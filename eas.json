@@ -1,0 +1,15 @@
+{
+    "cli": {
+        "version": ">= 3.0.0"
+    },
+    "build": {
+        "production": {
+            "releaseChannel": "production",
+            "distribution": "store",
+            "credentialsSource": "remote",
+            "android": {
+                "buildType": "apk"
+            }
+        }
+    }
+}
