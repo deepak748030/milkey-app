@@ -1,45 +1,63 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ShoppingCart } from 'lucide-react-native';
-import { colors } from '@/lib/colors';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ShoppingCart, Bell, Sun, Moon } from 'lucide-react-native';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function TopBar() {
   const insets = useSafeAreaInsets();
-
-  const handleCartPress = () => {
-    // Navigate to cart
-  };
+  const { colors, isDark, toggleTheme } = useTheme();
 
   return (
-    <LinearGradient
-      colors={[colors.background, colors.card]}
-      style={[styles.container, { paddingTop: insets.top + 4 }]}
-    >
+    <View style={[
+      styles.container,
+      {
+        paddingTop: insets.top + 4,
+        backgroundColor: colors.background,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+      }
+    ]}>
       <View style={styles.leftSection}>
-        <Image
-          source={require('@/assets/images/milkey-logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+        <View style={[styles.logoContainer, { backgroundColor: colors.primary }]}>
+          <Text style={styles.logoEmoji}>🥛</Text>
+        </View>
         <View>
-          <Text style={styles.appName}>Milkey</Text>
-          <Text style={styles.tagline}>Your complete dairy solution</Text>
+          <Text style={[styles.appName, { color: colors.foreground }]}>Milkey</Text>
+          <Text style={[styles.tagline, { color: colors.mutedForeground }]}>Fresh dairy delivered</Text>
         </View>
       </View>
 
-      <Pressable style={styles.cartButton} onPress={handleCartPress}>
-        <ShoppingCart size={20} color={colors.foreground} strokeWidth={2} />
-      </Pressable>
-    </LinearGradient>
+      <View style={styles.rightSection}>
+        <Pressable
+          style={[styles.iconButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+          onPress={toggleTheme}
+        >
+          {isDark ? (
+            <Sun size={18} color={colors.primary} strokeWidth={2.5} />
+          ) : (
+            <Moon size={18} color={colors.primary} strokeWidth={2.5} />
+          )}
+        </Pressable>
+        <Pressable
+          style={[styles.iconButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+        >
+          <Bell size={18} color={colors.foreground} strokeWidth={2} />
+        </Pressable>
+        <Pressable
+          style={[styles.iconButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+        >
+          <ShoppingCart size={18} color={colors.foreground} strokeWidth={2} />
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 12,
-    paddingBottom: 8,
+    paddingBottom: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -47,28 +65,36 @@ const styles = StyleSheet.create({
   leftSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  logo: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+  logoContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoEmoji: {
+    fontSize: 22,
   },
   appName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
-    color: colors.foreground,
   },
   tagline: {
     fontSize: 11,
-    color: colors.mutedForeground,
   },
-  cartButton: {
+  rightSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
   },
 });

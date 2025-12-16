@@ -1,11 +1,12 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { House, BookOpen, Store, ClipboardList, CircleUser } from 'lucide-react-native';
+import { Home, BookOpen, Store, ClipboardList, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/lib/colors';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   return (
     <Tabs
@@ -13,25 +14,19 @@ export default function TabLayout() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: colors.card,
-          borderTopWidth: 0,
-          borderTopColor: 'transparent',
-          height: 70 + insets.bottom,
-          paddingBottom: insets.bottom + 8,
-          paddingTop: 5,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-          elevation: 20,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          height: 65 + insets.bottom,
+          paddingBottom: insets.bottom + 6,
+          paddingTop: 6,
+          elevation: 0,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '700',
-          letterSpacing: 0.3,
-          marginTop: 4,
-          textTransform: 'uppercase',
+          fontWeight: '600',
+          marginTop: 2,
         },
       }}
     >
@@ -40,10 +35,11 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
-            <House
-              size={focused ? 26 : 24}
+            <Home
+              size={focused ? 26 : 22}
               color={color}
-              strokeWidth={focused ? 2.5 : 2}
+              strokeWidth={focused ? 2.8 : 2}
+              fill={focused ? color : 'transparent'}
             />
           ),
         }}
@@ -54,7 +50,7 @@ export default function TabLayout() {
           title: 'Dairy',
           tabBarIcon: ({ color, focused }) => (
             <BookOpen
-              size={focused ? 26 : 24}
+              size={focused ? 26 : 22}
               color={color}
               strokeWidth={focused ? 2.5 : 2}
             />
@@ -67,7 +63,7 @@ export default function TabLayout() {
           title: 'Selling',
           tabBarIcon: ({ color, focused }) => (
             <Store
-              size={focused ? 26 : 24}
+              size={focused ? 26 : 22}
               color={color}
               strokeWidth={focused ? 2.5 : 2}
             />
@@ -80,7 +76,7 @@ export default function TabLayout() {
           title: 'Register',
           tabBarIcon: ({ color, focused }) => (
             <ClipboardList
-              size={focused ? 26 : 24}
+              size={focused ? 26 : 22}
               color={color}
               strokeWidth={focused ? 2.5 : 2}
             />
@@ -92,8 +88,8 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
-            <CircleUser
-              size={focused ? 26 : 24}
+            <User
+              size={focused ? 26 : 22}
               color={color}
               strokeWidth={focused ? 2.5 : 2}
             />
