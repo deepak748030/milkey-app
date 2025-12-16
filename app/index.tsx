@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Animated, Easing, Image, Dimensions } from 'rea
 import { router } from 'expo-router';
 import { getAuthUser } from '@/lib/mockData';
 import { colors } from '@/lib/colors';
-import { Calendar, Ticket, Star, Music, Heart, MapPin, Sparkles } from 'lucide-react-native';
+import { Droplets, Milk, Leaf, Heart, Star, Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
@@ -23,28 +23,9 @@ export default function SplashScreen() {
   const icon2 = useRef(new Animated.Value(0)).current;
   const icon3 = useRef(new Animated.Value(0)).current;
   const icon4 = useRef(new Animated.Value(0)).current;
-  const icon5 = useRef(new Animated.Value(0)).current;
-  const icon6 = useRef(new Animated.Value(0)).current;
   const fadeOut = useRef(new Animated.Value(1)).current;
-  const shimmer = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Shimmer animation loop
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, {
-          toValue: 1,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(shimmer, {
-          toValue: 0,
-          duration: 2000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-
     // Start main animations
     Animated.sequence([
       // Logo entrance
@@ -102,8 +83,6 @@ export default function SplashScreen() {
         Animated.spring(icon2, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
         Animated.spring(icon3, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
         Animated.spring(icon4, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
-        Animated.spring(icon5, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
-        Animated.spring(icon6, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
       ]),
     ]).start(() => {
       // After animations, check auth
@@ -162,7 +141,7 @@ export default function SplashScreen() {
     <Animated.View style={[styles.container, { opacity: fadeOut }]}>
       {/* Gradient Background */}
       <LinearGradient
-        colors={['#FFF8E7', '#FFFAF0', '#FFF5E1', '#FFFFFF']}
+        colors={[colors.background, colors.card, colors.background]}
         style={styles.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -171,20 +150,12 @@ export default function SplashScreen() {
       {/* Decorative Background Elements */}
       <View style={[styles.bgCircle, styles.bgCircle1]} />
       <View style={[styles.bgCircle, styles.bgCircle2]} />
-      <View style={[styles.bgCircle, styles.bgCircle3]} />
-      <View style={[styles.bgCircle, styles.bgCircle4]} />
-
-      {/* Golden decorative lines */}
-      <View style={styles.decorLine1} />
-      <View style={styles.decorLine2} />
 
       {/* Floating Icons */}
-      <FloatingIcon icon={Calendar} animValue={icon1} style={styles.icon1} color="#D4A853" size={26} />
-      <FloatingIcon icon={Ticket} animValue={icon2} style={styles.icon2} color="#C9963C" size={24} />
-      <FloatingIcon icon={Star} animValue={icon3} style={styles.icon3} color="#E6BE5A" size={20} />
-      <FloatingIcon icon={Music} animValue={icon4} style={styles.icon4} color="#B8860B" size={22} />
-      <FloatingIcon icon={Heart} animValue={icon5} style={styles.icon5} color="#DAA520" size={18} />
-      <FloatingIcon icon={MapPin} animValue={icon6} style={styles.icon6} color="#CD9B1D" size={20} />
+      <FloatingIcon icon={Droplets} animValue={icon1} style={styles.icon1} color={colors.primary} size={22} />
+      <FloatingIcon icon={Leaf} animValue={icon2} style={styles.icon2} color={colors.success} size={20} />
+      <FloatingIcon icon={Heart} animValue={icon3} style={styles.icon3} color="#FF6B6B" size={18} />
+      <FloatingIcon icon={Star} animValue={icon4} style={styles.icon4} color={colors.warning} size={20} />
 
       {/* Main Content */}
       <View style={styles.content}>
@@ -198,15 +169,28 @@ export default function SplashScreen() {
           ]}
         >
           <Image
-            source={require('@/assets/images/plenify-logo.png')}
+            source={require('@/assets/images/milkey-logo.png')}
             style={styles.logo}
             resizeMode="contain"
           />
         </Animated.View>
 
+        {/* App Name */}
+        <Animated.Text
+          style={[
+            styles.appName,
+            {
+              opacity: titleOpacity,
+              transform: [{ translateY: titleTranslate }],
+            },
+          ]}
+        >
+          Milkey
+        </Animated.Text>
+
         {/* Subtitle */}
         <Animated.Text style={[styles.subtitle, { opacity: subtitleOpacity }]}>
-          Plan Your Perfect Events
+          Your Complete Dairy Solution
         </Animated.Text>
 
         {/* Highlighted Tagline */}
@@ -220,9 +204,9 @@ export default function SplashScreen() {
           ]}
         >
           <View style={styles.taglineBackground}>
-            <Sparkles size={16} color="#B8860B" style={styles.sparkleLeft} />
-            <Text style={styles.tagline}>✨ Enjoy Your Event ✨</Text>
-            <Sparkles size={16} color="#B8860B" style={styles.sparkleRight} />
+            <Sparkles size={14} color={colors.primary} style={styles.sparkleLeft} />
+            <Text style={styles.tagline}>Fresh Milk, Fresh Start</Text>
+            <Sparkles size={14} color={colors.primary} style={styles.sparkleRight} />
           </View>
         </Animated.View>
       </View>
@@ -237,13 +221,6 @@ export default function SplashScreen() {
           </View>
         </Animated.View>
       )}
-
-      {/* Bottom decorative element */}
-      <View style={styles.bottomDecor}>
-        <View style={styles.decorDot} />
-        <View style={styles.decorLineHorizontal} />
-        <View style={styles.decorDot} />
-      </View>
     </Animated.View>
   );
 }
@@ -251,7 +228,7 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFAF0',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -267,50 +244,18 @@ const styles = StyleSheet.create({
     borderRadius: 500,
   },
   bgCircle1: {
-    width: 350,
-    height: 350,
-    top: '5%',
+    width: 300,
+    height: 300,
+    top: '10%',
     left: -100,
-    backgroundColor: 'rgba(218, 165, 32, 0.08)',
+    backgroundColor: 'rgba(0, 180, 216, 0.1)',
   },
   bgCircle2: {
-    width: 450,
-    height: 450,
-    bottom: '5%',
-    right: -150,
-    backgroundColor: 'rgba(205, 155, 29, 0.06)',
-  },
-  bgCircle3: {
-    width: 200,
-    height: 200,
-    top: '35%',
-    right: -60,
-    backgroundColor: 'rgba(184, 134, 11, 0.05)',
-  },
-  bgCircle4: {
-    width: 150,
-    height: 150,
-    bottom: '30%',
-    left: -50,
-    backgroundColor: 'rgba(230, 190, 90, 0.07)',
-  },
-  decorLine1: {
-    position: 'absolute',
-    top: '18%',
-    left: '20%',
-    width: 60,
-    height: 2,
-    backgroundColor: 'rgba(218, 165, 32, 0.2)',
-    transform: [{ rotate: '45deg' }],
-  },
-  decorLine2: {
-    position: 'absolute',
-    bottom: '18%',
-    right: '20%',
-    width: 60,
-    height: 2,
-    backgroundColor: 'rgba(218, 165, 32, 0.2)',
-    transform: [{ rotate: '-45deg' }],
+    width: 350,
+    height: 350,
+    bottom: '10%',
+    right: -120,
+    backgroundColor: 'rgba(0, 180, 216, 0.08)',
   },
   content: {
     alignItems: 'center',
@@ -318,19 +263,27 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     marginBottom: 16,
-    shadowColor: '#DAA520',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 10,
   },
   logo: {
-    width: 220,
-    height: 220,
+    width: 140,
+    height: 140,
+    borderRadius: 28,
+  },
+  appName: {
+    fontSize: 42,
+    fontWeight: '800',
+    color: colors.foreground,
+    letterSpacing: 2,
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 17,
-    color: '#8B7355',
+    fontSize: 14,
+    color: colors.mutedForeground,
     letterSpacing: 1,
     fontWeight: '500',
     marginBottom: 20,
@@ -342,17 +295,17 @@ const styles = StyleSheet.create({
   taglineBackground: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(218, 165, 32, 0.12)',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 30,
-    borderWidth: 1.5,
-    borderColor: 'rgba(218, 165, 32, 0.3)',
+    backgroundColor: 'rgba(0, 180, 216, 0.15)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 180, 216, 0.3)',
   },
   tagline: {
-    fontSize: 16,
-    color: '#B8860B',
-    fontWeight: '700',
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   sparkleLeft: {
@@ -363,57 +316,44 @@ const styles = StyleSheet.create({
   },
   floatingIcon: {
     position: 'absolute',
-    width: 48,
-    height: 48,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(218, 165, 32, 0.25)',
-    shadowColor: '#DAA520',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   icon1: {
-    top: '12%',
-    left: '8%',
+    top: '15%',
+    left: '10%',
   },
   icon2: {
-    top: '10%',
-    right: '10%',
+    top: '12%',
+    right: '12%',
   },
   icon3: {
-    top: '32%',
-    left: '3%',
+    bottom: '25%',
+    left: '15%',
   },
   icon4: {
-    top: '38%',
-    right: '5%',
-  },
-  icon5: {
     bottom: '22%',
-    left: '12%',
-  },
-  icon6: {
-    bottom: '18%',
-    right: '12%',
+    right: '15%',
   },
   loadingContainer: {
     position: 'absolute',
-    bottom: 120,
+    bottom: 100,
   },
   loadingDots: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#DAA520',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
   },
   dot1: {
     opacity: 0.3,
@@ -423,23 +363,5 @@ const styles = StyleSheet.create({
   },
   dot3: {
     opacity: 1,
-  },
-  bottomDecor: {
-    position: 'absolute',
-    bottom: 60,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  decorDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(218, 165, 32, 0.4)',
-  },
-  decorLineHorizontal: {
-    width: 40,
-    height: 1.5,
-    backgroundColor: 'rgba(218, 165, 32, 0.3)',
-    marginHorizontal: 8,
   },
 });

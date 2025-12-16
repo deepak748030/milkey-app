@@ -137,7 +137,7 @@ export default function PaymentScreen() {
 
   const handleSuccessClose = () => {
     setShowSuccess(false);
-    router.replace('/(tabs)/bookings');
+    router.replace('/(tabs)');
   };
 
   return (

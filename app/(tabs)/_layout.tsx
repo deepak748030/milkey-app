@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { House, HeartHandshake, CalendarCheck, CircleUser, MessagesSquare } from 'lucide-react-native';
+import { House, BookOpen, Store, ClipboardList, CircleUser } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/lib/colors';
 
@@ -17,7 +17,7 @@ export default function TabLayout() {
           borderTopColor: 'transparent',
           height: 70 + insets.bottom,
           paddingBottom: insets.bottom + 8,
-          paddingTop: 10,
+          paddingTop: 5,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.1,
@@ -49,11 +49,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="favorites"
+        name="dairy"
         options={{
-          title: 'Saved',
+          title: 'Dairy',
           tabBarIcon: ({ color, focused }) => (
-            <HeartHandshake
+            <BookOpen
               size={focused ? 26 : 24}
               color={color}
               strokeWidth={focused ? 2.5 : 2}
@@ -62,11 +62,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="chat"
+        name="selling"
         options={{
-          title: 'Chats',
+          title: 'Selling',
           tabBarIcon: ({ color, focused }) => (
-            <MessagesSquare
+            <Store
               size={focused ? 26 : 24}
               color={color}
               strokeWidth={focused ? 2.5 : 2}
@@ -75,11 +75,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="bookings"
+        name="register"
         options={{
-          title: 'Orders',
+          title: 'Register',
           tabBarIcon: ({ color, focused }) => (
-            <CalendarCheck
+            <ClipboardList
               size={focused ? 26 : 24}
               color={color}
               strokeWidth={focused ? 2.5 : 2}
@@ -90,7 +90,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Account',
+          title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
             <CircleUser
               size={focused ? 26 : 24}
