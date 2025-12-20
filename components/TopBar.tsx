@@ -1,12 +1,21 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShoppingCart, Bell, Sun, Moon } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useCartStore } from '@/lib/cartStore';
+import { router } from 'expo-router';
 
 export default function TopBar() {
   const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
+  const { getItemCount, loadCart } = useCartStore();
+
+  useEffect(() => {
+    loadCart();
+  }, []);
+
+  const itemCount = getItemCount();
 
   return (
     <View style={[
@@ -41,13 +50,20 @@ export default function TopBar() {
         </Pressable>
         <Pressable
           style={[styles.iconButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+          onPress={() => router.push('/notifications')}
         >
           <Bell size={18} color={colors.foreground} strokeWidth={2} />
         </Pressable>
         <Pressable
           style={[styles.iconButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+          onPress={() => router.push('/cart')}
         >
           <ShoppingCart size={18} color={colors.foreground} strokeWidth={2} />
+          {itemCount > 0 && (
+            <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.badgeText, { color: colors.white }]}>{itemCount}</Text>
+            </View>
+          )}
         </Pressable>
       </View>
     </View>
@@ -96,5 +112,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
 });

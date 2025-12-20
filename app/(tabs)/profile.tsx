@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon } from 'lucide-react-native';
+import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users } from 'lucide-react-native';
+import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 
 const mockUser = {
@@ -17,9 +18,10 @@ export default function ProfileScreen() {
   const styles = createStyles(colors, isDark);
 
   const menuItems = [
-    { id: '1', icon: Settings, label: 'Settings', action: () => { } },
-    { id: '2', icon: Bell, label: 'Notifications', action: () => { } },
-    { id: '3', icon: HelpCircle, label: 'Help & Support', action: () => { } },
+    { id: '1', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
+    { id: '2', icon: Settings, label: 'Settings', action: () => { } },
+    { id: '3', icon: Bell, label: 'Notifications', action: () => { } },
+    { id: '4', icon: HelpCircle, label: 'Help & Support', action: () => { } },
   ];
 
   return (
@@ -137,22 +139,22 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   themeToggle: {
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 10,
+    padding: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
   themeIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   themeInfo: {
     flex: 1,
@@ -179,27 +181,27 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   menuSection: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   menuIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   menuLabel: {
     flex: 1,
@@ -212,9 +214,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.destructive + '15',
-    borderRadius: 12,
-    padding: 14,
-    gap: 8,
+    borderRadius: 10,
+    padding: 10,
+    gap: 6,
     borderWidth: 1,
     borderColor: colors.destructive + '30',
   },

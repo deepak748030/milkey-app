@@ -1,32 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, TextInput } from 'react-native';
-import { ShoppingCart, Minus, Plus } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, Alert } from 'react-native';
+import { ShoppingCart } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
+import { useCartStore } from '@/lib/cartStore';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
 const CARD_WIDTH = (width - 18) / 2;
 
-// Mock Data for dairy app
+// Banner images - dairy farm themed alert
 const banners = [
   {
     id: '1',
-    title: 'Farm Direct',
-    image: '🐄🥛',
-    gradient: ['#22C55E', '#16A34A'],
+    image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=800&h=300&fit=crop',
+    gradient: '#22C55E',
   },
   {
     id: '2',
-    title: 'Fresh Delivery',
-    image: '🚚',
-    gradient: ['#3B82F6', '#1D4ED8'],
+    image: 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=800&h=300&fit=crop',
+    gradient: '#3B82F6',
   },
   {
     id: '3',
-    title: 'Quality Milk',
-    image: '🌾',
-    gradient: ['#F59E0B', '#D97706'],
+    image: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=800&h=300&fit=crop',
+    gradient: '#F59E0B',
   },
 ];
 
@@ -52,6 +51,11 @@ export default function HomeScreen() {
     '1': 1, '2': 1, '3': 1, '4': 1
   });
   const bannerScrollRef = useRef<ScrollView>(null);
+  const { addToCart, getItemCount, loadCart } = useCartStore();
+
+  useEffect(() => {
+    loadCart();
+  }, []);
 
   // Auto-scroll banner
   useEffect(() => {
@@ -76,11 +80,21 @@ export default function HomeScreen() {
     }));
   };
 
+  const handleAddToCart = (product: typeof products[0]) => {
+    const quantity = quantities[product.id] || 1;
+    addToCart(
+      { id: product.id, name: product.name, price: product.price, icon: product.icon },
+      quantity
+    );
+
+  };
+
   const styles = createStyles(colors, isDark);
 
   return (
     <View style={styles.container}>
       <TopBar />
+
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
@@ -97,12 +111,12 @@ export default function HomeScreen() {
           contentContainerStyle={styles.bannerScrollContainer}
         >
           {banners.map((banner) => (
-            <View
-              key={banner.id}
-              style={[styles.banner, { backgroundColor: banner.gradient[0] }]}
-            >
-              <Text style={styles.bannerTitle}>{banner.title}</Text>
-              <Text style={styles.bannerImage}>{banner.image}</Text>
+            <View key={banner.id} style={styles.banner}>
+              <Image
+                source={{ uri: banner.image }}
+                style={styles.bannerImage}
+                resizeMode="cover"
+              />
             </View>
           ))}
         </ScrollView>
@@ -174,7 +188,7 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              <Pressable style={styles.addToCartBtn}>
+              <Pressable style={styles.addToCartBtn} onPress={() => handleAddToCart(product)}>
                 <Text style={styles.addToCartText}>Add to Cart</Text>
               </Pressable>
             </View>
@@ -190,6 +204,34 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  cartButton: {
+    position: 'absolute',
+    top: 50,
+    right: 12,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.destructive,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cartBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.white,
+  },
   scrollView: {
     flex: 1,
   },
@@ -202,21 +244,14 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   banner: {
     width: BANNER_WIDTH,
-    borderRadius: 4,
-    padding: 12,
-    height: 100,
+    height: 140,
+    borderRadius: 10,
     marginRight: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  bannerTitle: {
-    color: colors.white,
-    fontSize: 18,
-    fontWeight: '700',
+    overflow: 'hidden',
   },
   bannerImage: {
-    fontSize: 40,
+    width: '100%',
+    height: '100%',
   },
   bannerDots: {
     flexDirection: 'row',
@@ -308,16 +343,16 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     marginBottom: 6,
   },
   productIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
   },
   productIcon: {
-    fontSize: 24,
+    fontSize: 22,
   },
   productName: {
     fontSize: 12,
@@ -334,7 +369,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   quantityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     marginBottom: 8,
   },
   quantityBtn: {
@@ -360,14 +395,14 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   addToCartBtn: {
     backgroundColor: colors.primary,
     paddingVertical: 8,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     borderRadius: 6,
     width: '100%',
     alignItems: 'center',
   },
   addToCartText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
 });
