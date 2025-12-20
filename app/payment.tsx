@@ -103,7 +103,7 @@ export default function PaymentScreen() {
       if (!token) {
         setIsProcessing(false);
         Alert.alert('Login Required', 'Please login to make a booking.', [
-          { text: 'Login', onPress: () => router.push('/auth') },
+          { text: 'OK', onPress: () => router.push('/') },
           { text: 'Cancel', style: 'cancel' }
         ]);
         return;

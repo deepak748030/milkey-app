@@ -53,7 +53,7 @@ export default function TransactionsScreen() {
             const token = await getToken();
             if (!token) {
                 Alert.alert('Please Login', 'You need to login to view transactions.');
-                router.replace('/auth');
+                router.replace('/');
                 return;
             }
 

@@ -1,76 +1,67 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image } from 'react-native';
-import { ShoppingCart, Wallet, Users, Star, RefreshCw, ArrowRight, Droplets, Package, Truck, Clock } from 'lucide-react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, TextInput } from 'react-native';
+import { ShoppingCart, Minus, Plus } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import TopBar from '@/components/TopBar';
-import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
-const BANNER_WIDTH = width - 24;
-const CARD_WIDTH = (width - 12 - 8) / 2;
+const BANNER_WIDTH = width - 12;
+const CARD_WIDTH = (width - 18) / 2;
 
-// Mock Data
-const categories = [
-  { id: '1', name: 'Milk', icon: '🥛', color: '#DCFCE7' },
-  { id: '2', name: 'Curd', icon: '🍶', color: '#FEE2E2' },
-  { id: '3', name: 'Cheese', icon: '🧀', color: '#FEF3C7' },
-  { id: '4', name: 'Butter', icon: '🧈', color: '#D1FAE5' },
-  { id: '5', name: 'Paneer', icon: '🧊', color: '#E0E7FF' },
-  { id: '6', name: 'Ghee', icon: '🫗', color: '#FED7AA' },
-  { id: '7', name: 'Cream', icon: '🍦', color: '#FCE7F3' },
-  { id: '8', name: 'Lassi', icon: '🥤', color: '#CFFAFE' },
-];
-
-const products = [
-  { id: '1', name: 'Fresh Milk', price: '₹52/L', quantity: '1 Liter', icon: '🥛', badge: 'Best Seller' },
-  { id: '2', name: 'Buffalo Milk', price: '₹68/L', quantity: '1 Liter', icon: '🥛', badge: 'Premium' },
-  { id: '3', name: 'A2 Cow Milk', price: '₹85/L', quantity: '1 Liter', icon: '🥛', badge: 'Organic' },
-  { id: '4', name: 'Toned Milk', price: '₹48/L', quantity: '1 Liter', icon: '🥛', badge: 'Low Fat' },
-];
-
-const quickActions = [
-  { id: '1', name: 'My Orders', icon: Package, color: '#F59E0B' },
-  { id: '2', name: 'Schedule', icon: Clock, color: '#8B5CF6' },
-];
-
+// Mock Data for dairy app
 const banners = [
   {
     id: '1',
-    title: 'Quality Assured',
-    subtitle: 'Premium dairy products with guaranteed freshness',
-    badge: 'New',
-    image: '🥛',
+    title: 'Farm Direct',
+    image: '🐄🥛',
     gradient: ['#22C55E', '#16A34A'],
   },
   {
     id: '2',
-    title: 'Fresh Daily',
-    subtitle: 'Get fresh milk delivered to your doorstep',
-    badge: 'Hot',
+    title: 'Fresh Delivery',
     image: '🚚',
     gradient: ['#3B82F6', '#1D4ED8'],
   },
   {
     id: '3',
-    title: 'Farm Fresh',
-    subtitle: 'Direct from local farmers to your home',
-    badge: 'Organic',
+    title: 'Quality Milk',
     image: '🌾',
     gradient: ['#F59E0B', '#D97706'],
   },
 ];
 
-const stats = [
-  { id: '1', icon: ShoppingCart, value: '125', label: 'Milk Collected (L)', badge: 'Today' },
-  { id: '2', icon: Wallet, value: '₹45,680', label: 'Total Revenue', badge: 'Active' },
-  { id: '3', icon: Users, value: '24', label: 'Registered Farmers', badge: 'Total' },
-  { id: '4', icon: Star, value: '₹28/L', label: 'Average Rate', badge: 'Avg' },
+const quickOverview = {
+  totalPurchase: 0,
+  liters: 0,
+  sales: '-',
+  pending: '-',
+  farmers: 5,
+};
+
+const products = [
+  { id: '1', name: 'Fresh Milk', price: 60, icon: '🥛' },
+  { id: '2', name: 'Curd (Dahi)', price: 80, icon: '🍶' },
+  { id: '3', name: 'Butter', price: 500, icon: '🧈' },
+  { id: '4', name: 'Paneer', price: 380, icon: '🧀' },
 ];
 
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const [currentBanner, setCurrentBanner] = useState(0);
+  const [quantities, setQuantities] = useState<{ [key: string]: number }>({
+    '1': 1, '2': 1, '3': 1, '4': 1
+  });
   const bannerScrollRef = useRef<ScrollView>(null);
+
+  // Auto-scroll banner
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const nextIndex = (currentBanner + 1) % banners.length;
+      bannerScrollRef.current?.scrollTo({ x: nextIndex * BANNER_WIDTH, animated: true });
+      setCurrentBanner(nextIndex);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [currentBanner]);
 
   const handleBannerScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -78,18 +69,24 @@ export default function HomeScreen() {
     setCurrentBanner(index);
   };
 
+  const updateQuantity = (id: string, delta: number) => {
+    setQuantities(prev => ({
+      ...prev,
+      [id]: Math.max(1, (prev[id] || 1) + delta)
+    }));
+  };
+
   const styles = createStyles(colors, isDark);
 
   return (
     <View style={styles.container}>
       <TopBar />
-
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Banner Carousel - Scrollable */}
+        {/* Banner Carousel */}
         <ScrollView
           ref={bannerScrollRef}
           horizontal
@@ -100,26 +97,13 @@ export default function HomeScreen() {
           contentContainerStyle={styles.bannerScrollContainer}
         >
           {banners.map((banner) => (
-            <LinearGradient
+            <View
               key={banner.id}
-              colors={isDark ? ['#1E3A2F', banner.gradient[1]] as const : [banner.gradient[0], banner.gradient[1]] as const}
-              style={styles.banner}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              style={[styles.banner, { backgroundColor: banner.gradient[0] }]}
             >
-              <View style={styles.bannerBadge}>
-                <Text style={styles.bannerBadgeText}>{banner.badge}</Text>
-              </View>
-              <View style={styles.bannerRow}>
-                <View style={styles.bannerContent}>
-                  <Text style={styles.bannerTitle}>{banner.title}</Text>
-                  <Text style={styles.bannerSubtitle}>{banner.subtitle}</Text>
-                </View>
-                <View style={styles.bannerImageContainer}>
-                  <Text style={styles.bannerImage}>{banner.image}</Text>
-                </View>
-              </View>
-            </LinearGradient>
+              <Text style={styles.bannerTitle}>{banner.title}</Text>
+              <Text style={styles.bannerImage}>{banner.image}</Text>
+            </View>
           ))}
         </ScrollView>
 
@@ -135,95 +119,65 @@ export default function HomeScreen() {
           ))}
         </View>
 
-
         {/* Quick Overview */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Quick Overview</Text>
-          <Pressable style={styles.refreshButton}>
-            <RefreshCw size={14} color={colors.mutedForeground} />
-            <Text style={styles.refreshText}>Refresh</Text>
-          </Pressable>
-        </View>
-
-        {/* Stats Grid - 2x2 Centered */}
-        <View style={styles.statsGrid}>
-          {stats.map((stat, index) => {
-            const IconComponent = stat.icon;
-            return (
-              <View key={stat.id} style={[styles.statCard, { backgroundColor: index % 2 === 0 ? colors.statCard1 : colors.statCard2 }]}>
-                <View style={styles.statHeader}>
-                  <View style={styles.statIconContainer}>
-                    <IconComponent size={18} color={colors.primary} strokeWidth={2} />
-                  </View>
-                  <View style={styles.statBadge}>
-                    <Text style={styles.statBadgeText}>{stat.badge}</Text>
-                  </View>
-                </View>
-                <Text style={styles.statValue}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Milk Purchase Cards */}
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Buy Fresh Milk</Text>
-            <Text style={styles.sectionSubtitle}>Farm fresh dairy delivered daily</Text>
+        <Text style={styles.sectionTitle}>Quick Overview</Text>
+        <View style={styles.overviewCard}>
+          <View style={styles.overviewMain}>
+            <View>
+              <Text style={styles.overviewLabel}>Today</Text>
+              <Text style={styles.overviewSubLabel}>Total Purchase</Text>
+              <Text style={styles.overviewValue}>₹{quickOverview.totalPurchase}</Text>
+              <Text style={styles.overviewSmall}>{quickOverview.liters}L × 0</Text>
+            </View>
+            <View style={styles.overviewDivider} />
+            <View style={styles.overviewStat}>
+              <Text style={styles.overviewStatValue}>{quickOverview.sales}</Text>
+              <Text style={styles.overviewStatLabel}>Sales</Text>
+            </View>
+            <View style={styles.overviewDivider} />
+            <View style={styles.overviewStat}>
+              <Text style={styles.overviewStatValue}>{quickOverview.pending}</Text>
+              <Text style={styles.overviewStatLabel}>Pending</Text>
+            </View>
+            <View style={styles.overviewDivider} />
+            <View style={styles.overviewStat}>
+              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{quickOverview.farmers}</Text>
+              <Text style={styles.overviewStatLabel}>Farmers</Text>
+            </View>
           </View>
-          <Pressable style={styles.viewAllButton}>
-            <Text style={styles.viewAllText}>View All</Text>
-            <ArrowRight size={14} color={colors.primary} />
-          </Pressable>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.productsContainer}
-        >
+        {/* Products */}
+        <Text style={styles.sectionTitle}>Products</Text>
+        <View style={styles.productsGrid}>
           {products.map((product) => (
-            <Pressable key={product.id} style={styles.productCard}>
-              <View style={styles.productBadge}>
-                <Text style={styles.productBadgeText}>{product.badge}</Text>
-              </View>
+            <View key={product.id} style={styles.productCard}>
               <View style={styles.productIconContainer}>
                 <Text style={styles.productIcon}>{product.icon}</Text>
               </View>
               <Text style={styles.productName}>{product.name}</Text>
-              <Text style={styles.productQuantity}>{product.quantity}</Text>
-              <View style={styles.productPriceRow}>
-                <Text style={styles.productPrice}>{product.price}</Text>
-                <Pressable style={styles.addButton}>
-                  <Text style={styles.addButtonText}>Add</Text>
+              <Text style={styles.productPrice}>₹{product.price}</Text>
+
+              <View style={styles.quantityRow}>
+                <Pressable
+                  style={styles.quantityBtn}
+                  onPress={() => updateQuantity(product.id, -1)}
+                >
+                  <Text style={styles.quantityBtnText}>-</Text>
+                </Pressable>
+                <Text style={styles.quantityText}>{quantities[product.id]}</Text>
+                <Pressable
+                  style={styles.quantityBtn}
+                  onPress={() => updateQuantity(product.id, 1)}
+                >
+                  <Text style={styles.quantityBtnText}>+</Text>
                 </Pressable>
               </View>
-            </Pressable>
-          ))}
-        </ScrollView>
 
-        {/* Product Categories */}
-        <View style={styles.sectionHeader}>
-          <View>
-            <Text style={styles.sectionTitle}>Product Categories</Text>
-            <Text style={styles.sectionSubtitle}>Explore our dairy products</Text>
-          </View>
-          <Pressable style={styles.viewAllButton}>
-            <Text style={styles.viewAllText}>View All</Text>
-            <ArrowRight size={14} color={colors.primary} />
-          </Pressable>
-        </View>
-
-        {/* Categories Grid */}
-        <View style={styles.categoriesGrid}>
-          {categories.map((category) => (
-            <Pressable key={category.id} style={styles.categoryCard}>
-              <View style={[styles.categoryIconContainer, { backgroundColor: category.color }]}>
-                <Text style={styles.categoryIcon}>{category.icon}</Text>
-              </View>
-              <Text style={styles.categoryName}>{category.name}</Text>
-            </Pressable>
+              <Pressable style={styles.addToCartBtn}>
+                <Text style={styles.addToCartText}>Add to Cart</Text>
+              </Pressable>
+            </View>
           ))}
         </View>
       </ScrollView>
@@ -244,67 +198,32 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     paddingBottom: 80,
   },
   bannerScrollContainer: {
-    paddingTop: 8,
-    paddingHorizontal: 6,
+    paddingTop: 6,
   },
   banner: {
     width: BANNER_WIDTH,
-    borderRadius: 12,
-    padding: 16,
-    minHeight: 130,
-    marginRight: 12,
-  },
-  bannerBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: colors.white,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  bannerBadgeText: {
-    color: colors.primary,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  bannerRow: {
+    borderRadius: 4,
+    padding: 12,
+    height: 100,
+    marginRight: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  bannerContent: {
-    flex: 1,
   },
   bannerTitle: {
     color: colors.white,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 6,
-  },
-  bannerSubtitle: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 13,
-    maxWidth: '90%',
-  },
-  bannerImageContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   bannerImage: {
-    fontSize: 36,
+    fontSize: 40,
   },
   bannerDots: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 10,
-    marginBottom: 12,
-    gap: 6,
+    marginTop: 8,
+    marginBottom: 10,
+    gap: 4,
   },
   dot: {
     width: 6,
@@ -314,119 +233,79 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   activeDot: {
     backgroundColor: colors.primary,
-    width: 18,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    marginTop: 4,
+    width: 16,
   },
   sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.foreground,
+    marginBottom: 8,
+    marginTop: 6,
+  },
+  overviewCard: {
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 10,
+  },
+  overviewMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  overviewLabel: {
+    fontSize: 10,
+    color: colors.destructive,
+    fontWeight: '600',
+  },
+  overviewSubLabel: {
+    fontSize: 10,
+    color: colors.mutedForeground,
+  },
+  overviewValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  overviewSmall: {
+    fontSize: 9,
+    color: colors.mutedForeground,
+  },
+  overviewDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+    marginHorizontal: 10,
+  },
+  overviewStat: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  overviewStatValue: {
     fontSize: 16,
     fontWeight: '700',
     color: colors.foreground,
   },
-  sectionSubtitle: {
-    fontSize: 11,
-    color: colors.mutedForeground,
-    marginTop: 2,
-  },
-  refreshButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  refreshText: {
-    fontSize: 12,
+  overviewStatLabel: {
+    fontSize: 10,
     color: colors.mutedForeground,
   },
-  viewAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  viewAllText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  statsGrid: {
+  productsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  statCard: {
-    width: CARD_WIDTH,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  statIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(34,197,94,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statBadge: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  statBadgeText: {
-    color: colors.white,
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  statValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: isDark ? colors.white : colors.foreground,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: colors.mutedForeground,
-  },
-  productsContainer: {
-    paddingRight: 6,
-    gap: 10,
-    marginBottom: 16,
+    gap: 6,
   },
   productCard: {
-    width: 140,
+    width: CARD_WIDTH,
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 8,
+    padding: 10,
     borderWidth: 1,
     borderColor: colors.border,
-  },
-  productBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  productBadgeText: {
-    color: colors.white,
-    fontSize: 8,
-    fontWeight: '600',
+    alignItems: 'center',
+    marginBottom: 6,
   },
   productIconContainer: {
     width: 50,
@@ -435,69 +314,60 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
-    alignSelf: 'center',
+    marginBottom: 6,
   },
   productIcon: {
     fontSize: 24,
   },
   productName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.foreground,
     marginBottom: 2,
-  },
-  productQuantity: {
-    fontSize: 11,
-    color: colors.mutedForeground,
-    marginBottom: 8,
-  },
-  productPriceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   productPrice: {
     fontSize: 14,
     fontWeight: '700',
     color: colors.primary,
+    marginBottom: 8,
   },
-  addButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: colors.white,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  categoriesGrid: {
+  quantityRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 10,
-    marginBottom: 16,
-  },
-  categoryCard: {
     alignItems: 'center',
-    width: (width - 12 - 40) / 4,
+    gap: 12,
+    marginBottom: 8,
   },
-  categoryIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
+  quantityBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: colors.muted,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
   },
-  categoryIcon: {
-    fontSize: 26,
-  },
-  categoryName: {
-    fontSize: 11,
+  quantityBtnText: {
+    fontSize: 16,
     fontWeight: '600',
     color: colors.foreground,
+  },
+  quantityText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.foreground,
+    minWidth: 20,
+    textAlign: 'center',
+  },
+  addToCartBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+    width: '100%',
+    alignItems: 'center',
+  },
+  addToCartText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

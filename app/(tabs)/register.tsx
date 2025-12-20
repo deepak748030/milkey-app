@@ -1,68 +1,330 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { ClipboardList, UserPlus, Users, CheckCircle } from 'lucide-react-native';
+import { Calendar, FileText, Trash2 } from 'lucide-react-native';
+import TopBar from '@/components/TopBar';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+
+type TabType = 'Payments' | 'Advances' | 'Farmers';
 
 const mockFarmers = [
-    { id: '1', name: 'Rajesh Kumar', phone: '9876543210', status: 'Active', milk: '45L/day' },
-    { id: '2', name: 'Suresh Patel', phone: '9876543211', status: 'Active', milk: '38L/day' },
-    { id: '3', name: 'Mohan Singh', phone: '9876543212', status: 'Pending', milk: '32L/day' },
-    { id: '4', name: 'Anil Sharma', phone: '9876543213', status: 'Active', milk: '28L/day' },
+    { id: '1', code: '1', name: 'kalu', mobile: '963232' },
+    { id: '2', code: '2', name: 'premveer', mobile: '991756481' },
+    { id: '3', code: '4', name: 'jhgmn,bjh', mobile: '656322563' },
+    { id: '4', code: '5', name: 'ds lodhi', mobile: '9012977624' },
+    { id: '5', code: '6', name: 'khurram khalam', mobile: '8545785896' },
+];
+
+const mockAdvances = [
+    { id: '1', code: '4', note: 'vese hi de diuye', amt: 5000, date: '2025-12-16' },
+    { id: '2', code: '1', note: 'cash me diya tha', amt: 2000, date: '2025-12-16' },
+    { id: '3', code: '3', note: 'case me diye the rahul ko', amt: 3000, date: '2025-12-16' },
 ];
 
 export default function RegisterScreen() {
-    const insets = useSafeAreaInsets();
     const { colors, isDark } = useTheme();
+    const [activeTab, setActiveTab] = useState<TabType>('Payments');
+
+    // Payments state
+    const [farmerCode, setFarmerCode] = useState('');
+
+    // Advances state Register
+    const [advCode, setAdvCode] = useState('');
+    const [advName, setAdvName] = useState('');
+    const [advAmount, setAdvAmount] = useState('');
+    const [advDate, setAdvDate] = useState('20-12-2025');
+    const [advNote, setAdvNote] = useState('');
+
+    // Farmers state
+    const [newCode, setNewCode] = useState('');
+    const [newName, setNewName] = useState('');
+    const [newMobile, setNewMobile] = useState('');
+    const [newAddress, setNewAddress] = useState('');
+    const [searchCode, setSearchCode] = useState('');
+
+    const generateFarmersPDF = async () => {
+        const rows = mockFarmers.map(item => `
+      <tr>
+        <td>${item.code}</td>
+        <td>${item.name}</td>
+        <td>${item.mobile}</td>
+      </tr>
+    `).join('');
+
+        const html = `
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { color: #22C55E; text-align: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+            th { background-color: #22C55E; color: white; }
+            tr:nth-child(even) { background-color: #f2f2f2; }
+          </style>
+        </head>
+        <body>
+          <h1>Farmers List</h1>
+          <table>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Mobile</th>
+            </tr>
+            ${rows}
+          </table>
+        </body>
+      </html>
+    `;
+
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            } else {
+                Alert.alert('PDF Generated', `Saved to: ${uri}`);
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to generate PDF');
+        }
+    };
 
     const styles = createStyles(colors, isDark);
 
-    return (
-        <View style={styles.container}>
-            <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-                <Text style={styles.title}>Register</Text>
-                <Pressable style={styles.addButton}>
-                    <UserPlus size={20} color={colors.white} />
+    const renderPaymentsTab = () => (
+        <View>
+            <View style={styles.searchRow}>
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Enter Farmer Code"
+                    value={farmerCode}
+                    onChangeText={setFarmerCode}
+                    placeholderTextColor={colors.mutedForeground}
+                />
+                <Pressable style={styles.goBtn}>
+                    <Text style={styles.goBtnText}>Go</Text>
                 </Pressable>
             </View>
 
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-                {/* Summary Cards */}
-                <View style={styles.summaryRow}>
-                    <View style={[styles.summaryCard, { backgroundColor: colors.statCard1 }]}>
-                        <Users size={20} color={colors.primary} />
-                        <Text style={styles.summaryValue}>24</Text>
-                        <Text style={styles.summaryLabel}>Total Farmers</Text>
-                    </View>
-                    <View style={[styles.summaryCard, { backgroundColor: colors.statCard2 }]}>
-                        <ClipboardList size={20} color={colors.primary} />
-                        <Text style={styles.summaryValue}>3</Text>
-                        <Text style={styles.summaryLabel}>Pending Approval</Text>
+            <Text style={styles.subTitle}>Recent Settlements</Text>
+            <Text style={styles.infoText}>Index missing for global list</Text>
+
+            <Text style={[styles.subTitle, { marginTop: 16 }]}>Settlement History</Text>
+            <Text style={styles.infoTextMuted}>Select a farmer to view history</Text>
+        </View>
+    );
+
+    const renderAdvancesTab = () => (
+        <View>
+            <View style={styles.row}>
+                <View style={[styles.inputGroup, { flex: 0.4 }]}>
+                    <Text style={styles.label}>Code</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Code"
+                        value={advCode}
+                        onChangeText={setAdvCode}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                        style={[styles.input, { backgroundColor: colors.muted }]}
+                        placeholder="Name"
+                        value={advName}
+                        onChangeText={setAdvName}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+            </View>
+
+            <View style={styles.row}>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Amount</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Amount"
+                        value={advAmount}
+                        onChangeText={setAdvAmount}
+                        keyboardType="numeric"
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Date</Text>
+                    <View style={styles.dateInput}>
+                        <TextInput
+                            style={styles.textInput}
+                            value={advDate}
+                            onChangeText={setAdvDate}
+                            placeholderTextColor={colors.mutedForeground}
+                        />
+                        <Calendar size={16} color={colors.mutedForeground} />
                     </View>
                 </View>
+            </View>
 
-                {/* Farmers List */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Registered Farmers</Text>
+            <View style={styles.inputGroup}>
+                <Text style={styles.label}>Note</Text>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Note (e.g. Ghee, Cash)"
+                    value={advNote}
+                    onChangeText={setAdvNote}
+                    placeholderTextColor={colors.mutedForeground}
+                />
+            </View>
+
+            <View style={styles.buttonRow}>
+                <Pressable style={styles.saveBtn}>
+                    <Text style={styles.saveBtnText}>Save Advance</Text>
+                </Pressable>
+                <Pressable style={styles.clearBtn}>
+                    <Text style={styles.clearBtnText}>Clear</Text>
+                </Pressable>
+            </View>
+
+            {/* Advances Table */}
+            <View style={styles.table}>
+                <View style={styles.tableHeader}>
+                    <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Note</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Amt</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
                 </View>
+                {mockAdvances.map((item) => (
+                    <View key={item.id} style={styles.tableRow}>
+                        <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary }]}>{item.code}</Text>
+                        <Text style={[styles.tableCell, { flex: 2, textAlign: 'left' }]}>{item.note}</Text>
+                        <Text style={[styles.tableCell, { flex: 1, color: colors.warning }]}>₹{item.amt}</Text>
+                        <Text style={[styles.tableCell, { flex: 1 }]}>{item.date}</Text>
+                    </View>
+                ))}
+            </View>
+        </View>
+    );
 
-                {mockFarmers.map((farmer) => (
-                    <Pressable key={farmer.id} style={styles.farmerCard}>
-                        <View style={styles.farmerAvatar}>
-                            <Text style={styles.avatarText}>{farmer.name.charAt(0)}</Text>
+    const renderFarmersTab = () => (
+        <View>
+            <View style={styles.row}>
+                <View style={[styles.inputGroup, { flex: 0.4 }]}>
+                    <Text style={styles.label}>Code</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Code"
+                        value={newCode}
+                        onChangeText={setNewCode}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+                <View style={[styles.inputGroup, { flex: 1 }]}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Name"
+                        value={newName}
+                        onChangeText={setNewName}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+            </View>
+
+            <View style={styles.row}>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Mobile</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Mobile"
+                        value={newMobile}
+                        onChangeText={setNewMobile}
+                        keyboardType="phone-pad"
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Address</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Address"
+                        value={newAddress}
+                        onChangeText={setNewAddress}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+            </View>
+
+            <View style={styles.buttonRow}>
+                <Pressable style={styles.saveBtn}>
+                    <Text style={styles.saveBtnText}>Add Farmer</Text>
+                </Pressable>
+                <Pressable style={styles.clearBtn}>
+                    <Text style={styles.clearBtnText}>Clear</Text>
+                </Pressable>
+            </View>
+
+            {/* Search and PDF */}
+            <View style={styles.searchRow}>
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Enter Code"
+                    value={searchCode}
+                    onChangeText={setSearchCode}
+                    placeholderTextColor={colors.mutedForeground}
+                />
+                <Pressable style={styles.pdfBtn} onPress={generateFarmersPDF}>
+                    <FileText size={14} color={colors.white} />
+                    <Text style={styles.pdfBtnText}>PDF</Text>
+                </Pressable>
+            </View>
+
+            {/* Farmers Table */}
+            <View style={styles.table}>
+                <View style={styles.tableHeader}>
+                    <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Mobile</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Act</Text>
+                </View>
+                {mockFarmers.map((item) => (
+                    <View key={item.id} style={styles.tableRow}>
+                        <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary }]}>{item.code}</Text>
+                        <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'left' }]}>{item.name}</Text>
+                        <Text style={[styles.tableCell, { flex: 1.2 }]}>{item.mobile}</Text>
+                        <View style={{ flex: 0.5, alignItems: 'center' }}>
+                            <Pressable style={styles.deleteBtn}>
+                                <Trash2 size={14} color={colors.destructive} />
+                            </Pressable>
                         </View>
-                        <View style={styles.farmerInfo}>
-                            <Text style={styles.farmerName}>{farmer.name}</Text>
-                            <Text style={styles.farmerPhone}>{farmer.phone}</Text>
-                        </View>
-                        <View style={styles.farmerStats}>
-                            <View style={[styles.statusBadge, { backgroundColor: farmer.status === 'Active' ? colors.success + '20' : colors.warning + '20' }]}>
-                                <Text style={[styles.statusText, { color: farmer.status === 'Active' ? colors.success : colors.warning }]}>{farmer.status}</Text>
-                            </View>
-                            <Text style={styles.milkAmount}>{farmer.milk}</Text>
-                        </View>
+                    </View>
+                ))}
+            </View>
+        </View>
+    );
+
+    return (
+        <View style={styles.container}>
+            <TopBar />
+            {/* <Text style={styles.pageTitle}>Register</Text> */}
+
+            {/* Tabs */}
+            <View style={styles.tabRow}>
+                {(['Payments', 'Advances', 'Farmers'] as TabType[]).map((tab) => (
+                    <Pressable
+                        key={tab}
+                        style={[styles.tab, activeTab === tab && styles.tabActive]}
+                        onPress={() => setActiveTab(tab)}
+                    >
+                        <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
                     </Pressable>
                 ))}
+            </View>
+
+            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+                {activeTab === 'Payments' && renderPaymentsTab()}
+                {activeTab === 'Advances' && renderAdvancesTab()}
+                {activeTab === 'Farmers' && renderFarmersTab()}
             </ScrollView>
         </View>
     );
@@ -73,125 +335,212 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
-    header: {
-        paddingHorizontal: 16,
-        paddingBottom: 12,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: colors.background,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    title: {
-        fontSize: 22,
+    pageTitle: {
+        fontSize: 18,
         fontWeight: '700',
+        color: colors.primary,
+        paddingHorizontal: 6,
+        marginBottom: 10,
+        marginTop: 6,
+    },
+    tabRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 6,
+        gap: 6,
+        marginBottom: 12,
+        marginTop: 4,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: 8,
+        alignItems: 'center',
+        borderRadius: 6,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    tabActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    tabText: {
+        fontSize: 13,
+        fontWeight: '600',
         color: colors.foreground,
     },
-    addButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 10,
-        backgroundColor: colors.primary,
-        alignItems: 'center',
-        justifyContent: 'center',
+    tabTextActive: {
+        color: colors.white,
     },
     scrollView: {
         flex: 1,
     },
     scrollContent: {
         paddingHorizontal: 6,
-        paddingTop: 12,
         paddingBottom: 80,
     },
-    summaryRow: {
+    row: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 10,
+    },
+    inputGroup: {
+        flex: 1,
+        marginBottom: 10,
+    },
+    label: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.mutedForeground,
+        marginBottom: 4,
+    },
+    input: {
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        fontSize: 14,
+        color: colors.foreground,
+    },
+    dateInput: {
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    textInput: {
+        flex: 1,
+        fontSize: 14,
+        color: colors.foreground,
+        padding: 0,
+    },
+    searchRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+    },
+    searchInput: {
+        flex: 1,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        fontSize: 14,
+        color: colors.foreground,
+    },
+    goBtn: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 6,
+        justifyContent: 'center',
+    },
+    goBtnText: {
+        color: colors.white,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    pdfBtn: {
+        backgroundColor: colors.warning,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 6,
+        justifyContent: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    pdfBtnText: {
+        color: colors.white,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    subTitle: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.mutedForeground,
+        marginBottom: 4,
+    },
+    infoText: {
+        fontSize: 13,
+        color: colors.primary,
+    },
+    infoTextMuted: {
+        fontSize: 13,
+        color: colors.mutedForeground,
+    },
+    buttonRow: {
         flexDirection: 'row',
         gap: 8,
         marginBottom: 16,
     },
-    summaryCard: {
+    saveBtn: {
         flex: 1,
-        borderRadius: 12,
-        padding: 14,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    summaryValue: {
-        fontSize: 22,
-        fontWeight: '700',
-        color: isDark ? colors.white : colors.foreground,
-        marginTop: 8,
-    },
-    summaryLabel: {
-        fontSize: 11,
-        color: colors.mutedForeground,
-        marginTop: 2,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: colors.foreground,
-    },
-    farmerCard: {
-        backgroundColor: colors.card,
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    farmerAvatar: {
-        width: 46,
-        height: 46,
-        borderRadius: 23,
         backgroundColor: colors.primary,
+        paddingVertical: 10,
+        borderRadius: 6,
         alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
     },
-    avatarText: {
-        fontSize: 18,
-        fontWeight: '700',
+    saveBtnText: {
         color: colors.white,
-    },
-    farmerInfo: {
-        flex: 1,
-    },
-    farmerName: {
         fontSize: 14,
         fontWeight: '600',
+    },
+    clearBtn: {
+        flex: 1,
+        backgroundColor: colors.muted,
+        paddingVertical: 10,
+        borderRadius: 6,
+        alignItems: 'center',
+    },
+    clearBtnText: {
         color: colors.foreground,
-        marginBottom: 4,
-    },
-    farmerPhone: {
-        fontSize: 12,
-        color: colors.mutedForeground,
-    },
-    farmerStats: {
-        alignItems: 'flex-end',
-    },
-    statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 8,
-        marginBottom: 4,
-    },
-    statusText: {
-        fontSize: 10,
+        fontSize: 14,
         fontWeight: '600',
     },
-    milkAmount: {
+    table: {
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 6,
+        overflow: 'hidden',
+        marginTop: 10,
+    },
+    tableHeader: {
+        flexDirection: 'row',
+        backgroundColor: colors.muted,
+        paddingVertical: 8,
+        paddingHorizontal: 6,
+    },
+    tableHeaderCell: {
         fontSize: 12,
         fontWeight: '600',
-        color: colors.primary,
+        color: colors.foreground,
+        textAlign: 'center',
+    },
+    tableRow: {
+        flexDirection: 'row',
+        paddingVertical: 8,
+        paddingHorizontal: 6,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        alignItems: 'center',
+    },
+    tableCell: {
+        fontSize: 12,
+        color: colors.foreground,
+        textAlign: 'center',
+    },
+    deleteBtn: {
+        padding: 4,
+        backgroundColor: colors.destructive + '20',
+        borderRadius: 4,
     },
 });

@@ -135,7 +135,7 @@ export function usePushNotifications() {
                     if (result.response?.isBlocked) {
                         console.warn('User is blocked');
                         await authApi.logout();
-                        router.replace('/auth');
+                        router.replace('/');
                     }
                 } else {
                     console.error('Failed to update push token:', result.message);

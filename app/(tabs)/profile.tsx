@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon } from 'lucide-react-native';
+import TopBar from '@/components/TopBar';
 
 const mockUser = {
   name: 'Ramesh Dairy Farm',
@@ -12,7 +12,6 @@ const mockUser = {
 };
 
 export default function ProfileScreen() {
-  const insets = useSafeAreaInsets();
   const { colors, isDark, toggleTheme } = useTheme();
 
   const styles = createStyles(colors, isDark);
@@ -25,9 +24,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.title}>Profile</Text>
-      </View>
+      <TopBar />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Profile Card */}
@@ -89,18 +86,6 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.foreground,
   },
   scrollView: {
     flex: 1,
