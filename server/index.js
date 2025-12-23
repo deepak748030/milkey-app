@@ -18,6 +18,7 @@ const milkCollectionRoutes = require('./routes/milk-collections');
 const paymentRoutes = require('./routes/payments');
 const rateChartRoutes = require('./routes/rate-charts');
 const reportRoutes = require('./routes/reports');
+const feedbackRoutes = require('./routes/feedback');
 
 const app = express();
 
@@ -75,6 +76,7 @@ app.use('/api/milk-collections', milkCollectionRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/rate-charts', rateChartRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
 // 404 handler
 app.use((req, res) => {
