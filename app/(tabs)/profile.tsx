@@ -1,27 +1,47 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
-
-const mockUser = {
-  name: 'Ramesh Dairy Farm',
-  phone: '+91 9876543210',
-  email: 'ramesh@dairy.com',
-  role: 'Dairy Owner',
-};
+import { useAuth } from '@/hooks/useAuth';
+import { authApiNew } from '@/lib/milkeyApi';
+import { clearAuth } from '@/lib/authStore';
 
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
+  const { user } = useAuth();
 
   const styles = createStyles(colors, isDark);
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await authApiNew.logout();
+            } catch (error) {
+              // Ignore API errors on logout
+            }
+            await clearAuth();
+            router.replace('/auth');
+          },
+        },
+      ]
+    );
+  };
 
   const menuItems = [
     { id: '1', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
     { id: '2', icon: Settings, label: 'Settings', action: () => { } },
-    { id: '3', icon: Bell, label: 'Notifications', action: () => { } },
-    { id: '4', icon: HelpCircle, label: 'Help & Support', action: () => { } },
+    { id: '3', icon: Bell, label: 'Notifications', action: () => router.push('/notifications') },
+    { id: '4', icon: HelpCircle, label: 'Help & Support', action: () => router.push('/help-support') },
   ];
 
   return (
@@ -36,12 +56,18 @@ export default function ProfileScreen() {
               <User size={40} color={colors.white} />
             </View>
           </View>
-          <Text style={styles.userName}>{mockUser.name}</Text>
-          <Text style={styles.userRole}>{mockUser.role}</Text>
+          <Text style={styles.userName}>{user?.name || 'Dairy Owner'}</Text>
+          <Text style={styles.userRole}>{user?.role || 'Owner'}</Text>
           <View style={styles.contactInfo}>
-            <Text style={styles.contactText}>{mockUser.phone}</Text>
-            <Text style={styles.contactText}>{mockUser.email}</Text>
+            <Text style={styles.contactText}>{user?.phone || ''}</Text>
+            <Text style={styles.contactText}>{user?.email || ''}</Text>
           </View>
+          {user?.referralCode && (
+            <View style={styles.referralBadge}>
+              <Text style={styles.referralLabel}>Your Code:</Text>
+              <Text style={styles.referralCode}>{user.referralCode}</Text>
+            </View>
+          )}
         </View>
 
         {/* Theme Toggle */}
@@ -75,7 +101,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Logout Button */}
-        <Pressable style={styles.logoutButton}>
+        <Pressable style={styles.logoutButton} onPress={handleLogout}>
           <LogOut size={20} color={colors.destructive} />
           <Text style={styles.logoutText}>Logout</Text>
         </Pressable>
@@ -128,6 +154,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
     marginBottom: 12,
+    textTransform: 'capitalize',
   },
   contactInfo: {
     alignItems: 'center',
@@ -136,6 +163,26 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 12,
     color: colors.mutedForeground,
     marginBottom: 2,
+  },
+  referralBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.primary + '15',
+    borderRadius: 20,
+    gap: 6,
+  },
+  referralLabel: {
+    fontSize: 11,
+    color: colors.mutedForeground,
+  },
+  referralCode: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 1,
   },
   themeToggle: {
     backgroundColor: colors.card,

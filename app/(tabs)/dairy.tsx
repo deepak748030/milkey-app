@@ -1,574 +1,231 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Calendar, FileText, Printer, X, Plus } from 'lucide-react-native';
+import { Droplets, Sun, Moon, Plus, X, Wallet, Check } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
+import { milkCollectionsApi, paymentsApi, farmersApi, MilkCollection, TodaySummary, Farmer, FarmerPaymentSummary } from '@/lib/milkeyApi';
 
-const mockPurchaseHistory = [
-    { id: '1', date: '2025-12-17', session: 'morning', fat: 5, snf: 6, qty: 300, rate: 50, amt: 15000 },
-    { id: '2', date: '2025-12-17', session: 'morning', fat: 5, snf: 6, qty: 300, rate: 50, amt: 15000 },
-    { id: '3', date: '2025-12-17', session: 'morning', fat: 5, snf: 6, qty: 300, rate: 50, amt: 15000 },
-    { id: '4', date: '2025-12-17', session: 'morning', fat: 5, snf: 6, qty: 300, rate: 50, amt: 15000 },
-    { id: '5', date: '2025-12-17', session: 'morning', fat: 5, snf: 6, qty: 300, rate: 50, amt: 15000 },
-];
+type TabType = 'Collection' | 'Settlement';
 
 export default function DairyScreen() {
     const { colors, isDark } = useTheme();
-
-    const [session, setSession] = useState<'Morning' | 'Evening'>('Morning');
-    const [date, setDate] = useState('20-12-2025');
-    const [fat, setFat] = useState('0.0');
-    const [snf, setSnf] = useState('0.0');
-    const [totalQty, setTotalQty] = useState('0.0');
-    const [avgRate, setAvgRate] = useState('0.0');
-    const [fromDate, setFromDate] = useState('');
-    const [toDate, setToDate] = useState('');
-    const [quickRanges, setQuickRanges] = useState(['1-10', '11-20']);
-
-    const totalAmount = parseFloat(totalQty) * parseFloat(avgRate) || 0;
-
-    const handleClear = () => {
-        setFat('0.0');
-        setSnf('0.0');
-        setTotalQty('0.0');
-        setAvgRate('0.0');
-    };
-
-    const removeQuickRange = (range: string) => {
-        setQuickRanges(prev => prev.filter(r => r !== range));
-    };
-
-    const generateHTML = () => {
-        const rows = mockPurchaseHistory.map(item => `
-      <tr>
-        <td>${item.date}</td>
-        <td>${item.session}</td>
-        <td>${item.fat}</td>
-        <td>${item.snf}</td>
-        <td>${item.qty}</td>
-        <td>${item.rate}</td>
-        <td>₹${item.amt.toFixed(2)}</td>
-      </tr>
-    `).join('');
-
-        return `
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            h1 { color: #22C55E; text-align: center; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-            th { background-color: #22C55E; color: white; }
-            tr:nth-child(even) { background-color: #f2f2f2; }
-          </style>
-        </head>
-        <body>
-          <h1>Milk Purchase Report</h1>
-          <p>Date: ${date} | Session: ${session}</p>
-          <table>
-            <tr>
-              <th>Date</th>
-              <th>Session</th>
-              <th>FAT</th>
-              <th>SNF</th>
-              <th>Qty</th>
-              <th>Rate</th>
-              <th>Amount</th>
-            </tr>
-            ${rows}
-          </table>
-        </body>
-      </html>
-    `;
-    };
-
-    const handlePDF = async () => {
-        try {
-            const html = generateHTML();
-            const { uri } = await Print.printToFileAsync({ html });
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri);
-            } else {
-                Alert.alert('PDF Generated', `Saved to: ${uri}`);
-            }
-        } catch (error) {
-            Alert.alert('Error', 'Failed to generate PDF');
-        }
-    };
-
-    const handlePrint = async () => {
-        try {
-            const html = generateHTML();
-            await Print.printAsync({ html });
-        } catch (error) {
-            Alert.alert('Error', 'Failed to print');
-        }
-    };
+    const [activeTab, setActiveTab] = useState<TabType>('Collection');
+    const [loading, setLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
+    const [collections, setCollections] = useState<MilkCollection[]>([]);
+    const [farmers, setFarmers] = useState<Farmer[]>([]);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [collectionForm, setCollectionForm] = useState({ farmerCode: '', farmerName: '', quantity: '', rate: '60', shift: new Date().getHours() < 12 ? 'morning' : 'evening' });
+    const [settlementCode, setSettlementCode] = useState('');
+    const [farmerSummary, setFarmerSummary] = useState<FarmerPaymentSummary | null>(null);
 
     const styles = createStyles(colors, isDark);
+
+    useEffect(() => { fetchData(); }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const [summaryRes, collectionsRes, farmersRes] = await Promise.all([
+                milkCollectionsApi.getTodaySummary().catch(() => null),
+                milkCollectionsApi.getAll({ limit: 20 }).catch(() => null),
+                farmersApi.getAll().catch(() => null),
+            ]);
+            if (summaryRes?.success) setTodaySummary(summaryRes.response || null);
+            if (collectionsRes?.success) setCollections(collectionsRes.response?.data || []);
+            if (farmersRes?.success) setFarmers(farmersRes.response?.data || []);
+        } catch (e) { console.error(e); }
+        setLoading(false);
+    };
+
+    const onRefresh = useCallback(async () => { setRefreshing(true); await fetchData(); setRefreshing(false); }, []);
+
+    const handleFarmerCodeChange = (code: string) => {
+        const farmer = farmers.find(f => f.code === code);
+        setCollectionForm(prev => ({ ...prev, farmerCode: code, farmerName: farmer?.name || '' }));
+    };
+
+    const handleAddCollection = async () => {
+        if (!collectionForm.farmerCode || !collectionForm.quantity || !collectionForm.rate) {
+            Alert.alert('Error', 'Please fill farmer code, quantity, and rate'); return;
+        }
+        setLoading(true);
+        const res = await milkCollectionsApi.create({
+            farmerCode: collectionForm.farmerCode, quantity: parseFloat(collectionForm.quantity),
+            rate: parseFloat(collectionForm.rate), shift: collectionForm.shift as 'morning' | 'evening',
+        });
+        if (res.success) {
+            Alert.alert('Success', 'Milk collection recorded');
+            setShowAddModal(false);
+            setCollectionForm({ farmerCode: '', farmerName: '', quantity: '', rate: '60', shift: new Date().getHours() < 12 ? 'morning' : 'evening' });
+            fetchData();
+        } else Alert.alert('Error', res.message || 'Failed');
+        setLoading(false);
+    };
+
+    const handleFetchSettlement = async () => {
+        if (!settlementCode) { Alert.alert('Error', 'Enter farmer code'); return; }
+        setLoading(true);
+        const res = await paymentsApi.getFarmerSummary(settlementCode);
+        if (res.success) setFarmerSummary(res.response || null);
+        else { Alert.alert('Error', res.message || 'Not found'); setFarmerSummary(null); }
+        setLoading(false);
+    };
+
+    const handleSettlePayment = async () => {
+        if (!farmerSummary) return;
+        Alert.alert('Confirm Payment', `Pay ₹${farmerSummary.netPayable} to ${farmerSummary.farmer.name}?`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Pay', onPress: async () => {
+                    setLoading(true);
+                    const res = await paymentsApi.create({ farmerCode: farmerSummary.farmer.code, amount: farmerSummary.netPayable });
+                    if (res.success) { Alert.alert('Success', 'Payment recorded'); setFarmerSummary(null); setSettlementCode(''); fetchData(); }
+                    else Alert.alert('Error', res.message || 'Failed');
+                    setLoading(false);
+                }
+            },
+        ]);
+    };
 
     return (
         <View style={styles.container}>
             <TopBar />
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-                {/* Title */}
-                <Text style={styles.pageTitle}>Milk Purchase Entry</Text>
-
-                {/* Date and Session */}
-                <View style={styles.row}>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Date</Text>
-                        <View style={styles.dateInput}>
-                            <TextInput
-                                style={styles.textInput}
-                                value={date}
-                                onChangeText={setDate}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                            <Calendar size={16} color={colors.mutedForeground} />
-                        </View>
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Session</Text>
-                        <View style={styles.sessionToggle}>
-                            <Pressable
-                                style={[styles.sessionBtn, session === 'Morning' && styles.sessionBtnActive]}
-                                onPress={() => setSession('Morning')}
-                            >
-                                <Text style={[styles.sessionText, session === 'Morning' && styles.sessionTextActive]}>Morning</Text>
-                            </Pressable>
-                            <Pressable
-                                style={[styles.sessionBtn, session === 'Evening' && styles.sessionBtnActive]}
-                                onPress={() => setSession('Evening')}
-                            >
-                                <Text style={[styles.sessionText, session === 'Evening' && styles.sessionTextActive]}>Evening</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-
-                {/* FAT and SNF */}
-                <View style={styles.row}>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>FAT</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={fat}
-                            onChangeText={setFat}
-                            keyboardType="decimal-pad"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>SNF</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={snf}
-                            onChangeText={setSnf}
-                            keyboardType="decimal-pad"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                </View>
-
-                {/* Total Qty and Avg Rate */}
-                <View style={styles.row}>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Total Qty (L)</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={totalQty}
-                            onChangeText={setTotalQty}
-                            keyboardType="decimal-pad"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Avg Rate (₹/L)</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={avgRate}
-                            onChangeText={setAvgRate}
-                            keyboardType="decimal-pad"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                </View>
-
-                {/* Total Amount */}
-                <View style={styles.totalRow}>
-                    <Text style={styles.totalLabel}>Total Amount (₹)</Text>
-                    <Text style={styles.totalValue}>{totalAmount.toFixed(2)}</Text>
-                </View>
-
-                {/* Buttons */}
-                <View style={styles.buttonRow}>
-                    <Pressable style={styles.saveBtn}>
-                        <Text style={styles.saveBtnText}>Save</Text>
+            <View style={styles.tabRow}>
+                {(['Collection', 'Settlement'] as TabType[]).map(tab => (
+                    <Pressable key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => setActiveTab(tab)}>
+                        {tab === 'Collection' ? <Droplets size={16} color={activeTab === tab ? colors.white : colors.foreground} /> : <Wallet size={16} color={activeTab === tab ? colors.white : colors.foreground} />}
+                        <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
                     </Pressable>
-                    <Pressable style={styles.clearBtn} onPress={handleClear}>
-                        <Text style={styles.clearBtnText}>Clear</Text>
-                    </Pressable>
-                </View>
-
-                {/* Purchase History */}
-                <View style={styles.historyHeader}>
-                    <Text style={styles.sectionTitle}>Purchase History</Text>
-                    <View style={styles.exportBtns}>
-                        <Pressable style={styles.pdfBtn} onPress={handlePDF}>
-                            <FileText size={12} color={colors.white} />
-                            <Text style={styles.exportText}>PDF</Text>
-                        </Pressable>
-                        <Pressable style={styles.printBtn} onPress={handlePrint}>
-                            <Printer size={12} color={colors.white} />
-                            <Text style={styles.exportText}>Print</Text>
-                        </Pressable>
-                    </View>
-                </View>
-
-                {/* Date Filters */}
-                <View style={styles.row}>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>From Date</Text>
-                        <View style={styles.dateInput}>
-                            <TextInput
-                                style={styles.textInput}
-                                placeholder="dd-mm-yyyy"
-                                value={fromDate}
-                                onChangeText={setFromDate}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                            <Calendar size={16} color={colors.mutedForeground} />
-                        </View>
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>To Date</Text>
-                        <View style={styles.dateInput}>
-                            <TextInput
-                                style={styles.textInput}
-                                placeholder="dd-mm-yyyy"
-                                value={toDate}
-                                onChangeText={setToDate}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                            <Calendar size={16} color={colors.mutedForeground} />
-                        </View>
-                    </View>
-                </View>
-
-                {/* Quick Ranges */}
-                <View style={styles.quickRangesRow}>
-                    <Text style={styles.label}>Quick Ranges</Text>
-                    <View style={styles.rangeChips}>
-                        {quickRanges.map((range) => (
-                            <View key={range} style={styles.rangeChip}>
-                                <Text style={styles.rangeChipText}>{range}</Text>
-                                <Pressable onPress={() => removeQuickRange(range)}>
-                                    <X size={12} color={colors.destructive} />
-                                </Pressable>
+                ))}
+            </View>
+            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}>
+                {activeTab === 'Collection' ? (
+                    <>
+                        <View style={styles.summaryCard}>
+                            <Text style={styles.summaryTitle}>Today's Collection</Text>
+                            <View style={styles.shiftRow}>
+                                <View style={styles.shiftCard}><Sun size={16} color={colors.warning} /><Text style={styles.shiftQty}>{todaySummary?.morning.quantity.toFixed(1) || '0'} L</Text><Text style={styles.shiftAmt}>₹{todaySummary?.morning.amount.toFixed(0) || '0'}</Text></View>
+                                <View style={styles.shiftCard}><Moon size={16} color={colors.primary} /><Text style={styles.shiftQty}>{todaySummary?.evening.quantity.toFixed(1) || '0'} L</Text><Text style={styles.shiftAmt}>₹{todaySummary?.evening.amount.toFixed(0) || '0'}</Text></View>
                             </View>
-                        ))}
-                    </View>
-                </View>
-
-                <View style={styles.rangeActions}>
-                    <Pressable style={styles.clearRangeBtn}>
-                        <X size={12} color={colors.destructive} />
-                        <Text style={styles.clearRangeText}>Clear</Text>
-                    </Pressable>
-                    <Pressable style={styles.addRangeBtn}>
-                        <Plus size={12} color={colors.primary} />
-                        <Text style={styles.addRangeText}>Make Range</Text>
-                    </Pressable>
-                </View>
-
-                <Pressable style={styles.showBtn}>
-                    <Text style={styles.showBtnText}>Show</Text>
-                </Pressable>
-
-                {/* Table */}
-                <View style={styles.table}>
-                    <View style={styles.tableHeader}>
-                        <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Date</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Session</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>FAT</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>SNF</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Qty</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Rate</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Amt</Text>
-                    </View>
-                    {mockPurchaseHistory.map((item) => (
-                        <View key={item.id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 1.5 }]}>{item.date}</Text>
-                            <Text style={[styles.tableCell, { flex: 1, color: colors.primary }]}>{item.session}</Text>
-                            <Text style={[styles.tableCell, { flex: 0.6, color: colors.primary }]}>{item.fat}</Text>
-                            <Text style={[styles.tableCell, { flex: 0.6, color: colors.primary }]}>{item.snf}</Text>
-                            <Text style={[styles.tableCell, { flex: 0.6 }]}>{item.qty}</Text>
-                            <Text style={[styles.tableCell, { flex: 0.6 }]}>{item.rate}</Text>
-                            <Text style={[styles.tableCell, { flex: 1, color: colors.warning }]}>₹{item.amt.toFixed(2)}</Text>
+                            <View style={styles.totalRow}><Text style={styles.totalLabel}>Total: {todaySummary?.total.quantity.toFixed(1) || '0'} L</Text><Text style={styles.totalAmt}>₹{todaySummary?.total.amount.toFixed(0) || '0'}</Text></View>
                         </View>
-                    ))}
-                </View>
+                        <Pressable style={styles.addBtn} onPress={() => setShowAddModal(true)}><Plus size={18} color={colors.white} /><Text style={styles.addBtnText}>Add Collection</Text></Pressable>
+                        <Text style={styles.sectionTitle}>Recent Collections</Text>
+                        {collections.length > 0 ? collections.slice(0, 10).map(item => (
+                            <View key={item._id} style={styles.collectionRow}>
+                                <Text style={[styles.collectionCode, { color: colors.primary }]}>{item.farmer?.code}</Text>
+                                <Text style={styles.collectionShift}>{item.shift === 'morning' ? '☀️' : '🌙'}</Text>
+                                <Text style={styles.collectionQty}>{item.quantity}L</Text>
+                                <Text style={[styles.collectionAmt, { color: colors.success }]}>₹{item.amount.toFixed(0)}</Text>
+                            </View>
+                        )) : <Text style={styles.emptyText}>No collections yet</Text>}
+                    </>
+                ) : (
+                    <>
+                        <View style={styles.searchCard}>
+                            <Text style={styles.cardTitle}>Find Farmer</Text>
+                            <View style={styles.searchRow}>
+                                <TextInput style={styles.searchInput} placeholder="Farmer Code" value={settlementCode} onChangeText={setSettlementCode} placeholderTextColor={colors.mutedForeground} />
+                                <Pressable style={styles.searchBtn} onPress={handleFetchSettlement}><Text style={styles.searchBtnText}>Go</Text></Pressable>
+                            </View>
+                        </View>
+                        {farmerSummary && (
+                            <View style={styles.settlementCard}>
+                                <Text style={styles.farmerName}>{farmerSummary.farmer.name} (Code: {farmerSummary.farmer.code})</Text>
+                                <View style={styles.summarySection}><Text style={styles.summaryLabel}>Milk Amount</Text><Text style={[styles.summaryValue, { color: colors.success }]}>₹{farmerSummary.milk.totalAmount.toFixed(0)}</Text></View>
+                                {farmerSummary.advances.totalPending > 0 && <View style={styles.summarySection}><Text style={styles.summaryLabel}>Advance Deduction</Text><Text style={[styles.summaryValue, { color: colors.warning }]}>-₹{farmerSummary.advances.totalPending.toFixed(0)}</Text></View>}
+                                <View style={styles.netRow}><Text style={styles.netLabel}>Net Payable:</Text><Text style={styles.netAmt}>₹{farmerSummary.netPayable.toFixed(0)}</Text></View>
+                                {farmerSummary.netPayable > 0 ? <Pressable style={styles.payBtn} onPress={handleSettlePayment}><Wallet size={18} color={colors.white} /><Text style={styles.payBtnText}>Pay ₹{farmerSummary.netPayable.toFixed(0)}</Text></Pressable>
+                                    : <View style={styles.clearedBadge}><Check size={18} color={colors.success} /><Text style={styles.clearedText}>All cleared!</Text></View>}
+                            </View>
+                        )}
+                    </>
+                )}
             </ScrollView>
+            <Modal visible={showAddModal} animationType="slide" transparent onRequestClose={() => setShowAddModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}><Text style={styles.modalTitle}>Add Collection</Text><Pressable onPress={() => setShowAddModal(false)}><X size={20} color={colors.foreground} /></Pressable></View>
+                        <View style={styles.modalBody}>
+                            <View style={styles.shiftSelector}>
+                                <Pressable style={[styles.shiftOpt, collectionForm.shift === 'morning' && styles.shiftOptActive]} onPress={() => setCollectionForm(p => ({ ...p, shift: 'morning' }))}><Sun size={16} color={collectionForm.shift === 'morning' ? colors.white : colors.warning} /><Text style={[styles.shiftOptText, collectionForm.shift === 'morning' && { color: colors.white }]}>Morning</Text></Pressable>
+                                <Pressable style={[styles.shiftOpt, collectionForm.shift === 'evening' && styles.shiftOptActive]} onPress={() => setCollectionForm(p => ({ ...p, shift: 'evening' }))}><Moon size={16} color={collectionForm.shift === 'evening' ? colors.white : colors.primary} /><Text style={[styles.shiftOptText, collectionForm.shift === 'evening' && { color: colors.white }]}>Evening</Text></Pressable>
+                            </View>
+                            <View style={styles.formRow}><TextInput style={[styles.input, { flex: 0.4 }]} placeholder="Code" value={collectionForm.farmerCode} onChangeText={handleFarmerCodeChange} placeholderTextColor={colors.mutedForeground} /><TextInput style={[styles.input, { flex: 1, backgroundColor: colors.muted }]} placeholder="Name" value={collectionForm.farmerName} editable={false} placeholderTextColor={colors.mutedForeground} /></View>
+                            <View style={styles.formRow}><TextInput style={styles.input} placeholder="Qty (L)" value={collectionForm.quantity} onChangeText={v => setCollectionForm(p => ({ ...p, quantity: v }))} keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} /><TextInput style={styles.input} placeholder="Rate" value={collectionForm.rate} onChangeText={v => setCollectionForm(p => ({ ...p, rate: v }))} keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} /></View>
+                            {collectionForm.quantity && collectionForm.rate && <View style={styles.amtPreview}><Text style={styles.amtPreviewText}>Amount: ₹{(parseFloat(collectionForm.quantity || '0') * parseFloat(collectionForm.rate || '0')).toFixed(0)}</Text></View>}
+                        </View>
+                        <View style={styles.modalFooter}><Pressable style={styles.cancelBtn} onPress={() => setShowAddModal(false)}><Text style={styles.cancelBtnText}>Cancel</Text></Pressable><Pressable style={styles.saveBtn} onPress={handleAddCollection}><Text style={styles.saveBtnText}>{loading ? '...' : 'Save'}</Text></Pressable></View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
 
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingHorizontal: 6,
-        paddingTop: 6,
-        paddingBottom: 80,
-    },
-    pageTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: colors.primary,
-        marginBottom: 12,
-    },
-    row: {
-        flexDirection: 'row',
-        gap: 8,
-        marginBottom: 10,
-    },
-    inputGroup: {
-        flex: 1,
-    },
-    label: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.mutedForeground,
-        marginBottom: 4,
-    },
-    input: {
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        fontSize: 14,
-        color: colors.foreground,
-    },
-    dateInput: {
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    textInput: {
-        flex: 1,
-        fontSize: 14,
-        color: colors.foreground,
-        padding: 0,
-    },
-    sessionToggle: {
-        flexDirection: 'row',
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
-        overflow: 'hidden',
-    },
-    sessionBtn: {
-        flex: 1,
-        paddingVertical: 8,
-        alignItems: 'center',
-        backgroundColor: colors.card,
-    },
-    sessionBtnActive: {
-        backgroundColor: colors.primary,
-    },
-    sessionText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.foreground,
-    },
-    sessionTextActive: {
-        color: colors.white,
-    },
-    totalRow: {
-        marginBottom: 12,
-    },
-    totalLabel: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.mutedForeground,
-        marginBottom: 2,
-    },
-    totalValue: {
-        fontSize: 22,
-        fontWeight: '700',
-        color: colors.primary,
-    },
-    buttonRow: {
-        flexDirection: 'row',
-        gap: 8,
-        marginBottom: 16,
-    },
-    saveBtn: {
-        flex: 1,
-        backgroundColor: colors.primary,
-        paddingVertical: 10,
-        borderRadius: 6,
-        alignItems: 'center',
-    },
-    saveBtnText: {
-        color: colors.white,
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    clearBtn: {
-        flex: 1,
-        backgroundColor: colors.muted,
-        paddingVertical: 10,
-        borderRadius: 6,
-        alignItems: 'center',
-    },
-    clearBtnText: {
-        color: colors.foreground,
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    historyHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    sectionTitle: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: colors.foreground,
-    },
-    exportBtns: {
-        flexDirection: 'row',
-        gap: 6,
-    },
-    pdfBtn: {
-        backgroundColor: colors.primary,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 4,
-    },
-    printBtn: {
-        backgroundColor: colors.destructive,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 4,
-    },
-    exportText: {
-        color: colors.white,
-        fontSize: 12,
-        fontWeight: '600',
-    },
-    quickRangesRow: {
-        marginBottom: 8,
-    },
-    rangeChips: {
-        flexDirection: 'row',
-        gap: 6,
-        marginTop: 4,
-    },
-    rangeChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        backgroundColor: colors.secondary,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 4,
-        borderWidth: 1,
-        borderColor: colors.primary,
-    },
-    rangeChipText: {
-        fontSize: 12,
-        color: colors.primary,
-        fontWeight: '600',
-    },
-    rangeActions: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 10,
-    },
-    clearRangeBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    clearRangeText: {
-        fontSize: 12,
-        color: colors.destructive,
-    },
-    addRangeBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    addRangeText: {
-        fontSize: 12,
-        color: colors.primary,
-    },
-    showBtn: {
-        backgroundColor: colors.warning,
-        paddingVertical: 10,
-        borderRadius: 6,
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    showBtnText: {
-        color: colors.foreground,
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    table: {
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
-        overflow: 'hidden',
-    },
-    tableHeader: {
-        flexDirection: 'row',
-        backgroundColor: colors.muted,
-        paddingVertical: 8,
-        paddingHorizontal: 6,
-    },
-    tableHeaderCell: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: colors.foreground,
-        textAlign: 'center',
-    },
-    tableRow: {
-        flexDirection: 'row',
-        paddingVertical: 8,
-        paddingHorizontal: 6,
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
-    },
-    tableCell: {
-        fontSize: 12,
-        color: colors.foreground,
-        textAlign: 'center',
-    },
+    container: { flex: 1, backgroundColor: colors.background },
+    tabRow: { flexDirection: 'row', paddingHorizontal: 6, gap: 6, marginBottom: 12, marginTop: 4 },
+    tab: { flex: 1, flexDirection: 'row', paddingVertical: 10, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    tabActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    tabText: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+    tabTextActive: { color: colors.white },
+    scrollView: { flex: 1 },
+    scrollContent: { paddingHorizontal: 6, paddingBottom: 80 },
+    summaryCard: { backgroundColor: colors.card, borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
+    summaryTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 10 },
+    shiftRow: { flexDirection: 'row', gap: 10 },
+    shiftCard: { flex: 1, backgroundColor: colors.secondary, borderRadius: 8, padding: 10, alignItems: 'center' },
+    shiftQty: { fontSize: 18, fontWeight: '700', color: colors.foreground, marginTop: 4 },
+    shiftAmt: { fontSize: 13, fontWeight: '600', color: colors.success },
+    totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border },
+    totalLabel: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+    totalAmt: { fontSize: 16, fontWeight: '700', color: colors.success },
+    addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 12, gap: 6, marginBottom: 16 },
+    addBtnText: { color: colors.white, fontSize: 14, fontWeight: '600' },
+    sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 8 },
+    collectionRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 8, padding: 10, marginBottom: 6, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+    collectionCode: { flex: 1, fontSize: 13, fontWeight: '600' },
+    collectionShift: { fontSize: 14, marginHorizontal: 8 },
+    collectionQty: { fontSize: 13, color: colors.foreground, marginRight: 10 },
+    collectionAmt: { fontSize: 14, fontWeight: '700' },
+    emptyText: { fontSize: 13, color: colors.mutedForeground, textAlign: 'center', marginTop: 30 },
+    searchCard: { backgroundColor: colors.card, borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
+    cardTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 10 },
+    searchRow: { flexDirection: 'row', gap: 8 },
+    searchInput: { flex: 1, backgroundColor: colors.secondary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: colors.foreground },
+    searchBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 20, justifyContent: 'center' },
+    searchBtnText: { color: colors.white, fontSize: 14, fontWeight: '600' },
+    settlementCard: { backgroundColor: colors.card, borderRadius: 10, padding: 14, borderWidth: 1, borderColor: colors.border },
+    farmerName: { fontSize: 16, fontWeight: '700', color: colors.foreground, marginBottom: 12 },
+    summarySection: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
+    summaryLabel: { fontSize: 13, color: colors.mutedForeground },
+    summaryValue: { fontSize: 14, fontWeight: '600' },
+    netRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8 },
+    netLabel: { fontSize: 15, fontWeight: '600', color: colors.foreground },
+    netAmt: { fontSize: 22, fontWeight: '700', color: colors.primary },
+    payBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success, borderRadius: 8, paddingVertical: 12, gap: 8, marginTop: 8 },
+    payBtnText: { color: colors.white, fontSize: 15, fontWeight: '700' },
+    clearedBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success + '15', borderRadius: 8, paddingVertical: 12, gap: 6, marginTop: 8 },
+    clearedText: { color: colors.success, fontSize: 14, fontWeight: '600' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+    modalTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground },
+    modalBody: { padding: 16 },
+    modalFooter: { flexDirection: 'row', padding: 16, gap: 10, borderTopWidth: 1, borderTopColor: colors.border },
+    shiftSelector: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    shiftOpt: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.secondary, borderWidth: 1, borderColor: colors.border },
+    shiftOptActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    shiftOptText: { fontSize: 13, fontWeight: '600', color: colors.foreground },
+    formRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+    input: { flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: colors.foreground },
+    amtPreview: { backgroundColor: colors.success + '15', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+    amtPreviewText: { fontSize: 16, fontWeight: '700', color: colors.success },
+    cancelBtn: { flex: 1, backgroundColor: colors.muted, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+    cancelBtnText: { color: colors.foreground, fontSize: 14, fontWeight: '600' },
+    saveBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+    saveBtnText: { color: colors.white, fontSize: 14, fontWeight: '600' },
 });

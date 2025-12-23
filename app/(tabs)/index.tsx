@@ -1,16 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, Alert } from 'react-native';
-import { ShoppingCart } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, Alert, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
+import { productsApi, usersApi, Product, UserStats } from '@/lib/milkeyApi';
+import { useAuth } from '@/hooks/useAuth';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
 const CARD_WIDTH = (width - 18) / 2;
 
-// Banner images - dairy farm themed alert
+// Banner images - dairy farm themed
 const banners = [
   {
     id: '1',
@@ -29,15 +30,8 @@ const banners = [
   },
 ];
 
-const quickOverview = {
-  totalPurchase: 0,
-  liters: 0,
-  sales: '-',
-  pending: '-',
-  farmers: 5,
-};
-
-const products = [
+// Default products for fallback
+const defaultProducts = [
   { id: '1', name: 'Fresh Milk', price: 60, icon: '🥛' },
   { id: '2', name: 'Curd (Dahi)', price: 80, icon: '🍶' },
   { id: '3', name: 'Butter', price: 500, icon: '🧈' },
@@ -46,16 +40,58 @@ const products = [
 
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
+  const { isAuthenticated } = useAuth();
   const [currentBanner, setCurrentBanner] = useState(0);
-  const [quantities, setQuantities] = useState<{ [key: string]: number }>({
-    '1': 1, '2': 1, '3': 1, '4': 1
-  });
+  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState(defaultProducts);
+  const [stats, setStats] = useState<UserStats>({ farmers: 0, totalSales: 0, pendingAdvances: 0 });
+  const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const bannerScrollRef = useRef<ScrollView>(null);
-  const { addToCart, getItemCount, loadCart } = useCartStore();
+  const { addToCart, loadCart } = useCartStore();
 
   useEffect(() => {
     loadCart();
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Fetch products and stats in parallel
+      const [productsRes, statsRes] = await Promise.all([
+        productsApi.getAll().catch(() => null),
+        usersApi.getStats().catch(() => null),
+      ]);
+
+      if (productsRes?.success && productsRes.response?.data) {
+        const apiProducts = productsRes.response.data.map(p => ({
+          id: p._id,
+          name: p.name,
+          price: p.price,
+          icon: p.icon,
+        }));
+        setProducts(apiProducts.length > 0 ? apiProducts : defaultProducts);
+
+        // Initialize quantities
+        const initialQuantities: { [key: string]: number } = {};
+        apiProducts.forEach(p => { initialQuantities[p.id] = 1; });
+        setQuantities(initialQuantities);
+      } else {
+        // Use default products
+        const initialQuantities: { [key: string]: number } = {};
+        defaultProducts.forEach(p => { initialQuantities[p.id] = 1; });
+        setQuantities(initialQuantities);
+      }
+
+      if (statsRes?.success && statsRes.response) {
+        setStats(statsRes.response);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Auto-scroll banner
   useEffect(() => {
@@ -86,7 +122,6 @@ export default function HomeScreen() {
       { id: product.id, name: product.name, price: product.price, icon: product.icon },
       quantity
     );
-
   };
 
   const styles = createStyles(colors, isDark);
@@ -139,23 +174,22 @@ export default function HomeScreen() {
           <View style={styles.overviewMain}>
             <View>
               <Text style={styles.overviewLabel}>Today</Text>
-              <Text style={styles.overviewSubLabel}>Total Purchase</Text>
-              <Text style={styles.overviewValue}>₹{quickOverview.totalPurchase}</Text>
-              <Text style={styles.overviewSmall}>{quickOverview.liters}L × 0</Text>
+              <Text style={styles.overviewSubLabel}>Total Sales</Text>
+              <Text style={styles.overviewValue}>₹{stats.totalSales}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={styles.overviewStatValue}>{quickOverview.sales}</Text>
-              <Text style={styles.overviewStatLabel}>Sales</Text>
+              <Text style={styles.overviewStatValue}>-</Text>
+              <Text style={styles.overviewStatLabel}>Orders</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={styles.overviewStatValue}>{quickOverview.pending}</Text>
+              <Text style={[styles.overviewStatValue, { color: colors.warning }]}>₹{stats.pendingAdvances}</Text>
               <Text style={styles.overviewStatLabel}>Pending</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{quickOverview.farmers}</Text>
+              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{stats.farmers}</Text>
               <Text style={styles.overviewStatLabel}>Farmers</Text>
             </View>
           </View>
@@ -163,37 +197,43 @@ export default function HomeScreen() {
 
         {/* Products */}
         <Text style={styles.sectionTitle}>Products</Text>
-        <View style={styles.productsGrid}>
-          {products.map((product) => (
-            <View key={product.id} style={styles.productCard}>
-              <View style={styles.productIconContainer}>
-                <Text style={styles.productIcon}>{product.icon}</Text>
-              </View>
-              <Text style={styles.productName}>{product.name}</Text>
-              <Text style={styles.productPrice}>₹{product.price}</Text>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <View style={styles.productsGrid}>
+            {products.map((product) => (
+              <View key={product.id} style={styles.productCard}>
+                <View style={styles.productIconContainer}>
+                  <Text style={styles.productIcon}>{product.icon}</Text>
+                </View>
+                <Text style={styles.productName}>{product.name}</Text>
+                <Text style={styles.productPrice}>₹{product.price}</Text>
 
-              <View style={styles.quantityRow}>
-                <Pressable
-                  style={styles.quantityBtn}
-                  onPress={() => updateQuantity(product.id, -1)}
-                >
-                  <Text style={styles.quantityBtnText}>-</Text>
-                </Pressable>
-                <Text style={styles.quantityText}>{quantities[product.id]}</Text>
-                <Pressable
-                  style={styles.quantityBtn}
-                  onPress={() => updateQuantity(product.id, 1)}
-                >
-                  <Text style={styles.quantityBtnText}>+</Text>
+                <View style={styles.quantityRow}>
+                  <Pressable
+                    style={styles.quantityBtn}
+                    onPress={() => updateQuantity(product.id, -1)}
+                  >
+                    <Text style={styles.quantityBtnText}>-</Text>
+                  </Pressable>
+                  <Text style={styles.quantityText}>{quantities[product.id] || 1}</Text>
+                  <Pressable
+                    style={styles.quantityBtn}
+                    onPress={() => updateQuantity(product.id, 1)}
+                  >
+                    <Text style={styles.quantityBtnText}>+</Text>
+                  </Pressable>
+                </View>
+
+                <Pressable style={styles.addToCartBtn} onPress={() => handleAddToCart(product)}>
+                  <Text style={styles.addToCartText}>Add to Cart</Text>
                 </Pressable>
               </View>
-
-              <Pressable style={styles.addToCartBtn} onPress={() => handleAddToCart(product)}>
-                <Text style={styles.addToCartText}>Add to Cart</Text>
-              </Pressable>
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -204,33 +244,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  cartButton: {
-    position: 'absolute',
-    top: 50,
-    right: 12,
-    zIndex: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
+  loadingContainer: {
+    paddingVertical: 40,
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: colors.destructive,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.white,
   },
   scrollView: {
     flex: 1,
@@ -302,10 +318,6 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.primary,
-  },
-  overviewSmall: {
-    fontSize: 9,
-    color: colors.mutedForeground,
   },
   overviewDivider: {
     width: 1,

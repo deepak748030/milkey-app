@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { Droplets, Leaf, Heart, Star, Sparkles } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { initializeAuth, isAuthenticated } from '@/lib/authStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -24,6 +25,9 @@ export default function SplashScreen() {
   const fadeOut = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    // Initialize auth while showing splash
+    const checkAuth = initializeAuth();
+
     Animated.sequence([
       Animated.spring(logoScale, {
         toValue: 1,
@@ -68,16 +72,24 @@ export default function SplashScreen() {
         Animated.spring(icon3, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
         Animated.spring(icon4, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
       ]),
-    ]).start(() => {
+    ]).start(async () => {
+      // Wait for auth check to complete
+      await checkAuth;
+
       setTimeout(() => {
         Animated.timing(fadeOut, {
           toValue: 0,
           duration: 300,
           useNativeDriver: true,
         }).start(() => {
-          router.replace('/(tabs)');
+          // Navigate based on auth status
+          if (isAuthenticated()) {
+            router.replace('/(tabs)');
+          } else {
+            router.replace('/auth');
+          }
         });
-      }, 500);
+      }, 300);
     });
   }, []);
 

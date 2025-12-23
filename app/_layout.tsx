@@ -1,11 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import * as Notifications from 'expo-notifications';
-import { addNotificationFromPush } from '@/lib/mockData';
 
 export default function RootLayout() {
   useFrameworkReady();
@@ -13,13 +12,10 @@ export default function RootLayout() {
   // Initialize push notifications with deep linking support
   usePushNotifications();
 
-  // Request notification permission on app start and listen for incoming notifications
+  // Listen for incoming notifications
   useEffect(() => {
-    // Listen for incoming notifications and save them
     const notificationSubscription = Notifications.addNotificationReceivedListener(notification => {
-      const title = notification.request.content.title || 'New Notification';
-      const body = notification.request.content.body || '';
-      addNotificationFromPush(title, body);
+      console.log('Notification received:', notification.request.content.title);
     });
 
     return () => {
@@ -32,6 +28,7 @@ export default function RootLayout() {
       <>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
+          <Stack.Screen name="auth" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="event/[id]" />
           <Stack.Screen name="booking/[id]" />

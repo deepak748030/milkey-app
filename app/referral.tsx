@@ -1,37 +1,55 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Share, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Share, Dimensions, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
-import { ArrowLeft, Copy, Share2, Users, Wallet, Gift, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Copy, Share2, Users, Wallet, Gift } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
+import { referralsApi, ReferralData } from '@/lib/milkeyApi';
+import { useAuth } from '@/hooks/useAuth';
 
 const { width } = Dimensions.get('window');
-
-const mockReferralData = {
-    code: 'DAIRY2024',
-    totalReferrals: 12,
-    activeUsers: 8,
-    totalEarnings: 2450,
-    pendingEarnings: 320,
-    commissionRate: 5,
-    referrals: [
-        { id: '1', name: 'Mohan Kumar', date: '15 Dec 2024', earnings: 450, status: 'active' },
-        { id: '2', name: 'Suresh Patel', date: '12 Dec 2024', earnings: 380, status: 'active' },
-        { id: '3', name: 'Raj Singh', date: '10 Dec 2024', earnings: 520, status: 'active' },
-        { id: '4', name: 'Amit Sharma', date: '08 Dec 2024', earnings: 0, status: 'pending' },
-    ],
-};
 
 export default function ReferralScreen() {
     const { colors, isDark } = useTheme();
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
     const [copied, setCopied] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [referralData, setReferralData] = useState<ReferralData | null>(null);
 
     const styles = createStyles(colors, isDark, insets);
 
+    useEffect(() => {
+        fetchReferralData();
+    }, []);
+
+    const fetchReferralData = async () => {
+        setLoading(true);
+        try {
+            const res = await referralsApi.getData();
+            if (res.success && res.response) {
+                setReferralData(res.response);
+            }
+        } catch (error) {
+            console.error('Error fetching referral data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const code = referralData?.code || user?.referralCode || 'LOADING...';
+    const stats = referralData?.stats || {
+        totalReferrals: 0,
+        activeUsers: 0,
+        totalEarnings: 0,
+        pendingEarnings: 0,
+        commissionRate: 5,
+    };
+    const referrals = referralData?.referrals || [];
+
     const copyCode = async () => {
-        await Clipboard.setStringAsync(mockReferralData.code);
+        await Clipboard.setStringAsync(code);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -39,12 +57,20 @@ export default function ReferralScreen() {
     const shareCode = async () => {
         try {
             await Share.share({
-                message: `Join our dairy app using my referral code: ${mockReferralData.code} and get exciting rewards! Download now.`,
+                message: `Join Milkey dairy app using my referral code: ${code} and get exciting rewards! Download now.`,
             });
         } catch (error) {
             console.error('Error sharing:', error);
         }
     };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -62,7 +88,7 @@ export default function ReferralScreen() {
                 <View style={styles.commissionBanner}>
                     <Gift size={28} color={colors.white} />
                     <View style={styles.commissionInfo}>
-                        <Text style={styles.commissionTitle}>Earn {mockReferralData.commissionRate}% Commission</Text>
+                        <Text style={styles.commissionTitle}>Earn {stats.commissionRate}% Commission</Text>
                         <Text style={styles.commissionSubtitle}>On every purchase by your referrals</Text>
                     </View>
                 </View>
@@ -71,7 +97,7 @@ export default function ReferralScreen() {
                 <View style={styles.codeCard}>
                     <Text style={styles.codeLabel}>Your Referral Code</Text>
                     <View style={styles.codeContainer}>
-                        <Text style={styles.codeText}>{mockReferralData.code}</Text>
+                        <Text style={styles.codeText}>{code}</Text>
                         <Pressable onPress={copyCode} style={styles.copyBtn}>
                             <Copy size={18} color={colors.primary} />
                             <Text style={styles.copyText}>{copied ? 'Copied!' : 'Copy'}</Text>
@@ -87,12 +113,12 @@ export default function ReferralScreen() {
                 <View style={styles.statsRow}>
                     <View style={styles.statCard}>
                         <Users size={20} color={colors.primary} />
-                        <Text style={styles.statValue}>{mockReferralData.totalReferrals}</Text>
+                        <Text style={styles.statValue}>{stats.totalReferrals}</Text>
                         <Text style={styles.statLabel}>Total Referrals</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Users size={20} color={colors.success} />
-                        <Text style={styles.statValue}>{mockReferralData.activeUsers}</Text>
+                        <Text style={styles.statValue}>{stats.activeUsers}</Text>
                         <Text style={styles.statLabel}>Active Users</Text>
                     </View>
                 </View>
@@ -106,37 +132,43 @@ export default function ReferralScreen() {
                     <View style={styles.earningsRow}>
                         <View style={styles.earningItem}>
                             <Text style={styles.earningLabel}>Total Earned</Text>
-                            <Text style={styles.earningValue}>₹{mockReferralData.totalEarnings}</Text>
+                            <Text style={styles.earningValue}>₹{stats.totalEarnings}</Text>
                         </View>
                         <View style={styles.earningDivider} />
                         <View style={styles.earningItem}>
                             <Text style={styles.earningLabel}>Pending</Text>
-                            <Text style={[styles.earningValue, { color: colors.warning }]}>₹{mockReferralData.pendingEarnings}</Text>
+                            <Text style={[styles.earningValue, { color: colors.warning }]}>₹{stats.pendingEarnings}</Text>
                         </View>
                     </View>
                 </View>
 
                 {/* Referral History */}
                 <Text style={styles.sectionTitle}>Referral History</Text>
-                <View style={styles.historyCard}>
-                    {mockReferralData.referrals.map((referral, index) => (
-                        <View key={referral.id} style={[styles.historyItem, index < mockReferralData.referrals.length - 1 && styles.historyItemBorder]}>
-                            <View style={styles.historyAvatar}>
-                                <Text style={styles.historyAvatarText}>{referral.name.charAt(0)}</Text>
+                {referrals.length > 0 ? (
+                    <View style={styles.historyCard}>
+                        {referrals.map((referral, index) => (
+                            <View key={referral.id} style={[styles.historyItem, index < referrals.length - 1 && styles.historyItemBorder]}>
+                                <View style={styles.historyAvatar}>
+                                    <Text style={styles.historyAvatarText}>{referral.name.charAt(0)}</Text>
+                                </View>
+                                <View style={styles.historyInfo}>
+                                    <Text style={styles.historyName}>{referral.name}</Text>
+                                    <Text style={styles.historyDate}>{new Date(referral.date).toLocaleDateString()}</Text>
+                                </View>
+                                <View style={styles.historyEarnings}>
+                                    <Text style={[styles.historyStatus, { color: referral.status === 'active' ? colors.success : colors.warning }]}>
+                                        {referral.status === 'active' ? 'Active' : 'Pending'}
+                                    </Text>
+                                    <Text style={styles.historyAmount}>₹{referral.earnings}</Text>
+                                </View>
                             </View>
-                            <View style={styles.historyInfo}>
-                                <Text style={styles.historyName}>{referral.name}</Text>
-                                <Text style={styles.historyDate}>{referral.date}</Text>
-                            </View>
-                            <View style={styles.historyEarnings}>
-                                <Text style={[styles.historyStatus, { color: referral.status === 'active' ? colors.success : colors.warning }]}>
-                                    {referral.status === 'active' ? 'Active' : 'Pending'}
-                                </Text>
-                                <Text style={styles.historyAmount}>₹{referral.earnings}</Text>
-                            </View>
-                        </View>
-                    ))}
-                </View>
+                        ))}
+                    </View>
+                ) : (
+                    <View style={styles.emptyCard}>
+                        <Text style={styles.emptyText}>No referrals yet. Share your code to start earning!</Text>
+                    </View>
+                )}
 
                 {/* How It Works */}
                 <Text style={styles.sectionTitle}>How It Works</Text>
@@ -151,7 +183,7 @@ export default function ReferralScreen() {
                     </View>
                     <View style={styles.step}>
                         <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
-                        <Text style={styles.stepText}>Earn 5% on their every purchase</Text>
+                        <Text style={styles.stepText}>Earn {stats.commissionRate}% on their every purchase</Text>
                     </View>
                 </View>
             </ScrollView>
@@ -399,6 +431,20 @@ const createStyles = (colors: any, isDark: boolean, insets: any) => StyleSheet.c
         fontSize: 13,
         fontWeight: '700',
         color: colors.foreground,
+    },
+    emptyCard: {
+        backgroundColor: colors.card,
+        borderRadius: 10,
+        padding: 20,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: 'center',
+    },
+    emptyText: {
+        fontSize: 13,
+        color: colors.mutedForeground,
+        textAlign: 'center',
     },
     howItWorksCard: {
         backgroundColor: colors.card,

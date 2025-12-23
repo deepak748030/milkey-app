@@ -1,39 +1,32 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { Calendar, FileText, Trash2 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { farmersApi, advancesApi, Farmer, Advance } from '@/lib/milkeyApi';
 
 type TabType = 'Payments' | 'Advances' | 'Farmers';
 
-const mockFarmers = [
-    { id: '1', code: '1', name: 'kalu', mobile: '963232' },
-    { id: '2', code: '2', name: 'premveer', mobile: '991756481' },
-    { id: '3', code: '4', name: 'jhgmn,bjh', mobile: '656322563' },
-    { id: '4', code: '5', name: 'ds lodhi', mobile: '9012977624' },
-    { id: '5', code: '6', name: 'khurram khalam', mobile: '8545785896' },
-];
-
-const mockAdvances = [
-    { id: '1', code: '4', note: 'vese hi de diuye', amt: 5000, date: '2025-12-16' },
-    { id: '2', code: '1', note: 'cash me diya tha', amt: 2000, date: '2025-12-16' },
-    { id: '3', code: '3', note: 'case me diye the rahul ko', amt: 3000, date: '2025-12-16' },
-];
-
 export default function RegisterScreen() {
     const { colors, isDark } = useTheme();
-    const [activeTab, setActiveTab] = useState<TabType>('Payments');
+    const [activeTab, setActiveTab] = useState<TabType>('Farmers');
+    const [loading, setLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Data state
+    const [farmers, setFarmers] = useState<Farmer[]>([]);
+    const [advances, setAdvances] = useState<Advance[]>([]);
 
     // Payments state
     const [farmerCode, setFarmerCode] = useState('');
 
-    // Advances state Register
+    // Advances state
     const [advCode, setAdvCode] = useState('');
     const [advName, setAdvName] = useState('');
     const [advAmount, setAdvAmount] = useState('');
-    const [advDate, setAdvDate] = useState('20-12-2025');
+    const [advDate, setAdvDate] = useState(new Date().toISOString().split('T')[0]);
     const [advNote, setAdvNote] = useState('');
 
     // Farmers state
@@ -43,8 +36,148 @@ export default function RegisterScreen() {
     const [newAddress, setNewAddress] = useState('');
     const [searchCode, setSearchCode] = useState('');
 
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const [farmersRes, advancesRes] = await Promise.all([
+                farmersApi.getAll(),
+                advancesApi.getAll(),
+            ]);
+
+            if (farmersRes.success && farmersRes.response?.data) {
+                setFarmers(farmersRes.response.data);
+            }
+            if (advancesRes.success && advancesRes.response?.data) {
+                setAdvances(advancesRes.response.data);
+            }
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await fetchData();
+        setRefreshing(false);
+    }, []);
+
+    // Lookup farmer name when code changes
+    const handleAdvCodeChange = async (code: string) => {
+        setAdvCode(code);
+        if (code.length > 0) {
+            const farmer = farmers.find(f => f.code === code);
+            setAdvName(farmer?.name || '');
+        } else {
+            setAdvName('');
+        }
+    };
+
+    // Add farmer
+    const handleAddFarmer = async () => {
+        if (!newCode || !newName || !newMobile) {
+            Alert.alert('Error', 'Please fill code, name, and mobile');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const res = await farmersApi.create({
+                code: newCode,
+                name: newName,
+                mobile: newMobile,
+                address: newAddress,
+            });
+
+            if (res.success) {
+                Alert.alert('Success', 'Farmer added successfully');
+                clearFarmerForm();
+                fetchData();
+            } else {
+                Alert.alert('Error', res.message || 'Failed to add farmer');
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to add farmer');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const clearFarmerForm = () => {
+        setNewCode('');
+        setNewName('');
+        setNewMobile('');
+        setNewAddress('');
+    };
+
+    // Delete farmer
+    const handleDeleteFarmer = async (id: string, name: string) => {
+        Alert.alert(
+            'Delete Farmer',
+            `Are you sure you want to delete ${name}?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        const res = await farmersApi.delete(id);
+                        if (res.success) {
+                            fetchData();
+                        } else {
+                            Alert.alert('Error', res.message || 'Failed to delete');
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    // Add advance
+    const handleAddAdvance = async () => {
+        if (!advCode || !advAmount) {
+            Alert.alert('Error', 'Please enter farmer code and amount');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const res = await advancesApi.create({
+                farmerCode: advCode,
+                amount: parseFloat(advAmount),
+                date: advDate,
+                note: advNote,
+            });
+
+            if (res.success) {
+                Alert.alert('Success', 'Advance added successfully');
+                clearAdvanceForm();
+                fetchData();
+            } else {
+                Alert.alert('Error', res.message || 'Failed to add advance');
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to add advance');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const clearAdvanceForm = () => {
+        setAdvCode('');
+        setAdvName('');
+        setAdvAmount('');
+        setAdvNote('');
+    };
+
+    // Generate PDF
     const generateFarmersPDF = async () => {
-        const rows = mockFarmers.map(item => `
+        const rows = farmers.map(item => `
       <tr>
         <td>${item.code}</td>
         <td>${item.name}</td>
@@ -92,6 +225,11 @@ export default function RegisterScreen() {
 
     const styles = createStyles(colors, isDark);
 
+    // Filter farmers by search
+    const filteredFarmers = searchCode
+        ? farmers.filter(f => f.code.includes(searchCode))
+        : farmers;
+
     const renderPaymentsTab = () => (
         <View>
             <View style={styles.searchRow}>
@@ -108,10 +246,10 @@ export default function RegisterScreen() {
             </View>
 
             <Text style={styles.subTitle}>Recent Settlements</Text>
-            <Text style={styles.infoText}>Index missing for global list</Text>
+            <Text style={styles.infoText}>Select a farmer to view payments</Text>
 
             <Text style={[styles.subTitle, { marginTop: 16 }]}>Settlement History</Text>
-            <Text style={styles.infoTextMuted}>Select a farmer to view history</Text>
+            <Text style={styles.infoTextMuted}>No settlements yet</Text>
         </View>
     );
 
@@ -124,7 +262,7 @@ export default function RegisterScreen() {
                         style={styles.input}
                         placeholder="Code"
                         value={advCode}
-                        onChangeText={setAdvCode}
+                        onChangeText={handleAdvCodeChange}
                         placeholderTextColor={colors.mutedForeground}
                     />
                 </View>
@@ -132,9 +270,9 @@ export default function RegisterScreen() {
                     <Text style={styles.label}>Name</Text>
                     <TextInput
                         style={[styles.input, { backgroundColor: colors.muted }]}
-                        placeholder="Name"
+                        placeholder="Name (auto-filled)"
                         value={advName}
-                        onChangeText={setAdvName}
+                        editable={false}
                         placeholderTextColor={colors.mutedForeground}
                     />
                 </View>
@@ -178,31 +316,35 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.buttonRow}>
-                <Pressable style={styles.saveBtn}>
-                    <Text style={styles.saveBtnText}>Save Advance</Text>
+                <Pressable style={styles.saveBtn} onPress={handleAddAdvance} disabled={loading}>
+                    <Text style={styles.saveBtnText}>{loading ? 'Saving...' : 'Save Advance'}</Text>
                 </Pressable>
-                <Pressable style={styles.clearBtn}>
+                <Pressable style={styles.clearBtn} onPress={clearAdvanceForm}>
                     <Text style={styles.clearBtnText}>Clear</Text>
                 </Pressable>
             </View>
 
             {/* Advances Table */}
-            <View style={styles.table}>
-                <View style={styles.tableHeader}>
-                    <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Note</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Amt</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
-                </View>
-                {mockAdvances.map((item) => (
-                    <View key={item.id} style={styles.tableRow}>
-                        <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary }]}>{item.code}</Text>
-                        <Text style={[styles.tableCell, { flex: 2, textAlign: 'left' }]}>{item.note}</Text>
-                        <Text style={[styles.tableCell, { flex: 1, color: colors.warning }]}>₹{item.amt}</Text>
-                        <Text style={[styles.tableCell, { flex: 1 }]}>{item.date}</Text>
+            {advances.length > 0 ? (
+                <View style={styles.table}>
+                    <View style={styles.tableHeader}>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Note</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Amt</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
                     </View>
-                ))}
-            </View>
+                    {advances.map((item) => (
+                        <View key={item._id} style={styles.tableRow}>
+                            <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary }]}>{item.farmer?.code}</Text>
+                            <Text style={[styles.tableCell, { flex: 2, textAlign: 'left' }]}>{item.note || '-'}</Text>
+                            <Text style={[styles.tableCell, { flex: 1, color: colors.warning }]}>₹{item.amount}</Text>
+                            <Text style={[styles.tableCell, { flex: 1 }]}>{new Date(item.date).toLocaleDateString()}</Text>
+                        </View>
+                    ))}
+                </View>
+            ) : (
+                <Text style={styles.infoTextMuted}>No advances recorded yet</Text>
+            )}
         </View>
     );
 
@@ -256,10 +398,10 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.buttonRow}>
-                <Pressable style={styles.saveBtn}>
-                    <Text style={styles.saveBtnText}>Add Farmer</Text>
+                <Pressable style={styles.saveBtn} onPress={handleAddFarmer} disabled={loading}>
+                    <Text style={styles.saveBtnText}>{loading ? 'Adding...' : 'Add Farmer'}</Text>
                 </Pressable>
-                <Pressable style={styles.clearBtn}>
+                <Pressable style={styles.clearBtn} onPress={clearFarmerForm}>
                     <Text style={styles.clearBtnText}>Clear</Text>
                 </Pressable>
             </View>
@@ -268,7 +410,7 @@ export default function RegisterScreen() {
             <View style={styles.searchRow}>
                 <TextInput
                     style={styles.searchInput}
-                    placeholder="Enter Code"
+                    placeholder="Search by Code"
                     value={searchCode}
                     onChangeText={setSearchCode}
                     placeholderTextColor={colors.mutedForeground}
@@ -280,33 +422,38 @@ export default function RegisterScreen() {
             </View>
 
             {/* Farmers Table */}
-            <View style={styles.table}>
-                <View style={styles.tableHeader}>
-                    <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Mobile</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Act</Text>
-                </View>
-                {mockFarmers.map((item) => (
-                    <View key={item.id} style={styles.tableRow}>
-                        <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary }]}>{item.code}</Text>
-                        <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'left' }]}>{item.name}</Text>
-                        <Text style={[styles.tableCell, { flex: 1.2 }]}>{item.mobile}</Text>
-                        <View style={{ flex: 0.5, alignItems: 'center' }}>
-                            <Pressable style={styles.deleteBtn}>
-                                <Trash2 size={14} color={colors.destructive} />
-                            </Pressable>
-                        </View>
+            {loading ? (
+                <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
+            ) : filteredFarmers.length > 0 ? (
+                <View style={styles.table}>
+                    <View style={styles.tableHeader}>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Mobile</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Act</Text>
                     </View>
-                ))}
-            </View>
+                    {filteredFarmers.map((item) => (
+                        <View key={item._id} style={styles.tableRow}>
+                            <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary }]}>{item.code}</Text>
+                            <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'left' }]}>{item.name}</Text>
+                            <Text style={[styles.tableCell, { flex: 1.2 }]}>{item.mobile}</Text>
+                            <View style={{ flex: 0.5, alignItems: 'center' }}>
+                                <Pressable style={styles.deleteBtn} onPress={() => handleDeleteFarmer(item._id, item.name)}>
+                                    <Trash2 size={14} color={colors.destructive} />
+                                </Pressable>
+                            </View>
+                        </View>
+                    ))}
+                </View>
+            ) : (
+                <Text style={styles.infoTextMuted}>No farmers found. Add your first farmer above.</Text>
+            )}
         </View>
     );
 
     return (
         <View style={styles.container}>
             <TopBar />
-            {/* <Text style={styles.pageTitle}>Register</Text> */}
 
             {/* Tabs */}
             <View style={styles.tabRow}>
@@ -321,7 +468,13 @@ export default function RegisterScreen() {
                 ))}
             </View>
 
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+                }
+            >
                 {activeTab === 'Payments' && renderPaymentsTab()}
                 {activeTab === 'Advances' && renderAdvancesTab()}
                 {activeTab === 'Farmers' && renderFarmersTab()}
@@ -334,14 +487,6 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
-    },
-    pageTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: colors.primary,
-        paddingHorizontal: 6,
-        marginBottom: 10,
-        marginTop: 6,
     },
     tabRow: {
         flexDirection: 'row',
@@ -476,6 +621,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     infoTextMuted: {
         fontSize: 13,
         color: colors.mutedForeground,
+        textAlign: 'center',
+        marginTop: 20,
     },
     buttonRow: {
         flexDirection: 'row',
