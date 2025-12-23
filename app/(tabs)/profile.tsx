@@ -30,7 +30,7 @@ export default function ProfileScreen() {
               // Ignore API errors on logout
             }
             await clearAuth();
-            router.replace('/auth');
+            router.replace('/auth' as any);
           },
         },
       ]

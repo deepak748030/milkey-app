@@ -108,6 +108,74 @@ export interface Payment {
     netPayable: number;
 }
 
+export interface RateChart {
+    _id: string;
+    name: string;
+    milkType: 'cow' | 'buffalo' | 'mixed';
+    calculationType: 'fat_only' | 'fat_snf' | 'fixed';
+    fixedRate: number;
+    fatRate: number;
+    snfRate: number;
+    baseFat: number;
+    baseSnf: number;
+    baseRate: number;
+    isActive: boolean;
+}
+
+export interface ReportSummary {
+    totalQuantity: number;
+    totalAmount: number;
+    avgRate: number;
+    avgFat: number;
+    avgSnf: number;
+    morningQty: number;
+    eveningQty: number;
+    farmersCount: number;
+    collectionsCount: number;
+}
+
+export interface MilkReport {
+    period: { startDate: string; endDate: string };
+    summary: ReportSummary;
+    groupedData: any[];
+    details: any[];
+}
+
+export interface PaymentReport {
+    period: { startDate: string; endDate: string };
+    summary: {
+        totalPayments: number;
+        totalAmount: number;
+        totalMilkAmount: number;
+        totalAdvanceDeduction: number;
+        farmersCount: number;
+        byMethod: { cash: number; upi: number; bank: number; cheque: number };
+    };
+    groupedByFarmer: any[];
+    details: any[];
+}
+
+export interface FarmerStatement {
+    farmer: { _id: string; code: string; name: string; mobile: string };
+    period: { startDate: string; endDate: string };
+    summary: {
+        totalMilk: number;
+        totalMilkAmount: number;
+        totalPayments: number;
+        closingBalance: number;
+        collectionsCount: number;
+        paymentsCount: number;
+    };
+    statement: Array<{
+        date: string;
+        type: 'collection' | 'payment';
+        description: string;
+        credit: number;
+        debit: number;
+        balance: number;
+    }>;
+}
+
 export interface ReferralData {
     code: string;
     stats: {
@@ -430,6 +498,105 @@ export const paymentsApi = {
 
     getById: async (id: string) => {
         return apiRequest<Payment>(`/payments/${id}`);
+    },
+};
+
+// Rate Charts API
+export const rateChartsApi = {
+    getAll: async () => {
+        return apiRequest<{ data: RateChart[] }>('/rate-charts');
+    },
+
+    getActive: async () => {
+        return apiRequest<RateChart>('/rate-charts/active');
+    },
+
+    calculate: async (fat: number, snf: number) => {
+        return apiRequest<{ rate: number; fat: number; snf: number; chartName: string }>('/rate-charts/calculate', {
+            method: 'POST',
+            body: JSON.stringify({ fat, snf }),
+        });
+    },
+
+    create: async (data: Partial<RateChart>) => {
+        return apiRequest<RateChart>('/rate-charts', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    update: async (id: string, data: Partial<RateChart>) => {
+        return apiRequest<RateChart>(`/rate-charts/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+
+    getTable: async (params?: { fatMin?: number; fatMax?: number; snfMin?: number; snfMax?: number; step?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.fatMin) queryParams.append('fatMin', params.fatMin.toString());
+        if (params?.fatMax) queryParams.append('fatMax', params.fatMax.toString());
+        if (params?.snfMin) queryParams.append('snfMin', params.snfMin.toString());
+        if (params?.snfMax) queryParams.append('snfMax', params.snfMax.toString());
+        if (params?.step) queryParams.append('step', params.step.toString());
+        const query = queryParams.toString();
+
+        return apiRequest<{ chart: RateChart; table: Array<{ fat: number; rates: Array<{ snf: number; rate: number }> }> }>(
+            `/rate-charts/table${query ? `?${query}` : ''}`
+        );
+    },
+};
+
+// Reports API
+export const reportsApi = {
+    getMilkCollections: async (params: {
+        startDate: string;
+        endDate: string;
+        farmerCode?: string;
+        shift?: string;
+        groupBy?: 'date' | 'farmer';
+    }) => {
+        const queryParams = new URLSearchParams();
+        queryParams.append('startDate', params.startDate);
+        queryParams.append('endDate', params.endDate);
+        if (params.farmerCode) queryParams.append('farmerCode', params.farmerCode);
+        if (params.shift) queryParams.append('shift', params.shift);
+        if (params.groupBy) queryParams.append('groupBy', params.groupBy);
+
+        return apiRequest<MilkReport>(`/reports/milk-collections?${queryParams.toString()}`);
+    },
+
+    getPayments: async (params: {
+        startDate: string;
+        endDate: string;
+        farmerCode?: string;
+        paymentMethod?: string;
+    }) => {
+        const queryParams = new URLSearchParams();
+        queryParams.append('startDate', params.startDate);
+        queryParams.append('endDate', params.endDate);
+        if (params.farmerCode) queryParams.append('farmerCode', params.farmerCode);
+        if (params.paymentMethod) queryParams.append('paymentMethod', params.paymentMethod);
+
+        return apiRequest<PaymentReport>(`/reports/payments?${queryParams.toString()}`);
+    },
+
+    getFarmerStatement: async (farmerCode: string, startDate?: string, endDate?: string) => {
+        const queryParams = new URLSearchParams();
+        if (startDate) queryParams.append('startDate', startDate);
+        if (endDate) queryParams.append('endDate', endDate);
+        const query = queryParams.toString();
+
+        return apiRequest<FarmerStatement>(`/reports/farmer-statement/${farmerCode}${query ? `?${query}` : ''}`);
+    },
+
+    getDashboard: async () => {
+        return apiRequest<{
+            today: { quantity: number; amount: number; count: number };
+            thisMonth: { quantity: number; amount: number; count: number };
+            weekPayments: { amount: number; count: number };
+            totalFarmers: number;
+        }>('/reports/dashboard');
     },
 };
 

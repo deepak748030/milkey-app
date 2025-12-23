@@ -16,6 +16,8 @@ const advanceRoutes = require('./routes/advances');
 const referralRoutes = require('./routes/referrals');
 const milkCollectionRoutes = require('./routes/milk-collections');
 const paymentRoutes = require('./routes/payments');
+const rateChartRoutes = require('./routes/rate-charts');
+const reportRoutes = require('./routes/reports');
 
 const app = express();
 
@@ -71,6 +73,8 @@ app.use('/api/advances', advanceRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/milk-collections', milkCollectionRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/rate-charts', rateChartRoutes);
+app.use('/api/reports', reportRoutes);
 
 // 404 handler
 app.use((req, res) => {
