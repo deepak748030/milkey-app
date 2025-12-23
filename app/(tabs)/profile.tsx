@@ -1,43 +1,41 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users, MessageSquare } from 'lucide-react-native';
+import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users, MessageSquare, Package } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
 import { authApiNew } from '@/lib/milkeyApi';
 import { clearAuth } from '@/lib/authStore';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
   const { user } = useAuth();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const styles = createStyles(colors, isDark);
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await authApiNew.logout();
-            } catch (error) {
-              // Ignore API errors on logout
-            }
-            await clearAuth();
-            router.replace('/auth' as any);
-          },
-        },
-      ]
-    );
+  const handleLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await authApiNew.logout();
+    } catch (error) {
+      // Ignore API errors on logout
+    }
+    await clearAuth();
+    setShowLogoutModal(false);
+    setIsLoggingOut(false);
+    router.replace('/auth' as any);
   };
 
   const menuItems = [
+    { id: '0', icon: Package, label: 'My Orders', action: () => router.push('/orders' as any) },
     { id: '1', icon: MessageSquare, label: 'Feedback & Support', action: () => router.push('/feedback' as any) },
     { id: '2', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
     { id: '3', icon: Settings, label: 'Settings', action: () => { } },
@@ -107,6 +105,18 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>Logout</Text>
         </Pressable>
       </ScrollView>
+
+      <ConfirmationModal
+        visible={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={confirmLogout}
+        title="Logout"
+        message="Are you sure you want to logout?"
+        confirmText="Logout"
+        cancelText="Cancel"
+        confirmDestructive
+        isLoading={isLoggingOut}
+      />
     </View>
   );
 }

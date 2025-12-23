@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import { Eye, EyeOff, Mail, Lock, User, Phone, Gift } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { setToken, setStoredUser } from '@/lib/api';
-
-const API_BASE_URL = 'http://localhost:5000/api';
+import { authApiNew } from '@/lib/milkeyApi';
+import { setAuthUser } from '@/lib/authStore';
+import { SuccessModal } from '@/components/SuccessModal';
 
 export default function AuthScreen() {
     const { colors, isDark } = useTheme();
@@ -23,49 +23,60 @@ export default function AuthScreen() {
     const [password, setPassword] = useState('');
     const [referralCode, setReferralCode] = useState('');
 
+    // Modal state
+    const [modalVisible, setModalVisible] = useState(false);
+    const [modalTitle, setModalTitle] = useState('');
+    const [modalMessage, setModalMessage] = useState('');
+
     const styles = createStyles(colors, isDark, insets);
+
+    const showModal = (title: string, message: string) => {
+        setModalTitle(title);
+        setModalMessage(message);
+        setModalVisible(true);
+    };
 
     const handleAuth = async () => {
         if (isLogin) {
             if (!email || !password) {
-                Alert.alert('Error', 'Please enter email and password');
+                showModal('Error', 'Please enter email and password');
                 return;
             }
         } else {
             if (!name || !email || !phone || !password) {
-                Alert.alert('Error', 'Please fill all required fields');
+                showModal('Error', 'Please fill all required fields');
                 return;
             }
             if (password.length < 6) {
-                Alert.alert('Error', 'Password must be at least 6 characters');
+                showModal('Error', 'Password must be at least 6 characters');
                 return;
             }
         }
 
         setLoading(true);
         try {
-            const endpoint = isLogin ? '/auth/login' : '/auth/register';
-            const body = isLogin
-                ? { email, password }
-                : { name, email, phone, password, referralCode: referralCode || undefined };
+            let result;
 
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
+            if (isLogin) {
+                result = await authApiNew.login(email, password);
+            } else {
+                result = await authApiNew.register({
+                    name,
+                    email,
+                    phone,
+                    password,
+                    referralCode: referralCode || undefined,
+                });
+            }
 
-            const data = await response.json();
-
-            if (data.success) {
-                await setToken(data.response.token);
-                await setStoredUser(data.response.user);
+            if (result.success && result.response) {
+                await setAuthUser(result.response.token, result.response.user);
                 router.replace('/(tabs)');
             } else {
-                Alert.alert('Error', data.message || 'Authentication failed');
+                showModal('Error', result.message || 'Authentication failed');
             }
         } catch (error) {
-            Alert.alert('Error', 'Network error. Please check your connection.');
+            showModal('Error', 'Network error. Please check your connection.');
         } finally {
             setLoading(false);
         }
@@ -196,6 +207,14 @@ export default function AuthScreen() {
                     </View>
                 </View>
             </ScrollView>
+
+            <SuccessModal
+                isVisible={modalVisible}
+                onClose={() => setModalVisible(false)}
+                title={modalTitle}
+                message={modalMessage}
+                autoClose={false}
+            />
         </KeyboardAvoidingView>
     );
 }

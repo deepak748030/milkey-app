@@ -3,10 +3,10 @@ const router = express.Router();
 const Product = require('../models/Product');
 const auth = require('../middleware/auth');
 
-// GET /api/products - Get all products
-router.get('/', auth, async (req, res) => {
+// GET /api/products - Get all products (public - no auth required)
+router.get('/', async (req, res) => {
     try {
-        const products = await Product.find({ owner: req.userId, isActive: true })
+        const products = await Product.find({ isActive: true })
             .sort({ name: 1 })
             .lean();
 

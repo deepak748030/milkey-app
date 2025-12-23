@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, RefreshControl, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, Modal, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { Droplets, Sun, Moon, Plus, X, Wallet, Check, FileText, Calculator, ChevronDown, Share2, TrendingUp, User } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -7,6 +7,8 @@ import TopBar from '@/components/TopBar';
 import { milkCollectionsApi, paymentsApi, farmersApi, rateChartsApi, reportsApi, MilkCollection, TodaySummary, Farmer, FarmerPaymentSummary, RateChart, MilkReport, PaymentReport } from '@/lib/milkeyApi';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { SuccessModal } from '@/components/SuccessModal';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 type TabType = 'Collection' | 'Settlement' | 'Reports' | 'Rate Chart';
 
@@ -37,7 +39,25 @@ export default function DairyScreen() {
     const [milkReport, setMilkReport] = useState<MilkReport | null>(null);
     const [paymentReport, setPaymentReport] = useState<PaymentReport | null>(null);
 
+    // Modal state
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertTitle, setAlertTitle] = useState('');
+    const [alertMessage, setAlertMessage] = useState('');
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void }>({ title: '', message: '', onConfirm: () => { } });
+
     const styles = createStyles(colors, isDark);
+
+    const showAlert = (title: string, message: string) => {
+        setAlertTitle(title);
+        setAlertMessage(message);
+        setAlertVisible(true);
+    };
+
+    const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+        setConfirmData({ title, message, onConfirm });
+        setConfirmVisible(true);
+    };
 
     useEffect(() => { fetchData(); }, []);
 
@@ -90,7 +110,7 @@ export default function DairyScreen() {
 
     const handleAddCollection = async () => {
         if (!collectionForm.farmerCode || !collectionForm.quantity || !collectionForm.rate) {
-            Alert.alert('Error', 'Please fill farmer code, quantity, and rate'); return;
+            showAlert('Error', 'Please fill farmer code, quantity, and rate'); return;
         }
         setLoading(true);
         const res = await milkCollectionsApi.create({
@@ -102,37 +122,33 @@ export default function DairyScreen() {
             snf: collectionForm.snf ? parseFloat(collectionForm.snf) : undefined,
         });
         if (res.success) {
-            Alert.alert('Success', 'Milk collection recorded');
+            showAlert('Success', 'Milk collection recorded');
             setShowAddModal(false);
             setCollectionForm({ farmerCode: '', farmerName: '', quantity: '', rate: '', fat: '', snf: '', shift: new Date().getHours() < 12 ? 'morning' : 'evening' });
             fetchData();
-        } else Alert.alert('Error', res.message || 'Failed');
+        } else showAlert('Error', res.message || 'Failed');
         setLoading(false);
     };
 
     const handleFetchSettlement = async () => {
-        if (!settlementCode) { Alert.alert('Error', 'Enter farmer code'); return; }
+        if (!settlementCode) { showAlert('Error', 'Enter farmer code'); return; }
         setLoading(true);
         const res = await paymentsApi.getFarmerSummary(settlementCode);
         if (res.success) setFarmerSummary(res.response || null);
-        else { Alert.alert('Error', res.message || 'Not found'); setFarmerSummary(null); }
+        else { showAlert('Error', res.message || 'Not found'); setFarmerSummary(null); }
         setLoading(false);
     };
 
     const handleSettlePayment = async () => {
         if (!farmerSummary) return;
-        Alert.alert('Confirm Payment', `Pay ₹${farmerSummary.netPayable} to ${farmerSummary.farmer.name}?`, [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Pay', onPress: async () => {
-                    setLoading(true);
-                    const res = await paymentsApi.create({ farmerCode: farmerSummary.farmer.code, amount: farmerSummary.netPayable });
-                    if (res.success) { Alert.alert('Success', 'Payment recorded'); setFarmerSummary(null); setSettlementCode(''); fetchData(); }
-                    else Alert.alert('Error', res.message || 'Failed');
-                    setLoading(false);
-                }
-            },
-        ]);
+        showConfirm('Confirm Payment', `Pay ₹${farmerSummary.netPayable} to ${farmerSummary.farmer.name}?`, async () => {
+            setConfirmVisible(false);
+            setLoading(true);
+            const res = await paymentsApi.create({ farmerCode: farmerSummary.farmer.code, amount: farmerSummary.netPayable });
+            if (res.success) { showAlert('Success', 'Payment recorded'); setFarmerSummary(null); setSettlementCode(''); fetchData(); }
+            else showAlert('Error', res.message || 'Failed');
+            setLoading(false);
+        });
     };
 
     // Rate Chart functions
@@ -160,10 +176,10 @@ export default function DairyScreen() {
             : await rateChartsApi.create({ name: 'My Rate Chart', ...data });
 
         if (res.success) {
-            Alert.alert('Success', 'Rate chart saved');
+            showAlert('Success', 'Rate chart saved');
             setShowChartSettings(false);
             fetchData();
-        } else Alert.alert('Error', res.message || 'Failed');
+        } else showAlert('Error', res.message || 'Failed');
         setLoading(false);
     };
 
@@ -173,11 +189,11 @@ export default function DairyScreen() {
         if (reportType === 'milk') {
             const res = await reportsApi.getMilkCollections({ startDate: dateRange.start, endDate: dateRange.end });
             if (res.success) setMilkReport(res.response || null);
-            else Alert.alert('Error', res.message || 'Failed');
+            else showAlert('Error', res.message || 'Failed');
         } else {
             const res = await reportsApi.getPayments({ startDate: dateRange.start, endDate: dateRange.end });
             if (res.success) setPaymentReport(res.response || null);
-            else Alert.alert('Error', res.message || 'Failed');
+            else showAlert('Error', res.message || 'Failed');
         }
         setLoading(false);
     };
@@ -241,17 +257,17 @@ export default function DairyScreen() {
 
     const handleSharePdf = async () => {
         const html = generatePdfHtml();
-        if (!html) { Alert.alert('Error', 'Generate report first'); return; }
+        if (!html) { showAlert('Error', 'Generate report first'); return; }
 
         try {
             const { uri } = await Print.printToFileAsync({ html });
             if (await Sharing.isAvailableAsync()) {
                 await Sharing.shareAsync(uri);
             } else {
-                Alert.alert('Info', 'PDF saved to: ' + uri);
+                showAlert('Info', 'PDF saved to: ' + uri);
             }
         } catch (e) {
-            Alert.alert('Error', 'Failed to generate PDF');
+            showAlert('Error', 'Failed to generate PDF');
         }
     };
 
@@ -482,6 +498,24 @@ export default function DairyScreen() {
                     </View>
                 </View>
             </Modal>
+
+            <SuccessModal
+                isVisible={alertVisible}
+                onClose={() => setAlertVisible(false)}
+                title={alertTitle}
+                message={alertMessage}
+                autoClose={alertTitle === 'Success'}
+            />
+
+            <ConfirmationModal
+                visible={confirmVisible}
+                onClose={() => setConfirmVisible(false)}
+                onConfirm={confirmData.onConfirm}
+                title={confirmData.title}
+                message={confirmData.message}
+                confirmText="Confirm"
+                cancelText="Cancel"
+            />
         </View>
     );
 }

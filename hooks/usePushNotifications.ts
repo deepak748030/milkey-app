@@ -15,49 +15,10 @@ Notifications.setNotificationHandler({
     }),
 });
 
-// Set notification category with reply action
-Notifications.setNotificationCategoryAsync('chat', [
-    {
-        identifier: 'reply',
-        buttonTitle: 'Reply',
-        textInput: {
-            submitButtonTitle: 'Send',
-            placeholder: 'Type your message...',
-        },
-    },
-]);
-
 export interface PushNotificationState {
     expoPushToken: string | null;
     notification: Notifications.Notification | null;
     error: string | null;
-}
-
-// Handle notification navigation
-function handleNotificationNavigation(data: Record<string, unknown>) {
-    if (data?.type === 'chat') {
-        // Handle chat notification - navigate to chat with sender
-        const senderId = data.senderId as string;
-        const senderName = data.senderName as string;
-        if (senderId) {
-            router.push({
-                pathname: '/chat/[id]',
-                params: {
-                    id: senderId,
-                    vendorName: senderName || 'Vendor',
-                    vendorAvatar: ''
-                }
-            });
-        }
-    } else if (data?.type === 'booking' && data?.bookingId) {
-        router.push(`/booking-details/${data.bookingId}`);
-    } else if (data?.type === 'booking_confirmed' && data?.bookingId) {
-        router.push(`/booking-details/${data.bookingId}`);
-    } else if (data?.type === 'booking_cancelled' && data?.bookingId) {
-        router.push(`/booking-details/${data.bookingId}`);
-    } else if (data?.type === 'event' && data?.eventId) {
-        router.push(`/event/${data.eventId}`);
-    }
 }
 
 export function usePushNotifications() {
@@ -71,19 +32,11 @@ export function usePushNotifications() {
         let token: string | null = null;
 
         if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync('chat', {
-                name: 'Chat Messages',
-                importance: Notifications.AndroidImportance.HIGH,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#7C3AED',
-                sound: 'notification.mp3',
-            });
-
             await Notifications.setNotificationChannelAsync('default', {
                 name: 'Default',
                 importance: Notifications.AndroidImportance.MAX,
                 vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#7C3AED',
+                lightColor: '#22C55E',
             });
         }
 
@@ -122,7 +75,6 @@ export function usePushNotifications() {
         return token;
     }
 
-    // Function to update push token on server
     async function updatePushTokenOnServer(token: string) {
         try {
             const authToken = await getToken();
@@ -130,13 +82,6 @@ export function usePushNotifications() {
                 const result = await authApi.updatePushToken(token);
                 if (result.success) {
                     console.log('Push token updated on server');
-
-                    // Check if user is blocked
-                    if (result.response?.isBlocked) {
-                        console.warn('User is blocked');
-                        await authApi.logout();
-                        router.replace('/');
-                    }
                 } else {
                     console.error('Failed to update push token:', result.message);
                 }
@@ -150,33 +95,17 @@ export function usePushNotifications() {
         registerForPushNotificationsAsync().then((token) => {
             if (token) {
                 setExpoPushToken(token);
-                // Update token on server if user is logged in
                 updatePushTokenOnServer(token);
             }
         });
 
-        // Check if app was opened from a notification
-        Notifications.getLastNotificationResponseAsync().then((response) => {
-            if (response) {
-                const data = response.notification.request.content.data;
-                handleNotificationNavigation(data);
-            }
-        });
-
-        // Listen for notifications when app is in foreground
         notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
             setNotification(notification);
         });
 
-        // Listen for notification tap/response
         responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
-            const data = response.notification.request.content.data;
-
-            if (response.actionIdentifier === 'reply' && response.userText) {
-                return;
-            }
-
-            handleNotificationNavigation(data);
+            // Navigate to notifications screen on tap
+            router.push('/notifications' as any);
         });
 
         return () => {
@@ -197,58 +126,17 @@ export function usePushNotifications() {
     };
 }
 
-// Function to send a chat notification with proper deep linking
-export async function sendChatNotification(
-    senderName: string,
-    message: string,
-    eventId: string,
-    vendorId: string
-) {
-    await Notifications.scheduleNotificationAsync({
-        content: {
-            title: senderName,
-            body: message,
-            data: {
-                type: 'chat',
-                eventId,
-                vendorId,
-            },
-            sound: 'notification.mp3',
-            categoryIdentifier: 'chat',
-        },
-        trigger: null,
-    });
-}
-
-// Function to send a local notification with custom sound and category
 export async function sendLocalNotification(
     title: string,
     body: string,
-    data?: Record<string, unknown>,
-    categoryIdentifier?: string
+    data?: Record<string, unknown>
 ) {
     await Notifications.scheduleNotificationAsync({
         content: {
             title,
             body,
             data: data || {},
-            sound: 'notification.mp3',
-            categoryIdentifier: categoryIdentifier || undefined,
         },
         trigger: null,
-    });
-}
-
-// Function to handle notification response (reply action)
-export function setupNotificationResponseHandler(onReply: (vendorId: string, message: string) => void) {
-    return Notifications.addNotificationResponseReceivedListener((response) => {
-        if (response.actionIdentifier === 'reply') {
-            const userText = response.userText;
-            const vendorId = response.notification.request.content.data.vendorId as string;
-
-            if (userText && vendorId) {
-                onReply(vendorId, userText);
-            }
-        }
     });
 }

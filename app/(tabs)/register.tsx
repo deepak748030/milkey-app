@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { Calendar, FileText, Trash2 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { farmersApi, advancesApi, Farmer, Advance } from '@/lib/milkeyApi';
+import { SuccessModal } from '@/components/SuccessModal';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 type TabType = 'Payments' | 'Advances' | 'Farmers';
 
@@ -35,6 +37,24 @@ export default function RegisterScreen() {
     const [newMobile, setNewMobile] = useState('');
     const [newAddress, setNewAddress] = useState('');
     const [searchCode, setSearchCode] = useState('');
+
+    // Modal state
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertTitle, setAlertTitle] = useState('');
+    const [alertMessage, setAlertMessage] = useState('');
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void }>({ title: '', message: '', onConfirm: () => { } });
+
+    const showAlert = (title: string, message: string) => {
+        setAlertTitle(title);
+        setAlertMessage(message);
+        setAlertVisible(true);
+    };
+
+    const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+        setConfirmData({ title, message, onConfirm });
+        setConfirmVisible(true);
+    };
 
     useEffect(() => {
         fetchData();
@@ -81,7 +101,7 @@ export default function RegisterScreen() {
     // Add farmer
     const handleAddFarmer = async () => {
         if (!newCode || !newName || !newMobile) {
-            Alert.alert('Error', 'Please fill code, name, and mobile');
+            showAlert('Error', 'Please fill code, name, and mobile');
             return;
         }
 
@@ -95,14 +115,14 @@ export default function RegisterScreen() {
             });
 
             if (res.success) {
-                Alert.alert('Success', 'Farmer added successfully');
+                showAlert('Success', 'Farmer added successfully');
                 clearFarmerForm();
                 fetchData();
             } else {
-                Alert.alert('Error', res.message || 'Failed to add farmer');
+                showAlert('Error', res.message || 'Failed to add farmer');
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to add farmer');
+            showAlert('Error', 'Failed to add farmer');
         } finally {
             setLoading(false);
         }
@@ -117,31 +137,21 @@ export default function RegisterScreen() {
 
     // Delete farmer
     const handleDeleteFarmer = async (id: string, name: string) => {
-        Alert.alert(
-            'Delete Farmer',
-            `Are you sure you want to delete ${name}?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        const res = await farmersApi.delete(id);
-                        if (res.success) {
-                            fetchData();
-                        } else {
-                            Alert.alert('Error', res.message || 'Failed to delete');
-                        }
-                    },
-                },
-            ]
-        );
+        showConfirm('Delete Farmer', `Are you sure you want to delete ${name}?`, async () => {
+            setConfirmVisible(false);
+            const res = await farmersApi.delete(id);
+            if (res.success) {
+                fetchData();
+            } else {
+                showAlert('Error', res.message || 'Failed to delete');
+            }
+        });
     };
 
     // Add advance
     const handleAddAdvance = async () => {
         if (!advCode || !advAmount) {
-            Alert.alert('Error', 'Please enter farmer code and amount');
+            showAlert('Error', 'Please enter farmer code and amount');
             return;
         }
 
@@ -155,14 +165,14 @@ export default function RegisterScreen() {
             });
 
             if (res.success) {
-                Alert.alert('Success', 'Advance added successfully');
+                showAlert('Success', 'Advance added successfully');
                 clearAdvanceForm();
                 fetchData();
             } else {
-                Alert.alert('Error', res.message || 'Failed to add advance');
+                showAlert('Error', res.message || 'Failed to add advance');
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to add advance');
+            showAlert('Error', 'Failed to add advance');
         } finally {
             setLoading(false);
         }
@@ -216,10 +226,10 @@ export default function RegisterScreen() {
             if (await Sharing.isAvailableAsync()) {
                 await Sharing.shareAsync(uri);
             } else {
-                Alert.alert('PDF Generated', `Saved to: ${uri}`);
+                showAlert('PDF Generated', `Saved to: ${uri}`);
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to generate PDF');
+            showAlert('Error', 'Failed to generate PDF');
         }
     };
 
@@ -479,6 +489,25 @@ export default function RegisterScreen() {
                 {activeTab === 'Advances' && renderAdvancesTab()}
                 {activeTab === 'Farmers' && renderFarmersTab()}
             </ScrollView>
+
+            <SuccessModal
+                isVisible={alertVisible}
+                onClose={() => setAlertVisible(false)}
+                title={alertTitle}
+                message={alertMessage}
+                autoClose={alertTitle === 'Success'}
+            />
+
+            <ConfirmationModal
+                visible={confirmVisible}
+                onClose={() => setConfirmVisible(false)}
+                onConfirm={confirmData.onConfirm}
+                title={confirmData.title}
+                message={confirmData.message}
+                confirmText="Delete"
+                cancelText="Cancel"
+                confirmDestructive
+            />
         </View>
     );
 }

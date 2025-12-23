@@ -6,6 +6,7 @@ const RateChart = require('../models/RateChart');
 const MilkCollection = require('../models/MilkCollection');
 const Payment = require('../models/Payment');
 const Advance = require('../models/Advance');
+const auth = require('../middleware/auth');
 
 // Mock farmers data
 const mockFarmers = [
@@ -48,7 +49,7 @@ const mockRateChart = {
 };
 
 // Generate random milk collections for past 30 days
-const generateMilkCollections = (farmers) => {
+const generateMilkCollections = (farmers, owner) => {
     const collections = [];
     const today = new Date();
 
@@ -70,6 +71,7 @@ const generateMilkCollections = (farmers) => {
 
             collections.push({
                 farmer: farmer._id,
+                owner,
                 date: date,
                 shift,
                 quantity,
@@ -87,7 +89,7 @@ const generateMilkCollections = (farmers) => {
 };
 
 // Generate payments for farmers
-const generatePayments = (farmers) => {
+const generatePayments = (farmers, owner) => {
     const payments = [];
     const today = new Date();
 
@@ -101,6 +103,7 @@ const generatePayments = (farmers) => {
 
         payments.push({
             farmer: farmer._id,
+            owner,
             amount,
             date,
             paymentMethod: methods[Math.floor(Math.random() * methods.length)],
@@ -115,7 +118,7 @@ const generatePayments = (farmers) => {
 };
 
 // Generate advances for farmers
-const generateAdvances = (farmers) => {
+const generateAdvances = (farmers, owner) => {
     const advances = [];
     const today = new Date();
 
@@ -130,6 +133,7 @@ const generateAdvances = (farmers) => {
 
         advances.push({
             farmer: farmer._id,
+            owner,
             amount,
             date,
             note: ['Ghee advance', 'Cash advance', 'Festival advance', 'Emergency'][Math.floor(Math.random() * 4)],
@@ -141,91 +145,95 @@ const generateAdvances = (farmers) => {
     return advances;
 };
 
-// POST /api/seed - Seed all mock data
-router.post('/', async (req, res) => {
+// POST /api/seed - Seed all mock data (requires authentication)
+router.post('/', auth, async (req, res) => {
     try {
-        // Clear existing data (optional - remove if you want to keep existing data)
+        const owner = req.userId;
+
+        // Clear existing data for this user (optional - remove if you want to keep existing data)
         const clearExisting = req.query.clear === 'true';
 
         if (clearExisting) {
             await Promise.all([
-                Farmer.deleteMany({}),
-                Product.deleteMany({}),
-                RateChart.deleteMany({}),
-                MilkCollection.deleteMany({}),
-                Payment.deleteMany({}),
-                Advance.deleteMany({}),
+                Farmer.deleteMany({ owner }),
+                Product.deleteMany({ owner }),
+                RateChart.deleteMany({ owner }),
+                MilkCollection.deleteMany({ owner }),
+                Payment.deleteMany({ owner }),
+                Advance.deleteMany({ owner }),
             ]);
         }
 
         // Seed farmers
-        const existingFarmers = await Farmer.find({});
+        const existingFarmers = await Farmer.find({ owner });
         let farmers;
 
         if (existingFarmers.length === 0) {
-            farmers = await Farmer.insertMany(mockFarmers);
-            console.log(`✅ Seeded ${farmers.length} farmers`);
+            const farmersWithOwner = mockFarmers.map(f => ({ ...f, owner }));
+            farmers = await Farmer.insertMany(farmersWithOwner);
+            console.log(`✅ Seeded ${farmers.length} farmers for user ${owner}`);
         } else {
             farmers = existingFarmers;
-            console.log(`ℹ️ ${farmers.length} farmers already exist`);
+            console.log(`ℹ️ ${farmers.length} farmers already exist for user ${owner}`);
         }
 
         // Seed products
-        const existingProducts = await Product.find({});
+        const existingProducts = await Product.find({ owner });
         if (existingProducts.length === 0) {
-            const products = await Product.insertMany(mockProducts);
-            console.log(`✅ Seeded ${products.length} products`);
+            const productsWithOwner = mockProducts.map(p => ({ ...p, owner }));
+            const products = await Product.insertMany(productsWithOwner);
+            console.log(`✅ Seeded ${products.length} products for user ${owner}`);
         } else {
-            console.log(`ℹ️ ${existingProducts.length} products already exist`);
+            console.log(`ℹ️ ${existingProducts.length} products already exist for user ${owner}`);
         }
 
         // Seed rate chart
-        const existingRateChart = await RateChart.findOne({ isActive: true });
+        const existingRateChart = await RateChart.findOne({ owner, isActive: true });
         if (!existingRateChart) {
-            await RateChart.create(mockRateChart);
-            console.log(`✅ Seeded rate chart`);
+            await RateChart.create({ ...mockRateChart, owner });
+            console.log(`✅ Seeded rate chart for user ${owner}`);
         } else {
-            console.log(`ℹ️ Rate chart already exists`);
+            console.log(`ℹ️ Rate chart already exists for user ${owner}`);
         }
 
         // Seed milk collections
-        const existingCollections = await MilkCollection.find({});
+        const existingCollections = await MilkCollection.find({ owner });
         if (existingCollections.length === 0 && farmers.length > 0) {
-            const collections = generateMilkCollections(farmers);
+            const collections = generateMilkCollections(farmers, owner);
             await MilkCollection.insertMany(collections);
-            console.log(`✅ Seeded ${collections.length} milk collections`);
+            console.log(`✅ Seeded ${collections.length} milk collections for user ${owner}`);
         } else {
-            console.log(`ℹ️ ${existingCollections.length} milk collections already exist`);
+            console.log(`ℹ️ ${existingCollections.length} milk collections already exist for user ${owner}`);
         }
 
         // Seed payments
-        const existingPayments = await Payment.find({});
+        const existingPayments = await Payment.find({ owner });
         if (existingPayments.length === 0 && farmers.length > 0) {
-            const payments = generatePayments(farmers);
+            const payments = generatePayments(farmers, owner);
             await Payment.insertMany(payments);
-            console.log(`✅ Seeded ${payments.length} payments`);
+            console.log(`✅ Seeded ${payments.length} payments for user ${owner}`);
         } else {
-            console.log(`ℹ️ ${existingPayments.length} payments already exist`);
+            console.log(`ℹ️ ${existingPayments.length} payments already exist for user ${owner}`);
         }
 
         // Seed advances
-        const existingAdvances = await Advance.find({});
+        const existingAdvances = await Advance.find({ owner });
         if (existingAdvances.length === 0 && farmers.length > 0) {
-            const advances = generateAdvances(farmers);
+            const advances = generateAdvances(farmers, owner);
             await Advance.insertMany(advances);
-            console.log(`✅ Seeded ${advances.length} advances`);
+            console.log(`✅ Seeded ${advances.length} advances for user ${owner}`);
         } else {
-            console.log(`ℹ️ ${existingAdvances.length} advances already exist`);
+            console.log(`ℹ️ ${existingAdvances.length} advances already exist for user ${owner}`);
         }
 
         // Get counts for response
         const counts = {
-            farmers: await Farmer.countDocuments(),
-            products: await Product.countDocuments(),
-            rateCharts: await RateChart.countDocuments(),
-            milkCollections: await MilkCollection.countDocuments(),
-            payments: await Payment.countDocuments(),
-            advances: await Advance.countDocuments(),
+            farmers: await Farmer.countDocuments({ owner }),
+            products: await Product.countDocuments({ owner }),
+            rateCharts: await RateChart.countDocuments({ owner }),
+            milkCollections: await MilkCollection.countDocuments({ owner }),
+            payments: await Payment.countDocuments({ owner }),
+            advances: await Advance.countDocuments({ owner }),
         };
 
         res.json({
@@ -243,16 +251,18 @@ router.post('/', async (req, res) => {
     }
 });
 
-// GET /api/seed/status - Check current data counts
-router.get('/status', async (req, res) => {
+// GET /api/seed/status - Check current data counts (requires authentication)
+router.get('/status', auth, async (req, res) => {
     try {
+        const owner = req.userId;
+
         const counts = {
-            farmers: await Farmer.countDocuments(),
-            products: await Product.countDocuments(),
-            rateCharts: await RateChart.countDocuments(),
-            milkCollections: await MilkCollection.countDocuments(),
-            payments: await Payment.countDocuments(),
-            advances: await Advance.countDocuments(),
+            farmers: await Farmer.countDocuments({ owner }),
+            products: await Product.countDocuments({ owner }),
+            rateCharts: await RateChart.countDocuments({ owner }),
+            milkCollections: await MilkCollection.countDocuments({ owner }),
+            payments: await Payment.countDocuments({ owner }),
+            advances: await Advance.countDocuments({ owner }),
         };
 
         res.json({
@@ -268,16 +278,18 @@ router.get('/status', async (req, res) => {
     }
 });
 
-// DELETE /api/seed/clear - Clear all data
-router.delete('/clear', async (req, res) => {
+// DELETE /api/seed/clear - Clear all data for user (requires authentication)
+router.delete('/clear', auth, async (req, res) => {
     try {
+        const owner = req.userId;
+
         await Promise.all([
-            Farmer.deleteMany({}),
-            Product.deleteMany({}),
-            RateChart.deleteMany({}),
-            MilkCollection.deleteMany({}),
-            Payment.deleteMany({}),
-            Advance.deleteMany({}),
+            Farmer.deleteMany({ owner }),
+            Product.deleteMany({ owner }),
+            RateChart.deleteMany({ owner }),
+            MilkCollection.deleteMany({ owner }),
+            Payment.deleteMany({ owner }),
+            Advance.deleteMany({ owner }),
         ]);
 
         res.json({

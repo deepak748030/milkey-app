@@ -1,59 +1,78 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, FileQuestionMark as FileQuestion, MessageCircle, Mail, Phone, ChevronRight, ChevronDown } from 'lucide-react-native';
-import { colors } from '@/lib/colors';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function HelpSupportScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+
+  const styles = createStyles(colors, isDark, insets);
+
+  const handleEmailPress = () => {
+    Linking.openURL('mailto:support@milkeyapp.com');
+  };
+
+  const handlePhonePress = () => {
+    Linking.openURL('tel:+911800123456');
+  };
 
   const contactOptions = [
     {
       icon: MessageCircle,
       title: 'Live Chat',
       subtitle: 'Chat with our support team',
-      onPress: () => { },
+      onPress: () => router.push('/feedback'),
     },
     {
       icon: Mail,
       title: 'Email Us',
-      subtitle: 'support@eventapp.com',
-      onPress: () => { },
+      subtitle: 'support@milkeyapp.com',
+      onPress: handleEmailPress,
     },
     {
       icon: Phone,
       title: 'Call Us',
-      subtitle: '+91 1800 123 4567',
-      onPress: () => { },
+      subtitle: '+91 1800 123 456',
+      onPress: handlePhonePress,
     },
   ];
 
   const faqs = [
     {
-      question: 'How do I book an event?',
-      answer: 'To book an event, browse through our event listings, select the event you want, choose your preferred date, and proceed with the payment. You will receive a confirmation once the booking is complete.',
+      question: 'How do I add a new farmer/member?',
+      answer: 'Go to the Register tab, select the Farmers section, fill in the farmer code, name, mobile number, and address, then tap "Add Farmer" to save.',
     },
     {
-      question: 'Can I cancel my booking?',
-      answer: 'Yes, you can cancel your booking from the "My Bookings" section. Cancellation policies may vary depending on the event and vendor. Please check the specific terms before canceling.',
+      question: 'How do I record milk collection?',
+      answer: 'Navigate to the Dairy tab, tap "Add Collection", select the farmer by code, enter quantity, FAT%, SNF%, and the rate will be auto-calculated based on your rate chart.',
     },
     {
-      question: 'How do I get my tickets?',
-      answer: 'After successful payment, you will receive a booking confirmation with all the details. You can also view your booking details in the "My Bookings" section of the app.',
+      question: 'How does the rate calculation work?',
+      answer: 'The app uses your configured rate chart to calculate the milk rate based on FAT and SNF values. You can customize the rate chart in the Dairy tab under "Rate Chart" section.',
     },
     {
-      question: 'What payment methods are accepted?',
-      answer: 'We accept UPI payments, credit/debit cards, and digital wallets like Paytm, PhonePe, and Google Pay. All payments are processed securely.',
+      question: 'How do I make payments to farmers?',
+      answer: 'Go to the Dairy tab, select "Settlement", enter the farmer code to see their pending amount. You can then process payment via cash, UPI, or bank transfer.',
     },
     {
-      question: 'How can I contact the vendor?',
-      answer: 'You can chat with vendors directly through our in-app messaging system. Go to your booking details and tap on "Chat with Vendor" to start a conversation.',
+      question: 'How do I record advances given to farmers?',
+      answer: 'In the Register tab, go to "Advances" section. Enter the farmer code, amount, date, and optional note, then tap "Save Advance".',
     },
     {
-      question: 'What if I need to change my booking date?',
-      answer: 'Date changes depend on vendor availability and policies. Contact the vendor through the chat feature to discuss possible date modifications.',
+      question: 'How can I export reports?',
+      answer: 'Go to the Selling tab, navigate to Reports section, select your date range, and use the PDF or Export buttons to download your milk collection or payment reports.',
+    },
+    {
+      question: 'How do I change my rate chart settings?',
+      answer: 'In the Dairy tab, go to "Rate Chart" section and tap "Edit Settings". You can modify base rate, FAT rate, SNF rate, and other parameters.',
+    },
+    {
+      question: 'Can multiple users access the same data?',
+      answer: 'Currently, each account has its own separate data. Multi-user access and team features will be available in future updates.',
     },
   ];
 
@@ -62,7 +81,7 @@ export default function HelpSupportScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       {/* Custom Header */}
       <View style={styles.header}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -80,7 +99,7 @@ export default function HelpSupportScreen() {
             </View>
             <Text style={styles.heroTitle}>How can we help?</Text>
             <Text style={styles.heroDescription}>
-              Find answers to common questions or get in touch with our support team for personalized assistance.
+              Find answers to common questions about dairy management or get in touch with our support team.
             </Text>
           </View>
 
@@ -136,11 +155,11 @@ export default function HelpSupportScreen() {
           <View style={styles.additionalHelp}>
             <Text style={styles.additionalTitle}>Still need help?</Text>
             <Text style={styles.additionalText}>
-              Our support team is available 24/7 to assist you with any questions or issues you may have.
+              Our support team is available to assist you with any questions about dairy management.
             </Text>
-            <Pressable style={styles.contactButton}>
-              <MessageCircle size={18} color={colors.primaryForeground} />
-              <Text style={styles.contactButtonText}>Contact Support</Text>
+            <Pressable style={styles.contactButton} onPress={() => router.push('/feedback')}>
+              <MessageCircle size={18} color={colors.white} />
+              <Text style={styles.contactButtonText}>Send Feedback</Text>
             </Pressable>
           </View>
         </View>
@@ -149,17 +168,18 @@ export default function HelpSupportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, isDark: boolean, insets: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: insets.top,
   },
   header: {
     backgroundColor: colors.background,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     paddingHorizontal: 16,
-    paddingVertical: 1,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -184,7 +204,6 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     alignItems: 'center',
-    textAlign: 'center',
     marginBottom: 32,
   },
   heroIcon: {
@@ -333,6 +352,6 @@ const styles = StyleSheet.create({
   contactButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.primaryForeground,
+    color: colors.white,
   },
 });

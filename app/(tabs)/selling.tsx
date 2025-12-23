@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { Calendar, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Calculator } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
@@ -9,6 +9,8 @@ import { getAuthToken } from '@/lib/authStore';
 import { exportMembers, exportMilkCollections, exportPayments } from '@/lib/csvExport';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { SuccessModal } from '@/components/SuccessModal';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
 
@@ -51,6 +53,24 @@ export default function SellingScreen() {
     const [memberMobile, setMemberMobile] = useState('');
     const [memberAddress, setMemberAddress] = useState('');
     const [editingMember, setEditingMember] = useState<Farmer | null>(null);
+
+    // Modal state
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertTitle, setAlertTitle] = useState('');
+    const [alertMessage, setAlertMessage] = useState('');
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void }>({ title: '', message: '', onConfirm: () => { } });
+
+    const showAlert = (title: string, message: string) => {
+        setAlertTitle(title);
+        setAlertMessage(message);
+        setAlertVisible(true);
+    };
+
+    const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+        setConfirmData({ title, message, onConfirm });
+        setConfirmVisible(true);
+    };
 
     // Helper function for date offset
     function getDateOffset(days: number) {
@@ -109,16 +129,16 @@ export default function SellingScreen() {
     // Calculate rate based on FAT and SNF
     const handleCalculateRate = async () => {
         if (!fat || !snf) {
-            Alert.alert('Info', 'Enter FAT and SNF values to calculate rate');
+            showAlert('Info', 'Enter FAT and SNF values to calculate rate');
             return;
         }
         try {
             const res = await rateChartsApi.calculate(parseFloat(fat), parseFloat(snf));
             if (res.success && res.response) {
                 setRate(res.response.rate.toFixed(2));
-                Alert.alert('Rate Calculated', `Rate: ₹${res.response.rate.toFixed(2)}/L based on FAT ${fat}% and SNF ${snf}%`);
+                showAlert('Rate Calculated', `Rate: ₹${res.response.rate.toFixed(2)}/L based on FAT ${fat}% and SNF ${snf}%`);
             } else {
-                Alert.alert('Error', 'No rate chart configured. Using default rate.');
+                showAlert('Error', 'No rate chart configured. Using default rate.');
             }
         } catch (error) {
             console.error('Rate calculation error:', error);
@@ -128,13 +148,13 @@ export default function SellingScreen() {
     // Save milk entry
     const handleSaveEntry = async () => {
         if (!selectedFarmer) {
-            Alert.alert('Error', 'Please select a member first');
+            showAlert('Error', 'Please select a member first');
             return;
         }
 
         const qty = parseFloat(quantity) || 0;
         if (qty <= 0) {
-            Alert.alert('Error', 'Please enter valid quantity');
+            showAlert('Error', 'Please enter valid quantity');
             return;
         }
 
@@ -151,7 +171,7 @@ export default function SellingScreen() {
             });
 
             if (res.success) {
-                Alert.alert('Success', 'Entry saved successfully');
+                showAlert('Success', 'Entry saved successfully');
                 setQuantity('');
                 setFat('');
                 setSnf('');
@@ -159,10 +179,10 @@ export default function SellingScreen() {
                 setSearchMember('');
                 fetchData();
             } else {
-                Alert.alert('Error', res.message || 'Failed to save entry');
+                showAlert('Error', res.message || 'Failed to save entry');
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to save entry');
+            showAlert('Error', 'Failed to save entry');
         } finally {
             setIsLoading(false);
         }
@@ -170,25 +190,19 @@ export default function SellingScreen() {
 
     // Delete entry
     const handleDeleteEntry = async (id: string) => {
-        Alert.alert('Delete Entry', 'Are you sure you want to delete this entry?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {
-                    try {
-                        const res = await milkCollectionsApi.delete(id);
-                        if (res.success) {
-                            fetchData();
-                        } else {
-                            Alert.alert('Error', 'Failed to delete entry');
-                        }
-                    } catch (error) {
-                        Alert.alert('Error', 'Failed to delete entry');
-                    }
+        showConfirm('Delete Entry', 'Are you sure you want to delete this entry?', async () => {
+            setConfirmVisible(false);
+            try {
+                const res = await milkCollectionsApi.delete(id);
+                if (res.success) {
+                    fetchData();
+                } else {
+                    showAlert('Error', 'Failed to delete entry');
                 }
+            } catch (error) {
+                showAlert('Error', 'Failed to delete entry');
             }
-        ]);
+        });
     };
 
     // Fetch farmer summary for payment
@@ -208,13 +222,13 @@ export default function SellingScreen() {
     // Process payment
     const handleProcessPayment = async () => {
         if (!selectedPaymentFarmer) {
-            Alert.alert('Error', 'Please select a member first');
+            showAlert('Error', 'Please select a member first');
             return;
         }
 
         const amount = parseFloat(paymentAmount) || 0;
         if (amount <= 0) {
-            Alert.alert('Error', 'Please enter valid amount');
+            showAlert('Error', 'Please enter valid amount');
             return;
         }
 
@@ -228,16 +242,16 @@ export default function SellingScreen() {
             });
 
             if (res.success) {
-                Alert.alert('Success', 'Payment processed successfully');
+                showAlert('Success', 'Payment processed successfully');
                 setPaymentAmount('');
                 setSelectedPaymentFarmer(null);
                 setFarmerSummary(null);
                 fetchData();
             } else {
-                Alert.alert('Error', res.message || 'Failed to process payment');
+                showAlert('Error', res.message || 'Failed to process payment');
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to process payment');
+            showAlert('Error', 'Failed to process payment');
         } finally {
             setIsLoading(false);
         }
@@ -246,7 +260,7 @@ export default function SellingScreen() {
     // Save member
     const handleSaveMember = async () => {
         if (!memberCode || !memberName || !memberMobile) {
-            Alert.alert('Error', 'Please fill all required fields');
+            showAlert('Error', 'Please fill all required fields');
             return;
         }
 
@@ -260,11 +274,11 @@ export default function SellingScreen() {
                     address: memberAddress
                 });
                 if (res.success) {
-                    Alert.alert('Success', 'Member updated successfully');
+                    showAlert('Success', 'Member updated successfully');
                     clearMemberForm();
                     fetchData();
                 } else {
-                    Alert.alert('Error', res.message || 'Failed to update member');
+                    showAlert('Error', res.message || 'Failed to update member');
                 }
             } else {
                 const res = await farmersApi.create({
@@ -274,15 +288,15 @@ export default function SellingScreen() {
                     address: memberAddress
                 });
                 if (res.success) {
-                    Alert.alert('Success', 'Member added successfully');
+                    showAlert('Success', 'Member added successfully');
                     clearMemberForm();
                     fetchData();
                 } else {
-                    Alert.alert('Error', res.message || 'Failed to add member');
+                    showAlert('Error', res.message || 'Failed to add member');
                 }
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to save member');
+            showAlert('Error', 'Failed to save member');
         } finally {
             setIsLoading(false);
         }
@@ -305,25 +319,19 @@ export default function SellingScreen() {
     };
 
     const handleDeleteMember = async (id: string) => {
-        Alert.alert('Delete Member', 'Are you sure you want to delete this member?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: async () => {
-                    try {
-                        const res = await farmersApi.delete(id);
-                        if (res.success) {
-                            fetchData();
-                        } else {
-                            Alert.alert('Error', 'Failed to delete member');
-                        }
-                    } catch (error) {
-                        Alert.alert('Error', 'Failed to delete member');
-                    }
+        showConfirm('Delete Member', 'Are you sure you want to delete this member?', async () => {
+            setConfirmVisible(false);
+            try {
+                const res = await farmersApi.delete(id);
+                if (res.success) {
+                    fetchData();
+                } else {
+                    showAlert('Error', 'Failed to delete member');
                 }
+            } catch (error) {
+                showAlert('Error', 'Failed to delete member');
             }
-        ]);
+        });
     };
 
     // Date picker handler
@@ -423,10 +431,10 @@ export default function SellingScreen() {
             if (await Sharing.isAvailableAsync()) {
                 await Sharing.shareAsync(uri);
             } else {
-                Alert.alert('PDF Generated', `Saved to: ${uri}`);
+                showAlert('PDF Generated', `Saved to: ${uri}`);
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to generate PDF');
+            showAlert('Error', 'Failed to generate PDF');
         }
     };
 
@@ -435,7 +443,7 @@ export default function SellingScreen() {
             const html = generateReportHTML();
             await Print.printAsync({ html });
         } catch (error) {
-            Alert.alert('Error', 'Failed to print');
+            showAlert('Error', 'Failed to print');
         }
     };
 
@@ -992,6 +1000,25 @@ export default function SellingScreen() {
                 onSelect={handleDateSelect}
                 selectedDate={datePickerTarget === 'entry' ? entryDate : datePickerTarget === 'reportStart' ? reportStartDate : reportEndDate}
                 title={datePickerTarget === 'entry' ? 'Select Entry Date' : datePickerTarget === 'reportStart' ? 'Select Start Date' : 'Select End Date'}
+            />
+
+            <SuccessModal
+                isVisible={alertVisible}
+                onClose={() => setAlertVisible(false)}
+                title={alertTitle}
+                message={alertMessage}
+                autoClose={alertTitle === 'Success' || alertTitle === 'Rate Calculated'}
+            />
+
+            <ConfirmationModal
+                visible={confirmVisible}
+                onClose={() => setConfirmVisible(false)}
+                onConfirm={confirmData.onConfirm}
+                title={confirmData.title}
+                message={confirmData.message}
+                confirmText="Delete"
+                cancelText="Cancel"
+                confirmDestructive
             />
         </View>
     );

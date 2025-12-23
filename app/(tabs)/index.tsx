@@ -30,20 +30,12 @@ const banners = [
   },
 ];
 
-// Default products for fallback
-const defaultProducts = [
-  { id: '1', name: 'Fresh Milk', price: 60, icon: '🥛' },
-  { id: '2', name: 'Curd (Dahi)', price: 80, icon: '🍶' },
-  { id: '3', name: 'Butter', price: 500, icon: '🧈' },
-  { id: '4', name: 'Paneer', price: 380, icon: '🧀' },
-];
-
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { isAuthenticated } = useAuth();
   const [currentBanner, setCurrentBanner] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState(defaultProducts);
+  const [products, setProducts] = useState<{ id: string; name: string; price: number; icon: string }[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const bannerScrollRef = useRef<ScrollView>(null);
@@ -70,16 +62,11 @@ export default function HomeScreen() {
           price: p.price,
           icon: p.icon,
         }));
-        setProducts(apiProducts.length > 0 ? apiProducts : defaultProducts);
+        setProducts(apiProducts);
 
         // Initialize quantities
         const initialQuantities: { [key: string]: number } = {};
         apiProducts.forEach(p => { initialQuantities[p.id] = 1; });
-        setQuantities(initialQuantities);
-      } else {
-        // Use default products
-        const initialQuantities: { [key: string]: number } = {};
-        defaultProducts.forEach(p => { initialQuantities[p.id] = 1; });
         setQuantities(initialQuantities);
       }
 

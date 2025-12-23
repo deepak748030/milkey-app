@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, RefreshControl, ActivityIndicator } from 'react-native';
-import { Bell, Tag, CheckCheck, Trash2 } from 'lucide-react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { Bell, CheckCheck, Trash2 } from 'lucide-react-native';
 import { colors } from '@/lib/colors';
 import { notificationsApi, ServerNotification } from '@/lib/api';
 import TopBar from '@/components/TopBar';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
-import { useRouter } from 'expo-router';
 
 export default function NotificationsScreen() {
-  const router = useRouter();
   const { expoPushToken } = usePushNotifications();
   const [notifications, setNotifications] = useState<ServerNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showTokenInfo, setShowTokenInfo] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const loadNotifications = useCallback(async () => {
@@ -21,7 +18,6 @@ export default function NotificationsScreen() {
       const result = await notificationsApi.getNotifications({ limit: 50 });
       console.log('Notifications API response:', JSON.stringify(result));
 
-      // API returns { success, data: [...notifications], unreadCount, pagination }
       if (result.success) {
         const notificationsData = (result as any).data || [];
         const unread = (result as any).unreadCount || 0;
@@ -49,7 +45,6 @@ export default function NotificationsScreen() {
   }, [loadNotifications]);
 
   const handleNotificationPress = async (notification: ServerNotification) => {
-    // Mark as read if unread
     if (!notification.read) {
       try {
         await notificationsApi.markAsRead(notification.id);
@@ -60,13 +55,6 @@ export default function NotificationsScreen() {
       } catch (error) {
         console.error('Error marking notification as read:', error);
       }
-    }
-
-    // Navigate based on notification type/data
-    if (notification.data?.bookingId) {
-      router.push(`/booking-details/${notification.data.bookingId}`);
-    } else if (notification.data?.eventId) {
-      router.push(`/event/${notification.data.eventId}`);
     }
   };
 
@@ -91,18 +79,7 @@ export default function NotificationsScreen() {
   };
 
   const getNotificationIcon = (type: string) => {
-    const iconProps = { size: 24 };
-    switch (type) {
-      case 'booking':
-        return <Bell {...iconProps} color={colors.success} />;
-      case 'payment':
-        return <Tag {...iconProps} color={colors.primary} />;
-      case 'promotion':
-        return <Tag {...iconProps} color={colors.warning} />;
-      case 'system':
-      default:
-        return <Bell {...iconProps} color={colors.primary} />;
-    }
+    return <Bell size={24} color={colors.primary} />;
   };
 
   const formatTime = (timestamp: string) => {
@@ -138,9 +115,6 @@ export default function NotificationsScreen() {
         }
       >
         <View style={styles.content}>
-
-
-          {/* Action buttons */}
           {notifications.length > 0 && (
             <View style={styles.actionButtons}>
               {unreadCount > 0 && (
@@ -161,7 +135,7 @@ export default function NotificationsScreen() {
               <Bell size={48} color={colors.mutedForeground} style={styles.emptyIcon} />
               <Text style={styles.emptyText}>No notifications yet</Text>
               <Text style={styles.emptySubtext}>
-                We'll notify you when there are updates about your bookings
+                We'll notify you when there are updates
               </Text>
             </View>
           ) : (
@@ -307,37 +281,5 @@ const styles = StyleSheet.create({
   notificationTime: {
     fontSize: 12,
     color: colors.mutedForeground,
-  },
-  tokenContainer: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  tokenHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  tokenLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.foreground,
-  },
-  tokenText: {
-    fontSize: 11,
-    color: colors.mutedForeground,
-    marginTop: 8,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    backgroundColor: colors.muted,
-    padding: 8,
-    borderRadius: 6,
-  },
-  tokenHint: {
-    fontSize: 12,
-    color: colors.mutedForeground,
-    marginTop: 4,
   },
 });

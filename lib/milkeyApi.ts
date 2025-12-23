@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthToken } from './authStore';
 
-// API Base URL - Update this to your server URL
+// API Base URL - Vercel deployed server
 const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
 
 export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
@@ -740,6 +740,29 @@ export const authApiNew = {
 
     getMe: async () => {
         return apiRequest<any>('/auth/me');
+    },
+};
+
+// Seed API - Push mock data to database
+export const seedApi = {
+    // Seed all mock data
+    seedData: async (clearExisting: boolean = false) => {
+        return apiRequest<{ farmers: number; products: number; rateCharts: number; milkCollections: number; payments: number; advances: number }>(
+            `/seed${clearExisting ? '?clear=true' : ''}`,
+            { method: 'POST' }
+        );
+    },
+
+    // Get current database status
+    getStatus: async () => {
+        return apiRequest<{ farmers: number; products: number; rateCharts: number; milkCollections: number; payments: number; advances: number }>(
+            '/seed/status'
+        );
+    },
+
+    // Clear all data
+    clearData: async () => {
+        return apiRequest<void>('/seed/clear', { method: 'DELETE' });
     },
 };
 

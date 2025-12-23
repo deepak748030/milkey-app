@@ -1,45 +1,57 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
-import { colors } from '@/lib/colors';
+import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
+import { useTheme } from '@/hooks/useTheme';
+import { AlertTriangle, X } from 'lucide-react-native';
 
 interface ConfirmationModalProps {
-  isVisible: boolean;
+  visible: boolean;
   onClose: () => void;
   onConfirm: () => void;
   title: string;
   message: string;
   confirmText?: string;
   cancelText?: string;
+  confirmDestructive?: boolean;
+  isLoading?: boolean;
 }
 
 export function ConfirmationModal({
-  isVisible,
+  visible,
   onClose,
   onConfirm,
   title,
   message,
-  confirmText = 'Yes, Cancel',
-  cancelText = 'No, Keep Booking',
+  confirmText = 'Confirm',
+  cancelText = 'Cancel',
+  confirmDestructive = false,
+  isLoading = false,
 }: ConfirmationModalProps) {
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors, isDark, confirmDestructive);
+
   return (
-    <Modal
-      visible={isVisible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <View style={styles.modal}>
-          <View style={styles.modalBody}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.message}>{message}</Text>
+        <View style={styles.container}>
+          <Pressable style={styles.closeBtn} onPress={onClose}>
+            <X size={20} color={colors.mutedForeground} />
+          </Pressable>
+
+          <View style={styles.iconContainer}>
+            <AlertTriangle size={32} color={confirmDestructive ? colors.destructive : colors.warning} />
           </View>
-          <View style={styles.buttonContainer}>
-            <Pressable style={styles.cancelButton} onPress={onClose}>
-              <Text style={styles.cancelButtonText}>{cancelText}</Text>
+
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.message}>{message}</Text>
+
+          <View style={styles.buttonRow}>
+            <Pressable style={styles.cancelBtn} onPress={onClose} disabled={isLoading}>
+              <Text style={styles.cancelBtnText}>{cancelText}</Text>
             </Pressable>
-            <Pressable style={styles.confirmButton} onPress={onConfirm}>
-              <Text style={styles.confirmButtonText}>{confirmText}</Text>
+            <Pressable style={styles.confirmBtn} onPress={onConfirm} disabled={isLoading}>
+              <Text style={styles.confirmBtnText}>
+                {isLoading ? 'Please wait...' : confirmText}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -48,29 +60,40 @@ export function ConfirmationModal({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, isDark: boolean, confirmDestructive: boolean) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
-  modal: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  container: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 24,
     width: '100%',
-    maxHeight: '85%',
-  },
-  modalBody: {
-    paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 24,
+    maxWidth: 320,
     alignItems: 'center',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    padding: 4,
+  },
+  iconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: confirmDestructive ? colors.destructive + '15' : colors.warning + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     color: colors.foreground,
     marginBottom: 8,
     textAlign: 'center',
@@ -79,39 +102,36 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.mutedForeground,
     textAlign: 'center',
+    marginBottom: 24,
     lineHeight: 20,
   },
-  buttonContainer: {
+  buttonRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 20,
-    paddingBottom: 32,
     gap: 12,
+    width: '100%',
   },
-  cancelButton: {
+  cancelBtn: {
     flex: 1,
-    backgroundColor: colors.muted,
     paddingVertical: 12,
     borderRadius: 8,
+    backgroundColor: colors.muted,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  cancelButtonText: {
-    fontSize: 16,
+  cancelBtnText: {
+    fontSize: 14,
     fontWeight: '600',
     color: colors.foreground,
   },
-  confirmButton: {
+  confirmBtn: {
     flex: 1,
-    backgroundColor: colors.destructive,
     paddingVertical: 12,
     borderRadius: 8,
+    backgroundColor: confirmDestructive ? colors.destructive : colors.primary,
     alignItems: 'center',
   },
-  confirmButtonText: {
-    fontSize: 16,
+  confirmBtnText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: colors.primaryForeground,
+    color: colors.white,
   },
 });
