@@ -1,8 +1,8 @@
 // components/SuccessModal.tsx
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import { CircleCheck as CheckCircle2, AlertCircle, X } from 'lucide-react-native';
-import { colors } from '@/lib/colors';
+import { useTheme } from '@/hooks/useTheme';
 
 interface SuccessModalProps {
   isVisible: boolean;
@@ -14,6 +14,7 @@ interface SuccessModalProps {
 }
 
 export function SuccessModal({ isVisible, onClose, title, message, autoClose = true, duration = 1000 }: SuccessModalProps) {
+  const { colors } = useTheme();
   const isError = title.toLowerCase().includes('error');
 
   useEffect(() => {
@@ -34,33 +35,39 @@ export function SuccessModal({ isVisible, onClose, title, message, autoClose = t
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View style={styles.modal}>
+        <View style={[styles.modal, { backgroundColor: colors.card }]}>
           {/* Header */}
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Pressable style={styles.closeButton} onPress={onClose}>
               <X size={24} color={colors.foreground} />
             </Pressable>
-            <Text style={styles.headerTitle}>Notification</Text>
+            <Text style={[styles.headerTitle, { color: colors.foreground }]}>Notification</Text>
             <View style={styles.placeholder} />
           </View>
 
           {/* Content */}
           <View style={styles.content}>
-            <View style={[styles.iconContainer, isError ? styles.errorIcon : styles.successIcon]}>
+            <View style={[
+              styles.iconContainer,
+              { backgroundColor: isError ? colors.destructive + '20' : colors.success + '20' }
+            ]}>
               {isError ? (
                 <AlertCircle size={48} color={colors.destructive} />
               ) : (
                 <CheckCircle2 size={48} color={colors.success} />
               )}
             </View>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.message}>{message}</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>{title}</Text>
+            <Text style={[styles.message, { color: colors.mutedForeground }]}>{message}</Text>
           </View>
 
           {/* Button */}
           <View style={styles.buttonContainer}>
-            <Pressable style={styles.button} onPress={onClose}>
-              <Text style={styles.buttonText}>Got it</Text>
+            <Pressable
+              style={[styles.button, { backgroundColor: colors.primary }]}
+              onPress={onClose}
+            >
+              <Text style={[styles.buttonText, { color: colors.primaryForeground }]}>Got it</Text>
             </Pressable>
           </View>
         </View>
@@ -76,7 +83,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: colors.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 32,
@@ -88,7 +94,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   closeButton: {
     padding: 4,
@@ -96,7 +101,6 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.foreground,
   },
   placeholder: {
     width: 32,
@@ -113,22 +117,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 16,
   },
-  successIcon: {
-    backgroundColor: colors.success + '15',
-  },
-  errorIcon: {
-    backgroundColor: colors.destructive + '15',
-  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: colors.foreground,
     marginBottom: 8,
     textAlign: 'center',
   },
   message: {
     fontSize: 14,
-    color: colors.mutedForeground,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -136,7 +132,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   button: {
-    backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -144,6 +139,5 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.primaryForeground,
   },
 });

@@ -4,7 +4,8 @@ const milkCollectionSchema = new mongoose.Schema({
     farmer: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Farmer',
-        required: true
+        required: false,
+        default: null
     },
     owner: {
         type: mongoose.Schema.Types.ObjectId,

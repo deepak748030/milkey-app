@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { colors } from '@/lib/colors';
+import { useTheme } from '@/hooks/useTheme';
 
 interface CalendarProps {
   onDateSelect: (date: Date) => void;
@@ -10,9 +10,9 @@ interface CalendarProps {
 }
 
 export function Calendar({ onDateSelect, selectedDate, bookedDates = [] }: CalendarProps) {
+  const { colors } = useTheme();
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const today = new Date();
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
 
@@ -38,9 +38,7 @@ export function Calendar({ onDateSelect, selectedDate, bookedDates = [] }: Calen
 
   const handleDatePress = (day: number) => {
     const date = new Date(year, month, day);
-    if (date >= today) {
-      onDateSelect(date);
-    }
+    onDateSelect(date);
   };
 
   const isDateSelected = (day: number) => {
@@ -58,13 +56,13 @@ export function Calendar({ onDateSelect, selectedDate, bookedDates = [] }: Calen
     return bookedDates.includes(dateStr);
   };
 
-  const isDateDisabled = (day: number) => {
-    const date = new Date(year, month, day);
-    // Set time to 00:00:00 for comparison to ignore time part
-    date.setHours(0, 0, 0, 0);
-    const todayCompare = new Date();
-    todayCompare.setHours(0, 0, 0, 0);
-    return date < todayCompare;
+  const isToday = (day: number) => {
+    const today = new Date();
+    return (
+      today.getDate() === day &&
+      today.getMonth() === month &&
+      today.getFullYear() === year
+    );
   };
 
   const renderCalendarDays = () => {
@@ -78,28 +76,29 @@ export function Calendar({ onDateSelect, selectedDate, bookedDates = [] }: Calen
     // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const isSelected = isDateSelected(day);
-      const isDisabled = isDateDisabled(day);
       const isBooked = isDateBooked(day);
-      const isUnavailable = isDisabled || isBooked;
+      const isTodayDate = isToday(day);
 
       days.push(
         <View key={day} style={styles.dayCell}>
           <Pressable
             style={[
               styles.dayButton,
-              isSelected && styles.selectedDay,
-              isDisabled && styles.disabledDay,
-              isBooked && styles.bookedDay,
+              { backgroundColor: 'transparent' },
+              isSelected && { backgroundColor: colors.primary },
+              isBooked && { backgroundColor: colors.destructive, opacity: 0.7 },
+              isTodayDate && !isSelected && { borderWidth: 1, borderColor: colors.primary },
             ]}
             onPress={() => handleDatePress(day)}
-            disabled={isUnavailable}
+            disabled={isBooked}
           >
             <Text
               style={[
                 styles.dayText,
-                isSelected && styles.selectedDayText,
-                isDisabled && styles.disabledDayText,
-                isBooked && styles.bookedDayText,
+                { color: colors.foreground },
+                isSelected && { color: colors.primaryForeground, fontWeight: '600' },
+                isBooked && { color: colors.primaryForeground },
+                isTodayDate && !isSelected && { color: colors.primary, fontWeight: '600' },
               ]}
             >
               {day}
@@ -113,16 +112,16 @@ export function Calendar({ onDateSelect, selectedDate, bookedDates = [] }: Calen
   };
 
   return (
-    <View style={styles.calendar}>
+    <View style={[styles.calendar, { backgroundColor: colors.card }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable style={styles.navButton} onPress={goToPreviousMonth}>
+        <Pressable style={[styles.navButton, { backgroundColor: colors.muted }]} onPress={goToPreviousMonth}>
           <ChevronLeft size={20} color={colors.foreground} />
         </Pressable>
-        <Text style={styles.monthYear}>
+        <Text style={[styles.monthYear, { color: colors.foreground }]}>
           {monthNames[month]} {year}
         </Text>
-        <Pressable style={styles.navButton} onPress={goToNextMonth}>
+        <Pressable style={[styles.navButton, { backgroundColor: colors.muted }]} onPress={goToNextMonth}>
           <ChevronRight size={20} color={colors.foreground} />
         </Pressable>
       </View>
@@ -131,7 +130,7 @@ export function Calendar({ onDateSelect, selectedDate, bookedDates = [] }: Calen
       <View style={styles.dayNamesRow}>
         {dayNames.map((dayName) => (
           <View key={dayName} style={styles.dayNameCell}>
-            <Text style={styles.dayNameText}>{dayName}</Text>
+            <Text style={[styles.dayNameText, { color: colors.mutedForeground }]}>{dayName}</Text>
           </View>
         ))}
       </View>
@@ -146,9 +145,8 @@ export function Calendar({ onDateSelect, selectedDate, bookedDates = [] }: Calen
 
 const styles = StyleSheet.create({
   calendar: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
   },
   header: {
     flexDirection: 'row',
@@ -158,12 +156,11 @@ const styles = StyleSheet.create({
   },
   navButton: {
     padding: 8,
-    borderRadius: 6,
+    borderRadius: 8,
   },
   monthYear: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.foreground,
   },
   dayNamesRow: {
     flexDirection: 'row',
@@ -177,7 +174,6 @@ const styles = StyleSheet.create({
   dayNameText: {
     fontSize: 12,
     fontWeight: '500',
-    color: colors.mutedForeground,
   },
   calendarGrid: {
     flexDirection: 'row',
@@ -196,29 +192,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  selectedDay: {
-    backgroundColor: colors.primary,
-  },
-  disabledDay: {
-    opacity: 0.3,
-  },
-  bookedDay: {
-    backgroundColor: colors.destructive,
-    opacity: 0.7,
-  },
   dayText: {
     fontSize: 14,
-    color: colors.foreground,
     textAlign: 'center',
-  },
-  selectedDayText: {
-    color: colors.primaryForeground,
-    fontWeight: '600',
-  },
-  disabledDayText: {
-    color: colors.mutedForeground,
-  },
-  bookedDayText: {
-    color: colors.primaryForeground,
   },
 });

@@ -158,33 +158,34 @@ router.post('/', auth, async (req, res) => {
     try {
         const { farmerCode, date, shift, quantity, fat, snf, rate, notes } = req.body;
 
-        const normalizedCode = normalizeCode(farmerCode);
         const qty = Number(quantity);
         const r = Number(rate);
 
-        if (!normalizedCode || Number.isNaN(qty) || qty <= 0 || Number.isNaN(r) || r <= 0) {
+        if (Number.isNaN(qty) || qty <= 0 || Number.isNaN(r) || r <= 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Valid farmer code, quantity, and rate are required'
+                message: 'Valid quantity and rate are required'
             });
         }
 
-        // Find farmer by code (case-insensitive)
-        const farmer = await Farmer.findOne({
-            code: codeRegex(normalizedCode),
-            owner: req.userId,
-            isActive: true
-        });
+        let farmerId = null;
 
-        if (!farmer) {
-            return res.status(404).json({
-                success: false,
-                message: 'Farmer not found'
+        // If farmerCode provided, find the farmer
+        if (farmerCode) {
+            const normalizedCode = normalizeCode(farmerCode);
+            const farmer = await Farmer.findOne({
+                code: codeRegex(normalizedCode),
+                owner: req.userId,
+                isActive: true
             });
+
+            if (farmer) {
+                farmerId = farmer._id;
+            }
         }
 
         const collection = await MilkCollection.create({
-            farmer: farmer._id,
+            farmer: farmerId,
             owner: req.userId,
             date: date ? new Date(date) : new Date(),
             shift: shift || (new Date().getHours() < 12 ? 'morning' : 'evening'),
@@ -196,11 +197,16 @@ router.post('/', auth, async (req, res) => {
             notes: notes?.trim() || ''
         });
 
-        // Update farmer totals
-        farmer.totalLiters += parseFloat(quantity);
-        farmer.totalPurchase += collection.amount;
-        farmer.pendingAmount += collection.amount;
-        await farmer.save();
+        // Update farmer totals if farmer exists
+        if (farmerId) {
+            await Farmer.findByIdAndUpdate(farmerId, {
+                $inc: {
+                    totalLiters: parseFloat(quantity),
+                    totalPurchase: collection.amount,
+                    pendingAmount: collection.amount
+                }
+            });
+        }
 
         const populatedCollection = await MilkCollection.findById(collection._id)
             .populate('farmer', 'code name')
