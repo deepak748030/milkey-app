@@ -364,4 +364,179 @@ router.get('/dashboard', auth, async (req, res) => {
     }
 });
 
+// Analytics - Daily/Weekly/Monthly trends
+router.get('/analytics', auth, async (req, res) => {
+    try {
+        const { period = 'daily', days = 7 } = req.query;
+
+        const endDate = new Date();
+        endDate.setHours(23, 59, 59, 999);
+
+        const startDate = new Date();
+        if (period === 'weekly') {
+            startDate.setDate(startDate.getDate() - (parseInt(days) * 7));
+        } else if (period === 'monthly') {
+            startDate.setMonth(startDate.getMonth() - parseInt(days));
+        } else {
+            startDate.setDate(startDate.getDate() - parseInt(days));
+        }
+        startDate.setHours(0, 0, 0, 0);
+
+        // Get daily collections
+        const collections = await MilkCollection.aggregate([
+            {
+                $match: {
+                    owner: req.user._id,
+                    date: { $gte: startDate, $lte: endDate }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        $dateToString: { format: '%Y-%m-%d', date: '$date' }
+                    },
+                    quantity: { $sum: '$quantity' },
+                    amount: { $sum: '$amount' },
+                    count: { $sum: 1 },
+                    morningQty: {
+                        $sum: { $cond: [{ $eq: ['$shift', 'morning'] }, '$quantity', 0] }
+                    },
+                    eveningQty: {
+                        $sum: { $cond: [{ $eq: ['$shift', 'evening'] }, '$quantity', 0] }
+                    }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        // Get daily payments
+        const payments = await Payment.aggregate([
+            {
+                $match: {
+                    owner: req.user._id,
+                    date: { $gte: startDate, $lte: endDate }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        $dateToString: { format: '%Y-%m-%d', date: '$date' }
+                    },
+                    amount: { $sum: '$amount' },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]);
+
+        // Generate all dates in range for complete chart data
+        const allDates = [];
+        const current = new Date(startDate);
+        while (current <= endDate) {
+            allDates.push(current.toISOString().split('T')[0]);
+            current.setDate(current.getDate() + 1);
+        }
+
+        // Map data to dates
+        const collectionsMap = {};
+        collections.forEach(c => { collectionsMap[c._id] = c; });
+
+        const paymentsMap = {};
+        payments.forEach(p => { paymentsMap[p._id] = p; });
+
+        const chartData = allDates.map(date => ({
+            date,
+            label: new Date(date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+            quantity: collectionsMap[date]?.quantity || 0,
+            amount: collectionsMap[date]?.amount || 0,
+            morningQty: collectionsMap[date]?.morningQty || 0,
+            eveningQty: collectionsMap[date]?.eveningQty || 0,
+            payments: paymentsMap[date]?.amount || 0
+        }));
+
+        // Calculate totals
+        const totals = {
+            totalQuantity: chartData.reduce((sum, d) => sum + d.quantity, 0),
+            totalAmount: chartData.reduce((sum, d) => sum + d.amount, 0),
+            totalPayments: chartData.reduce((sum, d) => sum + d.payments, 0),
+            avgDailyQty: chartData.length > 0 ? chartData.reduce((sum, d) => sum + d.quantity, 0) / chartData.length : 0,
+            maxQty: Math.max(...chartData.map(d => d.quantity)),
+            minQty: Math.min(...chartData.filter(d => d.quantity > 0).map(d => d.quantity)) || 0
+        };
+
+        res.json({
+            success: true,
+            response: {
+                period: { startDate, endDate },
+                chartData,
+                totals: {
+                    ...totals,
+                    totalQuantity: Math.round(totals.totalQuantity * 100) / 100,
+                    totalAmount: Math.round(totals.totalAmount * 100) / 100,
+                    avgDailyQty: Math.round(totals.avgDailyQty * 100) / 100
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Top farmers analytics
+router.get('/top-farmers', auth, async (req, res) => {
+    try {
+        const { days = 30, limit = 10 } = req.query;
+
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - parseInt(days));
+        startDate.setHours(0, 0, 0, 0);
+
+        const topFarmers = await MilkCollection.aggregate([
+            {
+                $match: {
+                    owner: req.user._id,
+                    date: { $gte: startDate }
+                }
+            },
+            {
+                $group: {
+                    _id: '$farmer',
+                    totalQuantity: { $sum: '$quantity' },
+                    totalAmount: { $sum: '$amount' },
+                    collections: { $sum: 1 },
+                    avgRate: { $avg: '$rate' }
+                }
+            },
+            { $sort: { totalQuantity: -1 } },
+            { $limit: parseInt(limit) },
+            {
+                $lookup: {
+                    from: 'farmers',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'farmerInfo'
+                }
+            },
+            { $unwind: '$farmerInfo' }
+        ]);
+
+        res.json({
+            success: true,
+            response: topFarmers.map(f => ({
+                farmer: {
+                    _id: f._id,
+                    code: f.farmerInfo.code,
+                    name: f.farmerInfo.name
+                },
+                totalQuantity: Math.round(f.totalQuantity * 100) / 100,
+                totalAmount: Math.round(f.totalAmount * 100) / 100,
+                collections: f.collections,
+                avgRate: Math.round(f.avgRate * 100) / 100
+            }))
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 module.exports = router;

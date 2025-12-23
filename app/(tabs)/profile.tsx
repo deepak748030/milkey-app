@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users } from 'lucide-react-native';
+import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users, MessageSquare } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
@@ -38,10 +38,11 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
-    { id: '1', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
-    { id: '2', icon: Settings, label: 'Settings', action: () => { } },
-    { id: '3', icon: Bell, label: 'Notifications', action: () => router.push('/notifications') },
-    { id: '4', icon: HelpCircle, label: 'Help & Support', action: () => router.push('/help-support') },
+    { id: '1', icon: MessageSquare, label: 'Feedback & Support', action: () => router.push('/feedback' as any) },
+    { id: '2', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
+    { id: '3', icon: Settings, label: 'Settings', action: () => { } },
+    { id: '4', icon: Bell, label: 'Notifications', action: () => router.push('/notifications') },
+    { id: '5', icon: HelpCircle, label: 'Help & Support', action: () => router.push('/help-support') },
   ];
 
   return (

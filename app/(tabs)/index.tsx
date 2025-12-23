@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
-import { productsApi, usersApi, Product, UserStats } from '@/lib/milkeyApi';
+import { productsApi, reportsApi, Product, DashboardStats } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
 
 const { width } = Dimensions.get('window');
@@ -44,7 +44,7 @@ export default function HomeScreen() {
   const [currentBanner, setCurrentBanner] = useState(0);
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState(defaultProducts);
-  const [stats, setStats] = useState<UserStats>({ farmers: 0, totalSales: 0, pendingAdvances: 0 });
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const bannerScrollRef = useRef<ScrollView>(null);
   const { addToCart, loadCart } = useCartStore();
@@ -57,10 +57,10 @@ export default function HomeScreen() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch products and stats in parallel
-      const [productsRes, statsRes] = await Promise.all([
+      // Fetch products and dashboard stats in parallel
+      const [productsRes, dashboardRes] = await Promise.all([
         productsApi.getAll().catch(() => null),
-        usersApi.getStats().catch(() => null),
+        reportsApi.getDashboard().catch(() => null),
       ]);
 
       if (productsRes?.success && productsRes.response?.data) {
@@ -83,8 +83,8 @@ export default function HomeScreen() {
         setQuantities(initialQuantities);
       }
 
-      if (statsRes?.success && statsRes.response) {
-        setStats(statsRes.response);
+      if (dashboardRes?.success && dashboardRes.response) {
+        setDashboardStats(dashboardRes.response);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -174,22 +174,22 @@ export default function HomeScreen() {
           <View style={styles.overviewMain}>
             <View>
               <Text style={styles.overviewLabel}>Today</Text>
-              <Text style={styles.overviewSubLabel}>Total Sales</Text>
-              <Text style={styles.overviewValue}>₹{stats.totalSales}</Text>
+              <Text style={styles.overviewSubLabel}>Milk Collection</Text>
+              <Text style={styles.overviewValue}>₹{dashboardStats?.today.amount.toFixed(0) || '0'}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={styles.overviewStatValue}>-</Text>
-              <Text style={styles.overviewStatLabel}>Orders</Text>
+              <Text style={styles.overviewStatValue}>{dashboardStats?.today.quantity.toFixed(1) || '0'}L</Text>
+              <Text style={styles.overviewStatLabel}>Today Qty</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.warning }]}>₹{stats.pendingAdvances}</Text>
-              <Text style={styles.overviewStatLabel}>Pending</Text>
+              <Text style={[styles.overviewStatValue, { color: colors.success }]}>₹{dashboardStats?.thisMonth.amount.toFixed(0) || '0'}</Text>
+              <Text style={styles.overviewStatLabel}>This Month</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{stats.farmers}</Text>
+              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{dashboardStats?.totalFarmers || 0}</Text>
               <Text style={styles.overviewStatLabel}>Farmers</Text>
             </View>
           </View>

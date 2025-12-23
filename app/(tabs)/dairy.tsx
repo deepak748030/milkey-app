@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, RefreshControl, Modal, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Droplets, Sun, Moon, Plus, X, Wallet, Check, FileText, Calculator, ChevronDown, Share2 } from 'lucide-react-native';
+import { Droplets, Sun, Moon, Plus, X, Wallet, Check, FileText, Calculator, ChevronDown, Share2, TrendingUp, User } from 'lucide-react-native';
+import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { milkCollectionsApi, paymentsApi, farmersApi, rateChartsApi, reportsApi, MilkCollection, TodaySummary, Farmer, FarmerPaymentSummary, RateChart, MilkReport, PaymentReport } from '@/lib/milkeyApi';
 import * as Print from 'expo-print';

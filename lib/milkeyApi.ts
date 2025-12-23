@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthToken } from './authStore';
 
 // API Base URL - Update this to your server URL
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
 
 export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
 
@@ -19,6 +19,7 @@ export interface Farmer {
     name: string;
     mobile: string;
     address: string;
+    rate?: number;
     totalPurchase: number;
     totalLiters: number;
     pendingAmount: number;
@@ -71,6 +72,7 @@ export interface UserStats {
 export interface MilkCollection {
     _id: string;
     farmer: { _id: string; code: string; name: string };
+    farmerCode?: string;
     date: string;
     shift: 'morning' | 'evening';
     quantity: number;
@@ -94,6 +96,10 @@ export interface FarmerPaymentSummary {
     advances: { totalPending: number; count: number };
     netPayable: number;
     advanceBalance: number;
+    totalQuantity?: number;
+    totalMilkAmount?: number;
+    totalAdvances?: number;
+    totalDue?: number;
 }
 
 export interface Payment {
@@ -106,6 +112,7 @@ export interface Payment {
     totalMilkAmount: number;
     totalAdvanceDeduction: number;
     netPayable: number;
+    createdAt?: string;
 }
 
 export interface RateChart {
@@ -174,6 +181,25 @@ export interface FarmerStatement {
         debit: number;
         balance: number;
     }>;
+}
+
+export interface Feedback {
+    _id: string;
+    type: 'feedback' | 'complaint' | 'suggestion' | 'query' | 'bug_report';
+    subject: string;
+    message: string;
+    priority: 'low' | 'medium' | 'high';
+    status: 'pending' | 'in_review' | 'resolved' | 'closed';
+    adminResponse?: string;
+    respondedAt?: string;
+    createdAt: string;
+}
+
+export interface DashboardStats {
+    today: { quantity: number; amount: number; count: number };
+    thisMonth: { quantity: number; amount: number; count: number };
+    weekPayments: { amount: number; count: number };
+    totalFarmers: number;
 }
 
 export interface ReferralData {
@@ -469,11 +495,13 @@ export const milkCollectionsApi = {
 
 // Payments API
 export const paymentsApi = {
-    getAll: async (params?: { farmerId?: string; startDate?: string; endDate?: string }) => {
+    getAll: async (params?: { farmerId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
         const queryParams = new URLSearchParams();
         if (params?.farmerId) queryParams.append('farmerId', params.farmerId);
         if (params?.startDate) queryParams.append('startDate', params.startDate);
         if (params?.endDate) queryParams.append('endDate', params.endDate);
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.page) queryParams.append('page', params.page.toString());
         const query = queryParams.toString();
 
         return apiRequest<{ data: Payment[] }>(`/payments${query ? `?${query}` : ''}`);
@@ -591,12 +619,100 @@ export const reportsApi = {
     },
 
     getDashboard: async () => {
+        return apiRequest<DashboardStats>('/reports/dashboard');
+    },
+
+    getAnalytics: async (params?: { period?: string; days?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.period) queryParams.append('period', params.period);
+        if (params?.days) queryParams.append('days', params.days.toString());
+        const query = queryParams.toString();
+
         return apiRequest<{
-            today: { quantity: number; amount: number; count: number };
-            thisMonth: { quantity: number; amount: number; count: number };
-            weekPayments: { amount: number; count: number };
-            totalFarmers: number;
-        }>('/reports/dashboard');
+            period: { startDate: string; endDate: string };
+            chartData: Array<{
+                date: string;
+                label: string;
+                quantity: number;
+                amount: number;
+                morningQty: number;
+                eveningQty: number;
+                payments: number;
+            }>;
+            totals: {
+                totalQuantity: number;
+                totalAmount: number;
+                totalPayments: number;
+                avgDailyQty: number;
+                maxQty: number;
+                minQty: number;
+            };
+        }>(`/reports/analytics${query ? `?${query}` : ''}`);
+    },
+
+    getTopFarmers: async (params?: { days?: number; limit?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.days) queryParams.append('days', params.days.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        const query = queryParams.toString();
+
+        return apiRequest<Array<{
+            farmer: { _id: string; code: string; name: string };
+            totalQuantity: number;
+            totalAmount: number;
+            collections: number;
+            avgRate: number;
+        }>>(`/reports/top-farmers${query ? `?${query}` : ''}`);
+    },
+};
+
+// Feedback API
+export const feedbackApi = {
+    getMyFeedbacks: async () => {
+        return apiRequest<{ data: Feedback[] }>('/feedback/my');
+    },
+
+    submit: async (data: {
+        type: string;
+        subject: string;
+        message: string;
+        priority?: string
+    }) => {
+        return apiRequest<Feedback>('/feedback', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    getById: async (id: string) => {
+        return apiRequest<Feedback>(`/feedback/${id}`);
+    },
+
+    // Admin endpoints
+    getAll: async (params?: { status?: string; type?: string; page?: number; limit?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.status) queryParams.append('status', params.status);
+        if (params?.type) queryParams.append('type', params.type);
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        const query = queryParams.toString();
+
+        return apiRequest<{ data: Feedback[]; total: number; page: number; pages: number }>(
+            `/feedback${query ? `?${query}` : ''}`
+        );
+    },
+
+    getStats: async () => {
+        return apiRequest<{ total: number; pending: number; inReview: number; resolved: number; byType: any }>(
+            '/feedback/stats'
+        );
+    },
+
+    updateStatus: async (id: string, status: string, adminResponse?: string) => {
+        return apiRequest<Feedback>(`/feedback/${id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status, adminResponse }),
+        });
     },
 };
 
