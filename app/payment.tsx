@@ -3,10 +3,37 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, TextI
 import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft, Smartphone, Wallet } from 'lucide-react-native';
 import { colors } from '@/lib/colors';
-import { Event } from '@/lib/mockData';
 import { SuccessModal } from '@/components/SuccessModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { eventsApi, bookingsApi, ServerEvent, getToken } from '@/lib/api';
+
+// Local Event interface
+interface Event {
+  id: string;
+  title: string;
+  image: string;
+  images?: string[];
+  location: string;
+  fullLocation?: string;
+  category: string;
+  price: number;
+  mrp?: number;
+  rating: number;
+  reviews: number;
+  badge?: string;
+  description?: string;
+  date?: string;
+  time?: string;
+  services: string[];
+  vendor: {
+    id: string;
+    name: string;
+    avatar: string;
+    phone: string;
+    email: string;
+    experience: string;
+  };
+}
 
 // Helper to map ServerEvent to Event format
 const mapServerEventToEvent = (serverEvent: ServerEvent): Event => ({
@@ -181,7 +208,7 @@ export default function PaymentScreen() {
 
               <View style={styles.servicesSection}>
                 <Text style={styles.servicesLabel}>Services Included</Text>
-                {event.services.slice(0, 3).map((service, index) => (
+                {event.services.slice(0, 3).map((service: string, index: number) => (
                   <Text key={index} style={styles.serviceItem}>✓ {service}</Text>
                 ))}
               </View>
@@ -504,6 +531,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.mutedForeground,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
+    paddingHorizontal: 20,
   },
 });

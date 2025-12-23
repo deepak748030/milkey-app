@@ -2,8 +2,23 @@ import React from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { Calendar, MapPin, MessageCircle, X, Clock, Users, ChevronRight } from 'lucide-react-native';
 import { colors } from '@/lib/colors';
-import { Booking } from '@/lib/mockData';
 import { getImageUrl } from '@/lib/api';
+
+// Local Booking interface
+interface Booking {
+  id: string;
+  date: string;
+  time: string;
+  tickets: number;
+  price: number;
+  status: string;
+  event: {
+    id: string;
+    title: string;
+    image: string;
+    location: string;
+  };
+}
 
 interface BookingCardProps {
   booking: Booking;

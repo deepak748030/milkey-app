@@ -2,9 +2,21 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
 import { Heart, MapPin, Star } from 'lucide-react-native';
 import { colors } from '@/lib/colors';
-import { Event } from '@/lib/mockData';
 import { getImageUrl } from '@/lib/api';
 import { router } from 'expo-router';
+
+// Local Event interface
+interface Event {
+  id: string;
+  title: string;
+  image: string;
+  location: string;
+  price: number;
+  mrp?: number;
+  rating: number;
+  reviews: number;
+  badge?: string;
+}
 
 interface EventCardProps {
   event: Event;
@@ -14,7 +26,7 @@ interface EventCardProps {
 
 export default function EventCard({ event, isFavorite = false, onToggleFavorite }: EventCardProps) {
   const handlePress = () => {
-    router.push(`/event/${event.id}`);
+    router.push(`/event/${event.id}` as any);
   };
 
   // Get full image URL from path

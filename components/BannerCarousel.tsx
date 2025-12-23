@@ -65,11 +65,11 @@ export default function BannerCarousel() {
   const handleBannerPress = (banner: ServerBanner) => {
     if (banner.type === 'event' && banner.eventId) {
       // Navigate to specific event
-      router.push(`/event/${banner.eventId}`);
+      router.push(`/event/${banner.eventId}` as any);
     } else if (banner.type === 'category' && banner.categorySlug) {
       // Navigate to search screen with category filter
       router.push({
-        pathname: '/search',
+        pathname: '/search' as any,
         params: { category: banner.categorySlug }
       });
     }

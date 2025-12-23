@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, Modal, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Droplets, Sun, Moon, Plus, X, Wallet, Check, FileText, Calculator, ChevronDown, Share2, TrendingUp, User } from 'lucide-react-native';
+import { Droplets, Sun, Moon, Plus, X, Wallet, Check, FileText, Calculator, ChevronDown, Share2, TrendingUp, User, Calendar, Printer, Save } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { milkCollectionsApi, paymentsApi, farmersApi, rateChartsApi, reportsApi, MilkCollection, TodaySummary, Farmer, FarmerPaymentSummary, RateChart, MilkReport, PaymentReport } from '@/lib/milkeyApi';
@@ -10,7 +10,15 @@ import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 
-type TabType = 'Collection' | 'Settlement' | 'Reports' | 'Rate Chart';
+type TabType = 'Collection' | 'History' | 'Settlement' | 'Reports' | 'Rate Chart';
+
+// Quick range type
+interface QuickRange {
+    id: string;
+    label: string;
+    startDay: number;
+    endDay: number;
+}
 
 export default function DairyScreen() {
     const { colors, isDark } = useTheme();
@@ -40,6 +48,26 @@ export default function DairyScreen() {
     const [milkReport, setMilkReport] = useState<MilkReport | null>(null);
     const [paymentReport, setPaymentReport] = useState<PaymentReport | null>(null);
 
+    // Purchase History state
+    const [historyFromDate, setHistoryFromDate] = useState('');
+    const [historyToDate, setHistoryToDate] = useState('');
+    const [historyCollections, setHistoryCollections] = useState<MilkCollection[]>([]);
+    const [historyTotals, setHistoryTotals] = useState({ quantity: 0, amount: 0 });
+    const [selectedRanges, setSelectedRanges] = useState<string[]>([]);
+    const [showFromDatePicker, setShowFromDatePicker] = useState(false);
+    const [showToDatePicker, setShowToDatePicker] = useState(false);
+    const [showHistoryDateModal, setShowHistoryDateModal] = useState(false);
+    const [historyDateType, setHistoryDateType] = useState<'from' | 'to'>('from');
+    const [tempDate, setTempDate] = useState({ year: '', month: '', day: '' });
+    const [historyShiftFilter, setHistoryShiftFilter] = useState<'all' | 'morning' | 'evening'>('all');
+    const [historyFarmerFilter, setHistoryFarmerFilter] = useState('');
+    const [showHistoryFarmerPicker, setShowHistoryFarmerPicker] = useState(false);
+
+    // Collection modal state
+    const [collectionDate, setCollectionDate] = useState('');
+    const [showCollectionDateModal, setShowCollectionDateModal] = useState(false);
+    const [collectionTempDate, setCollectionTempDate] = useState({ year: '', month: '', day: '' });
+
     // Modal state
     const [alertVisible, setAlertVisible] = useState(false);
     const [alertTitle, setAlertTitle] = useState('');
@@ -53,6 +81,13 @@ export default function DairyScreen() {
     const [farmerCollections, setFarmerCollections] = useState<MilkCollection[]>([]);
 
     const styles = createStyles(colors, isDark);
+
+    // Quick ranges for date selection
+    const quickRanges: QuickRange[] = [
+        { id: '1-10', label: '1-10', startDay: 1, endDay: 10 },
+        { id: '11-20', label: '11-20', startDay: 11, endDay: 20 },
+        { id: '21-31', label: '21-31', startDay: 21, endDay: 31 },
+    ];
 
     const showAlert = (title: string, message: string) => {
         setAlertTitle(title);
@@ -169,6 +204,7 @@ export default function DairyScreen() {
                 shift: collectionForm.shift as 'morning' | 'evening',
                 fat: collectionForm.fat ? parseFloat(collectionForm.fat) : undefined,
                 snf: collectionForm.snf ? parseFloat(collectionForm.snf) : undefined,
+                date: collectionDate || undefined,
             });
 
             if (res.success) {
@@ -176,6 +212,7 @@ export default function DairyScreen() {
                 setShowAddModal(false);
                 setShowFarmerPicker(false);
                 setCollectionForm({ farmerCode: '', farmerName: '', quantity: '', rate: '', fat: '', snf: '', shift: new Date().getHours() < 12 ? 'morning' : 'evening' });
+                setCollectionDate('');
                 fetchData();
             } else {
                 // Show specific error from server
@@ -261,6 +298,217 @@ export default function DairyScreen() {
         setLoading(false);
     };
 
+    // Purchase History functions
+    const handleToggleRange = (rangeId: string) => {
+        setSelectedRanges(prev =>
+            prev.includes(rangeId) ? prev.filter(r => r !== rangeId) : [...prev, rangeId]
+        );
+    };
+
+    const handleClearRanges = () => {
+        setSelectedRanges([]);
+    };
+
+    const openDatePicker = (type: 'from' | 'to') => {
+        setHistoryDateType(type);
+        const currentDate = type === 'from' ? historyFromDate : historyToDate;
+        if (currentDate) {
+            const [year, month, day] = currentDate.split('-');
+            setTempDate({ year, month, day });
+        } else {
+            const now = new Date();
+            setTempDate({
+                year: String(now.getFullYear()),
+                month: String(now.getMonth() + 1).padStart(2, '0'),
+                day: String(now.getDate()).padStart(2, '0'),
+            });
+        }
+        setShowHistoryDateModal(true);
+    };
+
+    const handleConfirmDate = () => {
+        const formattedDate = `${tempDate.year}-${tempDate.month.padStart(2, '0')}-${tempDate.day.padStart(2, '0')}`;
+        if (historyDateType === 'from') {
+            setHistoryFromDate(formattedDate);
+        } else {
+            setHistoryToDate(formattedDate);
+        }
+        setShowHistoryDateModal(false);
+    };
+
+    const handleFetchHistory = async () => {
+        setLoading(true);
+        try {
+            let startDate = historyFromDate;
+            let endDate = historyToDate;
+
+            // If quick ranges are selected, calculate dates based on ranges
+            if (selectedRanges.length > 0 && !historyFromDate && !historyToDate) {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth();
+
+                // Find min and max days from selected ranges
+                let minDay = 31;
+                let maxDay = 1;
+                selectedRanges.forEach(rangeId => {
+                    const range = quickRanges.find(r => r.id === rangeId);
+                    if (range) {
+                        if (range.startDay < minDay) minDay = range.startDay;
+                        if (range.endDay > maxDay) maxDay = range.endDay;
+                    }
+                });
+
+                startDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(minDay).padStart(2, '0')}`;
+                endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(maxDay, new Date(year, month + 1, 0).getDate())).padStart(2, '0')}`;
+            }
+
+            // Build request params with all filters
+            const params: {
+                startDate?: string;
+                endDate?: string;
+                shift?: string;
+                farmerCode?: string;
+                limit: number;
+            } = {
+                limit: 100,
+            };
+
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+            if (historyShiftFilter !== 'all') params.shift = historyShiftFilter;
+            if (historyFarmerFilter) params.farmerCode = historyFarmerFilter;
+
+            const res = await milkCollectionsApi.getAll(params);
+
+            if (res.success) {
+                setHistoryCollections(res.response?.data || []);
+                setHistoryTotals(res.response?.totals || { quantity: 0, amount: 0 });
+            } else {
+                showAlert('Error', res.message || 'Failed to fetch history');
+            }
+        } catch (error) {
+            console.error('Fetch history error:', error);
+            showAlert('Error', 'Failed to fetch history');
+        }
+        setLoading(false);
+    };
+
+    const handleSelectHistoryFarmer = (farmer: Farmer) => {
+        setHistoryFarmerFilter(farmer.code);
+        setShowHistoryFarmerPicker(false);
+    };
+
+    const handleClearHistoryFarmer = () => {
+        setHistoryFarmerFilter('');
+    };
+
+    const openCollectionDatePicker = () => {
+        const now = new Date();
+        if (collectionDate) {
+            const [year, month, day] = collectionDate.split('-');
+            setCollectionTempDate({ year, month, day });
+        } else {
+            setCollectionTempDate({
+                year: String(now.getFullYear()),
+                month: String(now.getMonth() + 1).padStart(2, '0'),
+                day: String(now.getDate()).padStart(2, '0'),
+            });
+        }
+        setShowCollectionDateModal(true);
+    };
+
+    const handleConfirmCollectionDate = () => {
+        const formattedDate = `${collectionTempDate.year}-${collectionTempDate.month.padStart(2, '0')}-${collectionTempDate.day.padStart(2, '0')}`;
+        setCollectionDate(formattedDate);
+        setShowCollectionDateModal(false);
+    };
+
+    const generateHistoryPdfHtml = () => {
+        if (historyCollections.length === 0) return '';
+
+        return `
+        <html><head><style>
+          body { font-family: Arial; padding: 20px; }
+          h1 { color: #22c55e; text-align: center; font-size: 24px; }
+          .date-range { text-align: center; color: #666; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+          th { background-color: #22c55e; color: white; font-weight: bold; }
+          tr:nth-child(even) { background-color: #f9f9f9; }
+          .summary { background: #f0fdf4; padding: 15px; border-radius: 8px; margin-top: 20px; }
+          .summary-row { display: flex; justify-content: space-between; margin: 8px 0; }
+          .total-amount { color: #22c55e; font-weight: bold; font-size: 18px; }
+        </style></head><body>
+          <h1>Purchase History</h1>
+          <p class="date-range">
+            ${historyFromDate ? `From: ${historyFromDate}` : ''} 
+            ${historyToDate ? `To: ${historyToDate}` : ''}
+            ${selectedRanges.length > 0 ? `Ranges: ${selectedRanges.join(', ')}` : ''}
+          </p>
+          <table>
+            <tr>
+              <th>Date</th>
+              <th>Session</th>
+              <th>FAT</th>
+              <th>SNF</th>
+              <th>Qty</th>
+              <th>Rate</th>
+              <th>Amt</th>
+            </tr>
+            ${historyCollections.map(c => `
+              <tr>
+                <td>${new Date(c.date).toISOString().split('T')[0]}</td>
+                <td style="color: ${c.shift === 'morning' ? '#f59e0b' : '#3b82f6'}">${c.shift}</td>
+                <td>${c.fat || '-'}</td>
+                <td>${c.snf || '-'}</td>
+                <td>${c.quantity}</td>
+                <td>${c.rate}</td>
+                <td class="total-amount">₹${c.amount.toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </table>
+          <div class="summary">
+            <div class="summary-row">
+              <span>Total Quantity:</span>
+              <strong>${historyTotals.quantity.toFixed(2)} L</strong>
+            </div>
+            <div class="summary-row">
+              <span>Total Amount:</span>
+              <strong class="total-amount">₹${historyTotals.amount.toFixed(2)}</strong>
+            </div>
+          </div>
+        </body></html>
+      `;
+    };
+
+    const handleHistoryPdf = async () => {
+        const html = generateHistoryPdfHtml();
+        if (!html) { showAlert('Error', 'No data to export. Please fetch history first.'); return; }
+
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            } else {
+                showAlert('Info', 'PDF saved to: ' + uri);
+            }
+        } catch (e) {
+            showAlert('Error', 'Failed to generate PDF');
+        }
+    };
+
+    const handleHistoryPrint = async () => {
+        const html = generateHistoryPdfHtml();
+        if (!html) { showAlert('Error', 'No data to print. Please fetch history first.'); return; }
+
+        try {
+            await Print.printAsync({ html });
+        } catch (e) {
+            showAlert('Error', 'Failed to print');
+        }
+    };
+
     const generatePdfHtml = () => {
         if (reportType === 'milk' && milkReport) {
             return `
@@ -338,9 +586,10 @@ export default function DairyScreen() {
         <View style={styles.container}>
             <TopBar />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScrollView} contentContainerStyle={styles.tabRow}>
-                {(['Collection', 'Settlement', 'Reports', 'Rate Chart'] as TabType[]).map(tab => (
+                {(['Collection', 'History', 'Settlement', 'Reports', 'Rate Chart'] as TabType[]).map(tab => (
                     <Pressable key={tab} style={[styles.tab, activeTab === tab && styles.tabActive]} onPress={() => setActiveTab(tab)}>
                         {tab === 'Collection' && <Droplets size={14} color={activeTab === tab ? colors.white : colors.foreground} />}
+                        {tab === 'History' && <TrendingUp size={14} color={activeTab === tab ? colors.white : colors.foreground} />}
                         {tab === 'Settlement' && <Wallet size={14} color={activeTab === tab ? colors.white : colors.foreground} />}
                         {tab === 'Reports' && <FileText size={14} color={activeTab === tab ? colors.white : colors.foreground} />}
                         {tab === 'Rate Chart' && <Calculator size={14} color={activeTab === tab ? colors.white : colors.foreground} />}
@@ -377,6 +626,196 @@ export default function DairyScreen() {
                                 <Text style={[styles.collectionAmt, { color: colors.success }]}>₹{item.amount.toFixed(0)}</Text>
                             </Pressable>
                         )) : <Text style={styles.emptyText}>No collections yet</Text>}
+                    </>
+                )}
+
+                {activeTab === 'History' && (
+                    <>
+                        {/* Header with PDF and Print buttons */}
+                        <View style={styles.historyHeader}>
+                            <Text style={styles.historyTitle}>Purchase History</Text>
+                            <View style={styles.historyHeaderButtons}>
+                                <Pressable style={styles.pdfBtn} onPress={handleHistoryPdf}>
+                                    <FileText size={14} color={colors.white} />
+                                    <Text style={styles.pdfBtnText}>PDF</Text>
+                                </Pressable>
+                                <Pressable style={styles.printBtn} onPress={handleHistoryPrint}>
+                                    <Printer size={14} color={colors.white} />
+                                    <Text style={styles.printBtnText}>Print</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+
+                        {/* Date Range Selection */}
+                        <View style={styles.dateFilterRow}>
+                            <Pressable style={styles.datePickerBtn} onPress={() => openDatePicker('from')}>
+                                <Text style={styles.datePickerLabel}>From Date</Text>
+                                <View style={styles.datePickerValue}>
+                                    <Text style={styles.datePickerText}>{historyFromDate || 'dd-mm-yyyy'}</Text>
+                                    <Calendar size={16} color={colors.mutedForeground} />
+                                </View>
+                            </Pressable>
+                            <Pressable style={styles.datePickerBtn} onPress={() => openDatePicker('to')}>
+                                <Text style={styles.datePickerLabel}>To Date</Text>
+                                <View style={styles.datePickerValue}>
+                                    <Text style={styles.datePickerText}>{historyToDate || 'dd-mm-yyyy'}</Text>
+                                    <Calendar size={16} color={colors.mutedForeground} />
+                                </View>
+                            </Pressable>
+                        </View>
+
+                        {/* Shift Filter */}
+                        <View style={styles.filterSection}>
+                            <Text style={styles.filterLabel}>Shift</Text>
+                            <View style={styles.shiftFilterRow}>
+                                <Pressable
+                                    style={[styles.shiftFilterBtn, historyShiftFilter === 'all' && styles.shiftFilterBtnActive]}
+                                    onPress={() => setHistoryShiftFilter('all')}
+                                >
+                                    <Text style={[styles.shiftFilterText, historyShiftFilter === 'all' && styles.shiftFilterTextActive]}>All</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={[styles.shiftFilterBtn, historyShiftFilter === 'morning' && styles.shiftFilterBtnActive]}
+                                    onPress={() => setHistoryShiftFilter('morning')}
+                                >
+                                    <Sun size={14} color={historyShiftFilter === 'morning' ? colors.white : colors.warning} />
+                                    <Text style={[styles.shiftFilterText, historyShiftFilter === 'morning' && styles.shiftFilterTextActive]}>Morning</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={[styles.shiftFilterBtn, historyShiftFilter === 'evening' && styles.shiftFilterBtnActive]}
+                                    onPress={() => setHistoryShiftFilter('evening')}
+                                >
+                                    <Moon size={14} color={historyShiftFilter === 'evening' ? colors.white : colors.primary} />
+                                    <Text style={[styles.shiftFilterText, historyShiftFilter === 'evening' && styles.shiftFilterTextActive]}>Evening</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+
+                        {/* Farmer Filter */}
+                        <View style={styles.filterSection}>
+                            <Text style={styles.filterLabel}>Farmer</Text>
+                            <Pressable
+                                style={styles.farmerFilterBtn}
+                                onPress={() => setShowHistoryFarmerPicker(!showHistoryFarmerPicker)}
+                            >
+                                {historyFarmerFilter ? (
+                                    <View style={styles.farmerFilterSelected}>
+                                        <Text style={styles.farmerFilterText}>{historyFarmerFilter}</Text>
+                                        <Pressable onPress={handleClearHistoryFarmer}>
+                                            <X size={14} color={colors.mutedForeground} />
+                                        </Pressable>
+                                    </View>
+                                ) : (
+                                    <Text style={styles.farmerFilterPlaceholder}>All Farmers</Text>
+                                )}
+                                <ChevronDown size={16} color={colors.mutedForeground} />
+                            </Pressable>
+
+                            {showHistoryFarmerPicker && (
+                                <View style={styles.farmerPickerList}>
+                                    <ScrollView style={{ maxHeight: 150 }}>
+                                        <Pressable
+                                            style={[styles.farmerDropdownItem, !historyFarmerFilter && styles.farmerDropdownItemActive]}
+                                            onPress={() => { setHistoryFarmerFilter(''); setShowHistoryFarmerPicker(false); }}
+                                        >
+                                            <Text style={styles.farmerDropdownName}>All Farmers</Text>
+                                            {!historyFarmerFilter && <Check size={16} color={colors.primary} />}
+                                        </Pressable>
+                                        {farmers.map(f => (
+                                            <Pressable
+                                                key={f._id}
+                                                style={[styles.farmerDropdownItem, historyFarmerFilter === f.code && styles.farmerDropdownItemActive]}
+                                                onPress={() => handleSelectHistoryFarmer(f)}
+                                            >
+                                                <View style={styles.farmerDropdownItemContent}>
+                                                    <Text style={styles.farmerDropdownCode}>{f.code}</Text>
+                                                    <Text style={styles.farmerDropdownName}>{f.name}</Text>
+                                                </View>
+                                                {historyFarmerFilter === f.code && <Check size={16} color={colors.primary} />}
+                                            </Pressable>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            )}
+                        </View>
+
+                        {/* Quick Ranges */}
+                        <View style={styles.quickRangesSection}>
+                            <Text style={styles.quickRangesLabel}>Quick Ranges</Text>
+                            <View style={styles.quickRangesRow}>
+                                {quickRanges.map(range => (
+                                    <Pressable
+                                        key={range.id}
+                                        style={[
+                                            styles.quickRangeChip,
+                                            selectedRanges.includes(range.id) && styles.quickRangeChipActive
+                                        ]}
+                                        onPress={() => handleToggleRange(range.id)}
+                                    >
+                                        <Text style={[
+                                            styles.quickRangeText,
+                                            selectedRanges.includes(range.id) && styles.quickRangeTextActive
+                                        ]}>{range.label}</Text>
+                                        {selectedRanges.includes(range.id) && (
+                                            <X size={12} color={colors.white} />
+                                        )}
+                                    </Pressable>
+                                ))}
+                            </View>
+                            <View style={styles.rangeActions}>
+                                <Pressable onPress={handleClearRanges}>
+                                    <Text style={styles.clearRangesText}>✕ Clear</Text>
+                                </Pressable>
+                                <Pressable>
+                                    <Text style={styles.makeRangeText}>+ Make Range</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+
+                        {/* Show Button */}
+                        <Pressable style={styles.showBtn} onPress={handleFetchHistory}>
+                            <Text style={styles.showBtnText}>{loading ? 'Loading...' : 'Show'}</Text>
+                        </Pressable>
+
+                        {/* Results Table */}
+                        {historyCollections.length > 0 && (
+                            <View style={styles.tableContainer}>
+                                {/* Table Header */}
+                                <View style={styles.tableHeader}>
+                                    <Text style={[styles.tableHeaderCell, styles.tableCellDate]}>Date</Text>
+                                    <Text style={[styles.tableHeaderCell, styles.tableCellSession]}>Session</Text>
+                                    <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>FAT</Text>
+                                    <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>SNF</Text>
+                                    <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>Qty</Text>
+                                    <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>Rate</Text>
+                                    <Text style={[styles.tableHeaderCell, styles.tableCellAmount]}>Amt</Text>
+                                </View>
+
+                                {/* Table Rows */}
+                                {historyCollections.map((item, index) => (
+                                    <View key={item._id} style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
+                                        <Text style={[styles.tableCell, styles.tableCellDate]}>{new Date(item.date).toISOString().split('T')[0]}</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSession, { color: item.shift === 'morning' ? colors.warning : colors.primary }]}>{item.shift}</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.fat || '-'}</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.snf || '-'}</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.quantity}</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.rate}</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellAmount, { color: colors.success }]}>₹{item.amount.toFixed(2)}</Text>
+                                    </View>
+                                ))}
+
+                                {/* Totals Row */}
+                                <View style={styles.tableTotalsRow}>
+                                    <Text style={styles.tableTotalsLabel}>Total:</Text>
+                                    <Text style={styles.tableTotalsQty}>{historyTotals.quantity.toFixed(2)} L</Text>
+                                    <Text style={[styles.tableTotalsAmount, { color: colors.success }]}>₹{historyTotals.amount.toFixed(2)}</Text>
+                                </View>
+                            </View>
+                        )}
+
+                        {historyCollections.length === 0 && !loading && (
+                            <Text style={styles.emptyText}>Select date range and click Show to view history</Text>
+                        )}
                     </>
                 )}
 
@@ -556,6 +995,20 @@ export default function DairyScreen() {
                                 <Pressable style={[styles.shiftOpt, collectionForm.shift === 'evening' && styles.shiftOptActive]} onPress={() => setCollectionForm(p => ({ ...p, shift: 'evening' }))}><Moon size={16} color={collectionForm.shift === 'evening' ? colors.white : colors.primary} /><Text style={[styles.shiftOptText, collectionForm.shift === 'evening' && { color: colors.white }]}>Evening</Text></Pressable>
                             </View>
 
+                            {/* Date Selection */}
+                            <Text style={styles.inputLabel}>Date</Text>
+                            <Pressable
+                                style={styles.collectionDateBtn}
+                                onPress={openCollectionDatePicker}
+                            >
+                                {collectionDate ? (
+                                    <Text style={styles.collectionDateText}>{collectionDate}</Text>
+                                ) : (
+                                    <Text style={styles.collectionDatePlaceholder}>Today (tap to change)</Text>
+                                )}
+                                <Calendar size={16} color={colors.mutedForeground} />
+                            </Pressable>
+
                             {/* Farmer Selection - Dropdown Style */}
                             <Text style={styles.inputLabel}>Select Farmer</Text>
                             <Pressable
@@ -568,35 +1021,23 @@ export default function DairyScreen() {
                                         <Text style={styles.farmerSelectedName}>{collectionForm.farmerName}</Text>
                                     </View>
                                 ) : (
-                                    <Text style={styles.farmerPlaceholder}>Tap to select farmer...</Text>
+                                    <Text style={styles.farmerDropdownPlaceholder}>Tap to select farmer</Text>
                                 )}
-                                <ChevronDown size={18} color={colors.mutedForeground} />
+                                <ChevronDown size={16} color={colors.mutedForeground} />
                             </Pressable>
 
-                            {/* Farmer Dropdown List */}
+                            {/* Farmer Picker List */}
                             {showFarmerPicker && (
-                                <View style={styles.farmerDropdownList}>
-                                    <View style={styles.farmerDropdownHeader}>
-                                        <Text style={styles.farmerDropdownTitle}>Select Farmer</Text>
-                                        <Pressable onPress={() => setShowFarmerPicker(false)}>
-                                            <X size={18} color={colors.foreground} />
-                                        </Pressable>
-                                    </View>
-                                    <ScrollView style={styles.farmerDropdownScroll} nestedScrollEnabled>
+                                <View style={styles.farmerPickerList}>
+                                    <ScrollView style={{ maxHeight: 150 }}>
                                         {farmers.length > 0 ? farmers.map(f => (
                                             <Pressable
                                                 key={f._id}
-                                                style={[
-                                                    styles.farmerDropdownItem,
-                                                    collectionForm.farmerCode === f.code && styles.farmerDropdownItemActive
-                                                ]}
+                                                style={[styles.farmerDropdownItem, collectionForm.farmerCode === f.code && styles.farmerDropdownItemActive]}
                                                 onPress={() => handleSelectFarmer(f)}
                                             >
-                                                <View style={styles.farmerDropdownItemLeft}>
-                                                    <Text style={[
-                                                        styles.farmerDropdownCode,
-                                                        collectionForm.farmerCode === f.code && { color: colors.primary }
-                                                    ]}>{f.code}</Text>
+                                                <View style={styles.farmerDropdownItemContent}>
+                                                    <Text style={styles.farmerDropdownCode}>{f.code}</Text>
                                                     <Text style={styles.farmerDropdownName}>{f.name}</Text>
                                                 </View>
                                                 {collectionForm.farmerCode === f.code && (
@@ -619,6 +1060,126 @@ export default function DairyScreen() {
                             {collectionForm.quantity && collectionForm.rate && <View style={styles.amtPreview}><Text style={styles.amtPreviewText}>Amount: ₹{(parseFloat(collectionForm.quantity || '0') * parseFloat(collectionForm.rate || '0')).toFixed(0)}</Text></View>}
                         </ScrollView>
                         <View style={styles.modalFooter}><Pressable style={styles.cancelBtn} onPress={() => setShowAddModal(false)}><Text style={styles.cancelBtnText}>Cancel</Text></Pressable><Pressable style={styles.saveBtn} onPress={handleAddCollection}><Text style={styles.saveBtnText}>{loading ? '...' : 'Save'}</Text></Pressable></View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Date Picker Modal */}
+            <Modal visible={showHistoryDateModal} animationType="fade" transparent onRequestClose={() => setShowHistoryDateModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { maxHeight: 300 }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>{historyDateType === 'from' ? 'From Date' : 'To Date'}</Text>
+                            <Pressable onPress={() => setShowHistoryDateModal(false)}><X size={20} color={colors.foreground} /></Pressable>
+                        </View>
+                        <View style={styles.datePickerModalBody}>
+                            <View style={styles.dateInputRow}>
+                                <View style={styles.dateInputField}>
+                                    <Text style={styles.dateInputLabel}>Day</Text>
+                                    <TextInput
+                                        style={styles.dateInputValue}
+                                        value={tempDate.day}
+                                        onChangeText={v => setTempDate(p => ({ ...p, day: v }))}
+                                        keyboardType="number-pad"
+                                        maxLength={2}
+                                        placeholder="DD"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View style={styles.dateInputField}>
+                                    <Text style={styles.dateInputLabel}>Month</Text>
+                                    <TextInput
+                                        style={styles.dateInputValue}
+                                        value={tempDate.month}
+                                        onChangeText={v => setTempDate(p => ({ ...p, month: v }))}
+                                        keyboardType="number-pad"
+                                        maxLength={2}
+                                        placeholder="MM"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View style={styles.dateInputField}>
+                                    <Text style={styles.dateInputLabel}>Year</Text>
+                                    <TextInput
+                                        style={styles.dateInputValue}
+                                        value={tempDate.year}
+                                        onChangeText={v => setTempDate(p => ({ ...p, year: v }))}
+                                        keyboardType="number-pad"
+                                        maxLength={4}
+                                        placeholder="YYYY"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                            </View>
+                        </View>
+                        <View style={styles.modalFooter}>
+                            <Pressable style={styles.cancelBtn} onPress={() => setShowHistoryDateModal(false)}>
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={styles.saveBtn} onPress={handleConfirmDate}>
+                                <Text style={styles.saveBtnText}>Confirm</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Collection Date Picker Modal */}
+            <Modal visible={showCollectionDateModal} animationType="fade" transparent onRequestClose={() => setShowCollectionDateModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { maxHeight: 300 }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Date</Text>
+                            <Pressable onPress={() => setShowCollectionDateModal(false)}><X size={20} color={colors.foreground} /></Pressable>
+                        </View>
+                        <View style={styles.datePickerModalBody}>
+                            <View style={styles.dateInputRow}>
+                                <View style={styles.dateInputField}>
+                                    <Text style={styles.dateInputLabel}>Day</Text>
+                                    <TextInput
+                                        style={styles.dateInputValue}
+                                        value={collectionTempDate.day}
+                                        onChangeText={v => setCollectionTempDate(p => ({ ...p, day: v }))}
+                                        keyboardType="number-pad"
+                                        maxLength={2}
+                                        placeholder="DD"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View style={styles.dateInputField}>
+                                    <Text style={styles.dateInputLabel}>Month</Text>
+                                    <TextInput
+                                        style={styles.dateInputValue}
+                                        value={collectionTempDate.month}
+                                        onChangeText={v => setCollectionTempDate(p => ({ ...p, month: v }))}
+                                        keyboardType="number-pad"
+                                        maxLength={2}
+                                        placeholder="MM"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View style={styles.dateInputField}>
+                                    <Text style={styles.dateInputLabel}>Year</Text>
+                                    <TextInput
+                                        style={styles.dateInputValue}
+                                        value={collectionTempDate.year}
+                                        onChangeText={v => setCollectionTempDate(p => ({ ...p, year: v }))}
+                                        keyboardType="number-pad"
+                                        maxLength={4}
+                                        placeholder="YYYY"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                            </View>
+                        </View>
+                        <View style={styles.modalFooter}>
+                            <Pressable style={styles.cancelBtn} onPress={() => setShowCollectionDateModal(false)}>
+                                <Text style={styles.cancelBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={styles.saveBtn} onPress={handleConfirmCollectionDate}>
+                                <Text style={styles.saveBtnText}>Confirm</Text>
+                            </Pressable>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -655,8 +1216,8 @@ export default function DairyScreen() {
                                         </View>
                                     </View>
                                 </View>
-                                <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Recent Collections</Text>
-                                <ScrollView style={{ maxHeight: 200 }}>
+                                <Text style={[styles.sectionTitle, { marginTop: 12, paddingHorizontal: 16 }]}>Recent Collections</Text>
+                                <ScrollView style={{ maxHeight: 200, paddingHorizontal: 16 }}>
                                     {farmerCollections.length > 0 ? farmerCollections.map(c => (
                                         <View key={c._id} style={styles.collectionRow}>
                                             <Text style={styles.collectionCode}>{new Date(c.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</Text>
@@ -760,6 +1321,18 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     saveBtn: { flex: 1, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
     saveBtnText: { color: colors.white, fontSize: 14, fontWeight: '600' },
     calcRateBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 14, justifyContent: 'center' },
+    inputLabel: { fontSize: 12, fontWeight: '600', color: colors.foreground, marginBottom: 6 },
+    farmerDropdownBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 12 },
+    farmerDropdownPlaceholder: { color: colors.mutedForeground, fontSize: 14 },
+    farmerSelectedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    farmerSelectedCode: { fontSize: 14, fontWeight: '700', color: colors.primary },
+    farmerSelectedName: { fontSize: 14, color: colors.foreground },
+    farmerPickerList: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, marginBottom: 12 },
+    farmerDropdownItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+    farmerDropdownItemActive: { backgroundColor: colors.primary + '15' },
+    farmerDropdownItemContent: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    farmerDropdownCode: { fontSize: 13, fontWeight: '700', color: colors.primary },
+    farmerDropdownName: { fontSize: 13, color: colors.foreground },
 
     // Reports styles
     reportTypeRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
@@ -806,7 +1379,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     formulaExample: { fontSize: 11, color: colors.mutedForeground, fontStyle: 'italic' },
 
     // Farmer Detail Modal styles
-    farmerDetailCard: { backgroundColor: colors.secondary, borderRadius: 10, padding: 12, marginBottom: 8 },
+    farmerDetailCard: { backgroundColor: colors.secondary, borderRadius: 10, padding: 12, marginHorizontal: 16, marginBottom: 8 },
     farmerDetailRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
     farmerDetailName: { fontSize: 18, fontWeight: '700', color: colors.foreground },
     farmerDetailCode: { fontSize: 13, color: colors.mutedForeground, marginBottom: 4 },
@@ -816,60 +1389,64 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     farmerStatValue: { fontSize: 16, fontWeight: '700', color: colors.foreground },
     farmerStatLabel: { fontSize: 10, color: colors.mutedForeground, marginTop: 2 },
 
-    // Add Collection Modal - Farmer Dropdown styles
-    inputLabel: { fontSize: 12, color: colors.mutedForeground, marginBottom: 6, marginTop: 8 },
-    farmerPickerContainer: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-    farmerDropdownBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: colors.secondary,
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    farmerSelectedRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-    farmerSelectedCode: { fontSize: 13, fontWeight: '700', color: colors.primary, backgroundColor: colors.primary + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-    farmerSelectedName: { fontSize: 14, fontWeight: '600', color: colors.foreground },
-    farmerPlaceholder: { fontSize: 14, color: colors.mutedForeground },
-    farmerDropdownList: {
-        backgroundColor: colors.card,
-        borderRadius: 10,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        maxHeight: 200,
-        overflow: 'hidden',
-    },
-    farmerDropdownHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-        backgroundColor: colors.secondary,
-    },
-    farmerDropdownTitle: { fontSize: 13, fontWeight: '600', color: colors.foreground },
-    farmerDropdownScroll: { maxHeight: 150 },
-    farmerDropdownItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    farmerDropdownItemActive: { backgroundColor: colors.primary + '10' },
-    farmerDropdownItemLeft: { flex: 1 },
-    farmerDropdownCode: { fontSize: 12, fontWeight: '700', color: colors.foreground },
-    farmerDropdownName: { fontSize: 13, color: colors.mutedForeground, marginTop: 2 },
-    farmerQuickList: { backgroundColor: colors.secondary, borderRadius: 8, padding: 8, marginBottom: 12 },
-    quickListLabel: { fontSize: 11, color: colors.mutedForeground, marginBottom: 6 },
-    farmerChipScroll: { flexDirection: 'row' },
-    farmerChip: { backgroundColor: colors.card, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, marginRight: 8, borderWidth: 1, borderColor: colors.border, minWidth: 80 },
-    farmerChipCode: { fontSize: 12, fontWeight: '700', color: colors.primary },
-    farmerChipName: { fontSize: 10, color: colors.mutedForeground, marginTop: 2 },
+    // Purchase History styles
+    historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    historyTitle: { fontSize: 18, fontWeight: '700', color: colors.success },
+    historyHeaderButtons: { flexDirection: 'row', gap: 8 },
+    pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f97316', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
+    pdfBtnText: { color: colors.white, fontSize: 12, fontWeight: '600' },
+    printBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
+    printBtnText: { color: colors.white, fontSize: 12, fontWeight: '600' },
+    dateFilterRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+    datePickerBtn: { flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10 },
+    datePickerLabel: { fontSize: 11, color: colors.mutedForeground, marginBottom: 4 },
+    datePickerValue: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    datePickerText: { fontSize: 14, color: colors.foreground },
+    quickRangesSection: { marginBottom: 12 },
+    quickRangesLabel: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground, marginBottom: 8 },
+    quickRangesRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+    quickRangeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    quickRangeChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    quickRangeText: { fontSize: 13, fontWeight: '600', color: colors.foreground },
+    quickRangeTextActive: { color: colors.white },
+    rangeActions: { flexDirection: 'row', gap: 16, marginTop: 10 },
+    clearRangesText: { fontSize: 13, color: colors.destructive, fontWeight: '500' },
+    makeRangeText: { fontSize: 13, color: colors.primary, fontWeight: '500' },
+    showBtn: { backgroundColor: colors.success, borderRadius: 8, paddingVertical: 14, alignItems: 'center', marginBottom: 16 },
+    showBtnText: { color: colors.white, fontSize: 16, fontWeight: '700' },
+    tableContainer: { backgroundColor: colors.card, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
+    tableHeader: { flexDirection: 'row', backgroundColor: colors.success, paddingVertical: 10, paddingHorizontal: 8 },
+    tableHeaderCell: { fontSize: 11, fontWeight: '700', color: colors.white, textAlign: 'center' },
+    tableRow: { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+    tableRowEven: { backgroundColor: colors.secondary },
+    tableCell: { fontSize: 12, color: colors.foreground, textAlign: 'center' },
+    tableCellDate: { flex: 2 },
+    tableCellSession: { flex: 1.5 },
+    tableCellSmall: { flex: 1 },
+    tableCellAmount: { flex: 1.5, fontWeight: '600' },
+    tableTotalsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: colors.secondary, borderTopWidth: 2, borderTopColor: colors.success },
+    tableTotalsLabel: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+    tableTotalsQty: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+    tableTotalsAmount: { fontSize: 16, fontWeight: '700' },
+    datePickerModalBody: { padding: 16 },
+    dateInputRow: { flexDirection: 'row', gap: 10 },
+    dateInputField: { flex: 1 },
+    dateInputLabel: { fontSize: 12, color: colors.mutedForeground, marginBottom: 6, textAlign: 'center' },
+    dateInputValue: { backgroundColor: colors.secondary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, fontSize: 18, color: colors.foreground, textAlign: 'center', fontWeight: '600' },
+
+    // Filter styles
+    filterSection: { marginBottom: 12 },
+    filterLabel: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground, marginBottom: 8 },
+    shiftFilterRow: { flexDirection: 'row', gap: 8 },
+    shiftFilterBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    shiftFilterBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    shiftFilterText: { fontSize: 12, fontWeight: '600', color: colors.foreground },
+    shiftFilterTextActive: { color: colors.white },
+    farmerFilterBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12 },
+    farmerFilterSelected: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    farmerFilterText: { fontSize: 14, fontWeight: '600', color: colors.primary },
+    farmerFilterPlaceholder: { fontSize: 14, color: colors.mutedForeground },
+    collectionDateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 12 },
+    collectionDateText: { fontSize: 14, color: colors.foreground },
+    collectionDatePlaceholder: { fontSize: 14, color: colors.mutedForeground },
 });
