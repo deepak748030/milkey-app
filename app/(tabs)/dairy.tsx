@@ -21,6 +21,7 @@ export default function DairyScreen() {
     const [collections, setCollections] = useState<MilkCollection[]>([]);
     const [farmers, setFarmers] = useState<Farmer[]>([]);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [showFarmerPicker, setShowFarmerPicker] = useState(false);
     const [collectionForm, setCollectionForm] = useState({ farmerCode: '', farmerName: '', quantity: '', rate: '', fat: '', snf: '', shift: new Date().getHours() < 12 ? 'morning' : 'evening' });
     const [settlementCode, setSettlementCode] = useState('');
     const [farmerSummary, setFarmerSummary] = useState<FarmerPaymentSummary | null>(null);
@@ -45,6 +46,11 @@ export default function DairyScreen() {
     const [alertMessage, setAlertMessage] = useState('');
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void }>({ title: '', message: '', onConfirm: () => { } });
+
+    // Farmer details modal
+    const [farmerDetailVisible, setFarmerDetailVisible] = useState(false);
+    const [selectedFarmer, setSelectedFarmer] = useState<Farmer | null>(null);
+    const [farmerCollections, setFarmerCollections] = useState<MilkCollection[]>([]);
 
     const styles = createStyles(colors, isDark);
 
@@ -95,9 +101,34 @@ export default function DairyScreen() {
 
     const onRefresh = useCallback(async () => { setRefreshing(true); await fetchData(); setRefreshing(false); }, []);
 
+    const handleViewFarmerDetails = async (farmerCode: string) => {
+        if (!farmerCode) return;
+        setLoading(true);
+        try {
+            const farmer = farmers.find(f => f.code === farmerCode);
+            if (farmer) {
+                setSelectedFarmer(farmer);
+                const collectionsRes = await milkCollectionsApi.getAll({ farmerCode, limit: 20 });
+                if (collectionsRes.success) {
+                    setFarmerCollections(collectionsRes.response?.data || []);
+                }
+                setFarmerDetailVisible(true);
+            }
+        } catch (e) {
+            console.error(e);
+            showAlert('Error', 'Failed to load farmer details');
+        }
+        setLoading(false);
+    };
+
     const handleFarmerCodeChange = (code: string) => {
         const farmer = farmers.find(f => f.code === code);
         setCollectionForm(prev => ({ ...prev, farmerCode: code, farmerName: farmer?.name || '' }));
+    };
+
+    const handleSelectFarmer = (farmer: Farmer) => {
+        setCollectionForm(prev => ({ ...prev, farmerCode: farmer.code, farmerName: farmer.name }));
+        setShowFarmerPicker(false);
     };
 
     const handleCalculateRate = async () => {
@@ -109,24 +140,56 @@ export default function DairyScreen() {
     };
 
     const handleAddCollection = async () => {
-        if (!collectionForm.farmerCode || !collectionForm.quantity || !collectionForm.rate) {
-            showAlert('Error', 'Please fill farmer code, quantity, and rate'); return;
+        // Validation
+        if (!collectionForm.farmerCode || !collectionForm.farmerName) {
+            showAlert('Error', 'Please select a farmer from the list');
+            return;
         }
+        if (!collectionForm.quantity) {
+            showAlert('Error', 'Please enter milk quantity');
+            return;
+        }
+        if (!collectionForm.rate) {
+            showAlert('Error', 'Please enter rate per liter');
+            return;
+        }
+
+        // Check if farmers exist
+        if (farmers.length === 0) {
+            showAlert('No Farmers', 'Please register farmers first in the Register tab before adding milk collections');
+            return;
+        }
+
         setLoading(true);
-        const res = await milkCollectionsApi.create({
-            farmerCode: collectionForm.farmerCode,
-            quantity: parseFloat(collectionForm.quantity),
-            rate: parseFloat(collectionForm.rate),
-            shift: collectionForm.shift as 'morning' | 'evening',
-            fat: collectionForm.fat ? parseFloat(collectionForm.fat) : undefined,
-            snf: collectionForm.snf ? parseFloat(collectionForm.snf) : undefined,
-        });
-        if (res.success) {
-            showAlert('Success', 'Milk collection recorded');
-            setShowAddModal(false);
-            setCollectionForm({ farmerCode: '', farmerName: '', quantity: '', rate: '', fat: '', snf: '', shift: new Date().getHours() < 12 ? 'morning' : 'evening' });
-            fetchData();
-        } else showAlert('Error', res.message || 'Failed');
+        try {
+            const res = await milkCollectionsApi.create({
+                farmerCode: collectionForm.farmerCode,
+                quantity: parseFloat(collectionForm.quantity),
+                rate: parseFloat(collectionForm.rate),
+                shift: collectionForm.shift as 'morning' | 'evening',
+                fat: collectionForm.fat ? parseFloat(collectionForm.fat) : undefined,
+                snf: collectionForm.snf ? parseFloat(collectionForm.snf) : undefined,
+            });
+
+            if (res.success) {
+                showAlert('Success', 'Milk collection recorded');
+                setShowAddModal(false);
+                setShowFarmerPicker(false);
+                setCollectionForm({ farmerCode: '', farmerName: '', quantity: '', rate: '', fat: '', snf: '', shift: new Date().getHours() < 12 ? 'morning' : 'evening' });
+                fetchData();
+            } else {
+                // Show specific error from server
+                const errorMsg = res.message || 'Failed to save record';
+                if (errorMsg.includes('Farmer not found')) {
+                    showAlert('Farmer Not Found', 'This farmer is not registered. Please register the farmer first in the Register tab.');
+                } else {
+                    showAlert('Error', errorMsg);
+                }
+            }
+        } catch (error) {
+            console.error('Add collection error:', error);
+            showAlert('Error', 'Network error. Please check your connection and try again.');
+        }
         setLoading(false);
     };
 
@@ -300,12 +363,19 @@ export default function DairyScreen() {
                         <Pressable style={styles.addBtn} onPress={() => setShowAddModal(true)}><Plus size={18} color={colors.white} /><Text style={styles.addBtnText}>Add Collection</Text></Pressable>
                         <Text style={styles.sectionTitle}>Recent Collections</Text>
                         {collections.length > 0 ? collections.slice(0, 10).map(item => (
-                            <View key={item._id} style={styles.collectionRow}>
-                                <Text style={[styles.collectionCode, { color: colors.primary }]}>{item.farmer?.code}</Text>
+                            <Pressable
+                                key={item._id}
+                                style={styles.collectionRow}
+                                onPress={() => handleViewFarmerDetails(item.farmer?.code || '')}
+                            >
+                                <View style={styles.collectionNameCol}>
+                                    <Text style={[styles.collectionCode, { color: colors.primary }]}>{item.farmer?.code}</Text>
+                                    <Text style={styles.collectionName} numberOfLines={1}>{item.farmer?.name}</Text>
+                                </View>
                                 <Text style={styles.collectionShift}>{item.shift === 'morning' ? '☀️' : '🌙'}</Text>
                                 <Text style={styles.collectionQty}>{item.quantity}L</Text>
                                 <Text style={[styles.collectionAmt, { color: colors.success }]}>₹{item.amount.toFixed(0)}</Text>
-                            </View>
+                            </Pressable>
                         )) : <Text style={styles.emptyText}>No collections yet</Text>}
                     </>
                 )}
@@ -485,7 +555,61 @@ export default function DairyScreen() {
                                 <Pressable style={[styles.shiftOpt, collectionForm.shift === 'morning' && styles.shiftOptActive]} onPress={() => setCollectionForm(p => ({ ...p, shift: 'morning' }))}><Sun size={16} color={collectionForm.shift === 'morning' ? colors.white : colors.warning} /><Text style={[styles.shiftOptText, collectionForm.shift === 'morning' && { color: colors.white }]}>Morning</Text></Pressable>
                                 <Pressable style={[styles.shiftOpt, collectionForm.shift === 'evening' && styles.shiftOptActive]} onPress={() => setCollectionForm(p => ({ ...p, shift: 'evening' }))}><Moon size={16} color={collectionForm.shift === 'evening' ? colors.white : colors.primary} /><Text style={[styles.shiftOptText, collectionForm.shift === 'evening' && { color: colors.white }]}>Evening</Text></Pressable>
                             </View>
-                            <View style={styles.formRow}><TextInput style={[styles.input, { flex: 0.4 }]} placeholder="Code" value={collectionForm.farmerCode} onChangeText={handleFarmerCodeChange} placeholderTextColor={colors.mutedForeground} /><TextInput style={[styles.input, { flex: 1, backgroundColor: colors.muted }]} placeholder="Name" value={collectionForm.farmerName} editable={false} placeholderTextColor={colors.mutedForeground} /></View>
+
+                            {/* Farmer Selection - Dropdown Style */}
+                            <Text style={styles.inputLabel}>Select Farmer</Text>
+                            <Pressable
+                                style={styles.farmerDropdownBtn}
+                                onPress={() => setShowFarmerPicker(true)}
+                            >
+                                {collectionForm.farmerName ? (
+                                    <View style={styles.farmerSelectedRow}>
+                                        <Text style={styles.farmerSelectedCode}>{collectionForm.farmerCode}</Text>
+                                        <Text style={styles.farmerSelectedName}>{collectionForm.farmerName}</Text>
+                                    </View>
+                                ) : (
+                                    <Text style={styles.farmerPlaceholder}>Tap to select farmer...</Text>
+                                )}
+                                <ChevronDown size={18} color={colors.mutedForeground} />
+                            </Pressable>
+
+                            {/* Farmer Dropdown List */}
+                            {showFarmerPicker && (
+                                <View style={styles.farmerDropdownList}>
+                                    <View style={styles.farmerDropdownHeader}>
+                                        <Text style={styles.farmerDropdownTitle}>Select Farmer</Text>
+                                        <Pressable onPress={() => setShowFarmerPicker(false)}>
+                                            <X size={18} color={colors.foreground} />
+                                        </Pressable>
+                                    </View>
+                                    <ScrollView style={styles.farmerDropdownScroll} nestedScrollEnabled>
+                                        {farmers.length > 0 ? farmers.map(f => (
+                                            <Pressable
+                                                key={f._id}
+                                                style={[
+                                                    styles.farmerDropdownItem,
+                                                    collectionForm.farmerCode === f.code && styles.farmerDropdownItemActive
+                                                ]}
+                                                onPress={() => handleSelectFarmer(f)}
+                                            >
+                                                <View style={styles.farmerDropdownItemLeft}>
+                                                    <Text style={[
+                                                        styles.farmerDropdownCode,
+                                                        collectionForm.farmerCode === f.code && { color: colors.primary }
+                                                    ]}>{f.code}</Text>
+                                                    <Text style={styles.farmerDropdownName}>{f.name}</Text>
+                                                </View>
+                                                {collectionForm.farmerCode === f.code && (
+                                                    <Check size={16} color={colors.primary} />
+                                                )}
+                                            </Pressable>
+                                        )) : (
+                                            <Text style={styles.emptyText}>No farmers registered</Text>
+                                        )}
+                                    </ScrollView>
+                                </View>
+                            )}
+
                             <View style={styles.formRow}>
                                 <TextInput style={styles.input} placeholder="FAT %" value={collectionForm.fat} onChangeText={v => setCollectionForm(p => ({ ...p, fat: v }))} keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
                                 <TextInput style={styles.input} placeholder="SNF %" value={collectionForm.snf} onChangeText={v => setCollectionForm(p => ({ ...p, snf: v }))} keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
@@ -495,6 +619,55 @@ export default function DairyScreen() {
                             {collectionForm.quantity && collectionForm.rate && <View style={styles.amtPreview}><Text style={styles.amtPreviewText}>Amount: ₹{(parseFloat(collectionForm.quantity || '0') * parseFloat(collectionForm.rate || '0')).toFixed(0)}</Text></View>}
                         </ScrollView>
                         <View style={styles.modalFooter}><Pressable style={styles.cancelBtn} onPress={() => setShowAddModal(false)}><Text style={styles.cancelBtnText}>Cancel</Text></Pressable><Pressable style={styles.saveBtn} onPress={handleAddCollection}><Text style={styles.saveBtnText}>{loading ? '...' : 'Save'}</Text></Pressable></View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Farmer Detail Modal */}
+            <Modal visible={farmerDetailVisible} animationType="slide" transparent onRequestClose={() => setFarmerDetailVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Farmer Details</Text>
+                            <Pressable onPress={() => setFarmerDetailVisible(false)}><X size={20} color={colors.foreground} /></Pressable>
+                        </View>
+                        {selectedFarmer && (
+                            <>
+                                <View style={styles.farmerDetailCard}>
+                                    <View style={styles.farmerDetailRow}>
+                                        <User size={16} color={colors.primary} />
+                                        <Text style={styles.farmerDetailName}>{selectedFarmer.name}</Text>
+                                    </View>
+                                    <Text style={styles.farmerDetailCode}>Code: {selectedFarmer.code}</Text>
+                                    <Text style={styles.farmerDetailPhone}>Mobile: {selectedFarmer.mobile}</Text>
+                                    <View style={styles.farmerStatsRow}>
+                                        <View style={styles.farmerStatItem}>
+                                            <Text style={styles.farmerStatValue}>{selectedFarmer.totalLiters?.toFixed(1) || '0'} L</Text>
+                                            <Text style={styles.farmerStatLabel}>Total Milk</Text>
+                                        </View>
+                                        <View style={styles.farmerStatItem}>
+                                            <Text style={[styles.farmerStatValue, { color: colors.success }]}>₹{selectedFarmer.totalPurchase?.toFixed(0) || '0'}</Text>
+                                            <Text style={styles.farmerStatLabel}>Total Value</Text>
+                                        </View>
+                                        <View style={styles.farmerStatItem}>
+                                            <Text style={[styles.farmerStatValue, { color: colors.warning }]}>₹{selectedFarmer.pendingAmount?.toFixed(0) || '0'}</Text>
+                                            <Text style={styles.farmerStatLabel}>Pending</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                                <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Recent Collections</Text>
+                                <ScrollView style={{ maxHeight: 200 }}>
+                                    {farmerCollections.length > 0 ? farmerCollections.map(c => (
+                                        <View key={c._id} style={styles.collectionRow}>
+                                            <Text style={styles.collectionCode}>{new Date(c.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</Text>
+                                            <Text style={styles.collectionShift}>{c.shift === 'morning' ? '☀️' : '🌙'}</Text>
+                                            <Text style={styles.collectionQty}>{c.quantity}L</Text>
+                                            <Text style={[styles.collectionAmt, { color: colors.success }]}>₹{c.amount.toFixed(0)}</Text>
+                                        </View>
+                                    )) : <Text style={styles.emptyText}>No collections found</Text>}
+                                </ScrollView>
+                            </>
+                        )}
                     </View>
                 </View>
             </Modal>
@@ -543,7 +716,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     addBtnText: { color: colors.white, fontSize: 14, fontWeight: '600' },
     sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 8 },
     collectionRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 8, padding: 10, marginBottom: 6, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
-    collectionCode: { flex: 1, fontSize: 13, fontWeight: '600' },
+    collectionNameCol: { flex: 1 },
+    collectionCode: { fontSize: 13, fontWeight: '600' },
+    collectionName: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
     collectionShift: { fontSize: 14, marginHorizontal: 8 },
     collectionQty: { fontSize: 13, color: colors.foreground, marginRight: 10 },
     collectionAmt: { fontSize: 14, fontWeight: '700' },
@@ -629,4 +804,72 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     formulaCard: { backgroundColor: colors.card, borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
     formulaText: { fontSize: 12, color: colors.foreground, marginBottom: 8, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
     formulaExample: { fontSize: 11, color: colors.mutedForeground, fontStyle: 'italic' },
+
+    // Farmer Detail Modal styles
+    farmerDetailCard: { backgroundColor: colors.secondary, borderRadius: 10, padding: 12, marginBottom: 8 },
+    farmerDetailRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+    farmerDetailName: { fontSize: 18, fontWeight: '700', color: colors.foreground },
+    farmerDetailCode: { fontSize: 13, color: colors.mutedForeground, marginBottom: 4 },
+    farmerDetailPhone: { fontSize: 13, color: colors.mutedForeground },
+    farmerStatsRow: { flexDirection: 'row', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border, gap: 8 },
+    farmerStatItem: { flex: 1, alignItems: 'center' },
+    farmerStatValue: { fontSize: 16, fontWeight: '700', color: colors.foreground },
+    farmerStatLabel: { fontSize: 10, color: colors.mutedForeground, marginTop: 2 },
+
+    // Add Collection Modal - Farmer Dropdown styles
+    inputLabel: { fontSize: 12, color: colors.mutedForeground, marginBottom: 6, marginTop: 8 },
+    farmerPickerContainer: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+    farmerDropdownBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: colors.secondary,
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    farmerSelectedRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+    farmerSelectedCode: { fontSize: 13, fontWeight: '700', color: colors.primary, backgroundColor: colors.primary + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+    farmerSelectedName: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+    farmerPlaceholder: { fontSize: 14, color: colors.mutedForeground },
+    farmerDropdownList: {
+        backgroundColor: colors.card,
+        borderRadius: 10,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+        maxHeight: 200,
+        overflow: 'hidden',
+    },
+    farmerDropdownHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+        backgroundColor: colors.secondary,
+    },
+    farmerDropdownTitle: { fontSize: 13, fontWeight: '600', color: colors.foreground },
+    farmerDropdownScroll: { maxHeight: 150 },
+    farmerDropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    farmerDropdownItemActive: { backgroundColor: colors.primary + '10' },
+    farmerDropdownItemLeft: { flex: 1 },
+    farmerDropdownCode: { fontSize: 12, fontWeight: '700', color: colors.foreground },
+    farmerDropdownName: { fontSize: 13, color: colors.mutedForeground, marginTop: 2 },
+    farmerQuickList: { backgroundColor: colors.secondary, borderRadius: 8, padding: 8, marginBottom: 12 },
+    quickListLabel: { fontSize: 11, color: colors.mutedForeground, marginBottom: 6 },
+    farmerChipScroll: { flexDirection: 'row' },
+    farmerChip: { backgroundColor: colors.card, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, marginRight: 8, borderWidth: 1, borderColor: colors.border, minWidth: 80 },
+    farmerChipCode: { fontSize: 12, fontWeight: '700', color: colors.primary },
+    farmerChipName: { fontSize: 10, color: colors.mutedForeground, marginTop: 2 },
 });

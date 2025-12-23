@@ -3,6 +3,10 @@ const router = express.Router();
 const Farmer = require('../models/Farmer');
 const auth = require('../middleware/auth');
 
+const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeCode = (code) => String(code || '').trim().toUpperCase();
+const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`, 'i');
+
 // GET /api/farmers - Get all farmers for current user
 router.get('/', auth, async (req, res) => {
     try {
@@ -58,7 +62,7 @@ router.get('/:id', auth, async (req, res) => {
 router.get('/code/:code', auth, async (req, res) => {
     try {
         const farmer = await Farmer.findOne({
-            code: req.params.code,
+            code: codeRegex(req.params.code),
             owner: req.userId,
             isActive: true
         }).lean();
@@ -88,16 +92,18 @@ router.post('/', auth, async (req, res) => {
     try {
         const { code, name, mobile, address } = req.body;
 
-        if (!code || !name || !mobile) {
+        const normalizedCode = normalizeCode(code);
+
+        if (!normalizedCode || !name || !mobile) {
             return res.status(400).json({
                 success: false,
                 message: 'Code, name, and mobile are required'
             });
         }
 
-        // Check if code already exists for this owner
+        // Check if code already exists for this owner (case-insensitive)
         const existingFarmer = await Farmer.findOne({
-            code,
+            code: codeRegex(normalizedCode),
             owner: req.userId
         });
 
@@ -109,9 +115,9 @@ router.post('/', auth, async (req, res) => {
         }
 
         const farmer = await Farmer.create({
-            code: code.trim(),
-            name: name.trim(),
-            mobile: mobile.trim(),
+            code: normalizedCode,
+            name: String(name).trim(),
+            mobile: String(mobile).trim(),
             address: address?.trim() || '',
             owner: req.userId
         });

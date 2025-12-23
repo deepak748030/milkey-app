@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, Dimensions, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, CreditCard, Banknote, Wallet, Check } from 'lucide-react-native';
+import { ordersApi } from '@/lib/milkeyApi';
+import { useCartStore } from '@/lib/cartStore';
 
 const { height } = Dimensions.get('window');
 
@@ -16,39 +18,61 @@ interface PaymentBottomSheetProps {
 export default function PaymentBottomSheet({ visible, onClose, total, onSuccess }: PaymentBottomSheetProps) {
     const { colors, isDark } = useTheme();
     const insets = useSafeAreaInsets();
+    const { items } = useCartStore();
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const paymentMethods = [
-        { id: 'cod', label: 'Cash on Delivery', icon: Banknote, description: 'Pay when you receive' },
+        { id: 'cash', label: 'Cash on Delivery', icon: Banknote, description: 'Pay when you receive' },
         { id: 'upi', label: 'UPI Payment', icon: Wallet, description: 'GPay, PhonePe, Paytm' },
         { id: 'card', label: 'Credit/Debit Card', icon: CreditCard, description: 'Visa, Mastercard, RuPay' },
     ];
 
     const styles = createStyles(colors, isDark, insets);
 
-    const handlePayment = () => {
-        if (!selectedMethod) return;
+    const handlePayment = async () => {
+        if (!selectedMethod || items.length === 0) return;
 
         setIsProcessing(true);
+        setError(null);
 
-        setTimeout(() => {
+        try {
+            const orderData = {
+                items: items.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                })),
+                paymentMethod: selectedMethod,
+            };
+
+            const response = await ordersApi.create(orderData);
+
+            if (response.success) {
+                setShowSuccess(true);
+                setTimeout(() => {
+                    setShowSuccess(false);
+                    setSelectedMethod(null);
+                    onSuccess();
+                }, 1500);
+            } else {
+                setError(response.message || 'Failed to place order');
+            }
+        } catch (err) {
+            setError('Network error. Please try again.');
+        } finally {
             setIsProcessing(false);
-            setShowSuccess(true);
-
-            setTimeout(() => {
-                setShowSuccess(false);
-                setSelectedMethod(null);
-                onSuccess();
-            }, 1500);
-        }, 1000);
+        }
     };
 
     const handleClose = () => {
         setSelectedMethod(null);
         setShowSuccess(false);
         setIsProcessing(false);
+        setError(null);
         onClose();
     };
 
@@ -126,6 +150,12 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
                                 })}
                             </View>
 
+                            {error && (
+                                <View style={styles.errorContainer}>
+                                    <Text style={styles.errorText}>{error}</Text>
+                                </View>
+                            )}
+
                             <Pressable
                                 style={[
                                     styles.payBtn,
@@ -134,9 +164,11 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
                                 onPress={handlePayment}
                                 disabled={!selectedMethod || isProcessing}
                             >
-                                <Text style={styles.payBtnText}>
-                                    {isProcessing ? 'Processing...' : `Pay ₹${total}`}
-                                </Text>
+                                {isProcessing ? (
+                                    <ActivityIndicator color={colors.white} />
+                                ) : (
+                                    <Text style={styles.payBtnText}>{`Pay ₹${total}`}</Text>
+                                )}
                             </Pressable>
                         </>
                     )}
@@ -309,5 +341,16 @@ const createStyles = (colors: any, isDark: boolean, insets: any) => StyleSheet.c
     successSubtitle: {
         fontSize: 14,
         color: colors.mutedForeground,
+    },
+    errorContainer: {
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 12,
+    },
+    errorText: {
+        color: '#EF4444',
+        fontSize: 13,
+        textAlign: 'center',
     },
 });

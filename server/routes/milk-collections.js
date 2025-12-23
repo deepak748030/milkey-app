@@ -4,6 +4,10 @@ const MilkCollection = require('../models/MilkCollection');
 const Farmer = require('../models/Farmer');
 const auth = require('../middleware/auth');
 
+const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeCode = (code) => String(code || '').trim().toUpperCase();
+const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`, 'i');
+
 // GET /api/milk-collections - Get all collections with filters
 router.get('/', auth, async (req, res) => {
     try {
@@ -34,7 +38,7 @@ router.get('/', auth, async (req, res) => {
 
         // If farmerCode provided, find farmer first
         if (farmerCode) {
-            const farmer = await Farmer.findOne({ code: farmerCode, owner: req.userId });
+            const farmer = await Farmer.findOne({ code: codeRegex(farmerCode), owner: req.userId });
             if (farmer) {
                 query.farmer = farmer._id;
             } else {
@@ -154,16 +158,20 @@ router.post('/', auth, async (req, res) => {
     try {
         const { farmerCode, date, shift, quantity, fat, snf, rate, notes } = req.body;
 
-        if (!farmerCode || !quantity || !rate) {
+        const normalizedCode = normalizeCode(farmerCode);
+        const qty = Number(quantity);
+        const r = Number(rate);
+
+        if (!normalizedCode || Number.isNaN(qty) || qty <= 0 || Number.isNaN(r) || r <= 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Farmer code, quantity, and rate are required'
+                message: 'Valid farmer code, quantity, and rate are required'
             });
         }
 
-        // Find farmer by code
+        // Find farmer by code (case-insensitive)
         const farmer = await Farmer.findOne({
-            code: farmerCode,
+            code: codeRegex(normalizedCode),
             owner: req.userId,
             isActive: true
         });

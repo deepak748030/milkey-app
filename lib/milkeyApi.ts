@@ -242,18 +242,42 @@ const apiRequest = async <T>(
             headers,
         });
 
-        const data = await response.json();
+        // Some errors return non-JSON, so guard parsing
+        let data: any = null;
+        try {
+            data = await response.json();
+        } catch {
+            data = null;
+        }
 
         if (!response.ok) {
+            const serverMessage = data?.message || data?.error || 'Something went wrong';
+            const message = `${serverMessage} (HTTP ${response.status})`;
+
+            // Helpful auth hint
+            if (response.status === 401) {
+                return {
+                    success: false,
+                    message: `Session expired. Please login again. (HTTP 401)`,
+                };
+            }
+
+            console.error('API error:', {
+                endpoint,
+                status: response.status,
+                message: serverMessage,
+                body: data,
+            });
+
             return {
                 success: false,
-                message: data.message || 'Something went wrong',
+                message,
             };
         }
 
-        return data;
+        return (data ?? { success: true, response: null }) as ApiResponse<T>;
     } catch (error) {
-        console.error('API Request error:', error);
+        console.error('API Request error:', { endpoint, error });
         return {
             success: false,
             message: error instanceof Error ? error.message : 'Network error',
@@ -740,29 +764,6 @@ export const authApiNew = {
 
     getMe: async () => {
         return apiRequest<any>('/auth/me');
-    },
-};
-
-// Seed API - Push mock data to database
-export const seedApi = {
-    // Seed all mock data
-    seedData: async (clearExisting: boolean = false) => {
-        return apiRequest<{ farmers: number; products: number; rateCharts: number; milkCollections: number; payments: number; advances: number }>(
-            `/seed${clearExisting ? '?clear=true' : ''}`,
-            { method: 'POST' }
-        );
-    },
-
-    // Get current database status
-    getStatus: async () => {
-        return apiRequest<{ farmers: number; products: number; rateCharts: number; milkCollections: number; payments: number; advances: number }>(
-            '/seed/status'
-        );
-    },
-
-    // Clear all data
-    clearData: async () => {
-        return apiRequest<void>('/seed/clear', { method: 'DELETE' });
     },
 };
 
