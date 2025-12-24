@@ -7,10 +7,17 @@ const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const normalizeCode = (code) => String(code || '').trim().toUpperCase();
 const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`, 'i');
 
-// GET /api/farmers - Get all farmers for current user
+// GET /api/farmers - Get all farmers for current user (optionally filter by type)
 router.get('/', auth, async (req, res) => {
     try {
-        const farmers = await Farmer.find({ owner: req.userId, isActive: true })
+        const { type } = req.query;
+        const query = { owner: req.userId, isActive: true };
+
+        if (type && ['farmer', 'member'].includes(type)) {
+            query.type = type;
+        }
+
+        const farmers = await Farmer.find(query)
             .sort({ code: 1 })
             .lean();
 
@@ -90,9 +97,10 @@ router.get('/code/:code', auth, async (req, res) => {
 // POST /api/farmers
 router.post('/', auth, async (req, res) => {
     try {
-        const { code, name, mobile, address } = req.body;
+        const { code, name, mobile, address, type = 'farmer' } = req.body;
 
         const normalizedCode = normalizeCode(code);
+        const validType = ['farmer', 'member'].includes(type) ? type : 'farmer';
 
         if (!normalizedCode || !name || !mobile) {
             return res.status(400).json({
@@ -101,16 +109,17 @@ router.post('/', auth, async (req, res) => {
             });
         }
 
-        // Check if code already exists for this owner (case-insensitive)
+        // Check if code already exists for this owner and type (case-insensitive)
         const existingFarmer = await Farmer.findOne({
             code: codeRegex(normalizedCode),
-            owner: req.userId
+            owner: req.userId,
+            type: validType
         });
 
         if (existingFarmer) {
             return res.status(400).json({
                 success: false,
-                message: 'Farmer with this code already exists'
+                message: `${validType === 'member' ? 'Member' : 'Farmer'} with this code already exists`
             });
         }
 
@@ -119,19 +128,20 @@ router.post('/', auth, async (req, res) => {
             name: String(name).trim(),
             mobile: String(mobile).trim(),
             address: address?.trim() || '',
-            owner: req.userId
+            owner: req.userId,
+            type: validType
         });
 
         res.status(201).json({
             success: true,
-            message: 'Farmer added successfully',
+            message: `${validType === 'member' ? 'Member' : 'Farmer'} added successfully`,
             response: farmer
         });
     } catch (error) {
         console.error('Create farmer error:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to add farmer'
+            message: 'Failed to add'
         });
     }
 });

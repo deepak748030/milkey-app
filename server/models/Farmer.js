@@ -3,12 +3,12 @@ const mongoose = require('mongoose');
 const farmerSchema = new mongoose.Schema({
     code: {
         type: String,
-        required: [true, 'Farmer code is required'],
+        required: [true, 'Code is required'],
         trim: true
     },
     name: {
         type: String,
-        required: [true, 'Farmer name is required'],
+        required: [true, 'Name is required'],
         trim: true,
         maxlength: [100, 'Name cannot exceed 100 characters']
     },
@@ -26,6 +26,11 @@ const farmerSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
+    },
+    type: {
+        type: String,
+        enum: ['farmer', 'member'],
+        default: 'farmer'
     },
     totalPurchase: {
         type: Number,
@@ -47,8 +52,8 @@ const farmerSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Compound index for unique code per owner
-farmerSchema.index({ code: 1, owner: 1 }, { unique: true });
-farmerSchema.index({ owner: 1 });
+// Compound index for unique code per owner and type
+farmerSchema.index({ code: 1, owner: 1, type: 1 }, { unique: true });
+farmerSchema.index({ owner: 1, type: 1 });
 
 module.exports = mongoose.model('Farmer', farmerSchema);
