@@ -58,6 +58,8 @@ router.get('/', auth, async (req, res) => {
 // GET /api/payments/farmer-summary/:farmerCode - Get pending summary for a farmer
 router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
     try {
+        const { startDate, endDate } = req.query;
+
         const farmer = await Farmer.findOne({
             code: req.params.farmerCode,
             owner: req.userId
@@ -70,15 +72,26 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
             });
         }
 
-        // Get unpaid milk collections
+        // Build date filter for milk collections
+        const milkQuery = {
+            farmer: farmer._id,
+            owner: req.userId,
+            isPaid: false
+        };
+
+        if (startDate || endDate) {
+            milkQuery.date = {};
+            if (startDate) milkQuery.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                milkQuery.date.$lte = end;
+            }
+        }
+
+        // Get unpaid milk collections in date range
         const unpaidCollections = await MilkCollection.aggregate([
-            {
-                $match: {
-                    farmer: farmer._id,
-                    owner: req.userId,
-                    isPaid: false
-                }
-            },
+            { $match: milkQuery },
             {
                 $group: {
                     _id: null,
@@ -91,28 +104,18 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
             }
         ]);
 
-        // Get pending advances
-        const pendingAdvances = await Advance.aggregate([
-            {
-                $match: {
-                    farmer: farmer._id,
-                    owner: req.userId,
-                    status: { $in: ['pending', 'partial'] }
-                }
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalAdvance: { $sum: { $subtract: ['$amount', '$settledAmount'] } },
-                    count: { $sum: 1 }
-                }
-            }
-        ]);
+        // Get pending advances (all pending, not filtered by date)
+        const pendingAdvances = await Advance.find({
+            farmer: farmer._id,
+            owner: req.userId,
+            status: { $in: ['pending', 'partial'] }
+        }).sort({ date: 1 });
+
+        const advanceTotal = pendingAdvances.reduce((sum, a) => sum + (a.amount - a.settledAmount), 0);
 
         const milkData = unpaidCollections[0] || { totalQuantity: 0, totalAmount: 0, count: 0, minDate: null, maxDate: null };
-        const advanceData = pendingAdvances[0] || { totalAdvance: 0, count: 0 };
 
-        const netPayable = milkData.totalAmount - advanceData.totalAdvance;
+        const netPayable = milkData.totalAmount - advanceTotal;
 
         res.json({
             success: true,
@@ -121,7 +124,8 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
                     id: farmer._id,
                     code: farmer.code,
                     name: farmer.name,
-                    mobile: farmer.mobile
+                    mobile: farmer.mobile,
+                    currentBalance: farmer.pendingAmount || 0
                 },
                 milk: {
                     totalQuantity: milkData.totalQuantity,
@@ -131,11 +135,20 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
                     periodEnd: milkData.maxDate
                 },
                 advances: {
-                    totalPending: advanceData.totalAdvance,
-                    count: advanceData.count
+                    totalPending: advanceTotal,
+                    count: pendingAdvances.length,
+                    items: pendingAdvances.map(a => ({
+                        _id: a._id,
+                        amount: a.amount,
+                        settledAmount: a.settledAmount,
+                        remaining: a.amount - a.settledAmount,
+                        date: a.date,
+                        note: a.note,
+                        status: a.status
+                    }))
                 },
-                netPayable: Math.max(0, netPayable),
-                advanceBalance: netPayable < 0 ? Math.abs(netPayable) : 0
+                netPayable,
+                closingBalance: netPayable
             }
         });
     } catch (error) {
