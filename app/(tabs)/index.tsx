@@ -188,32 +188,6 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Member Selling Overview */}
-        <Text style={styles.sectionTitle}>This Month - Selling (Member)</Text>
-        <View style={styles.overviewCard}>
-          <View style={styles.overviewMain}>
-            <View>
-              <Text style={[styles.overviewLabel, { color: colors.warning }]}>Member</Text>
-              <Text style={styles.overviewSubLabel}>Milk Selling</Text>
-              <Text style={styles.overviewValue}>₹{memberStats?.thisMonth.amount.toFixed(0) || '0'}</Text>
-            </View>
-            <View style={styles.overviewDivider} />
-            <View style={styles.overviewStat}>
-              <Text style={styles.overviewStatValue}>{memberStats?.thisMonth.quantity.toFixed(1) || '0'}L</Text>
-              <Text style={styles.overviewStatLabel}>Month Qty</Text>
-            </View>
-            <View style={styles.overviewDivider} />
-            <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{memberStats?.today.quantity.toFixed(1) || '0'}L</Text>
-              <Text style={styles.overviewStatLabel}>Today</Text>
-            </View>
-            <View style={styles.overviewDivider} />
-            <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{memberStats?.totalMembers || 0}</Text>
-              <Text style={styles.overviewStatLabel}>Members</Text>
-            </View>
-          </View>
-        </View>
 
         {/* Products */}
         <Text style={styles.sectionTitle}>Products</Text>
