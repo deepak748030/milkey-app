@@ -70,8 +70,8 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Theme Toggle */}
-        <Pressable style={styles.themeToggle} onPress={toggleTheme}>
+        {/* Theme Toggle with Switcher */}
+        <View style={styles.themeToggle}>
           <View style={styles.themeIconContainer}>
             {isDark ? <Moon size={20} color={colors.primary} /> : <Sun size={20} color={colors.primary} />}
           </View>
@@ -79,10 +79,12 @@ export default function ProfileScreen() {
             <Text style={styles.themeLabel}>Appearance</Text>
             <Text style={styles.themeValue}>{isDark ? 'Dark Mode' : 'Light Mode'}</Text>
           </View>
-          <View style={[styles.themeBadge, { backgroundColor: isDark ? colors.primary : colors.success }]}>
-            <Text style={styles.themeBadgeText}>{isDark ? 'Dark' : 'Light'}</Text>
-          </View>
-        </Pressable>
+          <Pressable style={styles.themeSwitcher} onPress={toggleTheme}>
+            <View style={[styles.switchTrack, isDark && styles.switchTrackActive]}>
+              <View style={[styles.switchThumb, isDark && styles.switchThumbActive]} />
+            </View>
+          </Pressable>
+        </View>
 
         {/* Menu Items */}
         <View style={styles.menuSection}>
@@ -198,28 +200,28 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   themeToggle: {
     backgroundColor: colors.card,
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 12,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: colors.border,
   },
   themeIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   themeInfo: {
     flex: 1,
   },
   themeLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.foreground,
     marginBottom: 2,
@@ -228,43 +230,62 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 12,
     color: colors.mutedForeground,
   },
-  themeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+  themeSwitcher: {
+    padding: 2,
   },
-  themeBadgeText: {
-    color: colors.white,
-    fontSize: 11,
-    fontWeight: '600',
+  switchTrack: {
+    width: 52,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.muted,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  switchTrackActive: {
+    backgroundColor: colors.primary,
+  },
+  switchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  switchThumbActive: {
+    alignSelf: 'flex-end',
   },
   menuSection: {
     backgroundColor: colors.card,
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: colors.border,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   menuIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   menuLabel: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.foreground,
   },
@@ -273,14 +294,15 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.destructive + '15',
-    borderRadius: 10,
-    padding: 10,
-    gap: 6,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 8,
     borderWidth: 1,
     borderColor: colors.destructive + '30',
   },
   logoutText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.destructive,
   },

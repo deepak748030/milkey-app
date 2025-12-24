@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
-import { Bell, CheckCheck, Trash2 } from 'lucide-react-native';
-import { colors } from '@/lib/colors';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Bell, CheckCheck, Trash2, ChevronLeft } from 'lucide-react-native';
+import { useTheme } from '@/hooks/useTheme';
 import { notificationsApi, ServerNotification } from '@/lib/api';
-import TopBar from '@/components/TopBar';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { router } from 'expo-router';
 
 export default function NotificationsScreen() {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const styles = createStyles(colors);
   const { expoPushToken } = usePushNotifications();
   const [notifications, setNotifications] = useState<ServerNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,8 +98,13 @@ export default function NotificationsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <TopBar />
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <Pressable style={styles.backBtn} onPress={() => router.back()}>
+            <ChevronLeft size={24} color={colors.foreground} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Notifications</Text>
+        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -104,8 +113,13 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <TopBar />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <Pressable style={styles.backBtn} onPress={() => router.back()}>
+          <ChevronLeft size={24} color={colors.foreground} />
+        </Pressable>
+        <Text style={styles.headerTitle}>Notifications</Text>
+      </View>
 
       <ScrollView
         style={styles.scrollView}
@@ -123,9 +137,9 @@ export default function NotificationsScreen() {
                   <Text style={styles.actionButtonText}>Mark all read</Text>
                 </Pressable>
               )}
-              <Pressable style={styles.actionButton} onPress={handleClearAll}>
+              <Pressable style={[styles.actionButton, styles.deleteButton]} onPress={handleClearAll}>
                 <Trash2 size={16} color={colors.destructive} />
-                <Text style={[styles.actionButtonText, { color: colors.destructive }]}>Clear all</Text>
+                <Text style={styles.deleteButtonText}>Clear all</Text>
               </Pressable>
             </View>
           )}
@@ -176,110 +190,135 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    paddingVertical: 0,
-    paddingHorizontal: 10,
-    paddingBottom: 90,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 16,
-    marginBottom: 12,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  actionButtonText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyIcon: {
-    marginBottom: 16,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: colors.mutedForeground,
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
-  notificationsList: {
-    gap: 4,
-  },
-  notificationCard: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  notificationContent: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  notificationText: {
-    flex: 1,
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  notificationTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.foreground,
-    flex: 1,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    backgroundColor: colors.primary,
-    borderRadius: 4,
-    marginLeft: 8,
-    marginTop: 2,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: colors.mutedForeground,
-    marginBottom: 8,
-    lineHeight: 20,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: colors.mutedForeground,
-  },
-});
+const createStyles = (colors: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    backBtn: {
+      padding: 4,
+      marginRight: 12,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.foreground,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    scrollView: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: 24,
+      paddingVertical: 16,
+      paddingBottom: 90,
+    },
+    actionButtons: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 12,
+      marginBottom: 16,
+    },
+    actionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      backgroundColor: colors.card,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    deleteButton: {},
+    actionButtonText: {
+      fontSize: 13,
+      color: colors.primary,
+      fontWeight: '600',
+    },
+    deleteButtonText: {
+      fontSize: 13,
+      color: colors.destructive,
+      fontWeight: '600',
+    },
+    emptyContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 80,
+    },
+    emptyIcon: {
+      marginBottom: 16,
+    },
+    emptyText: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: colors.mutedForeground,
+      marginBottom: 8,
+    },
+    emptySubtext: {
+      fontSize: 14,
+      color: colors.mutedForeground,
+      textAlign: 'center',
+      paddingHorizontal: 40,
+    },
+    notificationsList: {
+      gap: 8,
+    },
+    notificationCard: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    notificationContent: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    notificationText: {
+      flex: 1,
+    },
+    notificationHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 4,
+    },
+    notificationTitle: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.foreground,
+      flex: 1,
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      backgroundColor: colors.primary,
+      borderRadius: 4,
+      marginLeft: 8,
+      marginTop: 4,
+    },
+    notificationMessage: {
+      fontSize: 14,
+      color: colors.mutedForeground,
+      marginBottom: 8,
+      lineHeight: 20,
+    },
+    notificationTime: {
+      fontSize: 12,
+      color: colors.mutedForeground,
+    },
+  });

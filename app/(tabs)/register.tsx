@@ -1,14 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Calendar, FileText, Trash2, Plus, Search } from 'lucide-react-native';
+import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary, AdvanceItem } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
-import DatePickerModal from '@/components/DatePickerModal';
+import { Calendar } from '@/components/Calendar';
+
+// Helper function to format date as dd/mm/yyyy
+const formatDateDDMMYYYY = (dateStr: string) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+};
 
 type TabType = 'Payments' | 'Advances' | 'Farmers';
 
@@ -42,6 +52,7 @@ export default function RegisterScreen() {
     });
     const [dateEnd, setDateEnd] = useState(() => new Date().toISOString().split('T')[0]);
     const [paidAmount, setPaidAmount] = useState('');
+    const [milkAmount, setMilkAmount] = useState('');
     const [savingPayment, setSavingPayment] = useState(false);
 
     // Advances state
@@ -71,6 +82,10 @@ export default function RegisterScreen() {
     // Advances search and date picker
     const [advanceSearch, setAdvanceSearch] = useState('');
     const [showAdvDatePicker, setShowAdvDatePicker] = useState(false);
+
+    // Payment date pickers
+    const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+    const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
     // Modal state
     const [alertVisible, setAlertVisible] = useState(false);
@@ -136,6 +151,7 @@ export default function RegisterScreen() {
             const res = await paymentsApi.getFarmerSummary(paymentCode, dateStart, dateEnd);
             if (res.success && res.response) {
                 setPaymentFarmer(res.response);
+                setMilkAmount(res.response.milk.totalAmount.toFixed(2));
                 setPaidAmount('');
             } else {
                 showAlert('Error', res.message || 'Farmer not found');
@@ -246,6 +262,7 @@ export default function RegisterScreen() {
         setPaymentCode('');
         setPaymentFarmer(null);
         setPaidAmount('');
+        setMilkAmount('');
     };
 
     // Lookup farmer name when code changes
@@ -396,10 +413,8 @@ export default function RegisterScreen() {
 
     const styles = createStyles(colors, isDark);
 
-    // Filter farmers by search
-    const filteredFarmers = searchCode
-        ? farmers.filter(f => f.code.includes(searchCode))
-        : farmers;
+    // Show all farmers (removed search filter)
+    const filteredFarmers = farmers;
 
     // Filter advances by search (name or code)
     const filteredAdvances = advanceSearch
@@ -471,10 +486,11 @@ export default function RegisterScreen() {
         }
     };
 
-    // Calculate closing balance
-    const closingBalance = paymentFarmer
-        ? paymentFarmer.netPayable - (parseFloat(paidAmount) || 0)
-        : 0;
+    // Calculate closing balance with editable milk amount
+    const currentMilkAmount = parseFloat(milkAmount) || 0;
+    const advanceAmount = paymentFarmer ? paymentFarmer.advances.totalPending : 0;
+    const netPayable = currentMilkAmount - advanceAmount;
+    const closingBalance = netPayable - (parseFloat(paidAmount) || 0);
 
     const renderPaymentsTab = () => (
         <View>
@@ -512,27 +528,77 @@ export default function RegisterScreen() {
                     {/* Date Range */}
                     <Text style={styles.sectionLabel}>Calculation Period</Text>
                     <View style={styles.dateRow}>
-                        <View style={styles.dateInputWrapper}>
-                            <TextInput
-                                style={styles.dateInput}
-                                value={dateStart}
-                                onChangeText={setDateStart}
-                                placeholder="Start Date"
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                            <Calendar size={16} color={colors.mutedForeground} />
-                        </View>
-                        <View style={styles.dateInputWrapper}>
-                            <TextInput
-                                style={styles.dateInput}
-                                value={dateEnd}
-                                onChangeText={setDateEnd}
-                                placeholder="End Date"
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                            <Calendar size={16} color={colors.mutedForeground} />
-                        </View>
+                        <Pressable
+                            style={styles.dateInputWrapper}
+                            onPress={() => setShowStartDatePicker(true)}
+                        >
+                            <Text style={[styles.dateInputText, !dateStart && { color: colors.mutedForeground }]}>
+                                {dateStart ? formatDateDDMMYYYY(dateStart) : 'Start Date'}
+                            </Text>
+                            <CalendarIcon size={16} color={colors.mutedForeground} />
+                        </Pressable>
+                        <Pressable
+                            style={styles.dateInputWrapper}
+                            onPress={() => setShowEndDatePicker(true)}
+                        >
+                            <Text style={[styles.dateInputText, !dateEnd && { color: colors.mutedForeground }]}>
+                                {dateEnd ? formatDateDDMMYYYY(dateEnd) : 'End Date'}
+                            </Text>
+                            <CalendarIcon size={16} color={colors.mutedForeground} />
+                        </Pressable>
                     </View>
+
+                    {/* Start Date Picker Modal */}
+                    <Modal
+                        visible={showStartDatePicker}
+                        transparent
+                        animationType="slide"
+                        onRequestClose={() => setShowStartDatePicker(false)}
+                    >
+                        <View style={styles.dateModalOverlay}>
+                            <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
+                                <View style={styles.dateModalHeader}>
+                                    <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select Start Date</Text>
+                                    <Pressable onPress={() => setShowStartDatePicker(false)} style={styles.dateModalClose}>
+                                        <X size={20} color={colors.foreground} />
+                                    </Pressable>
+                                </View>
+                                <Calendar
+                                    onDateSelect={(date) => {
+                                        setDateStart(date.toISOString().split('T')[0]);
+                                        setShowStartDatePicker(false);
+                                    }}
+                                    selectedDate={dateStart ? new Date(dateStart) : null}
+                                />
+                            </View>
+                        </View>
+                    </Modal>
+
+                    {/* End Date Picker Modal */}
+                    <Modal
+                        visible={showEndDatePicker}
+                        transparent
+                        animationType="slide"
+                        onRequestClose={() => setShowEndDatePicker(false)}
+                    >
+                        <View style={styles.dateModalOverlay}>
+                            <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
+                                <View style={styles.dateModalHeader}>
+                                    <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select End Date</Text>
+                                    <Pressable onPress={() => setShowEndDatePicker(false)} style={styles.dateModalClose}>
+                                        <X size={20} color={colors.foreground} />
+                                    </Pressable>
+                                </View>
+                                <Calendar
+                                    onDateSelect={(date) => {
+                                        setDateEnd(date.toISOString().split('T')[0]);
+                                        setShowEndDatePicker(false);
+                                    }}
+                                    selectedDate={dateEnd ? new Date(dateEnd) : null}
+                                />
+                            </View>
+                        </View>
+                    </Modal>
 
                     {/* Custom date ranges */}
                     <Text style={styles.sectionLabel}>Date Ranges</Text>
@@ -592,18 +658,25 @@ export default function RegisterScreen() {
                     <View style={styles.summaryCard}>
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Milk Amount:</Text>
-                            <Text style={styles.summaryValue}>₹{paymentFarmer.milk.totalAmount.toFixed(2)}</Text>
+                            <TextInput
+                                style={styles.milkAmountInput}
+                                value={milkAmount}
+                                onChangeText={setMilkAmount}
+                                keyboardType="numeric"
+                                placeholder="0.00"
+                                placeholderTextColor={colors.mutedForeground}
+                            />
                         </View>
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Advance/Prod:</Text>
                             <Text style={[styles.summaryValue, { color: colors.warning }]}>
-                                ₹{paymentFarmer.advances.totalPending.toFixed(2)}
+                                ₹{advanceAmount.toFixed(2)}
                             </Text>
                         </View>
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
                             <Text style={[styles.summaryLabel, { fontWeight: '700' }]}>Total Payable:</Text>
-                            <Text style={[styles.summaryValue, { fontWeight: '700', color: paymentFarmer.netPayable >= 0 ? colors.primary : colors.destructive }]}>
-                                ₹{paymentFarmer.netPayable.toFixed(2)}
+                            <Text style={[styles.summaryValue, { fontWeight: '700', color: netPayable >= 0 ? colors.primary : colors.destructive }]}>
+                                ₹{netPayable.toFixed(2)}
                             </Text>
                         </View>
                     </View>
@@ -616,7 +689,7 @@ export default function RegisterScreen() {
                                 <View key={adv._id} style={styles.advanceListItem}>
                                     <Text style={styles.advanceItemNote}>{adv.note || 'Advance'}</Text>
                                     <Text style={styles.advanceItemDate}>
-                                        {new Date(adv.date).toLocaleDateString()}
+                                        {formatDateDDMMYYYY(adv.date)}
                                     </Text>
                                     <Text style={[styles.advanceItemAmount, { color: colors.warning }]}>
                                         ₹{adv.remaining.toFixed(2)}
@@ -674,7 +747,7 @@ export default function RegisterScreen() {
                             <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary }]}>{p.farmer?.code}</Text>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{p.farmer?.name}</Text>
                             <Text style={[styles.tableCell, { flex: 1, color: colors.primary }]}>₹{p.amount}</Text>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{new Date(p.date).toLocaleDateString()}</Text>
+                            <Text style={[styles.tableCell, { flex: 1 }]}>{formatDateDDMMYYYY(p.date)}</Text>
                         </View>
                     ))}
                 </View>
@@ -728,20 +801,38 @@ export default function RegisterScreen() {
                         onPress={() => setShowAdvDatePicker(true)}
                     >
                         <Text style={[styles.dateInputText, !advDate && { color: colors.mutedForeground }]}>
-                            {advDate ? new Date(advDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Select Date'}
+                            {advDate ? formatDateDDMMYYYY(advDate) : 'Select Date'}
                         </Text>
-                        <Calendar size={16} color={colors.mutedForeground} />
+                        <CalendarIcon size={16} color={colors.mutedForeground} />
                     </Pressable>
                 </View>
             </View>
 
-            <DatePickerModal
+            {/* Advance Date Picker Modal */}
+            <Modal
                 visible={showAdvDatePicker}
-                onClose={() => setShowAdvDatePicker(false)}
-                onSelect={(date) => setAdvDate(date)}
-                selectedDate={advDate}
-                title="Select Advance Date"
-            />
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowAdvDatePicker(false)}
+            >
+                <View style={styles.dateModalOverlay}>
+                    <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select Advance Date</Text>
+                            <Pressable onPress={() => setShowAdvDatePicker(false)} style={styles.dateModalClose}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+                        <Calendar
+                            onDateSelect={(date) => {
+                                setAdvDate(date.toISOString().split('T')[0]);
+                                setShowAdvDatePicker(false);
+                            }}
+                            selectedDate={advDate ? new Date(advDate) : null}
+                        />
+                    </View>
+                </View>
+            </Modal>
 
             <View style={styles.inputGroup}>
                 <Text style={styles.label}>Note</Text>
@@ -873,18 +964,11 @@ export default function RegisterScreen() {
                 </Pressable>
             </View>
 
-            {/* Search and PDF */}
-            <View style={styles.searchRow}>
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search by Code"
-                    value={searchCode}
-                    onChangeText={setSearchCode}
-                    placeholderTextColor={colors.mutedForeground}
-                />
+            {/* PDF button only - removed search bar */}
+            <View style={styles.pdfRow}>
                 <Pressable style={styles.pdfBtn} onPress={generateFarmersPDF}>
                     <FileText size={14} color={colors.white} />
-                    <Text style={styles.pdfBtnText}>PDF</Text>
+                    <Text style={styles.pdfBtnText}>Download PDF</Text>
                 </Pressable>
             </View>
 
@@ -980,19 +1064,51 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         gap: 6,
         marginBottom: 12,
         marginTop: 4,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+        paddingVertical: 6,
+        borderRadius: 10,
+        marginHorizontal: 6,
     },
     tab: {
         flex: 1,
-        paddingVertical: 8,
+        paddingVertical: 10,
         alignItems: 'center',
-        borderRadius: 6,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
+        borderRadius: 8,
+        backgroundColor: 'transparent',
     },
     tabActive: {
         backgroundColor: colors.primary,
-        borderColor: colors.primary,
+    },
+    pdfRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginBottom: 12,
+    },
+    dateModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    dateModalContent: {
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingTop: 12,
+        paddingBottom: 30,
+        paddingHorizontal: 16,
+    },
+    dateModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+        paddingHorizontal: 4,
+    },
+    dateModalTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    dateModalClose: {
+        padding: 4,
     },
     tabText: {
         fontSize: 13,
@@ -1273,6 +1389,19 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: colors.foreground,
+    },
+    milkAmountInput: {
+        backgroundColor: colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.primary,
+        minWidth: 100,
+        textAlign: 'right',
     },
     advanceListCard: {
         backgroundColor: colors.card,

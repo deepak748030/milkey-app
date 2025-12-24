@@ -77,9 +77,6 @@ userSchema.pre('save', async function (next) {
     next();
 });
 
-// Index for faster queries
-userSchema.index({ phone: 1 });
-userSchema.index({ email: 1 });
-userSchema.index({ referralCode: 1 });
+
 
 module.exports = mongoose.model('User', userSchema);

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Calendar, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
+import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
-import DatePickerModal from '@/components/DatePickerModal';
-import { farmersApi, milkCollectionsApi, paymentsApi, MilkCollection, Farmer, Payment } from '@/lib/milkeyApi';
+import { Calendar } from '@/components/Calendar';
+import { membersApi, sellingEntriesApi, paymentsApi, Member, SellingEntry, Payment } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
-import { exportMembers, exportMilkCollections, exportPayments } from '@/lib/csvExport';
+import { exportMilkCollections, exportPayments } from '@/lib/csvExport';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
@@ -14,12 +14,11 @@ import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
 
-// Helper to group collections by date and farmer for combined M/E display
+// Helper to group entries by date and member for combined M/E display
 interface GroupedEntry {
     date: string;
-    farmerId: string;
-    farmerName: string;
-    farmerCode: string;
+    memberId: string;
+    memberName: string;
     morningQty: number;
     eveningQty: number;
     morningId?: string;
@@ -37,15 +36,16 @@ export default function SellingScreen() {
     // Date picker state
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [datePickerTarget, setDatePickerTarget] = useState<'entry' | 'reportStart' | 'reportEnd'>('entry');
+    const [tempCalendarDate, setTempCalendarDate] = useState<Date | null>(new Date());
 
     // Entry state
     const [searchMember, setSearchMember] = useState('');
-    const [selectedMember, setSelectedMember] = useState<Farmer | null>(null);
+    const [selectedMember, setSelectedMember] = useState<Member | null>(null);
     const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
     const [mornQty, setMornQty] = useState('');
     const [eveQty, setEveQty] = useState('');
     const [rate, setRate] = useState('50');
-    const [recentEntries, setRecentEntries] = useState<MilkCollection[]>([]);
+    const [recentEntries, setRecentEntries] = useState<SellingEntry[]>([]);
     const [entriesPage, setEntriesPage] = useState(1);
     const [hasMoreEntries, setHasMoreEntries] = useState(true);
     const [savingEntry, setSavingEntry] = useState(false);
@@ -53,7 +53,7 @@ export default function SellingScreen() {
     const [showSuggestions, setShowSuggestions] = useState(false);
 
     // Payment state
-    const [selectedPaymentMember, setSelectedPaymentMember] = useState<Farmer | null>(null);
+    const [selectedPaymentMember, setSelectedPaymentMember] = useState<Member | null>(null);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi' | 'bank'>('cash');
     const [memberSummary, setMemberSummary] = useState<any>(null);
@@ -64,12 +64,12 @@ export default function SellingScreen() {
     const [reportEndDate, setReportEndDate] = useState(getDateOffset(0));
 
     // Member state
-    const [members, setMembers] = useState<Farmer[]>([]);
-    const [memberCode, setMemberCode] = useState('');
+    const [members, setMembers] = useState<Member[]>([]);
     const [memberName, setMemberName] = useState('');
     const [memberMobile, setMemberMobile] = useState('');
     const [memberAddress, setMemberAddress] = useState('');
-    const [editingMember, setEditingMember] = useState<Farmer | null>(null);
+    const [memberRatePerLiter, setMemberRatePerLiter] = useState('50');
+    const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [showMemberModal, setShowMemberModal] = useState(false);
 
     // Modal state
@@ -98,33 +98,32 @@ export default function SellingScreen() {
     }
 
     // Filtered members for search - auto suggest
+    // Filtered members for search - by name only
     const filteredMembers = useMemo(() => {
         if (!searchMember.trim()) return members.slice(0, 10);
         const query = searchMember.toLowerCase();
         return members.filter(m =>
-            m.name.toLowerCase().includes(query) ||
-            m.code.toLowerCase().includes(query)
+            m.name.toLowerCase().includes(query)
         ).slice(0, 10);
     }, [members, searchMember]);
 
     const totalQuantity = (parseFloat(mornQty) || 0) + (parseFloat(eveQty) || 0);
     const totalAmount = totalQuantity * (parseFloat(rate) || 0);
 
-    // Group entries by date and farmer for combined M/E display
+    // Group entries by date and member for combined M/E display
     const groupedEntries = useMemo((): GroupedEntry[] => {
         const groups: Record<string, GroupedEntry> = {};
 
         recentEntries.forEach(entry => {
             const dateStr = new Date(entry.date).toISOString().split('T')[0];
-            const farmerId = (entry.farmer as any)?._id || entry.farmerCode;
-            const key = `${dateStr}-${farmerId}`;
+            const memberId = entry.member?._id || '';
+            const key = `${dateStr}-${memberId}`;
 
             if (!groups[key]) {
                 groups[key] = {
                     date: dateStr,
-                    farmerId,
-                    farmerName: (entry.farmer as any)?.name || entry.farmerCode,
-                    farmerCode: (entry.farmer as any)?.code || entry.farmerCode,
+                    memberId,
+                    memberName: entry.member?.name || 'Unknown',
                     morningQty: 0,
                     eveningQty: 0,
                     totalAmount: 0,
@@ -145,25 +144,25 @@ export default function SellingScreen() {
         return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [recentEntries]);
 
-    // Fetch data - only members (type: 'member')
+    // Fetch data - members and selling entries
     const fetchData = useCallback(async () => {
         const token = await getAuthToken();
         if (!token) return;
 
         try {
             setIsLoading(true);
-            const [membersRes, collectionsRes, paymentsRes] = await Promise.all([
-                farmersApi.getAll({ type: 'member' }),
-                milkCollectionsApi.getAll({ limit: 50 }),
+            const [membersRes, entriesRes, paymentsRes] = await Promise.all([
+                membersApi.getAll(),
+                sellingEntriesApi.getAll({ limit: 50 }),
                 paymentsApi.getAll({ limit: 10 })
             ]);
 
             if (membersRes.success) {
                 setMembers(membersRes.response?.data || []);
             }
-            if (collectionsRes.success) {
-                setRecentEntries(collectionsRes.response?.data || []);
-                setHasMoreEntries((collectionsRes.response?.data || []).length >= 50);
+            if (entriesRes.success) {
+                setRecentEntries(entriesRes.response?.data || []);
+                setHasMoreEntries((entriesRes.response?.data || []).length >= 50);
                 setEntriesPage(1);
             }
             if (paymentsRes.success) {
@@ -192,7 +191,7 @@ export default function SellingScreen() {
         setLoadingMore(true);
         try {
             const nextPage = entriesPage + 1;
-            const res = await milkCollectionsApi.getAll({ limit: 50, page: nextPage });
+            const res = await sellingEntriesApi.getAll({ limit: 50, page: nextPage });
             if (res.success) {
                 const newEntries = res.response?.data || [];
                 setRecentEntries(prev => [...prev, ...newEntries]);
@@ -206,7 +205,7 @@ export default function SellingScreen() {
         }
     };
 
-    // Save milk entry
+    // Save selling entry
     const handleSaveEntry = async () => {
         if (savingEntry) return;
 
@@ -227,27 +226,27 @@ export default function SellingScreen() {
             const entries = [];
 
             if (morn > 0) {
-                entries.push(milkCollectionsApi.create({
-                    farmerCode: selectedMember.code,
+                entries.push(sellingEntriesApi.create({
+                    memberId: selectedMember._id,
                     quantity: morn,
-                    rate: parseFloat(rate) || 50,
+                    rate: parseFloat(rate) || selectedMember.ratePerLiter,
                     shift: 'morning',
                     date: entryDate,
                 }));
             }
 
             if (eve > 0) {
-                entries.push(milkCollectionsApi.create({
-                    farmerCode: selectedMember.code,
+                entries.push(sellingEntriesApi.create({
+                    memberId: selectedMember._id,
                     quantity: eve,
-                    rate: parseFloat(rate) || 50,
+                    rate: parseFloat(rate) || selectedMember.ratePerLiter,
                     shift: 'evening',
                     date: entryDate,
                 }));
             }
 
             const results = await Promise.all(entries);
-            const allSuccess = results.every(res => res.success);
+            const allSuccess = results.every((res: any) => res.success);
 
             if (allSuccess) {
                 showAlert('Success', 'Entry saved successfully');
@@ -272,8 +271,8 @@ export default function SellingScreen() {
             setConfirmVisible(false);
             try {
                 const deletes = [];
-                if (morningId) deletes.push(milkCollectionsApi.delete(morningId));
-                if (eveningId) deletes.push(milkCollectionsApi.delete(eveningId));
+                if (morningId) deletes.push(sellingEntriesApi.delete(morningId));
+                if (eveningId) deletes.push(sellingEntriesApi.delete(eveningId));
                 await Promise.all(deletes);
                 fetchData();
             } catch (error) {
@@ -282,61 +281,21 @@ export default function SellingScreen() {
         });
     };
 
-    // Fetch member summary for payment
-    const handleSelectPaymentMember = async (member: Farmer) => {
+    // Fetch member summary for payment (placeholder - payment feature coming soon)
+    const handleSelectPaymentMember = async (member: Member) => {
         setSelectedPaymentMember(member);
-        try {
-            const res = await paymentsApi.getFarmerSummary(member.code);
-            if (res.success) {
-                setMemberSummary(res.response);
-                setPaymentAmount(res.response?.netPayable?.toString() || '0');
-            }
-        } catch (error) {
-            console.error('Fetch summary error:', error);
-        }
+        setMemberSummary({ pendingAmount: member.pendingAmount });
+        setPaymentAmount(member.pendingAmount?.toString() || '0');
     };
 
-    // Process payment
+    // Process payment (placeholder - coming soon)
     const handleProcessPayment = async () => {
-        if (!selectedPaymentMember) {
-            showAlert('Error', 'Please select a member first');
-            return;
-        }
-
-        const amount = parseFloat(paymentAmount) || 0;
-        if (amount <= 0) {
-            showAlert('Error', 'Please enter valid amount');
-            return;
-        }
-
-        try {
-            setIsLoading(true);
-            const res = await paymentsApi.create({
-                farmerCode: selectedPaymentMember.code,
-                amount,
-                paymentMethod,
-                notes: `Payment via ${paymentMethod}`
-            });
-
-            if (res.success) {
-                showAlert('Success', 'Payment processed successfully');
-                setPaymentAmount('');
-                setSelectedPaymentMember(null);
-                setMemberSummary(null);
-                fetchData();
-            } else {
-                showAlert('Error', res.message || 'Failed to process payment');
-            }
-        } catch (error) {
-            showAlert('Error', 'Failed to process payment');
-        } finally {
-            setIsLoading(false);
-        }
+        showAlert('Coming Soon', 'Payment feature will be available soon');
     };
 
     // Save member
     const handleSaveMember = async () => {
-        if (!memberCode || !memberName || !memberMobile) {
+        if (!memberName || !memberMobile) {
             showAlert('Error', 'Please fill all required fields');
             return;
         }
@@ -345,10 +304,11 @@ export default function SellingScreen() {
             setIsLoading(true);
 
             if (editingMember) {
-                const res = await farmersApi.update(editingMember._id, {
+                const res = await membersApi.update(editingMember._id, {
                     name: memberName,
                     mobile: memberMobile,
-                    address: memberAddress
+                    address: memberAddress,
+                    ratePerLiter: parseFloat(memberRatePerLiter) || 50
                 });
                 if (res.success) {
                     showAlert('Success', 'Member updated successfully');
@@ -359,12 +319,11 @@ export default function SellingScreen() {
                     showAlert('Error', res.message || 'Failed to update member');
                 }
             } else {
-                const res = await farmersApi.create({
-                    code: memberCode,
+                const res = await membersApi.create({
                     name: memberName,
                     mobile: memberMobile,
                     address: memberAddress,
-                    type: 'member'
+                    ratePerLiter: parseFloat(memberRatePerLiter) || 50
                 });
                 if (res.success) {
                     showAlert('Success', 'Member added successfully');
@@ -383,19 +342,19 @@ export default function SellingScreen() {
     };
 
     const clearMemberForm = () => {
-        setMemberCode('');
         setMemberName('');
         setMemberMobile('');
         setMemberAddress('');
+        setMemberRatePerLiter('50');
         setEditingMember(null);
     };
 
-    const handleEditMember = (member: Farmer) => {
+    const handleEditMember = (member: Member) => {
         setEditingMember(member);
-        setMemberCode(member.code);
         setMemberName(member.name);
         setMemberMobile(member.mobile);
         setMemberAddress(member.address || '');
+        setMemberRatePerLiter(member.ratePerLiter?.toString() || '50');
         setShowMemberModal(true);
     };
 
@@ -403,7 +362,7 @@ export default function SellingScreen() {
         showConfirm('Delete Member', 'Are you sure you want to delete this member?', async () => {
             setConfirmVisible(false);
             try {
-                const res = await farmersApi.delete(id);
+                const res = await membersApi.delete(id);
                 if (res.success) {
                     fetchData();
                 } else {
@@ -428,6 +387,14 @@ export default function SellingScreen() {
 
     const openDatePicker = (target: 'entry' | 'reportStart' | 'reportEnd') => {
         setDatePickerTarget(target);
+        // Set temp calendar date based on target
+        if (target === 'entry') {
+            setTempCalendarDate(new Date(entryDate));
+        } else if (target === 'reportStart') {
+            setTempCalendarDate(new Date(reportStartDate));
+        } else {
+            setTempCalendarDate(new Date(reportEndDate));
+        }
         setShowDatePicker(true);
     };
 
@@ -452,11 +419,9 @@ export default function SellingScreen() {
         const rows = filteredEntries.map(item => `
           <tr>
             <td>${new Date(item.date).toLocaleDateString()}</td>
-            <td>${(item.farmer as any)?.name || item.farmerCode}</td>
+            <td>${item.member?.name || 'Unknown'}</td>
             <td>${item.shift}</td>
             <td>${item.quantity} L</td>
-            <td>${item.fat || '-'}%</td>
-            <td>${item.snf || '-'}%</td>
             <td>₹${item.rate}</td>
             <td>₹${item.amount}</td>
           </tr>
@@ -488,8 +453,6 @@ export default function SellingScreen() {
                   <th>Name</th>
                   <th>Shift</th>
                   <th>Qty</th>
-                  <th>FAT</th>
-                  <th>SNF</th>
                   <th>Rate</th>
                   <th>Amount</th>
                 </tr>
@@ -530,9 +493,7 @@ export default function SellingScreen() {
 
     // Export handlers
     const handleExportMembers = async () => {
-        setIsLoading(true);
-        await exportMembers(members);
-        setIsLoading(false);
+        showAlert('Info', 'Member export feature coming soon');
     };
 
     const handleExportCollections = async () => {
@@ -569,11 +530,12 @@ export default function SellingScreen() {
                             onPress={() => {
                                 setSelectedMember(member);
                                 setSearchMember(member.name);
+                                setRate(member.ratePerLiter?.toString() || '50');
                                 setShowSuggestions(false);
                             }}
                         >
                             <View style={styles.dropdownItemContent}>
-                                <Text style={styles.dropdownCode}>{member.code}</Text>
+                                <Text style={styles.dropdownCode}>₹{member.ratePerLiter}/L</Text>
                                 <Text style={styles.dropdownText}>{member.name}</Text>
                             </View>
                         </Pressable>
@@ -612,7 +574,7 @@ export default function SellingScreen() {
                     <Search size={16} color={colors.mutedForeground} />
                     <TextInput
                         style={styles.searchTextInput}
-                        placeholder="Search member by name or code..."
+                        placeholder="Search member by name..."
                         value={searchMember}
                         onChangeText={(text) => {
                             setSearchMember(text);
@@ -641,7 +603,7 @@ export default function SellingScreen() {
                     <Text style={styles.label}>Date</Text>
                     <Pressable style={styles.dateInput} onPress={() => openDatePicker('entry')}>
                         <Text style={styles.dateText}>{formatDate(entryDate)}</Text>
-                        <Calendar size={16} color={colors.mutedForeground} />
+                        <CalendarIcon size={16} color={colors.mutedForeground} />
                     </Pressable>
                 </View>
                 <View style={styles.inputGroup}>
@@ -712,9 +674,9 @@ export default function SellingScreen() {
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Act</Text>
                     </View>
                     {groupedEntries.map((item, index) => (
-                        <View key={`${item.date}-${item.farmerId}-${index}`} style={styles.tableRow}>
+                        <View key={`${item.date}-${item.memberId}-${index}`} style={styles.tableRow}>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{formatDate(item.date)}</Text>
-                            <Text style={[styles.tableCell, { flex: 1.2 }]} numberOfLines={1}>{item.farmerName}</Text>
+                            <Text style={[styles.tableCell, { flex: 1.2 }]} numberOfLines={1}>{item.memberName}</Text>
                             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                                 <Text style={styles.meText}>
                                     {item.morningQty > 0 ? item.morningQty : '-'} + {item.eveningQty > 0 ? item.eveningQty : '-'}
@@ -756,25 +718,35 @@ export default function SellingScreen() {
 
     const renderReportsTab = () => {
         const filteredEntries = getFilteredEntries();
-        const filteredPaymentsData = getFilteredPayments();
         const totalQty = filteredEntries.reduce((s, e) => s + e.quantity, 0);
         const totalAmt = filteredEntries.reduce((s, e) => s + e.amount, 0);
-        const totalPaymentsAmt = filteredPaymentsData.reduce((s, p) => s + p.amount, 0);
+
+        // Group by member for summary
+        const memberSummaries: Record<string, { name: string; qty: number; amt: number }> = {};
+        filteredEntries.forEach(entry => {
+            const memberId = entry.member?._id || 'unknown';
+            if (!memberSummaries[memberId]) {
+                memberSummaries[memberId] = { name: entry.member?.name || 'Unknown', qty: 0, amt: 0 };
+            }
+            memberSummaries[memberId].qty += entry.quantity;
+            memberSummaries[memberId].amt += entry.amount;
+        });
+        const memberSummaryList = Object.values(memberSummaries).sort((a, b) => b.amt - a.amt);
 
         return (
             <View>
-                <Text style={styles.sectionTitle}>Reports</Text>
+                <Text style={styles.sectionTitle}>Selling Report</Text>
 
                 <View style={styles.filterCard}>
                     <Text style={styles.filterTitle}>Date Range Filter</Text>
                     <View style={styles.dateFilterRow}>
                         <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportStart')}>
-                            <Calendar size={14} color={colors.primary} />
+                            <CalendarIcon size={14} color={colors.primary} />
                             <Text style={styles.dateFilterText}>{formatDate(reportStartDate)}</Text>
                         </Pressable>
                         <Text style={styles.dateFilterSeparator}>to</Text>
                         <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportEnd')}>
-                            <Calendar size={14} color={colors.primary} />
+                            <CalendarIcon size={14} color={colors.primary} />
                             <Text style={styles.dateFilterText}>{formatDate(reportEndDate)}</Text>
                         </Pressable>
                     </View>
@@ -791,40 +763,39 @@ export default function SellingScreen() {
                     </View>
                     <View style={styles.reportCard}>
                         <Text style={styles.reportCardLabel}>Amount</Text>
-                        <Text style={styles.reportCardValue}>₹{totalAmt.toFixed(0)}</Text>
+                        <Text style={[styles.reportCardValue, { color: colors.success }]}>₹{totalAmt.toFixed(0)}</Text>
                     </View>
                 </View>
 
-                <View style={styles.reportSummary}>
-                    <View style={styles.reportCard}>
-                        <Text style={styles.reportCardLabel}>Payments</Text>
-                        <Text style={styles.reportCardValue}>{filteredPaymentsData.length}</Text>
+                {/* Member-wise Summary */}
+                {memberSummaryList.length > 0 && (
+                    <View style={styles.memberSummarySection}>
+                        <Text style={styles.memberSummaryTitle}>Member-wise Summary</Text>
+                        <View style={styles.table}>
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Member</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Qty (L)</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Amount</Text>
+                            </View>
+                            {memberSummaryList.map((item, index) => (
+                                <View key={index} style={styles.tableRow}>
+                                    <Text style={[styles.tableCell, { flex: 1.5 }]} numberOfLines={1}>{item.name}</Text>
+                                    <Text style={[styles.tableCell, { flex: 1 }]}>{item.qty.toFixed(1)}</Text>
+                                    <Text style={[styles.tableCell, { flex: 1, color: colors.primary, fontWeight: '600' }]}>₹{item.amt.toFixed(0)}</Text>
+                                </View>
+                            ))}
+                        </View>
                     </View>
-                    <View style={[styles.reportCard, { flex: 2 }]}>
-                        <Text style={styles.reportCardLabel}>Total Paid</Text>
-                        <Text style={[styles.reportCardValue, { color: colors.success }]}>₹{totalPaymentsAmt.toFixed(0)}</Text>
-                    </View>
-                </View>
+                )}
 
                 <View style={styles.exportBtnsRow}>
                     <Pressable style={styles.pdfBtn} onPress={handlePDF}>
                         <FileText size={16} color={colors.white} />
-                        <Text style={styles.exportText}>PDF</Text>
+                        <Text style={styles.exportText}>Download PDF</Text>
                     </Pressable>
-                    <Pressable style={styles.printBtn} onPress={handlePrint}>
-                        <Printer size={16} color={colors.primary} />
-                        <Text style={[styles.exportText, { color: colors.primary }]}>Print</Text>
-                    </Pressable>
-                </View>
-
-                <View style={[styles.exportBtnsRow, { marginTop: 8 }]}>
                     <Pressable style={styles.csvBtn} onPress={handleExportCollections}>
                         <Download size={14} color={colors.primary} />
-                        <Text style={styles.csvBtnText}>Collections CSV</Text>
-                    </Pressable>
-                    <Pressable style={styles.csvBtn} onPress={handleExportPayments}>
-                        <Download size={14} color={colors.primary} />
-                        <Text style={styles.csvBtnText}>Payments CSV</Text>
+                        <Text style={styles.csvBtnText}>Download CSV</Text>
                     </Pressable>
                 </View>
             </View>
@@ -860,14 +831,14 @@ export default function SellingScreen() {
             ) : (
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Code</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Rate</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Name</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Mobile</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Actions</Text>
                     </View>
                     {members.map((item) => (
                         <View key={item._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 0.6 }]}>{item.code}</Text>
+                            <Text style={[styles.tableCell, { flex: 0.6 }]}>₹{item.ratePerLiter}</Text>
                             <Text style={[styles.tableCell, { flex: 1.2 }]}>{item.name}</Text>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{item.mobile}</Text>
                             <View style={{ flex: 0.6, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
@@ -885,79 +856,80 @@ export default function SellingScreen() {
         </View>
     );
 
-    // Member Modal
+    // Member Modal - Bottom Sheet Style
     const renderMemberModal = () => (
         <Modal
             visible={showMemberModal}
             animationType="slide"
-            transparent={false}
+            transparent
             onRequestClose={() => setShowMemberModal(false)}
-            statusBarTranslucent
         >
-            <View style={styles.modalContainer}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>{editingMember ? 'Edit Member' : 'Add New Member'}</Text>
-                    <Pressable style={styles.modalCloseBtn} onPress={() => setShowMemberModal(false)}>
-                        <X size={24} color={colors.foreground} />
-                    </Pressable>
-                </View>
+            <View style={styles.bottomSheetOverlay}>
+                <View style={styles.bottomSheetContent}>
+                    <View style={styles.bottomSheetHeader}>
+                        <Text style={styles.bottomSheetTitle}>{editingMember ? 'Edit Member' : 'Add New Member'}</Text>
+                        <Pressable onPress={() => setShowMemberModal(false)}>
+                            <X size={22} color={colors.foreground} />
+                        </Pressable>
+                    </View>
 
-                <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Code *</Text>
-                        <TextInput
-                            style={[styles.input, editingMember && styles.inputDisabled]}
-                            placeholder="M001"
-                            value={memberCode}
-                            onChangeText={setMemberCode}
-                            editable={!editingMember}
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Name *</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Full Name"
-                            value={memberName}
-                            onChangeText={setMemberName}
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Mobile *</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="10-digit number"
-                            value={memberMobile}
-                            onChangeText={setMemberMobile}
-                            keyboardType="phone-pad"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Address</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Village/City"
-                            value={memberAddress}
-                            onChangeText={setMemberAddress}
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                </ScrollView>
+                    <ScrollView style={styles.bottomSheetBody} keyboardShouldPersistTaps="handled">
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Rate Per Liter (₹) *</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="50"
+                                value={memberRatePerLiter}
+                                onChangeText={setMemberRatePerLiter}
+                                keyboardType="decimal-pad"
+                                placeholderTextColor={colors.mutedForeground}
+                            />
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Name *</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Full Name"
+                                value={memberName}
+                                onChangeText={setMemberName}
+                                placeholderTextColor={colors.mutedForeground}
+                            />
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Mobile *</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="10-digit number"
+                                value={memberMobile}
+                                onChangeText={setMemberMobile}
+                                keyboardType="phone-pad"
+                                placeholderTextColor={colors.mutedForeground}
+                            />
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Address</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Village/City"
+                                value={memberAddress}
+                                onChangeText={setMemberAddress}
+                                placeholderTextColor={colors.mutedForeground}
+                            />
+                        </View>
+                    </ScrollView>
 
-                <View style={styles.modalFooter}>
-                    <Pressable style={styles.modalCancelBtn} onPress={() => setShowMemberModal(false)}>
-                        <Text style={styles.modalCancelBtnText}>Cancel</Text>
-                    </Pressable>
-                    <Pressable style={styles.modalSaveBtn} onPress={handleSaveMember} disabled={isLoading}>
-                        {isLoading ? (
-                            <ActivityIndicator size="small" color={colors.white} />
-                        ) : (
-                            <Text style={styles.modalSaveBtnText}>{editingMember ? 'Update' : 'Save'}</Text>
-                        )}
-                    </Pressable>
+                    <View style={styles.bottomSheetFooter}>
+                        <Pressable style={styles.cancelModalBtn} onPress={() => setShowMemberModal(false)}>
+                            <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable style={styles.confirmModalBtn} onPress={handleSaveMember} disabled={isLoading}>
+                            {isLoading ? (
+                                <ActivityIndicator size="small" color={colors.white} />
+                            ) : (
+                                <Text style={styles.confirmModalBtnText}>{editingMember ? 'Update' : 'Save'}</Text>
+                            )}
+                        </Pressable>
+                    </View>
                 </View>
             </View>
         </Modal>
@@ -1001,13 +973,38 @@ export default function SellingScreen() {
                 )}
             </ScrollView>
 
-            <DatePickerModal
-                visible={showDatePicker}
-                onClose={() => setShowDatePicker(false)}
-                onSelect={handleDateSelect}
-                selectedDate={datePickerTarget === 'entry' ? entryDate : datePickerTarget === 'reportStart' ? reportStartDate : reportEndDate}
-                title={datePickerTarget === 'entry' ? 'Select Entry Date' : datePickerTarget === 'reportStart' ? 'Select Start Date' : 'Select End Date'}
-            />
+            {/* Date Picker Modal - Bottom Sheet Style */}
+            <Modal visible={showDatePicker} animationType="slide" transparent onRequestClose={() => setShowDatePicker(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.dateModalContent}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={styles.dateModalTitle}>
+                                {datePickerTarget === 'entry' ? 'Select Entry Date' : datePickerTarget === 'reportStart' ? 'Select Start Date' : 'Select End Date'}
+                            </Text>
+                            <Pressable onPress={() => setShowDatePicker(false)}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+                        <View style={styles.calendarBody}>
+                            <Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} />
+                        </View>
+                        <View style={styles.dateModalFooter}>
+                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowDatePicker(false)}>
+                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={styles.confirmModalBtn} onPress={() => {
+                                if (tempCalendarDate) {
+                                    const dateStr = tempCalendarDate.toISOString().split('T')[0];
+                                    handleDateSelect(dateStr);
+                                }
+                                setShowDatePicker(false);
+                            }}>
+                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             <SuccessModal
                 isVisible={alertVisible}
@@ -1041,27 +1038,33 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     tabRow: {
         flexDirection: 'row',
         paddingHorizontal: 6,
-        gap: 4,
-        marginTop: 6,
+        gap: 6,
+        marginTop: 8,
         marginBottom: 12,
+        backgroundColor: colors.muted,
+        paddingVertical: 6,
+        borderRadius: 10,
+        marginHorizontal: 6,
     },
     tab: {
         flex: 1,
-        paddingVertical: 8,
+        paddingVertical: 10,
         alignItems: 'center',
-        borderRadius: 6,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
+        borderRadius: 8,
+        backgroundColor: 'transparent',
     },
     tabActive: {
         backgroundColor: colors.primary,
-        borderColor: colors.primary,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 3,
     },
     tabText: {
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: '600',
-        color: colors.foreground,
+        color: colors.mutedForeground,
     },
     tabTextActive: {
         color: colors.white,
@@ -1070,7 +1073,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
     },
     scrollContent: {
-        paddingHorizontal: 10,
+        paddingHorizontal: 6,
         paddingBottom: 100,
     },
     sectionTitle: {
@@ -1511,6 +1514,15 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontWeight: '700',
         color: colors.primary,
     },
+    memberSummarySection: {
+        marginBottom: 16,
+    },
+    memberSummaryTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.foreground,
+        marginBottom: 10,
+    },
     exportBtnsRow: {
         flexDirection: 'row',
         gap: 8,
@@ -1684,5 +1696,101 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     comingSoonSubtext: {
         fontSize: 14,
         color: colors.mutedForeground,
+    },
+    // Bottom sheet modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    dateModalContent: {
+        backgroundColor: colors.card,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: 20,
+    },
+    dateModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    dateModalTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    calendarBody: {
+        padding: 8,
+    },
+    dateModalFooter: {
+        flexDirection: 'row',
+        padding: 12,
+        gap: 8,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    cancelModalBtn: {
+        flex: 1,
+        backgroundColor: colors.muted,
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    cancelModalBtnText: {
+        color: colors.foreground,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    confirmModalBtn: {
+        flex: 1,
+        backgroundColor: colors.primary,
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    confirmModalBtnText: {
+        color: colors.white,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    // Bottom sheet member modal styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheetContent: {
+        backgroundColor: colors.card,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '70%',
+    },
+    bottomSheetHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    bottomSheetTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    bottomSheetBody: {
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 8,
+    },
+    bottomSheetFooter: {
+        flexDirection: 'row',
+        gap: 12,
+        padding: 16,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
     },
 });

@@ -177,8 +177,8 @@ export default function HomeScreen() {
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.success }]}>₹{dashboardStats?.thisMonth.amount.toFixed(0) || '0'}</Text>
-              <Text style={styles.overviewStatLabel}>This Month</Text>
+              <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{dashboardStats?.totalMembers || 0}</Text>
+              <Text style={styles.overviewStatLabel}>Members</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const MilkCollection = require('../models/MilkCollection');
-const Farmer = require('../models/Farmer');
+const PurchaseFarmer = require('../models/PurchaseFarmer');
 const auth = require('../middleware/auth');
 
 const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -15,7 +15,7 @@ router.get('/', auth, async (req, res) => {
 
         const query = { owner: req.userId };
 
-        if (farmerId) query.farmer = farmerId;
+        if (farmerId) query.purchaseFarmer = farmerId;
         if (shift) query.shift = shift;
         if (isPaid !== undefined) query.isPaid = isPaid === 'true';
 
@@ -36,11 +36,11 @@ router.get('/', auth, async (req, res) => {
             }
         }
 
-        // If farmerCode provided, find farmer first
+        // If farmerCode provided, find purchase farmer first
         if (farmerCode) {
-            const farmer = await Farmer.findOne({ code: codeRegex(farmerCode), owner: req.userId });
-            if (farmer) {
-                query.farmer = farmer._id;
+            const pFarmer = await PurchaseFarmer.findOne({ code: codeRegex(farmerCode), owner: req.userId });
+            if (pFarmer) {
+                query.purchaseFarmer = pFarmer._id;
             } else {
                 return res.json({
                     success: true,
@@ -50,7 +50,7 @@ router.get('/', auth, async (req, res) => {
         }
 
         const collections = await MilkCollection.find(query)
-            .populate('farmer', 'code name')
+            .populate('purchaseFarmer', 'code name mobile')
             .sort({ date: -1, shift: -1 })
             .limit(parseInt(limit))
             .skip((parseInt(page) - 1) * parseInt(limit))
@@ -156,7 +156,7 @@ router.get('/today', auth, async (req, res) => {
 // POST /api/milk-collections - Add new collection
 router.post('/', auth, async (req, res) => {
     try {
-        const { farmerCode, date, shift, quantity, fat, snf, rate, notes } = req.body;
+        const { farmerCode, purchaseFarmerId, date, shift, quantity, fat, snf, rate, notes } = req.body;
 
         const qty = Number(quantity);
         const r = Number(rate);
@@ -168,24 +168,35 @@ router.post('/', auth, async (req, res) => {
             });
         }
 
-        let farmerId = null;
+        let purchaseFarmerRef = null;
 
-        // If farmerCode provided, find the farmer
-        if (farmerCode) {
+        // If purchaseFarmerId provided directly, use it
+        if (purchaseFarmerId) {
+            const pFarmer = await PurchaseFarmer.findOne({
+                _id: purchaseFarmerId,
+                owner: req.userId,
+                isActive: true
+            });
+            if (pFarmer) {
+                purchaseFarmerRef = pFarmer._id;
+            }
+        }
+
+        // If farmerCode provided and no purchaseFarmer found yet, try to find by code
+        if (farmerCode && !purchaseFarmerRef) {
             const normalizedCode = normalizeCode(farmerCode);
-            const farmer = await Farmer.findOne({
+            const pFarmer = await PurchaseFarmer.findOne({
                 code: codeRegex(normalizedCode),
                 owner: req.userId,
                 isActive: true
             });
-
-            if (farmer) {
-                farmerId = farmer._id;
+            if (pFarmer) {
+                purchaseFarmerRef = pFarmer._id;
             }
         }
 
         const collection = await MilkCollection.create({
-            farmer: farmerId,
+            purchaseFarmer: purchaseFarmerRef,
             farmerCode: farmerCode ? normalizeCode(farmerCode) : '',
             owner: req.userId,
             date: date ? new Date(date) : new Date(),
@@ -198,19 +209,19 @@ router.post('/', auth, async (req, res) => {
             notes: notes?.trim() || ''
         });
 
-        // Update farmer totals if farmer exists
-        if (farmerId) {
-            await Farmer.findByIdAndUpdate(farmerId, {
+        // Update purchase farmer totals if exists
+        if (purchaseFarmerRef) {
+            await PurchaseFarmer.findByIdAndUpdate(purchaseFarmerRef, {
                 $inc: {
-                    totalLiters: parseFloat(quantity),
-                    totalPurchase: collection.amount,
-                    pendingAmount: collection.amount
-                }
+                    totalQuantity: parseFloat(quantity),
+                    totalAmount: collection.amount
+                },
+                lastPurchaseDate: new Date()
             });
         }
 
         const populatedCollection = await MilkCollection.findById(collection._id)
-            .populate('farmer', 'code name')
+            .populate('purchaseFarmer', 'code name mobile')
             .lean();
 
         res.status(201).json({
@@ -245,6 +256,7 @@ router.put('/:id', auth, async (req, res) => {
         }
 
         const oldAmount = collection.amount;
+        const oldQuantity = collection.quantity;
 
         if (quantity !== undefined) collection.quantity = parseFloat(quantity);
         if (fat !== undefined) collection.fat = parseFloat(fat);
@@ -255,16 +267,17 @@ router.put('/:id', auth, async (req, res) => {
         collection.amount = collection.quantity * collection.rate;
         await collection.save();
 
-        // Update farmer pending amount
+        // Update purchase farmer totals
         const amountDiff = collection.amount - oldAmount;
-        if (amountDiff !== 0) {
-            await Farmer.findByIdAndUpdate(collection.farmer, {
-                $inc: { pendingAmount: amountDiff, totalPurchase: amountDiff }
+        const qtyDiff = collection.quantity - oldQuantity;
+        if (collection.purchaseFarmer && (amountDiff !== 0 || qtyDiff !== 0)) {
+            await PurchaseFarmer.findByIdAndUpdate(collection.purchaseFarmer, {
+                $inc: { totalAmount: amountDiff, totalQuantity: qtyDiff }
             });
         }
 
         const populatedCollection = await MilkCollection.findById(collection._id)
-            .populate('farmer', 'code name')
+            .populate('purchaseFarmer', 'code name mobile')
             .lean();
 
         res.json({
@@ -296,14 +309,15 @@ router.delete('/:id', auth, async (req, res) => {
             });
         }
 
-        // Update farmer totals
-        await Farmer.findByIdAndUpdate(collection.farmer, {
-            $inc: {
-                totalLiters: -collection.quantity,
-                totalPurchase: -collection.amount,
-                pendingAmount: collection.isPaid ? 0 : -collection.amount
-            }
-        });
+        // Update purchase farmer totals
+        if (collection.purchaseFarmer) {
+            await PurchaseFarmer.findByIdAndUpdate(collection.purchaseFarmer, {
+                $inc: {
+                    totalQuantity: -collection.quantity,
+                    totalAmount: -collection.amount
+                }
+            });
+        }
 
         await MilkCollection.findByIdAndDelete(req.params.id);
 

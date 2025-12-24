@@ -1,16 +1,10 @@
 const mongoose = require('mongoose');
 
-const milkCollectionSchema = new mongoose.Schema({
-    purchaseFarmer: {
+const sellingEntrySchema = new mongoose.Schema({
+    member: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'PurchaseFarmer',
-        required: false,
-        default: null
-    },
-    farmerCode: {
-        type: String,
-        trim: true,
-        default: ''
+        ref: 'Member',
+        required: true
     },
     owner: {
         type: mongoose.Schema.Types.ObjectId,
@@ -31,18 +25,6 @@ const milkCollectionSchema = new mongoose.Schema({
         type: Number,
         required: [true, 'Quantity is required'],
         min: [0.1, 'Quantity must be at least 0.1 liters']
-    },
-    fat: {
-        type: Number,
-        min: 0,
-        max: 15,
-        default: 0
-    },
-    snf: {
-        type: Number,
-        min: 0,
-        max: 15,
-        default: 0
     },
     rate: {
         type: Number,
@@ -67,14 +49,14 @@ const milkCollectionSchema = new mongoose.Schema({
 });
 
 // Pre-save to calculate amount
-milkCollectionSchema.pre('save', function (next) {
+sellingEntrySchema.pre('save', function (next) {
     this.amount = this.quantity * this.rate;
     next();
 });
 
 // Indexes for faster queries
-milkCollectionSchema.index({ owner: 1, date: -1 });
-milkCollectionSchema.index({ purchaseFarmer: 1, date: -1 });
-milkCollectionSchema.index({ owner: 1, purchaseFarmer: 1, isPaid: 1 });
+sellingEntrySchema.index({ owner: 1, date: -1 });
+sellingEntrySchema.index({ member: 1, date: -1 });
+sellingEntrySchema.index({ owner: 1, member: 1, isPaid: 1 });
 
-module.exports = mongoose.model('MilkCollection', milkCollectionSchema);
+module.exports = mongoose.model('SellingEntry', sellingEntrySchema);

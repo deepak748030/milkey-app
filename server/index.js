@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const farmerRoutes = require('./routes/farmers');
+const purchaseFarmerRoutes = require('./routes/purchase-farmers');
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
 const advanceRoutes = require('./routes/advances');
@@ -20,6 +21,8 @@ const rateChartRoutes = require('./routes/rate-charts');
 const reportRoutes = require('./routes/reports');
 const feedbackRoutes = require('./routes/feedback');
 const seedRoutes = require('./routes/seed');
+const memberRoutes = require('./routes/members');
+const sellingEntryRoutes = require('./routes/selling-entries');
 const customFormRoutes = require('./routes/custom-forms');
 
 const app = express();
@@ -70,6 +73,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/farmers', farmerRoutes);
+app.use('/api/purchase-farmers', purchaseFarmerRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/advances', advanceRoutes);
@@ -81,6 +85,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/seed', seedRoutes);
 app.use('/api/custom-forms', customFormRoutes);
+app.use('/api/members', memberRoutes);
+app.use('/api/selling-entries', sellingEntryRoutes);
 
 // 404 handler
 app.use((req, res) => {

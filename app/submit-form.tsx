@@ -9,9 +9,9 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
-import TopBar from '@/components/TopBar';
 import { Plus, Trash2, Send, FileText, ChevronLeft, Clock, CheckCircle, XCircle, Eye } from 'lucide-react-native';
 import { customFormsApi } from '@/lib/milkeyApi';
 
@@ -32,6 +32,7 @@ interface SubmittedForm {
 
 export default function SubmitFormScreen() {
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const styles = createStyles(colors);
 
     const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
@@ -179,9 +180,7 @@ export default function SubmitFormScreen() {
     };
 
     return (
-        <View style={styles.container}>
-            <TopBar />
-
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header */}
             <View style={styles.header}>
                 <Pressable style={styles.backBtn} onPress={() => router.back()}>
@@ -347,8 +346,8 @@ const createStyles = (colors: any) =>
         header: {
             flexDirection: 'row',
             alignItems: 'center',
-            paddingHorizontal: 12,
-            paddingVertical: 12,
+            paddingHorizontal: 24,
+            paddingVertical: 16,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
         },
@@ -363,8 +362,9 @@ const createStyles = (colors: any) =>
         },
         tabRow: {
             flexDirection: 'row',
-            padding: 8,
-            gap: 8,
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            gap: 12,
         },
         tab: {
             flex: 1,
@@ -395,7 +395,8 @@ const createStyles = (colors: any) =>
             flex: 1,
         },
         scrollContent: {
-            padding: 12,
+            paddingHorizontal: 24,
+            paddingVertical: 16,
             paddingBottom: 100,
         },
         section: {

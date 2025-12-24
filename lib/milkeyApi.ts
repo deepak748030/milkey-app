@@ -3,6 +3,7 @@ import { getAuthToken } from './authStore';
 
 // API Base URL - Vercel deployed server
 const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
+// const API_BASE_URL = 'http://localhost:5000/api'
 
 export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
 
@@ -24,6 +25,42 @@ export interface Farmer {
     totalPurchase: number;
     totalLiters: number;
     pendingAmount: number;
+    isActive: boolean;
+}
+
+export interface Member {
+    _id: string;
+    name: string;
+    mobile: string;
+    address: string;
+    ratePerLiter: number;
+    totalLiters: number;
+    totalAmount: number;
+    pendingAmount: number;
+    isActive: boolean;
+}
+
+export interface SellingEntry {
+    _id: string;
+    member: { _id: string; name: string; mobile: string; ratePerLiter: number };
+    date: string;
+    shift: 'morning' | 'evening';
+    quantity: number;
+    rate: number;
+    amount: number;
+    isPaid: boolean;
+    notes: string;
+}
+
+export interface PurchaseFarmer {
+    _id: string;
+    code: string;
+    name: string;
+    mobile: string;
+    address: string;
+    totalQuantity: number;
+    totalAmount: number;
+    lastPurchaseDate?: string;
     isActive: boolean;
 }
 
@@ -72,7 +109,7 @@ export interface UserStats {
 
 export interface MilkCollection {
     _id: string;
-    farmer: { _id: string; code: string; name: string };
+    purchaseFarmer: { _id: string; code: string; name: string; mobile: string } | null;
     farmerCode?: string;
     date: string;
     shift: 'morning' | 'evening';
@@ -328,6 +365,47 @@ export const farmersApi = {
     },
 };
 
+// Purchase Farmers API (for Purchase tab only)
+export const purchaseFarmersApi = {
+    getAll: async (params?: { search?: string }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.search) queryParams.append('search', params.search);
+        const query = queryParams.toString();
+        return apiRequest<{ data: PurchaseFarmer[]; count: number }>(`/purchase-farmers${query ? `?${query}` : ''}`);
+    },
+
+    getByCode: async (code: string) => {
+        return apiRequest<PurchaseFarmer>(`/purchase-farmers/code/${code}`);
+    },
+
+    create: async (data: { code: string; name: string; mobile: string; address?: string }) => {
+        return apiRequest<PurchaseFarmer>('/purchase-farmers', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    update: async (id: string, data: { name?: string; mobile?: string; address?: string }) => {
+        return apiRequest<PurchaseFarmer>(`/purchase-farmers/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+
+    updateStats: async (id: string, data: { quantity: number; amount: number }) => {
+        return apiRequest<PurchaseFarmer>(`/purchase-farmers/${id}/stats`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+
+    delete: async (id: string) => {
+        return apiRequest<void>(`/purchase-farmers/${id}`, {
+            method: 'DELETE',
+        });
+    },
+};
+
 // Advances API
 export const advancesApi = {
     getAll: async (params?: { farmerId?: string; status?: string }) => {
@@ -501,6 +579,7 @@ export const milkCollectionsApi = {
 
     create: async (data: {
         farmerCode: string;
+        purchaseFarmerId?: string;
         quantity: number;
         rate: number;
         date?: string;
@@ -835,6 +914,70 @@ export const customFormsApi = {
 
     delete: async (id: string) => {
         return apiRequest<void>(`/custom-forms/${id}`, {
+            method: 'DELETE',
+        });
+    },
+};
+
+// Members API (for Selling tab)
+export const membersApi = {
+    getAll: async (params?: { search?: string }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.search) queryParams.append('search', params.search);
+        const query = queryParams.toString();
+        return apiRequest<{ data: Member[]; count: number }>(`/members${query ? `?${query}` : ''}`);
+    },
+
+    getById: async (id: string) => {
+        return apiRequest<Member>(`/members/${id}`);
+    },
+
+    create: async (data: { name: string; mobile: string; address?: string; ratePerLiter: number }) => {
+        return apiRequest<Member>('/members', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    update: async (id: string, data: { name?: string; mobile?: string; address?: string; ratePerLiter?: number }) => {
+        return apiRequest<Member>(`/members/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+
+    delete: async (id: string) => {
+        return apiRequest<void>(`/members/${id}`, {
+            method: 'DELETE',
+        });
+    },
+};
+
+// Selling Entries API (for Selling tab)
+export const sellingEntriesApi = {
+    getAll: async (params?: { memberId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.memberId) queryParams.append('memberId', params.memberId);
+        if (params?.startDate) queryParams.append('startDate', params.startDate);
+        if (params?.endDate) queryParams.append('endDate', params.endDate);
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.page) queryParams.append('page', params.page.toString());
+        const query = queryParams.toString();
+
+        return apiRequest<{ data: SellingEntry[]; count: number; total: number; page: number; pages: number }>(
+            `/selling-entries${query ? `?${query}` : ''}`
+        );
+    },
+
+    create: async (data: { memberId: string; quantity: number; rate: number; shift: 'morning' | 'evening'; date?: string; notes?: string }) => {
+        return apiRequest<SellingEntry>('/selling-entries', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    delete: async (id: string) => {
+        return apiRequest<void>(`/selling-entries/${id}`, {
             method: 'DELETE',
         });
     },
