@@ -324,6 +324,8 @@ router.get('/farmer-statement/:farmerCode', auth, async (req, res) => {
 // Dashboard summary
 router.get('/dashboard', auth, async (req, res) => {
     try {
+        const { farmerType } = req.query;
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -334,20 +336,33 @@ router.get('/dashboard', auth, async (req, res) => {
         const todayEnd = new Date(today);
         todayEnd.setHours(23, 59, 59, 999);
 
-        const [todayCollections, monthCollections, weekPayments, totalFarmers] = await Promise.all([
+        // If farmerType is specified, we need to filter by farmer type
+        let farmerIds = null;
+        if (farmerType) {
+            const farmers = await Farmer.find({ owner: req.user._id, type: farmerType, isActive: true }).select('_id');
+            farmerIds = farmers.map(f => f._id);
+        }
+
+        const collectionMatch = { owner: req.user._id };
+        if (farmerIds) {
+            collectionMatch.farmer = { $in: farmerIds };
+        }
+
+        const [todayCollections, monthCollections, weekPayments, totalFarmers, totalMembers] = await Promise.all([
             MilkCollection.aggregate([
-                { $match: { owner: req.user._id, date: { $gte: today, $lte: todayEnd } } },
+                { $match: { ...collectionMatch, date: { $gte: today, $lte: todayEnd } } },
                 { $group: { _id: null, quantity: { $sum: '$quantity' }, amount: { $sum: '$amount' }, count: { $sum: 1 } } }
             ]),
             MilkCollection.aggregate([
-                { $match: { owner: req.user._id, date: { $gte: monthStart } } },
+                { $match: { ...collectionMatch, date: { $gte: monthStart } } },
                 { $group: { _id: null, quantity: { $sum: '$quantity' }, amount: { $sum: '$amount' }, count: { $sum: 1 } } }
             ]),
             Payment.aggregate([
                 { $match: { owner: req.user._id, date: { $gte: weekStart } } },
                 { $group: { _id: null, amount: { $sum: '$amount' }, count: { $sum: 1 } } }
             ]),
-            Farmer.countDocuments({ owner: req.user._id, isActive: true })
+            Farmer.countDocuments({ owner: req.user._id, isActive: true, type: 'farmer' }),
+            Farmer.countDocuments({ owner: req.user._id, isActive: true, type: 'member' })
         ]);
 
         res.json({
@@ -356,7 +371,8 @@ router.get('/dashboard', auth, async (req, res) => {
                 today: todayCollections[0] || { quantity: 0, amount: 0, count: 0 },
                 thisMonth: monthCollections[0] || { quantity: 0, amount: 0, count: 0 },
                 weekPayments: weekPayments[0] || { amount: 0, count: 0 },
-                totalFarmers
+                totalFarmers,
+                totalMembers
             }
         });
     } catch (error) {
