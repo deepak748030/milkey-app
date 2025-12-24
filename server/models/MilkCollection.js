@@ -7,6 +7,11 @@ const milkCollectionSchema = new mongoose.Schema({
         required: false,
         default: null
     },
+    farmerCode: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     owner: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',

@@ -186,6 +186,7 @@ router.post('/', auth, async (req, res) => {
 
         const collection = await MilkCollection.create({
             farmer: farmerId,
+            farmerCode: farmerCode ? normalizeCode(farmerCode) : '',
             owner: req.userId,
             date: date ? new Date(date) : new Date(),
             shift: shift || (new Date().getHours() < 12 ? 'morning' : 'evening'),
