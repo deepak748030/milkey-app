@@ -37,6 +37,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<{ id: string; name: string; price: number; icon: string }[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [memberStats, setMemberStats] = useState<DashboardStats | null>(null);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const bannerScrollRef = useRef<ScrollView>(null);
   const { addToCart, loadCart } = useCartStore();
@@ -49,10 +50,11 @@ export default function HomeScreen() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch products and dashboard stats in parallel
-      const [productsRes, dashboardRes] = await Promise.all([
+      // Fetch products, dashboard stats for farmers and members in parallel
+      const [productsRes, dashboardRes, memberDashboardRes] = await Promise.all([
         productsApi.getAll().catch(() => null),
         reportsApi.getDashboard().catch(() => null),
+        reportsApi.getDashboard({ farmerType: 'member' }).catch(() => null),
       ]);
 
       if (productsRes?.success && productsRes.response?.data) {
@@ -72,6 +74,10 @@ export default function HomeScreen() {
 
       if (dashboardRes?.success && dashboardRes.response) {
         setDashboardStats(dashboardRes.response);
+      }
+
+      if (memberDashboardRes?.success && memberDashboardRes.response) {
+        setMemberStats(memberDashboardRes.response);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -178,6 +184,33 @@ export default function HomeScreen() {
             <View style={styles.overviewStat}>
               <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{dashboardStats?.totalFarmers || 0}</Text>
               <Text style={styles.overviewStatLabel}>Farmers</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Member Selling Overview */}
+        <Text style={styles.sectionTitle}>This Month - Selling (Member)</Text>
+        <View style={styles.overviewCard}>
+          <View style={styles.overviewMain}>
+            <View>
+              <Text style={[styles.overviewLabel, { color: colors.warning }]}>Member</Text>
+              <Text style={styles.overviewSubLabel}>Milk Selling</Text>
+              <Text style={styles.overviewValue}>₹{memberStats?.thisMonth.amount.toFixed(0) || '0'}</Text>
+            </View>
+            <View style={styles.overviewDivider} />
+            <View style={styles.overviewStat}>
+              <Text style={styles.overviewStatValue}>{memberStats?.thisMonth.quantity.toFixed(1) || '0'}L</Text>
+              <Text style={styles.overviewStatLabel}>Month Qty</Text>
+            </View>
+            <View style={styles.overviewDivider} />
+            <View style={styles.overviewStat}>
+              <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{memberStats?.today.quantity.toFixed(1) || '0'}L</Text>
+              <Text style={styles.overviewStatLabel}>Today</Text>
+            </View>
+            <View style={styles.overviewDivider} />
+            <View style={styles.overviewStat}>
+              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{memberStats?.totalMembers || 0}</Text>
+              <Text style={styles.overviewStatLabel}>Members</Text>
             </View>
           </View>
         </View>

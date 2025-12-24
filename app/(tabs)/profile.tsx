@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users, MessageSquare, Package } from 'lucide-react-native';
+import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users, MessageSquare, Package, FileEdit } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,11 +36,12 @@ export default function ProfileScreen() {
 
   const menuItems = [
     { id: '0', icon: Package, label: 'My Orders', action: () => router.push('/orders' as any) },
-    { id: '1', icon: MessageSquare, label: 'Feedback & Support', action: () => router.push('/feedback' as any) },
-    { id: '2', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
-    { id: '3', icon: Settings, label: 'Settings', action: () => { } },
-    { id: '4', icon: Bell, label: 'Notifications', action: () => router.push('/notifications') },
-    { id: '5', icon: HelpCircle, label: 'Help & Support', action: () => router.push('/help-support') },
+    { id: '1', icon: FileEdit, label: 'Submit Form', action: () => router.push('/submit-form' as any) },
+    { id: '2', icon: MessageSquare, label: 'Feedback & Support', action: () => router.push('/feedback' as any) },
+    { id: '3', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
+    { id: '4', icon: Settings, label: 'Settings', action: () => { } },
+    { id: '5', icon: Bell, label: 'Notifications', action: () => router.push('/notifications') },
+    { id: '6', icon: HelpCircle, label: 'Help & Support', action: () => router.push('/help-support') },
   ];
 
   return (

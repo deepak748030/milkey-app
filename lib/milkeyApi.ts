@@ -20,6 +20,7 @@ export interface Farmer {
     mobile: string;
     address: string;
     rate?: number;
+    type: 'farmer' | 'member';
     totalPurchase: number;
     totalLiters: number;
     pendingAmount: number;
@@ -90,16 +91,23 @@ export interface TodaySummary {
     total: { quantity: number; amount: number; farmers: number };
 }
 
+export interface AdvanceItem {
+    _id: string;
+    amount: number;
+    settledAmount: number;
+    remaining: number;
+    date: string;
+    note: string;
+    status: 'pending' | 'settled' | 'partial';
+}
+
 export interface FarmerPaymentSummary {
-    farmer: { id: string; code: string; name: string; mobile: string };
+    farmer: { id: string; code: string; name: string; mobile: string; currentBalance?: number };
     milk: { totalQuantity: number; totalAmount: number; collections: number; periodStart: string; periodEnd: string };
-    advances: { totalPending: number; count: number };
+    advances: { totalPending: number; count: number; items?: AdvanceItem[] };
     netPayable: number;
-    advanceBalance: number;
-    totalQuantity?: number;
-    totalMilkAmount?: number;
-    totalAdvances?: number;
-    totalDue?: number;
+    closingBalance: number;
+    advanceBalance?: number;
 }
 
 export interface Payment {
@@ -200,6 +208,7 @@ export interface DashboardStats {
     thisMonth: { quantity: number; amount: number; count: number };
     weekPayments: { amount: number; count: number };
     totalFarmers: number;
+    totalMembers: number;
 }
 
 export interface ReferralData {
@@ -287,15 +296,18 @@ const apiRequest = async <T>(
 
 // Farmers API
 export const farmersApi = {
-    getAll: async () => {
-        return apiRequest<{ data: Farmer[]; count: number }>('/farmers');
+    getAll: async (params?: { type?: 'farmer' | 'member' }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.type) queryParams.append('type', params.type);
+        const query = queryParams.toString();
+        return apiRequest<{ data: Farmer[]; count: number }>(`/farmers${query ? `?${query}` : ''}`);
     },
 
     getByCode: async (code: string) => {
         return apiRequest<Farmer>(`/farmers/code/${code}`);
     },
 
-    create: async (data: { code: string; name: string; mobile: string; address?: string }) => {
+    create: async (data: { code: string; name: string; mobile: string; address?: string; type?: 'farmer' | 'member' }) => {
         return apiRequest<Farmer>('/farmers', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -531,8 +543,12 @@ export const paymentsApi = {
         return apiRequest<{ data: Payment[] }>(`/payments${query ? `?${query}` : ''}`);
     },
 
-    getFarmerSummary: async (farmerCode: string) => {
-        return apiRequest<FarmerPaymentSummary>(`/payments/farmer-summary/${farmerCode}`);
+    getFarmerSummary: async (farmerCode: string, startDate?: string, endDate?: string) => {
+        const queryParams = new URLSearchParams();
+        if (startDate) queryParams.append('startDate', startDate);
+        if (endDate) queryParams.append('endDate', endDate);
+        const query = queryParams.toString();
+        return apiRequest<FarmerPaymentSummary>(`/payments/farmer-summary/${farmerCode}${query ? `?${query}` : ''}`);
     },
 
     create: async (data: {
@@ -642,8 +658,11 @@ export const reportsApi = {
         return apiRequest<FarmerStatement>(`/reports/farmer-statement/${farmerCode}${query ? `?${query}` : ''}`);
     },
 
-    getDashboard: async () => {
-        return apiRequest<DashboardStats>('/reports/dashboard');
+    getDashboard: async (params?: { farmerType?: 'farmer' | 'member' }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.farmerType) queryParams.append('farmerType', params.farmerType);
+        const query = queryParams.toString();
+        return apiRequest<DashboardStats>(`/reports/dashboard${query ? `?${query}` : ''}`);
     },
 
     getAnalytics: async (params?: { period?: string; days?: number }) => {
@@ -764,6 +783,60 @@ export const authApiNew = {
 
     getMe: async () => {
         return apiRequest<any>('/auth/me');
+    },
+};
+
+// Custom Forms API
+export interface CustomForm {
+    _id: string;
+    formName: string;
+    fields: { label: string; value: string }[];
+    status: 'pending' | 'reviewed' | 'approved' | 'rejected';
+    adminNotes?: string;
+    createdAt: string;
+    user?: { _id: string; name: string; email: string; phone: string };
+}
+
+export const customFormsApi = {
+    getAll: async (params?: { page?: number; limit?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        const query = queryParams.toString();
+        return apiRequest<{ data: CustomForm[]; count: number; hasMore: boolean }>(
+            `/custom-forms${query ? `?${query}` : ''}`
+        );
+    },
+
+    getAdminForms: async (params?: { page?: number; limit?: number; status?: string }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.status) queryParams.append('status', params.status);
+        const query = queryParams.toString();
+        return apiRequest<{ data: CustomForm[]; count: number; hasMore: boolean }>(
+            `/custom-forms/admin${query ? `?${query}` : ''}`
+        );
+    },
+
+    create: async (data: { formName: string; fields: { label: string; value: string }[] }) => {
+        return apiRequest<CustomForm>('/custom-forms', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    updateStatus: async (id: string, data: { status: string; adminNotes?: string }) => {
+        return apiRequest<CustomForm>(`/custom-forms/${id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+
+    delete: async (id: string) => {
+        return apiRequest<void>(`/custom-forms/${id}`, {
+            method: 'DELETE',
+        });
     },
 };
 

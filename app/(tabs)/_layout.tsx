@@ -45,9 +45,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="dairy"
+        name="purchase"
         options={{
-          title: 'Dairy',
+          title: 'Purchase',
           tabBarIcon: ({ color, focused }) => (
             <BookOpen
               size={focused ? 26 : 22}

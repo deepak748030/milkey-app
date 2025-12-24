@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Calendar, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Calculator } from 'lucide-react-native';
+import { Calendar, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import DatePickerModal from '@/components/DatePickerModal';
-import { farmersApi, milkCollectionsApi, paymentsApi, rateChartsApi, MilkCollection, Farmer, Payment } from '@/lib/milkeyApi';
+import { farmersApi, milkCollectionsApi, paymentsApi, MilkCollection, Farmer, Payment } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
 import { exportMembers, exportMilkCollections, exportPayments } from '@/lib/csvExport';
 import * as Print from 'expo-print';
@@ -13,6 +13,20 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
+
+// Helper to group collections by date and farmer for combined M/E display
+interface GroupedEntry {
+    date: string;
+    farmerId: string;
+    farmerName: string;
+    farmerCode: string;
+    morningQty: number;
+    eveningQty: number;
+    morningId?: string;
+    eveningId?: string;
+    totalAmount: number;
+    rate: number;
+}
 
 export default function SellingScreen() {
     const { colors, isDark } = useTheme();
@@ -26,20 +40,23 @@ export default function SellingScreen() {
 
     // Entry state
     const [searchMember, setSearchMember] = useState('');
-    const [selectedFarmer, setSelectedFarmer] = useState<Farmer | null>(null);
+    const [selectedMember, setSelectedMember] = useState<Farmer | null>(null);
     const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
-    const [quantity, setQuantity] = useState('');
+    const [mornQty, setMornQty] = useState('');
+    const [eveQty, setEveQty] = useState('');
     const [rate, setRate] = useState('50');
-    const [fat, setFat] = useState('');
-    const [snf, setSnf] = useState('');
-    const [shift, setShift] = useState<'morning' | 'evening'>(new Date().getHours() < 12 ? 'morning' : 'evening');
     const [recentEntries, setRecentEntries] = useState<MilkCollection[]>([]);
+    const [entriesPage, setEntriesPage] = useState(1);
+    const [hasMoreEntries, setHasMoreEntries] = useState(true);
+    const [savingEntry, setSavingEntry] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
 
     // Payment state
-    const [selectedPaymentFarmer, setSelectedPaymentFarmer] = useState<Farmer | null>(null);
+    const [selectedPaymentMember, setSelectedPaymentMember] = useState<Farmer | null>(null);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi' | 'bank'>('cash');
-    const [farmerSummary, setFarmerSummary] = useState<any>(null);
+    const [memberSummary, setMemberSummary] = useState<any>(null);
     const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
 
     // Reports state
@@ -53,6 +70,7 @@ export default function SellingScreen() {
     const [memberMobile, setMemberMobile] = useState('');
     const [memberAddress, setMemberAddress] = useState('');
     const [editingMember, setEditingMember] = useState<Farmer | null>(null);
+    const [showMemberModal, setShowMemberModal] = useState(false);
 
     // Modal state
     const [alertVisible, setAlertVisible] = useState(false);
@@ -79,32 +97,74 @@ export default function SellingScreen() {
         return d.toISOString().split('T')[0];
     }
 
-    // Filtered members for search
-    const filteredMembers = members.filter(m =>
-        m.name.toLowerCase().includes(searchMember.toLowerCase()) ||
-        m.code.toLowerCase().includes(searchMember.toLowerCase())
-    );
+    // Filtered members for search - auto suggest
+    const filteredMembers = useMemo(() => {
+        if (!searchMember.trim()) return members.slice(0, 10);
+        const query = searchMember.toLowerCase();
+        return members.filter(m =>
+            m.name.toLowerCase().includes(query) ||
+            m.code.toLowerCase().includes(query)
+        ).slice(0, 10);
+    }, [members, searchMember]);
 
-    const totalAmount = (parseFloat(quantity) || 0) * (parseFloat(rate) || 0);
+    const totalQuantity = (parseFloat(mornQty) || 0) + (parseFloat(eveQty) || 0);
+    const totalAmount = totalQuantity * (parseFloat(rate) || 0);
 
-    // Fetch data
+    // Group entries by date and farmer for combined M/E display
+    const groupedEntries = useMemo((): GroupedEntry[] => {
+        const groups: Record<string, GroupedEntry> = {};
+
+        recentEntries.forEach(entry => {
+            const dateStr = new Date(entry.date).toISOString().split('T')[0];
+            const farmerId = (entry.farmer as any)?._id || entry.farmerCode;
+            const key = `${dateStr}-${farmerId}`;
+
+            if (!groups[key]) {
+                groups[key] = {
+                    date: dateStr,
+                    farmerId,
+                    farmerName: (entry.farmer as any)?.name || entry.farmerCode,
+                    farmerCode: (entry.farmer as any)?.code || entry.farmerCode,
+                    morningQty: 0,
+                    eveningQty: 0,
+                    totalAmount: 0,
+                    rate: entry.rate,
+                };
+            }
+
+            if (entry.shift === 'morning') {
+                groups[key].morningQty += entry.quantity;
+                groups[key].morningId = entry._id;
+            } else {
+                groups[key].eveningQty += entry.quantity;
+                groups[key].eveningId = entry._id;
+            }
+            groups[key].totalAmount += entry.amount;
+        });
+
+        return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [recentEntries]);
+
+    // Fetch data - only members (type: 'member')
     const fetchData = useCallback(async () => {
         const token = await getAuthToken();
         if (!token) return;
 
         try {
             setIsLoading(true);
-            const [farmersRes, collectionsRes, paymentsRes] = await Promise.all([
-                farmersApi.getAll(),
-                milkCollectionsApi.getAll({ limit: 20 }),
+            const [membersRes, collectionsRes, paymentsRes] = await Promise.all([
+                farmersApi.getAll({ type: 'member' }),
+                milkCollectionsApi.getAll({ limit: 50 }),
                 paymentsApi.getAll({ limit: 10 })
             ]);
 
-            if (farmersRes.success) {
-                setMembers(farmersRes.response?.data || []);
+            if (membersRes.success) {
+                setMembers(membersRes.response?.data || []);
             }
             if (collectionsRes.success) {
                 setRecentEntries(collectionsRes.response?.data || []);
+                setHasMoreEntries((collectionsRes.response?.data || []).length >= 50);
+                setEntriesPage(1);
             }
             if (paymentsRes.success) {
                 setRecentPayments(paymentsRes.response?.data || []);
@@ -126,93 +186,110 @@ export default function SellingScreen() {
         fetchData();
     };
 
-    // Calculate rate based on FAT and SNF
-    const handleCalculateRate = async () => {
-        if (!fat || !snf) {
-            showAlert('Info', 'Enter FAT and SNF values to calculate rate');
-            return;
-        }
+    // Load more entries
+    const handleLoadMore = async () => {
+        if (loadingMore || !hasMoreEntries) return;
+        setLoadingMore(true);
         try {
-            const res = await rateChartsApi.calculate(parseFloat(fat), parseFloat(snf));
-            if (res.success && res.response) {
-                setRate(res.response.rate.toFixed(2));
-                showAlert('Rate Calculated', `Rate: ₹${res.response.rate.toFixed(2)}/L based on FAT ${fat}% and SNF ${snf}%`);
-            } else {
-                showAlert('Error', 'No rate chart configured. Using default rate.');
+            const nextPage = entriesPage + 1;
+            const res = await milkCollectionsApi.getAll({ limit: 50, page: nextPage });
+            if (res.success) {
+                const newEntries = res.response?.data || [];
+                setRecentEntries(prev => [...prev, ...newEntries]);
+                setHasMoreEntries(newEntries.length >= 50);
+                setEntriesPage(nextPage);
             }
         } catch (error) {
-            console.error('Rate calculation error:', error);
+            console.error('Load more error:', error);
+        } finally {
+            setLoadingMore(false);
         }
     };
 
     // Save milk entry
     const handleSaveEntry = async () => {
-        if (!selectedFarmer) {
+        if (savingEntry) return;
+
+        if (!selectedMember) {
             showAlert('Error', 'Please select a member first');
             return;
         }
 
-        const qty = parseFloat(quantity) || 0;
-        if (qty <= 0) {
-            showAlert('Error', 'Please enter valid quantity');
+        const morn = parseFloat(mornQty) || 0;
+        const eve = parseFloat(eveQty) || 0;
+        if (morn <= 0 && eve <= 0) {
+            showAlert('Error', 'Please enter morning or evening quantity');
             return;
         }
 
+        setSavingEntry(true);
         try {
-            setIsLoading(true);
-            const res = await milkCollectionsApi.create({
-                farmerCode: selectedFarmer.code,
-                quantity: qty,
-                rate: parseFloat(rate) || 50,
-                shift,
-                date: entryDate,
-                fat: fat ? parseFloat(fat) : undefined,
-                snf: snf ? parseFloat(snf) : undefined,
-            });
+            const entries = [];
 
-            if (res.success) {
+            if (morn > 0) {
+                entries.push(milkCollectionsApi.create({
+                    farmerCode: selectedMember.code,
+                    quantity: morn,
+                    rate: parseFloat(rate) || 50,
+                    shift: 'morning',
+                    date: entryDate,
+                }));
+            }
+
+            if (eve > 0) {
+                entries.push(milkCollectionsApi.create({
+                    farmerCode: selectedMember.code,
+                    quantity: eve,
+                    rate: parseFloat(rate) || 50,
+                    shift: 'evening',
+                    date: entryDate,
+                }));
+            }
+
+            const results = await Promise.all(entries);
+            const allSuccess = results.every(res => res.success);
+
+            if (allSuccess) {
                 showAlert('Success', 'Entry saved successfully');
-                setQuantity('');
-                setFat('');
-                setSnf('');
-                setSelectedFarmer(null);
+                setMornQty('');
+                setEveQty('');
+                setSelectedMember(null);
                 setSearchMember('');
                 fetchData();
             } else {
-                showAlert('Error', res.message || 'Failed to save entry');
+                showAlert('Error', 'Failed to save one or more entries');
             }
         } catch (error) {
             showAlert('Error', 'Failed to save entry');
         } finally {
-            setIsLoading(false);
+            setSavingEntry(false);
         }
     };
 
     // Delete entry
-    const handleDeleteEntry = async (id: string) => {
+    const handleDeleteEntry = async (morningId?: string, eveningId?: string) => {
         showConfirm('Delete Entry', 'Are you sure you want to delete this entry?', async () => {
             setConfirmVisible(false);
             try {
-                const res = await milkCollectionsApi.delete(id);
-                if (res.success) {
-                    fetchData();
-                } else {
-                    showAlert('Error', 'Failed to delete entry');
-                }
+                const deletes = [];
+                if (morningId) deletes.push(milkCollectionsApi.delete(morningId));
+                if (eveningId) deletes.push(milkCollectionsApi.delete(eveningId));
+                await Promise.all(deletes);
+                fetchData();
             } catch (error) {
                 showAlert('Error', 'Failed to delete entry');
             }
         });
     };
 
-    // Fetch farmer summary for payment
-    const handleSelectPaymentFarmer = async (farmer: Farmer) => {
-        setSelectedPaymentFarmer(farmer);
+    // Fetch member summary for payment
+    const handleSelectPaymentMember = async (member: Farmer) => {
+        setSelectedPaymentMember(member);
         try {
-            const res = await paymentsApi.getFarmerSummary(farmer.code);
+            const res = await paymentsApi.getFarmerSummary(member.code);
             if (res.success) {
-                setFarmerSummary(res.response);
-                setPaymentAmount(res.response?.totalDue?.toString() || res.response?.netPayable?.toString() || '0');
+                setMemberSummary(res.response);
+                setPaymentAmount(res.response?.netPayable?.toString() || '0');
             }
         } catch (error) {
             console.error('Fetch summary error:', error);
@@ -221,7 +298,7 @@ export default function SellingScreen() {
 
     // Process payment
     const handleProcessPayment = async () => {
-        if (!selectedPaymentFarmer) {
+        if (!selectedPaymentMember) {
             showAlert('Error', 'Please select a member first');
             return;
         }
@@ -235,7 +312,7 @@ export default function SellingScreen() {
         try {
             setIsLoading(true);
             const res = await paymentsApi.create({
-                farmerCode: selectedPaymentFarmer.code,
+                farmerCode: selectedPaymentMember.code,
                 amount,
                 paymentMethod,
                 notes: `Payment via ${paymentMethod}`
@@ -244,8 +321,8 @@ export default function SellingScreen() {
             if (res.success) {
                 showAlert('Success', 'Payment processed successfully');
                 setPaymentAmount('');
-                setSelectedPaymentFarmer(null);
-                setFarmerSummary(null);
+                setSelectedPaymentMember(null);
+                setMemberSummary(null);
                 fetchData();
             } else {
                 showAlert('Error', res.message || 'Failed to process payment');
@@ -276,6 +353,7 @@ export default function SellingScreen() {
                 if (res.success) {
                     showAlert('Success', 'Member updated successfully');
                     clearMemberForm();
+                    setShowMemberModal(false);
                     fetchData();
                 } else {
                     showAlert('Error', res.message || 'Failed to update member');
@@ -285,11 +363,13 @@ export default function SellingScreen() {
                     code: memberCode,
                     name: memberName,
                     mobile: memberMobile,
-                    address: memberAddress
+                    address: memberAddress,
+                    type: 'member'
                 });
                 if (res.success) {
                     showAlert('Success', 'Member added successfully');
                     clearMemberForm();
+                    setShowMemberModal(false);
                     fetchData();
                 } else {
                     showAlert('Error', res.message || 'Failed to add member');
@@ -316,6 +396,7 @@ export default function SellingScreen() {
         setMemberName(member.name);
         setMemberMobile(member.mobile);
         setMemberAddress(member.address || '');
+        setShowMemberModal(true);
     };
 
     const handleDeleteMember = async (id: string) => {
@@ -466,29 +547,54 @@ export default function SellingScreen() {
         setIsLoading(false);
     };
 
+    const formatDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+
     const styles = createStyles(colors, isDark);
 
-    const renderMemberDropdown = () => {
-        if (!searchMember || selectedFarmer) return null;
+    // Render auto-suggest dropdown with tick marks
+    const renderSuggestionDropdown = () => {
+        if (!showSuggestions) return null;
+        if (selectedMember) return null;
 
         return (
             <View style={styles.dropdown}>
-                {filteredMembers.slice(0, 5).map(member => (
-                    <Pressable
-                        key={member._id}
-                        style={styles.dropdownItem}
-                        onPress={() => {
-                            setSelectedFarmer(member);
-                            setSearchMember(member.name);
-                            setRate(member.rate?.toString() || '50');
-                        }}
-                    >
-                        <Text style={styles.dropdownText}>{member.code} - {member.name}</Text>
-                    </Pressable>
-                ))}
-                {filteredMembers.length === 0 && (
-                    <Text style={styles.dropdownEmpty}>No members found</Text>
-                )}
+                <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                    {filteredMembers.map(member => (
+                        <Pressable
+                            key={member._id}
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                                setSelectedMember(member);
+                                setSearchMember(member.name);
+                                setShowSuggestions(false);
+                            }}
+                        >
+                            <View style={styles.dropdownItemContent}>
+                                <Text style={styles.dropdownCode}>{member.code}</Text>
+                                <Text style={styles.dropdownText}>{member.name}</Text>
+                            </View>
+                        </Pressable>
+                    ))}
+                    {filteredMembers.length === 0 && (
+                        <View style={styles.dropdownEmptyContainer}>
+                            <Text style={styles.dropdownEmpty}>No members found</Text>
+                            <Pressable
+                                style={styles.addNewBtn}
+                                onPress={() => {
+                                    setShowSuggestions(false);
+                                    setMemberName(searchMember);
+                                    setShowMemberModal(true);
+                                }}
+                            >
+                                <Plus size={14} color={colors.primary} />
+                                <Text style={styles.addNewBtnText}>Add New Member</Text>
+                            </Pressable>
+                        </View>
+                    )}
+                </ScrollView>
             </View>
         );
     };
@@ -498,57 +604,63 @@ export default function SellingScreen() {
             <Text style={styles.sectionTitle}>Milk Selling Entry</Text>
 
             <View style={styles.inputGroup}>
-                <Text style={styles.label}>Member (Customer) *</Text>
-                <View style={styles.searchInput}>
+                <Text style={styles.label}>Member (Customer)</Text>
+                <Pressable
+                    style={styles.searchInput}
+                    onPress={() => setShowSuggestions(true)}
+                >
                     <Search size={16} color={colors.mutedForeground} />
                     <TextInput
                         style={styles.searchTextInput}
-                        placeholder="Search by name or code..."
+                        placeholder="Search member by name or code..."
                         value={searchMember}
                         onChangeText={(text) => {
                             setSearchMember(text);
-                            if (selectedFarmer) setSelectedFarmer(null);
+                            setShowSuggestions(true);
+                            if (selectedMember) setSelectedMember(null);
                         }}
+                        onFocus={() => setShowSuggestions(true)}
                         placeholderTextColor={colors.mutedForeground}
                     />
-                    {selectedFarmer && (
-                        <Pressable onPress={() => { setSelectedFarmer(null); setSearchMember(''); }}>
-                            <Trash2 size={14} color={colors.destructive} />
+                    {selectedMember && (
+                        <View style={styles.selectedBadge}>
+                            <Check size={12} color={colors.white} />
+                        </View>
+                    )}
+                    {selectedMember && (
+                        <Pressable onPress={() => { setSelectedMember(null); setSearchMember(''); }}>
+                            <X size={16} color={colors.destructive} />
                         </Pressable>
                     )}
-                </View>
-                {renderMemberDropdown()}
-            </View>
-
-            <View style={styles.shiftRow}>
-                <Pressable
-                    style={[styles.shiftBtn, shift === 'morning' && styles.shiftBtnActive]}
-                    onPress={() => setShift('morning')}
-                >
-                    <Text style={[styles.shiftText, shift === 'morning' && styles.shiftTextActive]}>☀️ Morning</Text>
                 </Pressable>
-                <Pressable
-                    style={[styles.shiftBtn, shift === 'evening' && styles.shiftBtnActive]}
-                    onPress={() => setShift('evening')}
-                >
-                    <Text style={[styles.shiftText, shift === 'evening' && styles.shiftTextActive]}>🌙 Evening</Text>
-                </Pressable>
+                {renderSuggestionDropdown()}
             </View>
 
             <View style={styles.row}>
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Date</Text>
                     <Pressable style={styles.dateInput} onPress={() => openDatePicker('entry')}>
-                        <Text style={styles.dateText}>{entryDate}</Text>
+                        <Text style={styles.dateText}>{formatDate(entryDate)}</Text>
                         <Calendar size={16} color={colors.mutedForeground} />
                     </Pressable>
                 </View>
                 <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Quantity (L) *</Text>
+                    <Text style={styles.label}>Morn (L)</Text>
                     <TextInput
                         style={styles.input}
-                        value={quantity}
-                        onChangeText={setQuantity}
+                        value={mornQty}
+                        onChangeText={setMornQty}
+                        keyboardType="decimal-pad"
+                        placeholder="0"
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Eve (L)</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={eveQty}
+                        onChangeText={setEveQty}
                         keyboardType="decimal-pad"
                         placeholder="0"
                         placeholderTextColor={colors.mutedForeground}
@@ -556,68 +668,28 @@ export default function SellingScreen() {
                 </View>
             </View>
 
-            {/* FAT and SNF inputs */}
-            <View style={styles.qualityCard}>
-                <Text style={styles.qualityTitle}>Milk Quality (Optional)</Text>
-                <View style={styles.row}>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>FAT %</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={fat}
-                            onChangeText={setFat}
-                            keyboardType="decimal-pad"
-                            placeholder="3.5"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>SNF %</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={snf}
-                            onChangeText={setSnf}
-                            keyboardType="decimal-pad"
-                            placeholder="8.5"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-                    <Pressable style={styles.calcBtn} onPress={handleCalculateRate}>
-                        <Calculator size={16} color={colors.white} />
-                    </Pressable>
-                </View>
-                <View style={styles.rateRow}>
-                    <Text style={styles.label}>Rate (₹/L)</Text>
-                    <TextInput
-                        style={[styles.input, { flex: 1 }]}
-                        value={rate}
-                        onChangeText={setRate}
-                        keyboardType="decimal-pad"
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-            </View>
-
             <View style={styles.totalRow}>
                 <View style={styles.totalBox}>
-                    <Text style={styles.totalLabel}>Total (₹)</Text>
-                    <Text style={styles.totalValue}>{totalAmount.toFixed(2)}</Text>
+                    <Text style={styles.totalValue}>₹{totalAmount.toFixed(2)}</Text>
                 </View>
                 <View style={styles.buttonRow}>
-                    <Pressable style={styles.saveBtn} onPress={handleSaveEntry} disabled={isLoading}>
-                        {isLoading ? (
+                    <Pressable
+                        style={[styles.saveBtn, savingEntry && styles.saveBtnDisabled]}
+                        onPress={handleSaveEntry}
+                        disabled={savingEntry}
+                    >
+                        {savingEntry ? (
                             <ActivityIndicator size="small" color={colors.white} />
                         ) : (
                             <Text style={styles.saveBtnText}>Save Entry</Text>
                         )}
                     </Pressable>
                     <Pressable style={styles.clearBtn} onPress={() => {
-                        setQuantity('');
-                        setFat('');
-                        setSnf('');
-                        setSelectedFarmer(null);
+                        setMornQty('');
+                        setEveQty('');
+                        setSelectedMember(null);
                         setSearchMember('');
-                    }}>
+                    }} disabled={savingEntry}>
                         <Text style={styles.clearBtnText}>Clear</Text>
                     </Pressable>
                 </View>
@@ -625,35 +697,51 @@ export default function SellingScreen() {
 
             <View style={styles.entriesHeader}>
                 <Text style={styles.sectionTitle}>Recent Entries</Text>
-                <Text style={styles.lastCount}>(Last 20)</Text>
+                <Text style={styles.lastCount}>({groupedEntries.length} days)</Text>
             </View>
 
-            {recentEntries.length === 0 ? (
+            {groupedEntries.length === 0 ? (
                 <Text style={styles.emptyText}>No entries yet</Text>
             ) : (
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Date</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Name</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Qty</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>FAT</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Amt</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.3 }]}></Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>M/E (L)</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Amt</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Act</Text>
                     </View>
-                    {recentEntries.map((item) => (
-                        <View key={item._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 0.8 }]}>{new Date(item.date).toLocaleDateString()}</Text>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{(item.farmer as any)?.name || item.farmerCode}</Text>
-                            <Text style={[styles.tableCell, { flex: 0.5 }]}>{item.quantity}L</Text>
-                            <Text style={[styles.tableCell, { flex: 0.5 }]}>{item.fat || '-'}</Text>
-                            <Text style={[styles.tableCell, { flex: 0.6, color: colors.primary }]}>₹{item.amount}</Text>
-                            <View style={{ flex: 0.3, alignItems: 'center' }}>
-                                <Pressable style={styles.deleteBtn} onPress={() => handleDeleteEntry(item._id)}>
+                    {groupedEntries.map((item, index) => (
+                        <View key={`${item.date}-${item.farmerId}-${index}`} style={styles.tableRow}>
+                            <Text style={[styles.tableCell, { flex: 1 }]}>{formatDate(item.date)}</Text>
+                            <Text style={[styles.tableCell, { flex: 1.2 }]} numberOfLines={1}>{item.farmerName}</Text>
+                            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                                <Text style={styles.meText}>
+                                    {item.morningQty > 0 ? item.morningQty : '-'} + {item.eveningQty > 0 ? item.eveningQty : '-'}
+                                </Text>
+                            </View>
+                            <Text style={[styles.tableCell, { flex: 0.8, color: colors.primary, fontWeight: '600' }]}>₹{item.totalAmount.toFixed(0)}</Text>
+                            <View style={{ flex: 0.5, alignItems: 'center', justifyContent: 'center' }}>
+                                <Pressable style={styles.deleteBtn} onPress={() => handleDeleteEntry(item.morningId, item.eveningId)}>
                                     <Trash2 size={12} color={colors.destructive} />
                                 </Pressable>
                             </View>
                         </View>
                     ))}
+
+                    {hasMoreEntries && (
+                        <Pressable
+                            style={styles.loadMoreBtn}
+                            onPress={handleLoadMore}
+                            disabled={loadingMore}
+                        >
+                            {loadingMore ? (
+                                <ActivityIndicator size="small" color={colors.primary} />
+                            ) : (
+                                <Text style={styles.loadMoreText}>Load More</Text>
+                            )}
+                        </Pressable>
+                    )}
                 </View>
             )}
         </View>
@@ -671,43 +759,46 @@ export default function SellingScreen() {
                             key={member._id}
                             style={[
                                 styles.memberChip,
-                                selectedPaymentFarmer?._id === member._id && styles.memberChipActive
+                                selectedPaymentMember?._id === member._id && styles.memberChipActive
                             ]}
-                            onPress={() => handleSelectPaymentFarmer(member)}
+                            onPress={() => handleSelectPaymentMember(member)}
                         >
-                            <User size={12} color={selectedPaymentFarmer?._id === member._id ? colors.white : colors.foreground} />
+                            <User size={12} color={selectedPaymentMember?._id === member._id ? colors.white : colors.foreground} />
                             <Text style={[
                                 styles.memberChipText,
-                                selectedPaymentFarmer?._id === member._id && styles.memberChipTextActive
+                                selectedPaymentMember?._id === member._id && styles.memberChipTextActive
                             ]}>{member.name}</Text>
+                            {selectedPaymentMember?._id === member._id && (
+                                <Check size={12} color={colors.white} />
+                            )}
                         </Pressable>
                     ))}
                 </ScrollView>
             </View>
 
-            {selectedPaymentFarmer && farmerSummary && (
+            {selectedPaymentMember && memberSummary && (
                 <View style={styles.summaryCard}>
-                    <Text style={styles.summaryTitle}>{selectedPaymentFarmer.name}</Text>
+                    <Text style={styles.summaryTitle}>{selectedPaymentMember.name}</Text>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Total Milk:</Text>
-                        <Text style={styles.summaryValue}>{farmerSummary.totalQuantity || farmerSummary.milk?.totalQuantity || 0} L</Text>
+                        <Text style={styles.summaryValue}>{memberSummary.totalQuantity || memberSummary.milk?.totalQuantity || 0} L</Text>
                     </View>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Milk Amount:</Text>
-                        <Text style={styles.summaryValue}>₹{farmerSummary.totalMilkAmount || farmerSummary.milk?.totalAmount || 0}</Text>
+                        <Text style={styles.summaryValue}>₹{memberSummary.totalMilkAmount || memberSummary.milk?.totalAmount || 0}</Text>
                     </View>
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Advances:</Text>
-                        <Text style={[styles.summaryValue, { color: colors.destructive }]}>-₹{farmerSummary.totalAdvances || farmerSummary.advances?.totalPending || 0}</Text>
+                        <Text style={[styles.summaryValue, { color: colors.destructive }]}>-₹{memberSummary.totalAdvances || memberSummary.advances?.totalPending || 0}</Text>
                     </View>
                     <View style={[styles.summaryRow, styles.summaryTotal]}>
                         <Text style={styles.summaryTotalLabel}>Net Payable:</Text>
-                        <Text style={styles.summaryTotalValue}>₹{farmerSummary.totalDue || farmerSummary.netPayable || 0}</Text>
+                        <Text style={styles.summaryTotalValue}>₹{memberSummary.totalDue || memberSummary.netPayable || 0}</Text>
                     </View>
                 </View>
             )}
 
-            {selectedPaymentFarmer && (
+            {selectedPaymentMember && (
                 <>
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Payment Amount (₹)</Text>
@@ -762,7 +853,7 @@ export default function SellingScreen() {
                     </View>
                     {recentPayments.map((item) => (
                         <View key={item._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{new Date(item.createdAt || item.date).toLocaleDateString()}</Text>
+                            <Text style={[styles.tableCell, { flex: 1 }]}>{formatDate(item.createdAt || item.date)}</Text>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{(item.farmer as any)?.name || '-'}</Text>
                             <Text style={[styles.tableCell, { flex: 0.8, color: colors.primary }]}>₹{item.amount}</Text>
                             <Text style={[styles.tableCell, { flex: 0.6 }]}>{item.paymentMethod}</Text>
@@ -784,18 +875,17 @@ export default function SellingScreen() {
             <View>
                 <Text style={styles.sectionTitle}>Reports</Text>
 
-                {/* Date Range Filter */}
                 <View style={styles.filterCard}>
                     <Text style={styles.filterTitle}>Date Range Filter</Text>
                     <View style={styles.dateFilterRow}>
                         <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportStart')}>
                             <Calendar size={14} color={colors.primary} />
-                            <Text style={styles.dateFilterText}>{reportStartDate}</Text>
+                            <Text style={styles.dateFilterText}>{formatDate(reportStartDate)}</Text>
                         </Pressable>
                         <Text style={styles.dateFilterSeparator}>to</Text>
                         <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportEnd')}>
                             <Calendar size={14} color={colors.primary} />
-                            <Text style={styles.dateFilterText}>{reportEndDate}</Text>
+                            <Text style={styles.dateFilterText}>{formatDate(reportEndDate)}</Text>
                         </Pressable>
                     </View>
                 </View>
@@ -828,24 +918,23 @@ export default function SellingScreen() {
 
                 <View style={styles.exportBtnsRow}>
                     <Pressable style={styles.pdfBtn} onPress={handlePDF}>
-                        <FileText size={14} color={colors.white} />
+                        <FileText size={16} color={colors.white} />
                         <Text style={styles.exportText}>PDF</Text>
                     </Pressable>
                     <Pressable style={styles.printBtn} onPress={handlePrint}>
-                        <Printer size={14} color={colors.white} />
-                        <Text style={styles.exportText}>Print</Text>
+                        <Printer size={16} color={colors.primary} />
+                        <Text style={[styles.exportText, { color: colors.primary }]}>Print</Text>
                     </Pressable>
                 </View>
 
-                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Export as CSV</Text>
-                <View style={styles.exportBtnsRow}>
+                <View style={[styles.exportBtnsRow, { marginTop: 8 }]}>
                     <Pressable style={styles.csvBtn} onPress={handleExportCollections}>
                         <Download size={14} color={colors.primary} />
-                        <Text style={styles.csvBtnText}>Collections</Text>
+                        <Text style={styles.csvBtnText}>Collections CSV</Text>
                     </Pressable>
                     <Pressable style={styles.csvBtn} onPress={handleExportPayments}>
                         <Download size={14} color={colors.primary} />
-                        <Text style={styles.csvBtnText}>Payments</Text>
+                        <Text style={styles.csvBtnText}>Payments CSV</Text>
                     </Pressable>
                 </View>
             </View>
@@ -855,92 +944,43 @@ export default function SellingScreen() {
     const renderMemberTab = () => (
         <View>
             <View style={styles.memberHeader}>
-                <Text style={styles.sectionTitle}>{editingMember ? 'Edit Member' : 'Add Member'}</Text>
-                <Pressable style={styles.exportMemberBtn} onPress={handleExportMembers}>
-                    <Download size={14} color={colors.primary} />
-                    <Text style={styles.exportMemberText}>Export</Text>
-                </Pressable>
-            </View>
-
-            <View style={styles.row}>
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Code *</Text>
-                    <TextInput
-                        style={[styles.input, editingMember && styles.inputDisabled]}
-                        placeholder="F001"
-                        value={memberCode}
-                        onChangeText={setMemberCode}
-                        editable={!editingMember}
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-                <View style={[styles.inputGroup, { flex: 2 }]}>
-                    <Text style={styles.label}>Name *</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Member Name"
-                        value={memberName}
-                        onChangeText={setMemberName}
-                        placeholderTextColor={colors.mutedForeground}
-                    />
+                <Text style={styles.sectionTitle}>Member Management</Text>
+                <View style={styles.memberHeaderBtns}>
+                    <Pressable style={styles.exportMemberBtn} onPress={handleExportMembers}>
+                        <Download size={14} color={colors.primary} />
+                        <Text style={styles.exportMemberText}>Export</Text>
+                    </Pressable>
+                    <Pressable
+                        style={styles.addMemberBtn}
+                        onPress={() => {
+                            clearMemberForm();
+                            setShowMemberModal(true);
+                        }}
+                    >
+                        <Plus size={14} color={colors.white} />
+                        <Text style={styles.addMemberBtnText}>Add</Text>
+                    </Pressable>
                 </View>
             </View>
 
-            <View style={styles.row}>
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Mobile *</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="9876543210"
-                        value={memberMobile}
-                        onChangeText={setMemberMobile}
-                        keyboardType="phone-pad"
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Address</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Village/City"
-                        value={memberAddress}
-                        onChangeText={setMemberAddress}
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-            </View>
-
-            <View style={styles.buttonRow}>
-                <Pressable style={styles.saveBtn} onPress={handleSaveMember} disabled={isLoading}>
-                    {isLoading ? (
-                        <ActivityIndicator size="small" color={colors.white} />
-                    ) : (
-                        <Text style={styles.saveBtnText}>{editingMember ? 'Update Member' : 'Save Member'}</Text>
-                    )}
-                </Pressable>
-                <Pressable style={styles.clearBtn} onPress={clearMemberForm}>
-                    <Text style={styles.clearBtnText}>Clear</Text>
-                </Pressable>
-            </View>
-
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Members List ({members.length})</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 8, fontSize: 13 }]}>Members List ({members.length})</Text>
 
             {members.length === 0 ? (
-                <Text style={styles.emptyText}>No members yet. Add your first member above.</Text>
+                <Text style={styles.emptyText}>No members yet. Add your first member.</Text>
             ) : (
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Code</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Name</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Mobile</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Actions</Text>
                     </View>
                     {members.map((item) => (
                         <View key={item._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 0.5 }]}>{item.code}</Text>
-                            <Text style={[styles.tableCell, { flex: 1, textAlign: 'left' }]}>{item.name}</Text>
+                            <Text style={[styles.tableCell, { flex: 0.6 }]}>{item.code}</Text>
+                            <Text style={[styles.tableCell, { flex: 1.2 }]}>{item.name}</Text>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{item.mobile}</Text>
-                            <View style={{ flex: 0.6, flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+                            <View style={{ flex: 0.6, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
                                 <Pressable style={styles.editBtn} onPress={() => handleEditMember(item)}>
                                     <Edit2 size={12} color={colors.primary} />
                                 </Pressable>
@@ -955,10 +995,87 @@ export default function SellingScreen() {
         </View>
     );
 
+    // Member Modal
+    const renderMemberModal = () => (
+        <Modal
+            visible={showMemberModal}
+            animationType="slide"
+            transparent={false}
+            onRequestClose={() => setShowMemberModal(false)}
+            statusBarTranslucent
+        >
+            <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>{editingMember ? 'Edit Member' : 'Add New Member'}</Text>
+                    <Pressable style={styles.modalCloseBtn} onPress={() => setShowMemberModal(false)}>
+                        <X size={24} color={colors.foreground} />
+                    </Pressable>
+                </View>
+
+                <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Code *</Text>
+                        <TextInput
+                            style={[styles.input, editingMember && styles.inputDisabled]}
+                            placeholder="M001"
+                            value={memberCode}
+                            onChangeText={setMemberCode}
+                            editable={!editingMember}
+                            placeholderTextColor={colors.mutedForeground}
+                        />
+                    </View>
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Name *</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Full Name"
+                            value={memberName}
+                            onChangeText={setMemberName}
+                            placeholderTextColor={colors.mutedForeground}
+                        />
+                    </View>
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Mobile *</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="10-digit number"
+                            value={memberMobile}
+                            onChangeText={setMemberMobile}
+                            keyboardType="phone-pad"
+                            placeholderTextColor={colors.mutedForeground}
+                        />
+                    </View>
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Address</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Village/City"
+                            value={memberAddress}
+                            onChangeText={setMemberAddress}
+                            placeholderTextColor={colors.mutedForeground}
+                        />
+                    </View>
+                </ScrollView>
+
+                <View style={styles.modalFooter}>
+                    <Pressable style={styles.modalCancelBtn} onPress={() => setShowMemberModal(false)}>
+                        <Text style={styles.modalCancelBtnText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable style={styles.modalSaveBtn} onPress={handleSaveMember} disabled={isLoading}>
+                        {isLoading ? (
+                            <ActivityIndicator size="small" color={colors.white} />
+                        ) : (
+                            <Text style={styles.modalSaveBtnText}>{editingMember ? 'Update' : 'Save'}</Text>
+                        )}
+                    </Pressable>
+                </View>
+            </View>
+        </Modal>
+    );
+
     return (
         <View style={styles.container}>
             <TopBar />
-            {/* Tabs */}
             <View style={styles.tabRow}>
                 {(['Entry', 'Payment', 'Reports', 'Member'] as TabType[]).map((tab) => (
                     <Pressable
@@ -977,6 +1094,7 @@ export default function SellingScreen() {
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
                 }
+                keyboardShouldPersistTaps="handled"
             >
                 {isLoading && recentEntries.length === 0 ? (
                     <View style={styles.loadingContainer}>
@@ -993,7 +1111,6 @@ export default function SellingScreen() {
                 )}
             </ScrollView>
 
-            {/* Date Picker Modal */}
             <DatePickerModal
                 visible={showDatePicker}
                 onClose={() => setShowDatePicker(false)}
@@ -1007,7 +1124,7 @@ export default function SellingScreen() {
                 onClose={() => setAlertVisible(false)}
                 title={alertTitle}
                 message={alertMessage}
-                autoClose={alertTitle === 'Success' || alertTitle === 'Rate Calculated'}
+                autoClose={alertTitle === 'Success'}
             />
 
             <ConfirmationModal
@@ -1020,6 +1137,8 @@ export default function SellingScreen() {
                 cancelText="Cancel"
                 confirmDestructive
             />
+
+            {renderMemberModal()}
         </View>
     );
 }
@@ -1116,6 +1235,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.foreground,
         padding: 0,
     },
+    selectedBadge: {
+        backgroundColor: colors.primary,
+        borderRadius: 10,
+        padding: 2,
+    },
     dateInput: {
         backgroundColor: colors.card,
         borderWidth: 1,
@@ -1137,7 +1261,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderColor: colors.border,
         borderRadius: 6,
         marginTop: 4,
-        maxHeight: 150,
+        zIndex: 100,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
     },
     dropdownItem: {
         paddingHorizontal: 12,
@@ -1145,69 +1274,51 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
     },
+    dropdownItemSelected: {
+        backgroundColor: colors.primary + '15',
+    },
+    dropdownItemContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    dropdownCode: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: colors.primary,
+        backgroundColor: colors.primary + '20',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
     dropdownText: {
         fontSize: 14,
         color: colors.foreground,
+        flex: 1,
+    },
+    dropdownEmptyContainer: {
+        padding: 12,
+        alignItems: 'center',
     },
     dropdownEmpty: {
-        padding: 12,
         fontSize: 13,
         color: colors.mutedForeground,
         textAlign: 'center',
+        marginBottom: 8,
     },
-    shiftRow: {
-        flexDirection: 'row',
-        gap: 8,
-        marginBottom: 12,
-    },
-    shiftBtn: {
-        flex: 1,
-        paddingVertical: 10,
-        alignItems: 'center',
-        borderRadius: 6,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    shiftBtnActive: {
-        backgroundColor: colors.primary,
-        borderColor: colors.primary,
-    },
-    shiftText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.foreground,
-    },
-    shiftTextActive: {
-        color: colors.white,
-    },
-    qualityCard: {
-        backgroundColor: colors.card,
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    qualityTitle: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.foreground,
-        marginBottom: 10,
-    },
-    calcBtn: {
-        backgroundColor: colors.primary,
-        borderRadius: 6,
-        padding: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        alignSelf: 'flex-end',
-    },
-    rateRow: {
+    addNewBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 10,
-        marginTop: 8,
+        gap: 4,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        backgroundColor: colors.primary + '15',
+        borderRadius: 6,
+    },
+    addNewBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.primary,
     },
     totalRow: {
         flexDirection: 'row',
@@ -1223,10 +1334,6 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderStyle: 'dashed',
-    },
-    totalLabel: {
-        fontSize: 11,
-        color: colors.mutedForeground,
     },
     totalValue: {
         fontSize: 16,
@@ -1249,6 +1356,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.white,
         fontSize: 13,
         fontWeight: '600',
+    },
+    saveBtnDisabled: {
+        backgroundColor: '#86efac',
+        opacity: 0.7,
     },
     clearBtn: {
         paddingHorizontal: 16,
@@ -1310,6 +1421,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.foreground,
         textAlign: 'center',
     },
+    meText: {
+        fontSize: 12,
+        color: colors.foreground,
+        fontWeight: '500',
+        textAlign: 'center',
+    },
     deleteBtn: {
         padding: 6,
         backgroundColor: colors.destructive + '20',
@@ -1319,6 +1436,17 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         padding: 6,
         backgroundColor: colors.primary + '20',
         borderRadius: 4,
+    },
+    loadMoreBtn: {
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    loadMoreText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.primary,
     },
     memberChips: {
         marginTop: 4,
@@ -1547,6 +1675,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         alignItems: 'center',
         marginBottom: 10,
     },
+    memberHeaderBtns: {
+        flexDirection: 'row',
+        gap: 8,
+    },
     exportMemberBtn: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1563,6 +1695,20 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontWeight: '600',
         color: colors.primary,
     },
+    addMemberBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        backgroundColor: colors.primary,
+        borderRadius: 6,
+    },
+    addMemberBtnText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.white,
+    },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -1573,5 +1719,64 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         marginTop: 10,
         fontSize: 14,
         color: colors.mutedForeground,
+    },
+    // Modal styles
+    modalContainer: {
+        flex: 1,
+        backgroundColor: colors.background,
+        paddingTop: 50,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    modalCloseBtn: {
+        padding: 4,
+    },
+    modalBody: {
+        flex: 1,
+        paddingHorizontal: 16,
+        paddingTop: 16,
+    },
+    modalFooter: {
+        flexDirection: 'row',
+        gap: 12,
+        padding: 16,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    modalCancelBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 8,
+        backgroundColor: colors.muted,
+        alignItems: 'center',
+    },
+    modalCancelBtnText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    modalSaveBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 8,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+    },
+    modalSaveBtnText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.white,
     },
 });
