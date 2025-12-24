@@ -20,6 +20,7 @@ const rateChartRoutes = require('./routes/rate-charts');
 const reportRoutes = require('./routes/reports');
 const feedbackRoutes = require('./routes/feedback');
 const seedRoutes = require('./routes/seed');
+const customFormRoutes = require('./routes/custom-forms');
 
 const app = express();
 
@@ -79,6 +80,7 @@ app.use('/api/rate-charts', rateChartRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/seed', seedRoutes);
+app.use('/api/custom-forms', customFormRoutes);
 
 // 404 handler
 app.use((req, res) => {
