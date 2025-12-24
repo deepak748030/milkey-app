@@ -748,119 +748,9 @@ export default function SellingScreen() {
     );
 
     const renderPaymentTab = () => (
-        <View>
-            <Text style={styles.sectionTitle}>Payment Management</Text>
-
-            <View style={styles.inputGroup}>
-                <Text style={styles.label}>Select Member</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.memberChips}>
-                    {members.slice(0, 10).map(member => (
-                        <Pressable
-                            key={member._id}
-                            style={[
-                                styles.memberChip,
-                                selectedPaymentMember?._id === member._id && styles.memberChipActive
-                            ]}
-                            onPress={() => handleSelectPaymentMember(member)}
-                        >
-                            <User size={12} color={selectedPaymentMember?._id === member._id ? colors.white : colors.foreground} />
-                            <Text style={[
-                                styles.memberChipText,
-                                selectedPaymentMember?._id === member._id && styles.memberChipTextActive
-                            ]}>{member.name}</Text>
-                            {selectedPaymentMember?._id === member._id && (
-                                <Check size={12} color={colors.white} />
-                            )}
-                        </Pressable>
-                    ))}
-                </ScrollView>
-            </View>
-
-            {selectedPaymentMember && memberSummary && (
-                <View style={styles.summaryCard}>
-                    <Text style={styles.summaryTitle}>{selectedPaymentMember.name}</Text>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Total Milk:</Text>
-                        <Text style={styles.summaryValue}>{memberSummary.totalQuantity || memberSummary.milk?.totalQuantity || 0} L</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Milk Amount:</Text>
-                        <Text style={styles.summaryValue}>₹{memberSummary.totalMilkAmount || memberSummary.milk?.totalAmount || 0}</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Advances:</Text>
-                        <Text style={[styles.summaryValue, { color: colors.destructive }]}>-₹{memberSummary.totalAdvances || memberSummary.advances?.totalPending || 0}</Text>
-                    </View>
-                    <View style={[styles.summaryRow, styles.summaryTotal]}>
-                        <Text style={styles.summaryTotalLabel}>Net Payable:</Text>
-                        <Text style={styles.summaryTotalValue}>₹{memberSummary.totalDue || memberSummary.netPayable || 0}</Text>
-                    </View>
-                </View>
-            )}
-
-            {selectedPaymentMember && (
-                <>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Payment Amount (₹)</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={paymentAmount}
-                            onChangeText={setPaymentAmount}
-                            keyboardType="decimal-pad"
-                            placeholder="Enter amount"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Payment Method</Text>
-                        <View style={styles.methodRow}>
-                            {(['cash', 'upi', 'bank'] as const).map(method => (
-                                <Pressable
-                                    key={method}
-                                    style={[styles.methodBtn, paymentMethod === method && styles.methodBtnActive]}
-                                    onPress={() => setPaymentMethod(method)}
-                                >
-                                    <DollarSign size={14} color={paymentMethod === method ? colors.white : colors.foreground} />
-                                    <Text style={[styles.methodText, paymentMethod === method && styles.methodTextActive]}>
-                                        {method.toUpperCase()}
-                                    </Text>
-                                </Pressable>
-                            ))}
-                        </View>
-                    </View>
-
-                    <Pressable style={styles.payBtn} onPress={handleProcessPayment} disabled={isLoading}>
-                        {isLoading ? (
-                            <ActivityIndicator size="small" color={colors.white} />
-                        ) : (
-                            <Text style={styles.payBtnText}>Process Payment</Text>
-                        )}
-                    </Pressable>
-                </>
-            )}
-
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Recent Payments</Text>
-            {recentPayments.length === 0 ? (
-                <Text style={styles.emptyText}>No payments yet</Text>
-            ) : (
-                <View style={styles.table}>
-                    <View style={styles.tableHeader}>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Name</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Amount</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Method</Text>
-                    </View>
-                    {recentPayments.map((item) => (
-                        <View key={item._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{formatDate(item.createdAt || item.date)}</Text>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{(item.farmer as any)?.name || '-'}</Text>
-                            <Text style={[styles.tableCell, { flex: 0.8, color: colors.primary }]}>₹{item.amount}</Text>
-                            <Text style={[styles.tableCell, { flex: 0.6 }]}>{item.paymentMethod}</Text>
-                        </View>
-                    ))}
-                </View>
-            )}
+        <View style={styles.comingSoonContainer}>
+            <Text style={styles.comingSoonText}>Coming Soon</Text>
+            <Text style={styles.comingSoonSubtext}>Payment feature will be available soon</Text>
         </View>
     );
 
@@ -1778,5 +1668,21 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: colors.white,
+    },
+    comingSoonContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 80,
+    },
+    comingSoonText: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: colors.primary,
+        marginBottom: 8,
+    },
+    comingSoonSubtext: {
+        fontSize: 14,
+        color: colors.mutedForeground,
     },
 });

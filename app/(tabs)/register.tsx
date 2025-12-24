@@ -1,15 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Calendar, FileText, Trash2 } from 'lucide-react-native';
+import { Calendar, FileText, Trash2, Plus, Search } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary, AdvanceItem } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import DatePickerModal from '@/components/DatePickerModal';
 
 type TabType = 'Payments' | 'Advances' | 'Farmers';
+
+// Custom date range interface
+interface DateRange {
+    id: string;
+    startDay: number;
+    endDay: number;
+    label: string;
+}
 
 export default function RegisterScreen() {
     const { colors, isDark } = useTheme();
@@ -48,6 +57,20 @@ export default function RegisterScreen() {
     const [newMobile, setNewMobile] = useState('');
     const [newAddress, setNewAddress] = useState('');
     const [searchCode, setSearchCode] = useState('');
+
+    // Custom date ranges state
+    const [customRanges, setCustomRanges] = useState<DateRange[]>([
+        { id: '1', startDay: 1, endDay: 10, label: '1-10' },
+        { id: '2', startDay: 11, endDay: 20, label: '11-20' },
+        { id: '3', startDay: 21, endDay: 31, label: '21-End' },
+    ]);
+    const [showAddRange, setShowAddRange] = useState(false);
+    const [newRangeStart, setNewRangeStart] = useState('');
+    const [newRangeEnd, setNewRangeEnd] = useState('');
+
+    // Advances search and date picker
+    const [advanceSearch, setAdvanceSearch] = useState('');
+    const [showAdvDatePicker, setShowAdvDatePicker] = useState(false);
 
     // Modal state
     const [alertVisible, setAlertVisible] = useState(false);
@@ -125,25 +148,53 @@ export default function RegisterScreen() {
         }
     };
 
-    // Set quick date range
-    const setQuickDateRange = (range: '1-10' | '11-20' | '21-end') => {
+    // Set date range from custom range
+    const applyCustomRange = (range: DateRange) => {
         const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth();
 
-        let start: Date, end: Date;
-        if (range === '1-10') {
-            start = new Date(year, month, 1);
-            end = new Date(year, month, 10);
-        } else if (range === '11-20') {
-            start = new Date(year, month, 11);
-            end = new Date(year, month, 20);
+        const start = new Date(year, month, range.startDay);
+        let end: Date;
+        if (range.endDay >= 28) {
+            // If end day is 28 or more, use last day of month
+            end = new Date(year, month + 1, 0);
         } else {
-            start = new Date(year, month, 21);
-            end = new Date(year, month + 1, 0); // Last day of month
+            end = new Date(year, month, range.endDay);
         }
         setDateStart(start.toISOString().split('T')[0]);
         setDateEnd(end.toISOString().split('T')[0]);
+    };
+
+    // Add new custom range
+    const handleAddCustomRange = () => {
+        const startDay = parseInt(newRangeStart);
+        const endDay = parseInt(newRangeEnd);
+
+        if (isNaN(startDay) || isNaN(endDay) || startDay < 1 || startDay > 31 || endDay < 1 || endDay > 31) {
+            showAlert('Error', 'Please enter valid day numbers (1-31)');
+            return;
+        }
+        if (startDay > endDay) {
+            showAlert('Error', 'Start day must be less than or equal to end day');
+            return;
+        }
+
+        const newRange: DateRange = {
+            id: Date.now().toString(),
+            startDay,
+            endDay,
+            label: `${startDay}-${endDay >= 28 ? 'End' : endDay}`,
+        };
+        setCustomRanges([...customRanges, newRange]);
+        setNewRangeStart('');
+        setNewRangeEnd('');
+        setShowAddRange(false);
+    };
+
+    // Remove custom range
+    const handleRemoveRange = (id: string) => {
+        setCustomRanges(customRanges.filter(r => r.id !== id));
     };
 
     // Recalculate when dates change
@@ -350,6 +401,76 @@ export default function RegisterScreen() {
         ? farmers.filter(f => f.code.includes(searchCode))
         : farmers;
 
+    // Filter advances by search (name or code)
+    const filteredAdvances = advanceSearch
+        ? advances.filter(a =>
+            a.farmer?.code?.toLowerCase().includes(advanceSearch.toLowerCase()) ||
+            a.farmer?.name?.toLowerCase().includes(advanceSearch.toLowerCase())
+        )
+        : advances;
+
+    // Generate Advances PDF
+    const generateAdvancesPDF = async () => {
+        const dataToExport = filteredAdvances;
+        const rows = dataToExport.map(item => {
+            const isSettled = item.status === 'settled' || item.status === 'partial';
+            return `
+                <tr class="${isSettled ? 'settled' : ''}">
+                    <td>${item.farmer?.code || '-'}</td>
+                    <td>${item.farmer?.name || '-'}</td>
+                    <td>${item.note || '-'}</td>
+                    <td>₹${item.amount}</td>
+                    <td>${new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' })}</td>
+                    <td>${item.status}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const html = `
+            <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; }
+                        h1 { color: #22C55E; text-align: center; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+                        th { background-color: #22C55E; color: white; }
+                        tr:nth-child(even) { background-color: #f2f2f2; }
+                        .settled { color: #999; text-decoration: line-through; background-color: #f5f5f5; }
+                        .info { text-align: center; margin-bottom: 10px; color: #666; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Advances Report</h1>
+                    <p class="info">Generated on: ${new Date().toLocaleDateString('en-IN')} | Total Records: ${dataToExport.length}</p>
+                    <table>
+                        <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Note</th>
+                            <th>Amount</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                        </tr>
+                        ${rows}
+                    </table>
+                </body>
+            </html>
+        `;
+
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            } else {
+                showAlert('PDF Generated', `Saved to: ${uri}`);
+            }
+        } catch (error) {
+            showAlert('Error', 'Failed to generate PDF');
+        }
+    };
+
     // Calculate closing balance
     const closingBalance = paymentFarmer
         ? paymentFarmer.netPayable - (parseFloat(paidAmount) || 0)
@@ -413,20 +534,58 @@ export default function RegisterScreen() {
                         </View>
                     </View>
 
-                    {/* Quick date buttons */}
-                    <View style={styles.quickDateRow}>
-                        <Pressable style={styles.quickDateBtn} onPress={() => setQuickDateRange('1-10')}>
-                            <Text style={styles.quickDateText}>1-10</Text>
-                        </Pressable>
-                        <Pressable style={styles.quickDateBtn} onPress={() => setQuickDateRange('11-20')}>
-                            <Text style={styles.quickDateText}>11-20</Text>
-                        </Pressable>
-                        <Pressable style={styles.quickDateBtn} onPress={() => setQuickDateRange('21-end')}>
-                            <Text style={styles.quickDateText}>21-End</Text>
-                        </Pressable>
-                        <Pressable style={styles.calculateBtn} onPress={handleRecalculate}>
-                            <Text style={styles.calculateBtnText}>Calculate</Text>
-                        </Pressable>
+                    {/* Custom date ranges */}
+                    <Text style={styles.sectionLabel}>Date Ranges</Text>
+                    <View style={styles.rangesContainer}>
+                        {customRanges.map((range) => (
+                            <View key={range.id} style={styles.rangeChip}>
+                                <Pressable
+                                    style={styles.rangeChipBtn}
+                                    onPress={() => applyCustomRange(range)}
+                                >
+                                    <Text style={styles.rangeChipText}>{range.label}</Text>
+                                </Pressable>
+                                <Pressable
+                                    style={styles.rangeDeleteBtn}
+                                    onPress={() => handleRemoveRange(range.id)}
+                                >
+                                    <Trash2 size={12} color={colors.destructive} />
+                                </Pressable>
+                            </View>
+                        ))}
+
+                        {showAddRange ? (
+                            <View style={styles.addRangeForm}>
+                                <TextInput
+                                    style={styles.rangeInput}
+                                    placeholder="Start"
+                                    value={newRangeStart}
+                                    onChangeText={setNewRangeStart}
+                                    keyboardType="numeric"
+                                    placeholderTextColor={colors.mutedForeground}
+                                />
+                                <Text style={styles.rangeDash}>-</Text>
+                                <TextInput
+                                    style={styles.rangeInput}
+                                    placeholder="End"
+                                    value={newRangeEnd}
+                                    onChangeText={setNewRangeEnd}
+                                    keyboardType="numeric"
+                                    placeholderTextColor={colors.mutedForeground}
+                                />
+                                <Pressable style={styles.rangeAddConfirmBtn} onPress={handleAddCustomRange}>
+                                    <Text style={styles.rangeAddConfirmText}>Add</Text>
+                                </Pressable>
+                                <Pressable style={styles.rangeCancelBtn} onPress={() => setShowAddRange(false)}>
+                                    <Text style={styles.rangeCancelText}>✕</Text>
+                                </Pressable>
+                            </View>
+                        ) : (
+                            <Pressable style={styles.addRangeBtn} onPress={() => setShowAddRange(true)}>
+                                <Plus size={14} color={colors.primary} />
+                                <Text style={styles.addRangeText}>Add Range</Text>
+                            </Pressable>
+                        )}
                     </View>
 
                     {/* Summary card */}
@@ -564,17 +723,25 @@ export default function RegisterScreen() {
                 </View>
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Date</Text>
-                    <View style={styles.dateInput}>
-                        <TextInput
-                            style={styles.textInput}
-                            value={advDate}
-                            onChangeText={setAdvDate}
-                            placeholderTextColor={colors.mutedForeground}
-                        />
+                    <Pressable
+                        style={styles.dateInputWrapper}
+                        onPress={() => setShowAdvDatePicker(true)}
+                    >
+                        <Text style={[styles.dateInputText, !advDate && { color: colors.mutedForeground }]}>
+                            {advDate ? new Date(advDate).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Select Date'}
+                        </Text>
                         <Calendar size={16} color={colors.mutedForeground} />
-                    </View>
+                    </Pressable>
                 </View>
             </View>
+
+            <DatePickerModal
+                visible={showAdvDatePicker}
+                onClose={() => setShowAdvDatePicker(false)}
+                onSelect={(date) => setAdvDate(date)}
+                selectedDate={advDate}
+                title="Select Advance Date"
+            />
 
             <View style={styles.inputGroup}>
                 <Text style={styles.label}>Note</Text>
@@ -596,26 +763,54 @@ export default function RegisterScreen() {
                 </Pressable>
             </View>
 
+            {/* Search bar and PDF button */}
+            <View style={styles.advanceSearchRow}>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10 }}>
+                    <Search size={16} color={colors.mutedForeground} />
+                    <TextInput
+                        style={[styles.advanceSearchInput, { borderWidth: 0, backgroundColor: 'transparent', marginLeft: 8 }]}
+                        placeholder="Search by name or code"
+                        value={advanceSearch}
+                        onChangeText={setAdvanceSearch}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+                <Pressable style={styles.advancePdfBtn} onPress={generateAdvancesPDF}>
+                    <FileText size={14} color={colors.white} />
+                    <Text style={styles.advancePdfBtnText}>PDF</Text>
+                </Pressable>
+            </View>
+
             {/* Advances Table */}
-            {advances.length > 0 ? (
+            {filteredAdvances.length > 0 ? (
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Note</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Amt</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Note</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Amt</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
                     </View>
-                    {advances.map((item) => (
-                        <View key={item._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.farmer?.code}</Text>
-                            <Text style={[styles.tableCell, { flex: 2, textAlign: 'center' }]}>{item.note || '-'}</Text>
-                            <Text style={[styles.tableCell, { flex: 1, color: colors.warning, textAlign: 'center' }]}>₹{item.amount}</Text>
-                            <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{new Date(item.date).toLocaleDateString()}</Text>
-                        </View>
-                    ))}
+                    {filteredAdvances.map((item) => {
+                        // Only show cross-line for advances that are settled or partial (used in payments)
+                        const isUsedInPayment = item.status === 'settled' || item.status === 'partial';
+                        return (
+                            <View key={item._id} style={[styles.tableRow, isUsedInPayment && styles.settledRow]}>
+                                <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.farmer?.code}</Text>
+                                <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.farmer?.name || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.note || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 0.8, color: isUsedInPayment ? colors.mutedForeground : colors.warning, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>₹{item.amount}</Text>
+                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>
+                                    {new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                </Text>
+                            </View>
+                        );
+                    })}
                 </View>
             ) : (
-                <Text style={styles.infoTextMuted}>No advances recorded yet</Text>
+                <Text style={styles.infoTextMuted}>
+                    {advanceSearch ? 'No advances found matching your search' : 'No advances recorded yet'}
+                </Text>
             )}
         </View>
     );
@@ -1160,5 +1355,138 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.foreground,
         fontSize: 14,
         fontWeight: '600',
+    },
+    // Custom ranges styles
+    rangesContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 12,
+    },
+    rangeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.card,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.border,
+        overflow: 'hidden',
+    },
+    rangeChipBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+    },
+    rangeChipText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    rangeDeleteBtn: {
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        borderLeftWidth: 1,
+        borderLeftColor: colors.border,
+    },
+    addRangeForm: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    rangeInput: {
+        width: 50,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+        fontSize: 12,
+        color: colors.foreground,
+        textAlign: 'center',
+    },
+    rangeDash: {
+        fontSize: 14,
+        color: colors.mutedForeground,
+    },
+    rangeAddConfirmBtn: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 4,
+    },
+    rangeAddConfirmText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.white,
+    },
+    rangeCancelBtn: {
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+    },
+    rangeCancelText: {
+        fontSize: 14,
+        color: colors.mutedForeground,
+    },
+    addRangeBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.primary,
+        borderStyle: 'dashed',
+    },
+    addRangeText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.primary,
+    },
+    // Advances search and PDF styles
+    advanceSearchRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+        marginTop: 8,
+    },
+    advanceSearchInput: {
+        flex: 1,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        fontSize: 14,
+        color: colors.foreground,
+    },
+    advancePdfBtn: {
+        backgroundColor: colors.warning,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 6,
+        justifyContent: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    advancePdfBtnText: {
+        color: colors.white,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    settledRow: {
+        opacity: 0.6,
+        backgroundColor: 'rgba(0,0,0,0.03)',
+    },
+    settledText: {
+        textDecorationLine: 'line-through',
+        color: '#999',
+    },
+    dateInputText: {
+        flex: 1,
+        fontSize: 13,
+        color: colors.foreground,
     },
 });

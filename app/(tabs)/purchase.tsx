@@ -217,8 +217,8 @@ export default function PurchaseScreen() {
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     scrollView: { flex: 1 },
-    scrollContent: { padding: 12, gap: 12 },
-    card: { backgroundColor: colors.card, borderRadius: 12, padding: 12 },
+    scrollContent: { padding: 6, gap: 12 },
+    card: { backgroundColor: colors.card, borderRadius: 12, padding: 1 },
     cardTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground },
     row: { flexDirection: 'row', gap: 8, marginBottom: 8 },
     fieldHalf: { flex: 1 },
