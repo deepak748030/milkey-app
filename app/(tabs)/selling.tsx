@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
 import { membersApi, sellingEntriesApi, paymentsApi, Member, SellingEntry, Payment } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
-import { exportMilkCollections, exportPayments } from '@/lib/csvExport';
+import { exportPayments } from '@/lib/csvExport';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
@@ -21,8 +21,7 @@ interface GroupedEntry {
     memberName: string;
     morningQty: number;
     eveningQty: number;
-    morningId?: string;
-    eveningId?: string;
+    entryId: string;
     totalAmount: number;
     rate: number;
 }
@@ -126,18 +125,15 @@ export default function SellingScreen() {
                     memberName: entry.member?.name || 'Unknown',
                     morningQty: 0,
                     eveningQty: 0,
+                    entryId: entry._id,
                     totalAmount: 0,
                     rate: entry.rate,
                 };
             }
 
-            if (entry.shift === 'morning') {
-                groups[key].morningQty += entry.quantity;
-                groups[key].morningId = entry._id;
-            } else {
-                groups[key].eveningQty += entry.quantity;
-                groups[key].eveningId = entry._id;
-            }
+            groups[key].morningQty += entry.morningQuantity || 0;
+            groups[key].eveningQty += entry.eveningQuantity || 0;
+            groups[key].entryId = entry._id;
             groups[key].totalAmount += entry.amount;
         });
 
@@ -223,32 +219,14 @@ export default function SellingScreen() {
 
         setSavingEntry(true);
         try {
-            const entries = [];
-
-            if (morn > 0) {
-                entries.push(sellingEntriesApi.create({
-                    memberId: selectedMember._id,
-                    quantity: morn,
-                    rate: parseFloat(rate) || selectedMember.ratePerLiter,
-                    shift: 'morning',
-                    date: entryDate,
-                }));
-            }
-
-            if (eve > 0) {
-                entries.push(sellingEntriesApi.create({
-                    memberId: selectedMember._id,
-                    quantity: eve,
-                    rate: parseFloat(rate) || selectedMember.ratePerLiter,
-                    shift: 'evening',
-                    date: entryDate,
-                }));
-            }
-
-            const results = await Promise.all(entries);
-            const allSuccess = results.every((res: any) => res.success);
-
-            if (allSuccess) {
+            const res = await sellingEntriesApi.create({
+                memberId: selectedMember._id,
+                morningQuantity: morn,
+                eveningQuantity: eve,
+                rate: parseFloat(rate) || selectedMember.ratePerLiter,
+                date: entryDate,
+            });
+            if (res.success) {
                 showAlert('Success', 'Entry saved successfully');
                 setMornQty('');
                 setEveQty('');
@@ -256,7 +234,7 @@ export default function SellingScreen() {
                 setSearchMember('');
                 fetchData();
             } else {
-                showAlert('Error', 'Failed to save one or more entries');
+                showAlert('Error', res.message || 'Failed to save entry');
             }
         } catch (error) {
             showAlert('Error', 'Failed to save entry');
@@ -266,14 +244,11 @@ export default function SellingScreen() {
     };
 
     // Delete entry
-    const handleDeleteEntry = async (morningId?: string, eveningId?: string) => {
+    const handleDeleteEntry = async (entryId: string) => {
         showConfirm('Delete Entry', 'Are you sure you want to delete this entry?', async () => {
             setConfirmVisible(false);
             try {
-                const deletes = [];
-                if (morningId) deletes.push(sellingEntriesApi.delete(morningId));
-                if (eveningId) deletes.push(sellingEntriesApi.delete(eveningId));
-                await Promise.all(deletes);
+                await sellingEntriesApi.delete(entryId);
                 fetchData();
             } catch (error) {
                 showAlert('Error', 'Failed to delete entry');
@@ -413,22 +388,66 @@ export default function SellingScreen() {
         });
     };
 
-    // Generate PDF Report
-    const generateReportHTML = () => {
+    // Helper to format date as dd/mm/yyyy
+    const formatDateDDMMYYYY = (dateStr: string) => {
+        const d = new Date(dateStr);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    };
+
+    // Group filtered entries by date and member (like entry table)
+    const getGroupedReportEntries = () => {
         const filteredEntries = getFilteredEntries();
-        const rows = filteredEntries.map(item => `
+        const groups: Record<string, {
+            date: string;
+            memberName: string;
+            morningQty: number;
+            eveningQty: number;
+            totalAmount: number;
+            rate: number;
+        }> = {};
+
+        filteredEntries.forEach(entry => {
+            const dateStr = new Date(entry.date).toISOString().split('T')[0];
+            const memberId = entry.member?._id || '';
+            const key = `${dateStr}-${memberId}`;
+
+            if (!groups[key]) {
+                groups[key] = {
+                    date: dateStr,
+                    memberName: entry.member?.name || 'Unknown',
+                    morningQty: 0,
+                    eveningQty: 0,
+                    totalAmount: 0,
+                    rate: entry.rate,
+                };
+            }
+
+            groups[key].morningQty += entry.morningQuantity || 0;
+            groups[key].eveningQty += entry.eveningQuantity || 0;
+            groups[key].totalAmount += entry.amount;
+        });
+
+        return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    };
+
+    // Generate PDF Report - matching entry table format
+    const generateReportHTML = () => {
+        const groupedEntries = getGroupedReportEntries();
+        const rows = groupedEntries.map(item => `
           <tr>
-            <td>${new Date(item.date).toLocaleDateString()}</td>
-            <td>${item.member?.name || 'Unknown'}</td>
-            <td>${item.shift}</td>
-            <td>${item.quantity} L</td>
+            <td>${formatDateDDMMYYYY(item.date)}</td>
+            <td>${item.memberName}</td>
+            <td>${item.morningQty > 0 ? item.morningQty : '-'} + ${item.eveningQty > 0 ? item.eveningQty : '-'}</td>
             <td>₹${item.rate}</td>
-            <td>₹${item.amount}</td>
+            <td>₹${item.totalAmount.toFixed(0)}</td>
           </tr>
         `).join('');
 
-        const totalQty = filteredEntries.reduce((sum, e) => sum + e.quantity, 0);
-        const totalAmt = filteredEntries.reduce((sum, e) => sum + e.amount, 0);
+        const totalQty = groupedEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
+        const totalAmt = groupedEntries.reduce((sum, e) => sum + e.totalAmount, 0);
 
         return `
           <html>
@@ -436,30 +455,32 @@ export default function SellingScreen() {
               <style>
                 body { font-family: Arial, sans-serif; padding: 20px; }
                 h1 { color: #22C55E; text-align: center; }
-                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: center; font-size: 12px; }
-                th { background-color: #22C55E; color: white; }
-                tr:nth-child(even) { background-color: #f2f2f2; }
+                .period { text-align: center; color: #666; margin-bottom: 10px; }
+                .generated { text-align: center; color: #999; font-size: 12px; margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #ddd; padding: 10px 8px; text-align: center; font-size: 12px; }
+                th { background-color: #22C55E; color: white; font-weight: 600; }
+                tr:nth-child(even) { background-color: #f9f9f9; }
                 .summary { margin-top: 20px; font-weight: bold; background: #f5f5f5; padding: 15px; border-radius: 8px; }
+                .summary p { margin: 5px 0; }
               </style>
             </head>
             <body>
               <h1>Milk Selling Report</h1>
-              <p>Period: ${reportStartDate} to ${reportEndDate}</p>
-              <p>Generated on: ${new Date().toLocaleDateString()}</p>
+              <p class="period">Period: ${formatDateDDMMYYYY(reportStartDate)} to ${formatDateDDMMYYYY(reportEndDate)}</p>
+              <p class="generated">Generated on: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
               <table>
                 <tr>
                   <th>Date</th>
                   <th>Name</th>
-                  <th>Shift</th>
-                  <th>Qty</th>
+                  <th>M/E (L)</th>
                   <th>Rate</th>
                   <th>Amount</th>
                 </tr>
                 ${rows}
               </table>
               <div class="summary">
-                <p>Total Entries: ${filteredEntries.length}</p>
+                <p>Total Days: ${groupedEntries.length}</p>
                 <p>Total Quantity: ${totalQty.toFixed(2)} L</p>
                 <p>Total Amount: ₹${totalAmt.toFixed(2)}</p>
               </div>
@@ -491,15 +512,68 @@ export default function SellingScreen() {
         }
     };
 
-    // Export handlers
-    const handleExportMembers = async () => {
-        showAlert('Info', 'Member export feature coming soon');
-    };
+    // Print members list
+    const handlePrintMembers = async () => {
+        if (members.length === 0) {
+            showAlert('Error', 'No members to print');
+            return;
+        }
 
-    const handleExportCollections = async () => {
-        setIsLoading(true);
-        await exportMilkCollections(getFilteredEntries());
-        setIsLoading(false);
+        const rows = members.map((item, index) => `
+            <tr style="${index % 2 === 0 ? '' : 'background-color: #f9fafb;'}">
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${index + 1}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600; color: #22c55e;">₹${item.ratePerLiter}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${item.name}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.mobile}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${item.address || '-'}</td>
+            </tr>
+        `).join('');
+
+        const html = `
+            <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                        h1 { color: #22c55e; text-align: center; margin-bottom: 5px; }
+                        .subtitle { text-align: center; color: #666; margin-bottom: 20px; font-size: 14px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th { background-color: #22c55e; color: white; padding: 12px 10px; text-align: left; font-weight: 600; }
+                        th:first-child, th:nth-child(2), th:nth-child(4) { text-align: center; }
+                        .summary { margin-top: 20px; padding: 15px; background-color: #f0fdf4; border-radius: 8px; }
+                        .summary-text { font-size: 14px; color: #333; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Members List</h1>
+                    <p class="subtitle">Generated on: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                    <table>
+                        <tr>
+                            <th style="width: 50px;">Sr.</th>
+                            <th style="width: 80px;">Rate/L</th>
+                            <th>Name</th>
+                            <th style="width: 120px;">Mobile</th>
+                            <th>Address</th>
+                        </tr>
+                        ${rows}
+                    </table>
+                    <div class="summary">
+                        <p class="summary-text"><strong>Total Members:</strong> ${members.length}</p>
+                    </div>
+                </body>
+            </html>
+        `;
+
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            } else {
+                showAlert('PDF Generated', `Saved to: ${uri}`);
+            }
+        } catch (error) {
+            showAlert('Error', 'Failed to generate PDF');
+        }
     };
 
     const handleExportPayments = async () => {
@@ -684,7 +758,7 @@ export default function SellingScreen() {
                             </View>
                             <Text style={[styles.tableCell, { flex: 0.8, color: colors.primary, fontWeight: '600' }]}>₹{item.totalAmount.toFixed(0)}</Text>
                             <View style={{ flex: 0.5, alignItems: 'center', justifyContent: 'center' }}>
-                                <Pressable style={styles.deleteBtn} onPress={() => handleDeleteEntry(item.morningId, item.eveningId)}>
+                                <Pressable style={styles.deleteBtn} onPress={() => handleDeleteEntry(item.entryId)}>
                                     <Trash2 size={12} color={colors.destructive} />
                                 </Pressable>
                             </View>
@@ -718,7 +792,7 @@ export default function SellingScreen() {
 
     const renderReportsTab = () => {
         const filteredEntries = getFilteredEntries();
-        const totalQty = filteredEntries.reduce((s, e) => s + e.quantity, 0);
+        const totalQty = filteredEntries.reduce((s, e) => s + (e.morningQuantity || 0) + (e.eveningQuantity || 0), 0);
         const totalAmt = filteredEntries.reduce((s, e) => s + e.amount, 0);
 
         // Group by member for summary
@@ -728,7 +802,7 @@ export default function SellingScreen() {
             if (!memberSummaries[memberId]) {
                 memberSummaries[memberId] = { name: entry.member?.name || 'Unknown', qty: 0, amt: 0 };
             }
-            memberSummaries[memberId].qty += entry.quantity;
+            memberSummaries[memberId].qty += (entry.morningQuantity || 0) + (entry.eveningQuantity || 0);
             memberSummaries[memberId].amt += entry.amount;
         });
         const memberSummaryList = Object.values(memberSummaries).sort((a, b) => b.amt - a.amt);
@@ -793,9 +867,9 @@ export default function SellingScreen() {
                         <FileText size={16} color={colors.white} />
                         <Text style={styles.exportText}>Download PDF</Text>
                     </Pressable>
-                    <Pressable style={styles.csvBtn} onPress={handleExportCollections}>
-                        <Download size={14} color={colors.primary} />
-                        <Text style={styles.csvBtnText}>Download CSV</Text>
+                    <Pressable style={styles.csvBtn} onPress={handlePrint}>
+                        <Printer size={14} color={colors.primary} />
+                        <Text style={styles.csvBtnText}>Print</Text>
                     </Pressable>
                 </View>
             </View>
@@ -807,9 +881,9 @@ export default function SellingScreen() {
             <View style={styles.memberHeader}>
                 <Text style={styles.sectionTitle}>Member Management</Text>
                 <View style={styles.memberHeaderBtns}>
-                    <Pressable style={styles.exportMemberBtn} onPress={handleExportMembers}>
-                        <Download size={14} color={colors.primary} />
-                        <Text style={styles.exportMemberText}>Export</Text>
+                    <Pressable style={styles.printMemberBtn} onPress={handlePrintMembers}>
+                        <Printer size={14} color={colors.primary} />
+                        <Text style={styles.printMemberText}>Print</Text>
                     </Pressable>
                     <Pressable
                         style={styles.addMemberBtn}
@@ -856,26 +930,41 @@ export default function SellingScreen() {
         </View>
     );
 
-    // Member Modal - Bottom Sheet Style
+    // Member Modal - Full Screen Style with Keyboard Avoiding
     const renderMemberModal = () => (
         <Modal
             visible={showMemberModal}
             animationType="slide"
-            transparent
+            transparent={false}
             onRequestClose={() => setShowMemberModal(false)}
         >
-            <View style={styles.bottomSheetOverlay}>
-                <View style={styles.bottomSheetContent}>
-                    <View style={styles.bottomSheetHeader}>
-                        <Text style={styles.bottomSheetTitle}>{editingMember ? 'Edit Member' : 'Add New Member'}</Text>
-                        <Pressable onPress={() => setShowMemberModal(false)}>
-                            <X size={22} color={colors.foreground} />
-                        </Pressable>
+            <KeyboardAvoidingView
+                style={styles.memberModalFullScreen}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+                {/* Header */}
+                <View style={styles.memberModalHeader}>
+                    <View style={styles.memberModalHeaderLeft}>
+                        <View style={styles.memberModalIcon}>
+                            <User size={20} color="#fff" />
+                        </View>
+                        <Text style={styles.memberModalTitle}>{editingMember ? 'Edit Member' : 'Add New Member'}</Text>
                     </View>
+                    <Pressable style={styles.memberModalCloseBtn} onPress={() => setShowMemberModal(false)}>
+                        <X size={20} color={colors.foreground} />
+                    </Pressable>
+                </View>
 
-                    <ScrollView style={styles.bottomSheetBody} keyboardShouldPersistTaps="handled">
+                {/* Body */}
+                <ScrollView
+                    style={styles.memberModalBody}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.memberModalBodyContent}
+                >
+                    <View style={styles.memberFormCard}>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Rate Per Liter (₹) *</Text>
+                            <Text style={styles.label}>Rate Per Liter (₹) <Text style={{ color: colors.destructive }}>*</Text></Text>
                             <TextInput
                                 style={styles.input}
                                 placeholder="50"
@@ -886,7 +975,7 @@ export default function SellingScreen() {
                             />
                         </View>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Name *</Text>
+                            <Text style={styles.label}>Name <Text style={{ color: colors.destructive }}>*</Text></Text>
                             <TextInput
                                 style={styles.input}
                                 placeholder="Full Name"
@@ -896,7 +985,7 @@ export default function SellingScreen() {
                             />
                         </View>
                         <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Mobile *</Text>
+                            <Text style={styles.label}>Mobile <Text style={{ color: colors.destructive }}>*</Text></Text>
                             <TextInput
                                 style={styles.input}
                                 placeholder="10-digit number"
@@ -909,29 +998,31 @@ export default function SellingScreen() {
                         <View style={styles.inputGroup}>
                             <Text style={styles.label}>Address</Text>
                             <TextInput
-                                style={styles.input}
+                                style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
                                 placeholder="Village/City"
                                 value={memberAddress}
                                 onChangeText={setMemberAddress}
                                 placeholderTextColor={colors.mutedForeground}
+                                multiline
                             />
                         </View>
-                    </ScrollView>
-
-                    <View style={styles.bottomSheetFooter}>
-                        <Pressable style={styles.cancelModalBtn} onPress={() => setShowMemberModal(false)}>
-                            <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                        </Pressable>
-                        <Pressable style={styles.confirmModalBtn} onPress={handleSaveMember} disabled={isLoading}>
-                            {isLoading ? (
-                                <ActivityIndicator size="small" color={colors.white} />
-                            ) : (
-                                <Text style={styles.confirmModalBtnText}>{editingMember ? 'Update' : 'Save'}</Text>
-                            )}
-                        </Pressable>
                     </View>
+                </ScrollView>
+
+                {/* Footer */}
+                <View style={styles.memberModalFooter}>
+                    <Pressable style={styles.memberModalCancelBtn} onPress={() => setShowMemberModal(false)}>
+                        <Text style={styles.memberModalCancelBtnText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable style={styles.memberModalSaveBtn} onPress={handleSaveMember} disabled={isLoading}>
+                        {isLoading ? (
+                            <ActivityIndicator size="small" color={colors.white} />
+                        ) : (
+                            <Text style={styles.memberModalSaveBtnText}>{editingMember ? 'Update Member' : 'Save Member'}</Text>
+                        )}
+                    </Pressable>
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 
@@ -994,7 +1085,11 @@ export default function SellingScreen() {
                             </Pressable>
                             <Pressable style={styles.confirmModalBtn} onPress={() => {
                                 if (tempCalendarDate) {
-                                    const dateStr = tempCalendarDate.toISOString().split('T')[0];
+                                    // Use local date format to avoid timezone issues
+                                    const y = tempCalendarDate.getFullYear();
+                                    const m = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
+                                    const d = String(tempCalendarDate.getDate()).padStart(2, '0');
+                                    const dateStr = `${y}-${m}-${d}`;
                                     handleDateSelect(dateStr);
                                 }
                                 setShowDatePicker(false);
@@ -1581,7 +1676,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flexDirection: 'row',
         gap: 8,
     },
-    exportMemberBtn: {
+    printMemberBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
@@ -1592,7 +1687,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.primary,
     },
-    exportMemberText: {
+    printMemberText: {
         fontSize: 12,
         fontWeight: '600',
         color: colors.primary,
@@ -1792,5 +1887,94 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         padding: 16,
         borderTopWidth: 1,
         borderTopColor: colors.border,
+    },
+    // Member Modal Full Screen Styles
+    memberModalFullScreen: {
+        flex: 1,
+        backgroundColor: colors.card,
+    },
+    memberModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+        backgroundColor: colors.card,
+        paddingTop: Platform.OS === 'ios' ? 50 : 16,
+    },
+    memberModalHeaderLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    memberModalIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    memberModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    memberModalCloseBtn: {
+        padding: 8,
+        backgroundColor: colors.muted,
+        borderRadius: 10,
+    },
+    memberModalBody: {
+        flex: 1,
+        paddingHorizontal: 16,
+    },
+    memberModalBodyContent: {
+        paddingBottom: 30,
+        paddingTop: 16,
+    },
+    memberFormCard: {
+        backgroundColor: colors.background,
+        borderRadius: 14,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: colors.border,
+        gap: 4,
+    },
+    memberModalFooter: {
+        flexDirection: 'row',
+        gap: 12,
+        padding: 16,
+        paddingBottom: 30,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        backgroundColor: colors.card,
+    },
+    memberModalCancelBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: colors.muted,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    memberModalCancelBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    memberModalSaveBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+    },
+    memberModalSaveBtnText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: colors.white,
     },
 });

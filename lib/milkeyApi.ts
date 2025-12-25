@@ -44,8 +44,8 @@ export interface SellingEntry {
     _id: string;
     member: { _id: string; name: string; mobile: string; ratePerLiter: number };
     date: string;
-    shift: 'morning' | 'evening';
-    quantity: number;
+    morningQuantity: number;
+    eveningQuantity: number;
     rate: number;
     amount: number;
     isPaid: boolean;
@@ -244,6 +244,13 @@ export interface DashboardStats {
     today: { quantity: number; amount: number; count: number };
     thisMonth: { quantity: number; amount: number; count: number };
     weekPayments: { amount: number; count: number };
+    totalFarmers: number;
+    totalMembers: number;
+}
+
+export interface HomeStats {
+    today: { quantity: number; amount: number; count: number };
+    todaySell: { quantity: number; amount: number; count: number };
     totalFarmers: number;
     totalMembers: number;
 }
@@ -744,6 +751,10 @@ export const reportsApi = {
         return apiRequest<DashboardStats>(`/reports/dashboard${query ? `?${query}` : ''}`);
     },
 
+    getHomeStats: async () => {
+        return apiRequest<HomeStats>('/reports/home-stats');
+    },
+
     getAnalytics: async (params?: { period?: string; days?: number }) => {
         const queryParams = new URLSearchParams();
         if (params?.period) queryParams.append('period', params.period);
@@ -969,7 +980,14 @@ export const sellingEntriesApi = {
         );
     },
 
-    create: async (data: { memberId: string; quantity: number; rate: number; shift: 'morning' | 'evening'; date?: string; notes?: string }) => {
+    create: async (data: {
+        memberId: string;
+        rate: number;
+        date?: string;
+        notes?: string;
+        morningQuantity?: number;
+        eveningQuantity?: number;
+    }) => {
         return apiRequest<SellingEntry>('/selling-entries', {
             method: 'POST',
             body: JSON.stringify(data),

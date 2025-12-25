@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
-import { productsApi, reportsApi, Product, DashboardStats } from '@/lib/milkeyApi';
+import { productsApi, reportsApi, Product, HomeStats } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
 
 const { width } = Dimensions.get('window');
@@ -35,9 +36,9 @@ export default function HomeScreen() {
   const { isAuthenticated } = useAuth();
   const [currentBanner, setCurrentBanner] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [products, setProducts] = useState<{ id: string; name: string; price: number; icon: string }[]>([]);
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-  const [memberStats, setMemberStats] = useState<DashboardStats | null>(null);
+  const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const bannerScrollRef = useRef<ScrollView>(null);
   const { addToCart, loadCart } = useCartStore();
@@ -47,14 +48,31 @@ export default function HomeScreen() {
     fetchData();
   }, []);
 
+  // Refresh data when tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchHomeStats();
+    }, [])
+  );
+
+  const fetchHomeStats = async () => {
+    try {
+      const homeStatsRes = await reportsApi.getHomeStats().catch(() => null);
+      if (homeStatsRes?.success && homeStatsRes.response) {
+        setHomeStats(homeStatsRes.response);
+      }
+    } catch (error) {
+      console.error('Error fetching home stats:', error);
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch products, dashboard stats for farmers and members in parallel
-      const [productsRes, dashboardRes, memberDashboardRes] = await Promise.all([
+      // Fetch products and home stats in parallel
+      const [productsRes, homeStatsRes] = await Promise.all([
         productsApi.getAll().catch(() => null),
-        reportsApi.getDashboard().catch(() => null),
-        reportsApi.getDashboard({ farmerType: 'member' }).catch(() => null),
+        reportsApi.getHomeStats().catch(() => null),
       ]);
 
       if (productsRes?.success && productsRes.response?.data) {
@@ -72,12 +90,8 @@ export default function HomeScreen() {
         setQuantities(initialQuantities);
       }
 
-      if (dashboardRes?.success && dashboardRes.response) {
-        setDashboardStats(dashboardRes.response);
-      }
-
-      if (memberDashboardRes?.success && memberDashboardRes.response) {
-        setMemberStats(memberDashboardRes.response);
+      if (homeStatsRes?.success && homeStatsRes.response) {
+        setHomeStats(homeStatsRes.response);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -85,6 +99,12 @@ export default function HomeScreen() {
       setLoading(false);
     }
   };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  }, []);
 
   // Auto-scroll banner
   useEffect(() => {
@@ -127,6 +147,14 @@ export default function HomeScreen() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
       >
         {/* Banner Carousel */}
         <ScrollView
@@ -168,21 +196,21 @@ export default function HomeScreen() {
             <View>
               <Text style={styles.overviewLabel}>Today</Text>
               <Text style={styles.overviewSubLabel}>Milk Collection</Text>
-              <Text style={styles.overviewValue}>₹{dashboardStats?.today.amount.toFixed(0) || '0'}</Text>
+              <Text style={styles.overviewValue}>₹{homeStats?.today.amount.toFixed(0) || '0'}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={styles.overviewStatValue}>{dashboardStats?.today.quantity.toFixed(1) || '0'}L</Text>
-              <Text style={styles.overviewStatLabel}>Today Qty</Text>
+              <Text style={styles.overviewStatValue}>{homeStats?.todaySell.quantity.toFixed(1) || '0'}L</Text>
+              <Text style={styles.overviewStatLabel}>Sell Qty</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{dashboardStats?.totalMembers || 0}</Text>
+              <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{homeStats?.totalMembers || 0}</Text>
               <Text style={styles.overviewStatLabel}>Members</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{dashboardStats?.totalFarmers || 0}</Text>
+              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{homeStats?.totalFarmers || 0}</Text>
               <Text style={styles.overviewStatLabel}>Farmers</Text>
             </View>
           </View>
