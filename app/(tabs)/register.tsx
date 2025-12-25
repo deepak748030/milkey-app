@@ -236,10 +236,12 @@ export default function RegisterScreen() {
 
         setSavingPayment(true);
         try {
+            const milkAmountValue = parseFloat(milkAmount) || 0;
             const res = await paymentsApi.create({
                 farmerCode: paymentFarmer.farmer.code,
                 amount,
                 paymentMethod: 'cash',
+                totalMilkAmount: milkAmountValue,
             });
 
             if (res.success) {

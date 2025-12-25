@@ -647,6 +647,7 @@ export const paymentsApi = {
         paymentMethod?: string;
         reference?: string;
         notes?: string;
+        totalMilkAmount?: number;
     }) => {
         return apiRequest<Payment>('/payments', {
             method: 'POST',

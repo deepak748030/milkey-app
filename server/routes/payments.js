@@ -163,7 +163,7 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
 // POST /api/payments - Create payment (settle farmer dues)
 router.post('/', auth, async (req, res) => {
     try {
-        const { farmerCode, amount, paymentMethod, reference, notes } = req.body;
+        const { farmerCode, amount, paymentMethod, reference, notes, totalMilkAmount: providedMilkAmount } = req.body;
 
         if (!farmerCode || !amount) {
             return res.status(400).json({
@@ -198,8 +198,8 @@ router.post('/', auth, async (req, res) => {
             status: { $in: ['pending', 'partial'] }
         }).sort({ date: 1 });
 
-        // Calculate totals
-        const totalMilkAmount = unpaidCollections.reduce((sum, c) => sum + c.amount, 0);
+        // Use provided milk amount from frontend if available, otherwise calculate from DB
+        const totalMilkAmount = providedMilkAmount !== undefined ? parseFloat(providedMilkAmount) : unpaidCollections.reduce((sum, c) => sum + c.amount, 0);
         const totalAdvanceAmount = pendingAdvances.reduce((sum, a) => sum + (a.amount - a.settledAmount), 0);
 
         // Get previous balance from farmer (can be + or -)
