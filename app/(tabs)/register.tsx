@@ -88,6 +88,9 @@ export default function RegisterScreen() {
     const [showStartDatePicker, setShowStartDatePicker] = useState(false);
     const [showEndDatePicker, setShowEndDatePicker] = useState(false);
 
+    // Temp calendar date for confirmation
+    const [tempCalendarDate, setTempCalendarDate] = useState<Date | null>(null);
+
     // Modal state
     const [alertVisible, setAlertVisible] = useState(false);
     const [alertTitle, setAlertTitle] = useState('');
@@ -573,7 +576,10 @@ export default function RegisterScreen() {
                     <View style={styles.dateRow}>
                         <Pressable
                             style={styles.dateInputWrapper}
-                            onPress={() => setShowStartDatePicker(true)}
+                            onPress={() => {
+                                setTempCalendarDate(dateStart ? new Date(dateStart + 'T00:00:00') : new Date());
+                                setShowStartDatePicker(true);
+                            }}
                         >
                             <Text style={[styles.dateInputText, !dateStart && { color: colors.mutedForeground }]}>
                                 {dateStart ? formatDateDDMMYYYY(dateStart) : 'Start Date'}
@@ -582,7 +588,10 @@ export default function RegisterScreen() {
                         </Pressable>
                         <Pressable
                             style={styles.dateInputWrapper}
-                            onPress={() => setShowEndDatePicker(true)}
+                            onPress={() => {
+                                setTempCalendarDate(dateEnd ? new Date(dateEnd + 'T00:00:00') : new Date());
+                                setShowEndDatePicker(true);
+                            }}
                         >
                             <Text style={[styles.dateInputText, !dateEnd && { color: colors.mutedForeground }]}>
                                 {dateEnd ? formatDateDDMMYYYY(dateEnd) : 'End Date'}
@@ -599,20 +608,40 @@ export default function RegisterScreen() {
                         onRequestClose={() => setShowStartDatePicker(false)}
                     >
                         <View style={styles.dateModalOverlay}>
-                            <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
+                            <Pressable style={{ flex: 1 }} onPress={() => setShowStartDatePicker(false)} />
+                            <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
                                 <View style={styles.dateModalHeader}>
                                     <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select Start Date</Text>
                                     <Pressable onPress={() => setShowStartDatePicker(false)} style={styles.dateModalClose}>
                                         <X size={20} color={colors.foreground} />
                                     </Pressable>
                                 </View>
+                                <View style={styles.selectedDateDisplay}>
+                                    <Text style={styles.selectedDateLabel}>Selected Date</Text>
+                                    <Text style={styles.selectedDateValue}>
+                                        {tempCalendarDate ? `${String(tempCalendarDate.getDate()).padStart(2, '0')}-${String(tempCalendarDate.getMonth() + 1).padStart(2, '0')}-${tempCalendarDate.getFullYear()}` : 'None'}
+                                    </Text>
+                                </View>
                                 <Calendar
-                                    onDateSelect={(date) => {
-                                        setDateStart(date.toISOString().split('T')[0]);
-                                        setShowStartDatePicker(false);
-                                    }}
-                                    selectedDate={dateStart ? new Date(dateStart) : null}
+                                    onDateSelect={setTempCalendarDate}
+                                    selectedDate={tempCalendarDate}
                                 />
+                                <View style={styles.dateModalFooter}>
+                                    <Pressable style={styles.cancelModalBtn} onPress={() => setShowStartDatePicker(false)}>
+                                        <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                                    </Pressable>
+                                    <Pressable style={styles.confirmModalBtn} onPress={() => {
+                                        if (tempCalendarDate) {
+                                            const year = tempCalendarDate.getFullYear();
+                                            const month = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
+                                            const day = String(tempCalendarDate.getDate()).padStart(2, '0');
+                                            setDateStart(`${year}-${month}-${day}`);
+                                        }
+                                        setShowStartDatePicker(false);
+                                    }}>
+                                        <Text style={styles.confirmModalBtnText}>Confirm</Text>
+                                    </Pressable>
+                                </View>
                             </View>
                         </View>
                     </Modal>
@@ -625,20 +654,40 @@ export default function RegisterScreen() {
                         onRequestClose={() => setShowEndDatePicker(false)}
                     >
                         <View style={styles.dateModalOverlay}>
-                            <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
+                            <Pressable style={{ flex: 1 }} onPress={() => setShowEndDatePicker(false)} />
+                            <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
                                 <View style={styles.dateModalHeader}>
                                     <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select End Date</Text>
                                     <Pressable onPress={() => setShowEndDatePicker(false)} style={styles.dateModalClose}>
                                         <X size={20} color={colors.foreground} />
                                     </Pressable>
                                 </View>
+                                <View style={styles.selectedDateDisplay}>
+                                    <Text style={styles.selectedDateLabel}>Selected Date</Text>
+                                    <Text style={styles.selectedDateValue}>
+                                        {tempCalendarDate ? `${String(tempCalendarDate.getDate()).padStart(2, '0')}-${String(tempCalendarDate.getMonth() + 1).padStart(2, '0')}-${tempCalendarDate.getFullYear()}` : 'None'}
+                                    </Text>
+                                </View>
                                 <Calendar
-                                    onDateSelect={(date) => {
-                                        setDateEnd(date.toISOString().split('T')[0]);
-                                        setShowEndDatePicker(false);
-                                    }}
-                                    selectedDate={dateEnd ? new Date(dateEnd) : null}
+                                    onDateSelect={setTempCalendarDate}
+                                    selectedDate={tempCalendarDate}
                                 />
+                                <View style={styles.dateModalFooter}>
+                                    <Pressable style={styles.cancelModalBtn} onPress={() => setShowEndDatePicker(false)}>
+                                        <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                                    </Pressable>
+                                    <Pressable style={styles.confirmModalBtn} onPress={() => {
+                                        if (tempCalendarDate) {
+                                            const year = tempCalendarDate.getFullYear();
+                                            const month = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
+                                            const day = String(tempCalendarDate.getDate()).padStart(2, '0');
+                                            setDateEnd(`${year}-${month}-${day}`);
+                                        }
+                                        setShowEndDatePicker(false);
+                                    }}>
+                                        <Text style={styles.confirmModalBtnText}>Confirm</Text>
+                                    </Pressable>
+                                </View>
                             </View>
                         </View>
                     </Modal>
@@ -781,48 +830,111 @@ export default function RegisterScreen() {
                 </>
             )}
 
-            {/* Settlement History */}
-            <Text style={[styles.subTitle, { marginTop: 16 }]}>Settlement History</Text>
-            {payments.length > 0 ? (
-                <View style={{ gap: 8 }}>
-                    {payments.slice(0, 10).map((p) => (
-                        <View key={p._id} style={styles.historyCard}>
-                            {/* Header row: period + date */}
-                            <View style={styles.historyCardHeader}>
-                                <Text style={styles.historyPeriod}>
-                                    {formatDateDDMMYYYY(p.periodStart || p.date)} to {formatDateDDMMYYYY(p.periodEnd || p.date)}
-                                </Text>
-                                <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date)}</Text>
-                            </View>
-                            {/* Details */}
-                            <View style={styles.historyRow}>
-                                <Text style={styles.historyLabel}>Milk Amount:</Text>
-                                <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.totalMilkAmount || 0).toFixed(2)}</Text>
-                            </View>
-                            <View style={styles.historyRow}>
-                                <Text style={styles.historyLabel}>Advance:</Text>
-                                <Text style={[styles.historyValue, { color: colors.warning }]}>-₹{(p.totalAdvanceDeduction || 0).toFixed(2)}</Text>
-                            </View>
-                            <View style={styles.historyRow}>
-                                <Text style={styles.historyLabel}>Total Payable:</Text>
-                                <Text style={[styles.historyValue, { color: colors.foreground }]}>₹{(p.netPayable || 0).toFixed(2)}</Text>
-                            </View>
-                            <View style={[styles.historyRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, marginTop: 4 }]}>
-                                <Text style={styles.historyLabel}>Paid Amount:</Text>
-                                <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.amount || 0).toFixed(2)}</Text>
-                            </View>
-                            <View style={[styles.historyRow, { backgroundColor: colors.muted, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 6, marginBottom: -6, borderBottomLeftRadius: 6, borderBottomRightRadius: 6, marginTop: 6 }]}>
-                                <Text style={[styles.historyLabel, { fontWeight: '700' }]}>Closing Balance:</Text>
-                                <Text style={[styles.historyValue, { fontWeight: '700', color: (p.closingBalance || 0) >= 0 ? colors.primary : colors.destructive }]}>
-                                    ₹{(p.closingBalance || 0).toFixed(2)}
-                                </Text>
-                            </View>
+            {/* Settlement History - Show filtered by farmer code when searched */}
+            <Text style={[styles.subTitle, { marginTop: 16 }]}>
+                Settlement History {paymentFarmer ? `(${paymentFarmer.farmer.code})` : ''}
+            </Text>
+            {(() => {
+                // Filter payments by farmer code if a farmer is selected
+                const filteredPayments = paymentFarmer
+                    ? payments.filter(p => p.farmer?.code === paymentFarmer.farmer.code)
+                    : payments;
+
+                if (filteredPayments.length === 0) {
+                    return (
+                        <Text style={styles.infoTextMuted}>
+                            {paymentFarmer ? `No settlements for ${paymentFarmer.farmer.name}` : 'No settlements yet'}
+                        </Text>
+                    );
+                }
+
+                // When farmer is searched - show card format
+                if (paymentFarmer) {
+                    return (
+                        <View style={{ gap: 8 }}>
+                            {filteredPayments.slice(0, 10).map((p) => (
+                                <View key={p._id} style={styles.historyCard}>
+                                    <View style={styles.historyCardHeader}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                            <Text style={[styles.historyPeriod, { color: colors.primary, fontWeight: '700' }]}>
+                                                {p.farmer?.code || '-'}
+                                            </Text>
+                                            <Text style={[styles.historyPeriod, { color: colors.foreground }]}>
+                                                {p.farmer?.name || '-'}
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date)}</Text>
+                                    </View>
+                                    <View style={[styles.historyRow, { marginBottom: 4 }]}>
+                                        <Text style={[styles.historyLabel, { fontSize: 10 }]}>Period:</Text>
+                                        <Text style={[styles.historyValue, { fontSize: 10, color: colors.mutedForeground }]}>
+                                            {formatDateDDMMYYYY(p.periodStart || p.date)} - {formatDateDDMMYYYY(p.periodEnd || p.date)}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.historyRow}>
+                                        <Text style={styles.historyLabel}>Milk Amount:</Text>
+                                        <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.totalMilkAmount || 0).toFixed(2)}</Text>
+                                    </View>
+                                    <View style={styles.historyRow}>
+                                        <Text style={styles.historyLabel}>Advance:</Text>
+                                        <Text style={[styles.historyValue, { color: colors.warning }]}>-₹{(p.totalAdvanceDeduction || 0).toFixed(2)}</Text>
+                                    </View>
+                                    <View style={styles.historyRow}>
+                                        <Text style={styles.historyLabel}>Total Payable:</Text>
+                                        <Text style={[styles.historyValue, { color: colors.foreground }]}>₹{(p.netPayable || 0).toFixed(2)}</Text>
+                                    </View>
+                                    <View style={[styles.historyRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, marginTop: 4 }]}>
+                                        <Text style={styles.historyLabel}>Paid Amount:</Text>
+                                        <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.amount || 0).toFixed(2)}</Text>
+                                    </View>
+                                    <View style={[styles.historyRow, { backgroundColor: colors.muted, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 6, marginBottom: -6, borderBottomLeftRadius: 6, borderBottomRightRadius: 6, marginTop: 6 }]}>
+                                        <Text style={[styles.historyLabel, { fontWeight: '700' }]}>Closing Balance:</Text>
+                                        <Text style={[styles.historyValue, { fontWeight: '700', color: (p.closingBalance || 0) >= 0 ? colors.primary : colors.destructive }]}>
+                                            ₹{(p.closingBalance || 0).toFixed(2)}
+                                        </Text>
+                                    </View>
+                                </View>
+                            ))}
                         </View>
-                    ))}
-                </View>
-            ) : (
-                <Text style={styles.infoTextMuted}>No settlements yet</Text>
-            )}
+                    );
+                }
+
+                // Without search - show table format
+                return (
+                    <View style={styles.historyTable}>
+                        <View style={styles.historyTableHeader}>
+                            <Text style={[styles.historyTableHeaderCell, { flex: 0.6 }]}>Code</Text>
+                            <Text style={[styles.historyTableHeaderCell, { flex: 1 }]}>Date</Text>
+                            <Text style={[styles.historyTableHeaderCell, { flex: 0.9 }]}>Milk</Text>
+                            <Text style={[styles.historyTableHeaderCell, { flex: 0.7 }]}>Adv</Text>
+                            <Text style={[styles.historyTableHeaderCell, { flex: 0.8 }]}>Paid</Text>
+                            <Text style={[styles.historyTableHeaderCell, { flex: 0.8 }]}>Bal</Text>
+                        </View>
+                        {filteredPayments.slice(0, 15).map((p) => (
+                            <View key={p._id} style={styles.historyTableRow}>
+                                <Text style={[styles.historyTableCell, { flex: 0.6, color: colors.primary, fontWeight: '600' }]}>
+                                    {p.farmer?.code || '-'}
+                                </Text>
+                                <Text style={[styles.historyTableCell, { flex: 1 }]}>
+                                    {formatDateDDMMYYYY(p.date)}
+                                </Text>
+                                <Text style={[styles.historyTableCell, { flex: 0.9, color: colors.primary }]}>
+                                    ₹{(p.totalMilkAmount || 0).toFixed(0)}
+                                </Text>
+                                <Text style={[styles.historyTableCell, { flex: 0.7, color: colors.warning }]}>
+                                    ₹{(p.totalAdvanceDeduction || 0).toFixed(0)}
+                                </Text>
+                                <Text style={[styles.historyTableCell, { flex: 0.8, color: colors.foreground, fontWeight: '600' }]}>
+                                    ₹{(p.amount || 0).toFixed(0)}
+                                </Text>
+                                <Text style={[styles.historyTableCell, { flex: 0.8, fontWeight: '600', color: (p.closingBalance || 0) >= 0 ? colors.primary : colors.destructive }]}>
+                                    ₹{(p.closingBalance || 0).toFixed(0)}
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
+                );
+            })()}
         </View>
     );
 
@@ -867,7 +979,10 @@ export default function RegisterScreen() {
                     <Text style={styles.label}>Date</Text>
                     <Pressable
                         style={styles.dateInputWrapper}
-                        onPress={() => setShowAdvDatePicker(true)}
+                        onPress={() => {
+                            setTempCalendarDate(advDate ? new Date(advDate + 'T00:00:00') : new Date());
+                            setShowAdvDatePicker(true);
+                        }}
                     >
                         <Text style={[styles.dateInputText, !advDate && { color: colors.mutedForeground }]}>
                             {advDate ? formatDateDDMMYYYY(advDate) : 'Select Date'}
@@ -885,20 +1000,40 @@ export default function RegisterScreen() {
                 onRequestClose={() => setShowAdvDatePicker(false)}
             >
                 <View style={styles.dateModalOverlay}>
-                    <View style={[styles.dateModalContent, { backgroundColor: colors.background }]}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowAdvDatePicker(false)} />
+                    <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
                         <View style={styles.dateModalHeader}>
                             <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select Advance Date</Text>
                             <Pressable onPress={() => setShowAdvDatePicker(false)} style={styles.dateModalClose}>
                                 <X size={20} color={colors.foreground} />
                             </Pressable>
                         </View>
+                        <View style={styles.selectedDateDisplay}>
+                            <Text style={styles.selectedDateLabel}>Selected Date</Text>
+                            <Text style={styles.selectedDateValue}>
+                                {tempCalendarDate ? `${String(tempCalendarDate.getDate()).padStart(2, '0')}-${String(tempCalendarDate.getMonth() + 1).padStart(2, '0')}-${tempCalendarDate.getFullYear()}` : 'None'}
+                            </Text>
+                        </View>
                         <Calendar
-                            onDateSelect={(date) => {
-                                setAdvDate(date.toISOString().split('T')[0]);
-                                setShowAdvDatePicker(false);
-                            }}
-                            selectedDate={advDate ? new Date(advDate) : null}
+                            onDateSelect={setTempCalendarDate}
+                            selectedDate={tempCalendarDate}
                         />
+                        <View style={styles.dateModalFooter}>
+                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowAdvDatePicker(false)}>
+                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={styles.confirmModalBtn} onPress={() => {
+                                if (tempCalendarDate) {
+                                    const year = tempCalendarDate.getFullYear();
+                                    const month = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
+                                    const day = String(tempCalendarDate.getDate()).padStart(2, '0');
+                                    setAdvDate(`${year}-${month}-${day}`);
+                                }
+                                setShowAdvDatePicker(false);
+                            }}>
+                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
+                            </Pressable>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -1188,6 +1323,54 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     dateModalClose: {
         padding: 4,
+    },
+    selectedDateDisplay: {
+        alignItems: 'center',
+        paddingVertical: 12,
+        backgroundColor: isDark ? colors.muted : '#f0fdf4',
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    selectedDateLabel: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+        marginBottom: 4,
+    },
+    selectedDateValue: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#22c55e',
+    },
+    dateModalFooter: {
+        flexDirection: 'row',
+        padding: 12,
+        gap: 10,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    cancelModalBtn: {
+        flex: 1,
+        backgroundColor: colors.muted,
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    cancelModalBtnText: {
+        color: colors.foreground,
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    confirmModalBtn: {
+        flex: 1,
+        backgroundColor: '#22c55e',
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    confirmModalBtnText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
     },
     tabText: {
         fontSize: 13,
@@ -1705,7 +1888,39 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 13,
         color: colors.foreground,
     },
-    // History card styles
+    // History table styles
+    historyTable: {
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
+    historyTableHeader: {
+        flexDirection: 'row',
+        backgroundColor: colors.primary,
+        paddingVertical: 8,
+        paddingHorizontal: 6,
+    },
+    historyTableHeaderCell: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: colors.white,
+        textAlign: 'center',
+    },
+    historyTableRow: {
+        flexDirection: 'row',
+        paddingVertical: 8,
+        paddingHorizontal: 6,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    historyTableCell: {
+        fontSize: 11,
+        color: colors.foreground,
+        textAlign: 'center',
+    },
+    // History card styles (for searched farmer)
     historyCard: {
         backgroundColor: colors.card,
         borderWidth: 1,

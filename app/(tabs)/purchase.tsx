@@ -394,8 +394,64 @@ export default function PurchaseScreen() {
                 </View>
             </ScrollView>
 
-            <Modal visible={showEntryDateModal} animationType="slide" transparent onRequestClose={() => setShowEntryDateModal(false)}><View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>Select Date</Text><Pressable onPress={() => setShowEntryDateModal(false)}><X size={20} color={colors.foreground} /></Pressable></View><View style={styles.calendarBody}><Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} /></View><View style={styles.modalFooter}><Pressable style={styles.cancelModalBtn} onPress={() => setShowEntryDateModal(false)}><Text style={styles.cancelModalBtnText}>Cancel</Text></Pressable><Pressable style={styles.confirmModalBtn} onPress={() => { if (tempCalendarDate) setEntryDate(tempCalendarDate); setShowEntryDateModal(false); }}><Text style={styles.confirmModalBtnText}>Confirm</Text></Pressable></View></View></View></Modal>
-            <Modal visible={showHistoryDateModal} animationType="slide" transparent onRequestClose={() => setShowHistoryDateModal(false)}><View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>{historyDateType === 'from' ? 'From Date' : 'To Date'}</Text><Pressable onPress={() => setShowHistoryDateModal(false)}><X size={20} color={colors.foreground} /></Pressable></View><View style={styles.calendarBody}><Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} /></View><View style={styles.modalFooter}><Pressable style={styles.cancelModalBtn} onPress={() => setShowHistoryDateModal(false)}><Text style={styles.cancelModalBtnText}>Cancel</Text></Pressable><Pressable style={styles.confirmModalBtn} onPress={() => { if (tempCalendarDate) { if (historyDateType === 'from') setHistoryFromDate(tempCalendarDate); else setHistoryToDate(tempCalendarDate); } setShowHistoryDateModal(false); }}><Text style={styles.confirmModalBtnText}>Confirm</Text></Pressable></View></View></View></Modal>
+            {/* Entry Date Modal - Bottom Sheet Style */}
+            <Modal visible={showEntryDateModal} animationType="slide" transparent onRequestClose={() => setShowEntryDateModal(false)}>
+                <View style={styles.bottomSheetOverlay}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowEntryDateModal(false)} />
+                    <View style={styles.dateModalContent}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={styles.dateModalTitle}>Select Entry Date</Text>
+                            <Pressable onPress={() => setShowEntryDateModal(false)}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+                        <View style={styles.selectedDateDisplay}>
+                            <Text style={styles.selectedDateLabel}>Selected Date</Text>
+                            <Text style={styles.selectedDateValue}>{tempCalendarDate ? formatDisplayDate(tempCalendarDate) : 'None'}</Text>
+                        </View>
+                        <View style={styles.calendarBody}>
+                            <Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} />
+                        </View>
+                        <View style={styles.dateModalFooter}>
+                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowEntryDateModal(false)}>
+                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={styles.confirmModalBtn} onPress={() => { if (tempCalendarDate) setEntryDate(tempCalendarDate); setShowEntryDateModal(false); }}>
+                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal visible={showHistoryDateModal} animationType="slide" transparent onRequestClose={() => setShowHistoryDateModal(false)}>
+                <View style={styles.bottomSheetOverlay}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowHistoryDateModal(false)} />
+                    <View style={styles.dateModalContent}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={styles.dateModalTitle}>{historyDateType === 'from' ? 'Select Start Date' : 'Select End Date'}</Text>
+                            <Pressable onPress={() => setShowHistoryDateModal(false)}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+                        <View style={styles.selectedDateDisplay}>
+                            <Text style={styles.selectedDateLabel}>Selected Date</Text>
+                            <Text style={styles.selectedDateValue}>{tempCalendarDate ? formatDisplayDate(tempCalendarDate) : 'None'}</Text>
+                        </View>
+                        <View style={styles.calendarBody}>
+                            <Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} />
+                        </View>
+                        <View style={styles.dateModalFooter}>
+                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowHistoryDateModal(false)}>
+                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={styles.confirmModalBtn} onPress={() => { if (tempCalendarDate) { if (historyDateType === 'from') setHistoryFromDate(tempCalendarDate); else setHistoryToDate(tempCalendarDate); } setShowHistoryDateModal(false); }}>
+                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
             <Modal visible={showCreateRangeModal} animationType="slide" transparent onRequestClose={() => setShowCreateRangeModal(false)}><View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>Create Custom Range</Text><Pressable onPress={() => setShowCreateRangeModal(false)}><X size={20} color={colors.foreground} /></Pressable></View><View style={styles.rangeModalBody}><View style={styles.rangeInputRow}><View style={styles.rangeInputField}><Text style={styles.rangeInputLabel}>Start Day</Text><TextInput style={styles.rangeInput} value={newRangeStart} onChangeText={setNewRangeStart} keyboardType="number-pad" placeholder="1" placeholderTextColor={colors.mutedForeground} maxLength={2} /></View><Text style={styles.rangeDash}>—</Text><View style={styles.rangeInputField}><Text style={styles.rangeInputLabel}>End Day</Text><TextInput style={styles.rangeInput} value={newRangeEnd} onChangeText={setNewRangeEnd} keyboardType="number-pad" placeholder="10" placeholderTextColor={colors.mutedForeground} maxLength={2} /></View></View></View><View style={styles.modalFooter}><Pressable style={styles.cancelModalBtn} onPress={() => setShowCreateRangeModal(false)}><Text style={styles.cancelModalBtnText}>Cancel</Text></Pressable><Pressable style={styles.confirmModalBtn} onPress={handleCreateRange}><Text style={styles.confirmModalBtnText}>Create</Text></Pressable></View></View></View></Modal>
             {/* Improved Code Modal */}
             <Modal visible={showCodeModal} animationType="slide" transparent onRequestClose={() => setShowCodeModal(false)}>
@@ -782,4 +838,55 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     farmerFormSaveBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
     farmerFormCancelBtn: { flex: 1, backgroundColor: colors.muted, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
     farmerFormCancelBtnText: { color: colors.foreground, fontSize: 15, fontWeight: '600' },
+    // Date Modal Bottom Sheet Styles
+    bottomSheetOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    dateModalContent: {
+        backgroundColor: colors.card,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: 20,
+        width: '100%',
+        overflow: 'hidden',
+    },
+    dateModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    dateModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    selectedDateDisplay: {
+        alignItems: 'center',
+        paddingVertical: 12,
+        backgroundColor: isDark ? colors.muted : '#f0fdf4',
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    selectedDateLabel: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+        marginBottom: 4,
+    },
+    selectedDateValue: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#22c55e',
+    },
+    dateModalFooter: {
+        flexDirection: 'row',
+        padding: 12,
+        gap: 10,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
 });

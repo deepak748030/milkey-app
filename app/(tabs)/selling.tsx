@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
-import { membersApi, sellingEntriesApi, paymentsApi, Member, SellingEntry, Payment } from '@/lib/milkeyApi';
+import { membersApi, sellingEntriesApi, memberPaymentsApi, Member, SellingEntry, MemberPayment, MemberPaymentSummary } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
 import { exportPayments } from '@/lib/csvExport';
 import * as Print from 'expo-print';
@@ -35,7 +35,7 @@ export default function SellingScreen() {
 
     // Date picker state
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [datePickerTarget, setDatePickerTarget] = useState<'entry' | 'reportStart' | 'reportEnd'>('entry');
+    const [datePickerTarget, setDatePickerTarget] = useState<'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd'>('entry');
     const [tempCalendarDate, setTempCalendarDate] = useState<Date | null>(new Date());
 
     // Entry state
@@ -52,16 +52,30 @@ export default function SellingScreen() {
     const [loadingMore, setLoadingMore] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
 
+    // Recent entries filter state
+    const [recentEntriesStartDate, setRecentEntriesStartDate] = useState('');
+    const [recentEntriesEndDate, setRecentEntriesEndDate] = useState('');
+    const [recentEntriesMemberFilter, setRecentEntriesMemberFilter] = useState('');
+    const [showRecentMemberDropdown, setShowRecentMemberDropdown] = useState(false);
+    const [recentMemberSearch, setRecentMemberSearch] = useState('');
+
     // Payment state
     const [selectedPaymentMember, setSelectedPaymentMember] = useState<Member | null>(null);
     const [paymentAmount, setPaymentAmount] = useState('');
+    const [milkAmount, setMilkAmount] = useState('0');
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi' | 'bank'>('cash');
     const [memberSummary, setMemberSummary] = useState<any>(null);
-    const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
+    const [recentPayments, setRecentPayments] = useState<MemberPayment[]>([]);
+    const [paymentLoading, setPaymentLoading] = useState(false);
+    const [savingPayment, setSavingPayment] = useState(false);
+    const [paymentMemberSearch, setPaymentMemberSearch] = useState('');
+    const [showPaymentMemberSuggestions, setShowPaymentMemberSuggestions] = useState(false);
 
-    // Reports state
-    const [reportStartDate, setReportStartDate] = useState(getDateOffset(-7));
-    const [reportEndDate, setReportEndDate] = useState(getDateOffset(0));
+    // Reports state - empty dates means show all data
+    const [reportStartDate, setReportStartDate] = useState('');
+    const [reportEndDate, setReportEndDate] = useState('');
+    const [reportMemberFilter, setReportMemberFilter] = useState<string>(''); // Member ID filter for reports
+    const [showReportMemberDropdown, setShowReportMemberDropdown] = useState(false);
 
     // Member state
     const [members, setMembers] = useState<Member[]>([]);
@@ -110,11 +124,39 @@ export default function SellingScreen() {
     const totalQuantity = (parseFloat(mornQty) || 0) + (parseFloat(eveQty) || 0);
     const totalAmount = totalQuantity * (parseFloat(rate) || 0);
 
-    // Group entries by date and member for combined M/E display
+    // Filtered members for recent entries dropdown
+    const filteredRecentMembers = useMemo(() => {
+        if (!recentMemberSearch.trim()) return members.slice(0, 10);
+        const query = recentMemberSearch.toLowerCase();
+        return members.filter(m => m.name.toLowerCase().includes(query)).slice(0, 10);
+    }, [members, recentMemberSearch]);
+
+    // Get selected recent member name for display
+    const getSelectedRecentMemberName = () => {
+        if (!recentEntriesMemberFilter) return 'All Members';
+        const member = members.find(m => m._id === recentEntriesMemberFilter);
+        return member?.name || 'All Members';
+    };
+
+    // Group entries by date and member for combined M/E display - with filters
     const groupedEntries = useMemo((): GroupedEntry[] => {
         const groups: Record<string, GroupedEntry> = {};
 
-        recentEntries.forEach(entry => {
+        // Apply filters to recentEntries
+        const filteredEntries = recentEntries.filter(entry => {
+            const entryDateStr = new Date(entry.date).toISOString().split('T')[0];
+
+            // Date filter
+            if (recentEntriesStartDate && entryDateStr < recentEntriesStartDate) return false;
+            if (recentEntriesEndDate && entryDateStr > recentEntriesEndDate) return false;
+
+            // Member filter
+            if (recentEntriesMemberFilter && entry.member?._id !== recentEntriesMemberFilter) return false;
+
+            return true;
+        });
+
+        filteredEntries.forEach(entry => {
             const dateStr = new Date(entry.date).toISOString().split('T')[0];
             const memberId = entry.member?._id || '';
             const key = `${dateStr}-${memberId}`;
@@ -141,7 +183,7 @@ export default function SellingScreen() {
         });
 
         return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [recentEntries]);
+    }, [recentEntries, recentEntriesStartDate, recentEntriesEndDate, recentEntriesMemberFilter]);
 
     // Fetch data - members and selling entries
     const fetchData = useCallback(async () => {
@@ -153,7 +195,7 @@ export default function SellingScreen() {
             const [membersRes, entriesRes, paymentsRes] = await Promise.all([
                 membersApi.getAll(),
                 sellingEntriesApi.getAll({ limit: 50 }),
-                paymentsApi.getAll({ limit: 10 })
+                memberPaymentsApi.getAll({ limit: 10 })
             ]);
 
             if (membersRes.success) {
@@ -259,17 +301,86 @@ export default function SellingScreen() {
         });
     };
 
-    // Fetch member summary for payment (placeholder - payment feature coming soon)
+    // Fetch member summary for payment
     const handleSelectPaymentMember = async (member: Member) => {
         setSelectedPaymentMember(member);
-        setMemberSummary({ pendingAmount: member.pendingAmount });
-        setPaymentAmount(member.pendingAmount?.toString() || '0');
+        setPaymentMemberSearch(member.name);
+        setShowPaymentMemberSuggestions(false);
+        setPaymentLoading(true);
+
+        // Reset inputs for new selection - keep milk amount as 0, no auto-fill
+        setPaymentAmount('');
+        setMilkAmount('0');
+
+        try {
+            const res = await memberPaymentsApi.getMemberSummary(member._id);
+            if (res.success && res.response) {
+                setMemberSummary(res.response);
+                // Don't auto-fill milk amount - user will enter manually
+            } else {
+                setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+            }
+        } catch (error) {
+            setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+        } finally {
+            setPaymentLoading(false);
+        }
     };
 
-    // Process payment (placeholder - coming soon)
+    // Process payment
     const handleProcessPayment = async () => {
-        showAlert('Coming Soon', 'Payment feature will be available soon');
+        if (!selectedPaymentMember) {
+            showAlert('Error', 'Please select a member first');
+            return;
+        }
+
+        const amount = parseFloat(paymentAmount);
+        if (isNaN(amount) || amount <= 0) {
+            showAlert('Error', 'Please enter a valid amount');
+            return;
+        }
+
+        setSavingPayment(true);
+        try {
+            const res = await memberPaymentsApi.create({
+                memberId: selectedPaymentMember._id,
+                amount,
+                milkAmount: Number.parseFloat(milkAmount) || 0,
+                paymentMethod,
+            });
+
+            if (res.success) {
+                showAlert('Success', 'Payment recorded successfully');
+                setSelectedPaymentMember(null);
+                setPaymentMemberSearch('');
+                setPaymentAmount('');
+                setMemberSummary(null);
+                fetchData();
+            } else {
+                showAlert('Error', res.message || 'Failed to save payment');
+            }
+        } catch (error) {
+            showAlert('Error', 'Failed to save payment');
+        } finally {
+            setSavingPayment(false);
+        }
     };
+
+    // Clear payment form
+    const clearPaymentForm = () => {
+        setSelectedPaymentMember(null);
+        setPaymentMemberSearch('');
+        setPaymentAmount('');
+        setMilkAmount('0');
+        setMemberSummary(null);
+    };
+
+    // Filtered members for payment search
+    const filteredPaymentMembers = useMemo(() => {
+        if (!paymentMemberSearch.trim()) return members.slice(0, 10);
+        const query = paymentMemberSearch.toLowerCase();
+        return members.filter(m => m.name.toLowerCase().includes(query)).slice(0, 10);
+    }, [members, paymentMemberSearch]);
 
     // Save member
     const handleSaveMember = async () => {
@@ -358,36 +469,57 @@ export default function SellingScreen() {
             setEntryDate(date);
         } else if (datePickerTarget === 'reportStart') {
             setReportStartDate(date);
-        } else {
+        } else if (datePickerTarget === 'reportEnd') {
             setReportEndDate(date);
+        } else if (datePickerTarget === 'recentStart') {
+            setRecentEntriesStartDate(date);
+        } else if (datePickerTarget === 'recentEnd') {
+            setRecentEntriesEndDate(date);
         }
     };
 
-    const openDatePicker = (target: 'entry' | 'reportStart' | 'reportEnd') => {
+    const openDatePicker = (target: 'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd') => {
         setDatePickerTarget(target);
         // Set temp calendar date based on target
         if (target === 'entry') {
             setTempCalendarDate(new Date(entryDate));
         } else if (target === 'reportStart') {
-            setTempCalendarDate(new Date(reportStartDate));
-        } else {
-            setTempCalendarDate(new Date(reportEndDate));
+            setTempCalendarDate(reportStartDate ? new Date(reportStartDate) : new Date());
+        } else if (target === 'reportEnd') {
+            setTempCalendarDate(reportEndDate ? new Date(reportEndDate) : new Date());
+        } else if (target === 'recentStart') {
+            setTempCalendarDate(recentEntriesStartDate ? new Date(recentEntriesStartDate) : new Date());
+        } else if (target === 'recentEnd') {
+            setTempCalendarDate(recentEntriesEndDate ? new Date(recentEntriesEndDate) : new Date());
         }
         setShowDatePicker(true);
     };
 
-    // Filter entries by date range for reports
+    // Filter entries by date range and member for reports
     const getFilteredEntries = () => {
         return recentEntries.filter(entry => {
             const entryDate = new Date(entry.date).toISOString().split('T')[0];
-            return entryDate >= reportStartDate && entryDate <= reportEndDate;
+            // If no date filters, show all; otherwise apply date range
+            const dateMatch = (!reportStartDate && !reportEndDate) ||
+                ((!reportStartDate || entryDate >= reportStartDate) && (!reportEndDate || entryDate <= reportEndDate));
+            const memberMatch = !reportMemberFilter || entry.member?._id === reportMemberFilter;
+            return dateMatch && memberMatch;
         });
+    };
+
+    // Get selected member name for display
+    const getSelectedReportMemberName = () => {
+        if (!reportMemberFilter) return 'All Members';
+        const member = members.find(m => m._id === reportMemberFilter);
+        return member?.name || 'All Members';
     };
 
     const getFilteredPayments = () => {
         return recentPayments.filter(payment => {
             const paymentDate = new Date(payment.date || payment.createdAt || '').toISOString().split('T')[0];
-            return paymentDate >= reportStartDate && paymentDate <= reportEndDate;
+            // If no date filters, show all; otherwise apply date range
+            return (!reportStartDate && !reportEndDate) ||
+                ((!reportStartDate || paymentDate >= reportStartDate) && (!reportEndDate || paymentDate <= reportEndDate));
         });
     };
 
@@ -475,7 +607,7 @@ export default function SellingScreen() {
             </head>
             <body>
               <h1>Milk Selling Report</h1>
-              <p class="period">Period: ${formatDateDDMMYYYY(reportStartDate)} to ${formatDateDDMMYYYY(reportEndDate)}</p>
+              <p class="period">Period: ${reportStartDate ? formatDateDDMMYYYY(reportStartDate) : 'All'} to ${reportEndDate ? formatDateDDMMYYYY(reportEndDate) : 'All'}</p>
               <p class="generated">Generated on: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
               <table>
                 <tr>
@@ -741,13 +873,104 @@ export default function SellingScreen() {
                 </View>
             </View>
 
+            {/* Recent Entries Section */}
             <View style={styles.entriesHeader}>
                 <Text style={styles.sectionTitle}>Recent Entries</Text>
                 <Text style={styles.lastCount}>({groupedEntries.length} days)</Text>
             </View>
 
+            {/* Recent Entries Filters */}
+            <View style={styles.recentFiltersCard}>
+                <View style={styles.recentFiltersRow}>
+                    {/* Date Filters */}
+                    <Pressable style={styles.recentDateInput} onPress={() => openDatePicker('recentStart')}>
+                        <CalendarIcon size={14} color={colors.mutedForeground} />
+                        <Text style={styles.recentDateText}>
+                            {recentEntriesStartDate ? formatDate(recentEntriesStartDate) : 'Start Date'}
+                        </Text>
+                    </Pressable>
+                    <Text style={styles.dateSeparator}>→</Text>
+                    <Pressable style={styles.recentDateInput} onPress={() => openDatePicker('recentEnd')}>
+                        <CalendarIcon size={14} color={colors.mutedForeground} />
+                        <Text style={styles.recentDateText}>
+                            {recentEntriesEndDate ? formatDate(recentEntriesEndDate) : 'End Date'}
+                        </Text>
+                    </Pressable>
+                </View>
+
+                <View style={styles.recentFiltersRow}>
+                    {/* Member Filter */}
+                    <View style={{ flex: 1, position: 'relative' }}>
+                        <Pressable
+                            style={styles.recentMemberFilter}
+                            onPress={() => setShowRecentMemberDropdown(!showRecentMemberDropdown)}
+                        >
+                            <User size={14} color={colors.mutedForeground} />
+                            <Text style={styles.recentFilterText} numberOfLines={1}>
+                                {getSelectedRecentMemberName()}
+                            </Text>
+                        </Pressable>
+
+                        {showRecentMemberDropdown && (
+                            <View style={styles.recentMemberDropdown}>
+                                <View style={styles.memberSearchContainer}>
+                                    <Search size={14} color={colors.mutedForeground} />
+                                    <TextInput
+                                        style={styles.memberSearchInput}
+                                        placeholder="Search member..."
+                                        value={recentMemberSearch}
+                                        onChangeText={setRecentMemberSearch}
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                                    <Pressable
+                                        style={[styles.memberDropdownItem, !recentEntriesMemberFilter && styles.memberDropdownItemActive]}
+                                        onPress={() => {
+                                            setRecentEntriesMemberFilter('');
+                                            setShowRecentMemberDropdown(false);
+                                            setRecentMemberSearch('');
+                                        }}
+                                    >
+                                        <Text style={[styles.memberDropdownText, !recentEntriesMemberFilter && { color: colors.primary }]}>All Members</Text>
+                                    </Pressable>
+                                    {filteredRecentMembers.map(member => (
+                                        <Pressable
+                                            key={member._id}
+                                            style={[styles.memberDropdownItem, recentEntriesMemberFilter === member._id && styles.memberDropdownItemActive]}
+                                            onPress={() => {
+                                                setRecentEntriesMemberFilter(member._id);
+                                                setShowRecentMemberDropdown(false);
+                                                setRecentMemberSearch('');
+                                            }}
+                                        >
+                                            <Text style={[styles.memberDropdownText, recentEntriesMemberFilter === member._id && { color: colors.primary }]}>{member.name}</Text>
+                                        </Pressable>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </View>
+
+                    {/* Clear Filters Button */}
+                    {(recentEntriesStartDate || recentEntriesEndDate || recentEntriesMemberFilter) && (
+                        <Pressable
+                            style={styles.clearFiltersBtn}
+                            onPress={() => {
+                                setRecentEntriesStartDate('');
+                                setRecentEntriesEndDate('');
+                                setRecentEntriesMemberFilter('');
+                            }}
+                        >
+                            <X size={14} color={colors.destructive} />
+                            <Text style={styles.clearFiltersBtnText}>Clear</Text>
+                        </Pressable>
+                    )}
+                </View>
+            </View>
+
             {groupedEntries.length === 0 ? (
-                <Text style={styles.emptyText}>No entries yet</Text>
+                <Text style={styles.emptyText}>No entries found</Text>
             ) : (
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
@@ -795,10 +1018,254 @@ export default function SellingScreen() {
         </View>
     );
 
+
+    // Calculate balances - previous balance carried forward, add current milk amount, subtract paid
+    const previousBalance = (memberSummary?.member?.currentBalance ?? selectedPaymentMember?.sellingPaymentBalance ?? 0);
+    const currentMilkAmount = Number.parseFloat(milkAmount) || 0;
+    const paidAmount = Number.parseFloat(paymentAmount) || 0;
+    const netPayable = previousBalance + currentMilkAmount;
+    const closingBalance = netPayable - paidAmount;
+
     const renderPaymentTab = () => (
-        <View style={styles.comingSoonContainer}>
-            <Text style={styles.comingSoonText}>Coming Soon</Text>
-            <Text style={styles.comingSoonSubtext}>Payment feature will be available soon</Text>
+        <View>
+            {/* Member Search */}
+            <View style={styles.inputGroup}>
+                <Text style={styles.label}>Select Member</Text>
+                <Pressable
+                    style={styles.searchInput}
+                    onPress={() => setShowPaymentMemberSuggestions(true)}
+                >
+                    <Search size={16} color={colors.mutedForeground} />
+                    <TextInput
+                        style={styles.searchTextInput}
+                        placeholder="Search member by name..."
+                        value={paymentMemberSearch}
+                        onChangeText={(text) => {
+                            setPaymentMemberSearch(text);
+                            setShowPaymentMemberSuggestions(true);
+                            if (selectedPaymentMember) {
+                                setSelectedPaymentMember(null);
+                                setMemberSummary(null);
+                            }
+                        }}
+                        onFocus={() => setShowPaymentMemberSuggestions(true)}
+                        onBlur={() => {
+                            // Delay to allow selection to complete before hiding
+                            setTimeout(() => setShowPaymentMemberSuggestions(false), 200);
+                        }}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                    {selectedPaymentMember && (
+                        <View style={styles.selectedBadge}>
+                            <Check size={12} color={colors.white} />
+                        </View>
+                    )}
+                    {selectedPaymentMember && (
+                        <Pressable onPress={clearPaymentForm}>
+                            <X size={16} color={colors.destructive} />
+                        </Pressable>
+                    )}
+                </Pressable>
+
+                {/* Member suggestions dropdown */}
+                {showPaymentMemberSuggestions && !selectedPaymentMember && (
+                    <View style={styles.suggestionDropdown}>
+                        <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                            {filteredPaymentMembers.length === 0 ? (
+                                <Text style={styles.emptyText}>No members found</Text>
+                            ) : (
+                                filteredPaymentMembers.map((member) => (
+                                    <Pressable
+                                        key={member._id}
+                                        style={styles.suggestionItem}
+                                        onPress={() => handleSelectPaymentMember(member)}
+                                    >
+                                        <View>
+                                            <Text style={styles.suggestionName}>{member.name}</Text>
+                                            <Text style={styles.suggestionCode}>{member.mobile}</Text>
+                                        </View>
+                                        <Text style={[styles.suggestionBalance, { color: (member.sellingPaymentBalance ?? 0) >= 0 ? colors.success : colors.destructive }]}>
+                                            {(member.sellingPaymentBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(member.sellingPaymentBalance ?? 0).toFixed(2)}
+                                        </Text>
+                                    </Pressable>
+                                ))
+                            )}
+                        </ScrollView>
+                    </View>
+                )}
+            </View>
+
+            {paymentLoading && (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+            )}
+
+            {/* Member Info */}
+            {selectedPaymentMember && !paymentLoading && (
+                <>
+                    <View style={styles.memberInfoRow}>
+                        <View>
+                            <Text style={styles.memberInfoName}>{selectedPaymentMember.name}</Text>
+                            <Text style={styles.memberInfoMobile}>{selectedPaymentMember.mobile}</Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={styles.balanceLabel}>Previous Balance</Text>
+                            <Text style={[styles.balanceValue, { color: previousBalance >= 0 ? colors.primary : colors.destructive }]}>
+                                ₹{previousBalance.toFixed(2)}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Summary Card */}
+                    <View style={styles.paymentSummaryCard}>
+                        <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Milk Amount (₹):</Text>
+                            <View style={styles.milkAmountWrapper}>
+                                <Text style={styles.milkAmountPrefix}>₹</Text>
+                                <TextInput
+                                    style={[styles.milkAmountInput, { minWidth: Math.max(40, (milkAmount.length || 1) * 12) }]}
+                                    placeholder="0"
+                                    value={milkAmount}
+                                    onChangeText={setMilkAmount}
+                                    onFocus={() => {
+                                        if (milkAmount === '0') setMilkAmount('');
+                                    }}
+                                    onBlur={() => {
+                                        if (!milkAmount.trim()) setMilkAmount('0');
+                                    }}
+                                    keyboardType="numeric"
+                                    placeholderTextColor={colors.mutedForeground}
+                                />
+                            </View>
+                        </View>
+                        <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
+                            <Text style={[styles.summaryLabel, { fontWeight: '700' }]}>Total Payable:</Text>
+                            <Text style={[styles.summaryValue, { fontWeight: '700', color: netPayable >= 0 ? colors.primary : colors.destructive }]}>
+                                ₹{netPayable.toFixed(2)}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Payment Amount Input */}
+                    <Text style={styles.sectionLabel}>Paid Amount</Text>
+                    <TextInput
+                        style={styles.paidInput}
+                        placeholder="Enter Paid Amount"
+                        value={paymentAmount}
+                        onChangeText={setPaymentAmount}
+                        keyboardType="numeric"
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+
+                    {/* Closing Balance - positive means customer owes, negative means overpaid */}
+                    <View style={styles.closingRow}>
+                        <Text style={styles.closingLabel}>Closing Balance:</Text>
+                        <Text style={[styles.closingValue, { color: closingBalance > 0 ? colors.success : closingBalance < 0 ? colors.destructive : colors.mutedForeground }]}>
+                            {closingBalance < 0 ? '-' : ''}₹{Math.abs(closingBalance).toFixed(2)}
+                        </Text>
+                    </View>
+
+                    {/* Save & Clear buttons */}
+                    <View style={styles.paymentButtonRow}>
+                        <Pressable style={styles.saveSettlementBtn} onPress={handleProcessPayment} disabled={savingPayment}>
+                            <Text style={styles.saveSettlementText}>
+                                {savingPayment ? 'Saving...' : 'SAVE PAYMENT'}
+                            </Text>
+                        </Pressable>
+                    </View>
+                    <Pressable style={styles.clearPaymentBtn} onPress={clearPaymentForm}>
+                        <Text style={styles.clearPaymentText}>Clear</Text>
+                    </Pressable>
+                </>
+            )}
+
+            {/* Payment History */}
+            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
+                Payment History {selectedPaymentMember ? `(${selectedPaymentMember.name})` : ''}
+            </Text>
+            {(() => {
+                // Filter payments by member if one is selected
+                const filteredPayments = selectedPaymentMember
+                    ? recentPayments.filter(p => p.member?._id === selectedPaymentMember._id)
+                    : recentPayments;
+
+                if (filteredPayments.length === 0) {
+                    return (
+                        <Text style={styles.emptyText}>
+                            {selectedPaymentMember ? `No payments for ${selectedPaymentMember.name}` : 'No payments yet'}
+                        </Text>
+                    );
+                }
+
+                // Card format when member is selected
+                if (selectedPaymentMember) {
+                    return (
+                        <View style={{ gap: 8 }}>
+                            {filteredPayments.slice(0, 10).map((p) => (
+                                <View key={p._id} style={styles.historyCard}>
+                                    <View style={styles.historyCardHeader}>
+                                        <Text style={[styles.historyName, { color: colors.primary, fontWeight: '700' }]}>
+                                            {p.member?.name || '-'}
+                                        </Text>
+                                        <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
+                                    </View>
+                                    <View style={styles.historyRow}>
+                                        <Text style={styles.historyLabel}>Milk Amount:</Text>
+                                        <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(2)}</Text>
+                                    </View>
+                                    <View style={styles.historyRow}>
+                                        <Text style={styles.historyLabel}>Amount Paid:</Text>
+                                        <Text style={[styles.historyValue, { color: colors.success }]}>₹{(p.amount || 0).toFixed(2)}</Text>
+                                    </View>
+                                    {p.closingBalance !== undefined && (
+                                        <View style={[styles.historyRow, { backgroundColor: colors.muted, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 6, marginBottom: -6, borderBottomLeftRadius: 6, borderBottomRightRadius: 6, marginTop: 6 }]}>
+                                            <Text style={[styles.historyLabel, { fontWeight: '700' }]}>Closing Balance:</Text>
+                                            <Text style={[
+                                                styles.historyValue,
+                                                {
+                                                    fontWeight: '700',
+                                                    color: (p.closingBalance ?? 0) > 0
+                                                        ? colors.success
+                                                        : (p.closingBalance ?? 0) < 0
+                                                            ? colors.destructive
+                                                            : colors.mutedForeground
+                                                }
+                                            ]}>
+                                                {(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(2)}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            ))}
+                        </View>
+                    );
+                }
+
+                // Table format when no member is selected
+                return (
+                    <View style={styles.paymentTableContainer}>
+                        {/* Table Header */}
+                        <View style={styles.paymentTableHeader}>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 1.5 }]}>Name</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Milk</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Paid</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Balance</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Date</Text>
+                        </View>
+                        {/* Table Rows */}
+                        {filteredPayments.slice(0, 15).map((p, index) => (
+                            <View key={p._id} style={[styles.paymentTableRow, index % 2 === 0 && styles.paymentTableRowAlt]}>
+                                <Text style={[styles.paymentTableCell, { flex: 1.5 }]} numberOfLines={1}>{p.member?.name || '-'}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', color: colors.success }]}>₹{(p.amount || 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', color: (p.closingBalance ?? 0) > 0 ? colors.success : (p.closingBalance ?? 0) < 0 ? colors.destructive : colors.mutedForeground }]}>{(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', fontSize: 9 }]}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
+                            </View>
+                        ))}
+                    </View>
+                );
+            })()}
         </View>
     );
 
@@ -823,21 +1290,7 @@ export default function SellingScreen() {
             <View>
                 <Text style={styles.sectionTitle}>Selling Report</Text>
 
-                <View style={styles.filterCard}>
-                    <Text style={styles.filterTitle}>Date Range Filter</Text>
-                    <View style={styles.dateFilterRow}>
-                        <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportStart')}>
-                            <CalendarIcon size={14} color={colors.primary} />
-                            <Text style={styles.dateFilterText}>{formatDate(reportStartDate)}</Text>
-                        </Pressable>
-                        <Text style={styles.dateFilterSeparator}>to</Text>
-                        <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportEnd')}>
-                            <CalendarIcon size={14} color={colors.primary} />
-                            <Text style={styles.dateFilterText}>{formatDate(reportEndDate)}</Text>
-                        </Pressable>
-                    </View>
-                </View>
-
+                {/* Summary Cards - At Top */}
                 <View style={styles.reportSummary}>
                     <View style={styles.reportCard}>
                         <Text style={styles.reportCardLabel}>Entries</Text>
@@ -853,27 +1306,7 @@ export default function SellingScreen() {
                     </View>
                 </View>
 
-                {/* Member-wise Summary */}
-                {memberSummaryList.length > 0 && (
-                    <View style={styles.memberSummarySection}>
-                        <Text style={styles.memberSummaryTitle}>Member-wise Summary</Text>
-                        <View style={styles.table}>
-                            <View style={styles.tableHeader}>
-                                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Member</Text>
-                                <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Qty (L)</Text>
-                                <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Amount</Text>
-                            </View>
-                            {memberSummaryList.map((item, index) => (
-                                <View key={index} style={styles.tableRow}>
-                                    <Text style={[styles.tableCell, { flex: 1.5 }]} numberOfLines={1}>{item.name}</Text>
-                                    <Text style={[styles.tableCell, { flex: 1 }]}>{item.qty.toFixed(1)}</Text>
-                                    <Text style={[styles.tableCell, { flex: 1, color: colors.primary, fontWeight: '600' }]}>₹{item.amt.toFixed(0)}</Text>
-                                </View>
-                            ))}
-                        </View>
-                    </View>
-                )}
-
+                {/* Export Buttons */}
                 <View style={styles.exportBtnsRow}>
                     <Pressable style={styles.pdfBtn} onPress={handlePDF}>
                         <FileText size={16} color={colors.white} />
@@ -884,6 +1317,98 @@ export default function SellingScreen() {
                         <Text style={styles.csvBtnText}>Print</Text>
                     </Pressable>
                 </View>
+
+                {/* Filters */}
+                <View style={styles.filterCard}>
+                    <Text style={styles.filterTitle}>Filters</Text>
+                    <View style={styles.dateFilterRow}>
+                        <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportStart')}>
+                            <CalendarIcon size={14} color={colors.primary} />
+                            <Text style={[styles.dateFilterText, !reportStartDate && { color: colors.mutedForeground }]}>
+                                {reportStartDate ? formatDate(reportStartDate) : 'Start Date'}
+                            </Text>
+                        </Pressable>
+                        <Text style={styles.dateFilterSeparator}>to</Text>
+                        <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportEnd')}>
+                            <CalendarIcon size={14} color={colors.primary} />
+                            <Text style={[styles.dateFilterText, !reportEndDate && { color: colors.mutedForeground }]}>
+                                {reportEndDate ? formatDate(reportEndDate) : 'End Date'}
+                            </Text>
+                        </Pressable>
+                    </View>
+                    {/* Member Filter */}
+                    <View style={styles.memberFilterRow}>
+                        <Text style={styles.memberFilterLabel}>Member:</Text>
+                        <Pressable
+                            style={styles.memberFilterBtn}
+                            onPress={() => setShowReportMemberDropdown(!showReportMemberDropdown)}
+                        >
+                            <User size={14} color={colors.primary} />
+                            <Text style={styles.memberFilterText} numberOfLines={1}>{getSelectedReportMemberName()}</Text>
+                            <X
+                                size={14}
+                                color={reportMemberFilter ? colors.destructive : colors.muted}
+                                onPress={(e) => {
+                                    e.stopPropagation?.();
+                                    setReportMemberFilter('');
+                                    setShowReportMemberDropdown(false);
+                                }}
+                            />
+                        </Pressable>
+                    </View>
+                    {showReportMemberDropdown && (
+                        <View style={styles.memberFilterDropdown}>
+                            <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                                <Pressable
+                                    style={[styles.memberFilterItem, !reportMemberFilter && styles.memberFilterItemActive]}
+                                    onPress={() => {
+                                        setReportMemberFilter('');
+                                        setShowReportMemberDropdown(false);
+                                    }}
+                                >
+                                    <Text style={styles.memberFilterItemText}>All Members</Text>
+                                    {!reportMemberFilter && <Check size={14} color={colors.primary} />}
+                                </Pressable>
+                                {members.map(member => (
+                                    <Pressable
+                                        key={member._id}
+                                        style={[styles.memberFilterItem, reportMemberFilter === member._id && styles.memberFilterItemActive]}
+                                        onPress={() => {
+                                            setReportMemberFilter(member._id);
+                                            setShowReportMemberDropdown(false);
+                                        }}
+                                    >
+                                        <Text style={styles.memberFilterItemText}>{member.name}</Text>
+                                        {reportMemberFilter === member._id && <Check size={14} color={colors.primary} />}
+                                    </Pressable>
+                                ))}
+                            </ScrollView>
+                        </View>
+                    )}
+                </View>
+
+                {/* Member-wise Summary */}
+                {filteredEntries.length > 0 && (
+                    <View style={styles.memberSummarySection}>
+                        <Text style={styles.memberSummaryTitle}>Member-wise Summary</Text>
+                        <View style={styles.table}>
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Member</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Qty (L)</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Amount</Text>
+                            </View>
+                            {filteredEntries.map((entry, index) => (
+                                <View key={index} style={styles.tableRow}>
+                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontSize: 10 }]}>{formatDateDDMMYYYY(entry.date)}</Text>
+                                    <Text style={[styles.tableCell, { flex: 1.5 }]} numberOfLines={1}>{entry.member?.name || '-'}</Text>
+                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{((entry.morningQuantity || 0) + (entry.eveningQuantity || 0)).toFixed(1)}</Text>
+                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', color: colors.primary, fontWeight: '600' }]}>₹{entry.amount.toFixed(0)}</Text>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
             </View>
         );
     };
@@ -2028,5 +2553,425 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
         color: colors.white,
+    },
+    // Member Filter Styles for Reports
+    memberFilterRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginTop: 12,
+    },
+    memberFilterLabel: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: colors.mutedForeground,
+    },
+    memberFilterBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: isDark ? colors.muted : colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+    },
+    memberFilterText: {
+        flex: 1,
+        fontSize: 13,
+        color: colors.foreground,
+    },
+    memberFilterDropdown: {
+        marginTop: 8,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 10,
+        overflow: 'hidden',
+    },
+    memberFilterItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    memberFilterItemActive: {
+        backgroundColor: colors.primary + '15',
+    },
+    memberFilterItemText: {
+        fontSize: 14,
+        color: colors.foreground,
+    },
+    // Recent Entries Filters
+    recentFiltersCard: {
+        backgroundColor: colors.card,
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    recentFiltersRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 8,
+    },
+    recentDateInput: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: isDark ? colors.muted : colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+    },
+    recentDateText: {
+        fontSize: 12,
+        color: colors.foreground,
+    },
+    dateSeparator: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+    },
+    recentMemberFilter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: isDark ? colors.muted : colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+    },
+    recentFilterText: {
+        flex: 1,
+        fontSize: 12,
+        color: colors.foreground,
+    },
+    recentMemberDropdown: {
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        right: 0,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        marginTop: 4,
+        zIndex: 100,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+    },
+    memberSearchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    memberSearchInput: {
+        flex: 1,
+        fontSize: 13,
+        color: colors.foreground,
+        padding: 0,
+    },
+    memberDropdownItem: {
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    memberDropdownItemActive: {
+        backgroundColor: colors.primary + '15',
+    },
+    memberDropdownText: {
+        fontSize: 13,
+        color: colors.foreground,
+    },
+    clearFiltersBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        backgroundColor: colors.destructive + '15',
+        borderRadius: 6,
+    },
+    clearFiltersBtnText: {
+        fontSize: 11,
+        fontWeight: '500',
+        color: colors.destructive,
+    },
+    // Payment tab styles
+    suggestionDropdown: {
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        right: 0,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        marginTop: 4,
+        zIndex: 100,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+    },
+    suggestionItem: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    suggestionName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    suggestionCode: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+    },
+    suggestionBalance: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    memberInfoRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: colors.card,
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    memberInfoName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    memberInfoMobile: {
+        fontSize: 13,
+        color: colors.mutedForeground,
+    },
+    balanceLabel: {
+        fontSize: 11,
+        color: colors.mutedForeground,
+    },
+    balanceValue: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    paymentSummaryCard: {
+        backgroundColor: colors.card,
+        borderRadius: 8,
+        padding: 14,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    sectionLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.foreground,
+        marginBottom: 8,
+    },
+    paidInput: {
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 16,
+        color: colors.foreground,
+        marginBottom: 12,
+    },
+    paymentMethodRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+    },
+    paymentMethodBtn: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 6,
+        backgroundColor: colors.muted,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    paymentMethodBtnActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    paymentMethodText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    paymentMethodTextActive: {
+        color: colors.white,
+    },
+    closingRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 12,
+    },
+    closingLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    closingValue: {
+        fontSize: 20,
+        fontWeight: '700',
+    },
+    milkAmountWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: isDark ? colors.muted : colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 6,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+    milkAmountPrefix: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    milkAmountInput: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.foreground,
+        paddingHorizontal: 4,
+        paddingVertical: 4,
+        textAlign: 'left',
+    },
+    paymentButtonRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 8,
+    },
+    saveSettlementBtn: {
+        flex: 1,
+        backgroundColor: colors.primary,
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    saveSettlementText: {
+        color: colors.white,
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    clearPaymentBtn: {
+        paddingVertical: 10,
+        alignItems: 'center',
+    },
+    clearPaymentText: {
+        color: colors.mutedForeground,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    historyCard: {
+        backgroundColor: colors.card,
+        borderRadius: 8,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    historyCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+        paddingBottom: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    historyName: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    historyDate: {
+        fontSize: 11,
+        color: colors.mutedForeground,
+    },
+    historyRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 2,
+    },
+    historyLabel: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+    },
+    historyValue: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    // Payment table styles
+    paymentTableContainer: {
+        backgroundColor: colors.card,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.border,
+        overflow: 'hidden',
+    },
+    paymentTableHeader: {
+        flexDirection: 'row',
+        backgroundColor: colors.primary,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+    },
+    paymentTableHeaderText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: colors.white,
+    },
+    paymentTableRow: {
+        flexDirection: 'row',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    paymentTableRowAlt: {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+    },
+    paymentTableCell: {
+        fontSize: 12,
+        color: colors.foreground,
     },
 });

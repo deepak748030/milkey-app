@@ -37,6 +37,7 @@ export interface Member {
     totalLiters: number;
     totalAmount: number;
     pendingAmount: number;
+    sellingPaymentBalance: number;
     isActive: boolean;
 }
 
@@ -1006,7 +1007,66 @@ export const sellingEntriesApi = {
     },
 };
 
-// Health check
+// Member Payment Summary interface
+export interface MemberPaymentSummary {
+    member: { id: string; name: string; mobile: string; currentBalance: number };
+    selling: { totalLiters: number; totalAmount: number; unpaidAmount?: number };
+    netPayable: number;
+    closingBalance: number;
+}
+
+// Member Payment interface
+export interface MemberPayment {
+    _id: string;
+    member: { _id: string; name: string; mobile: string };
+    amount: number;
+    date: string;
+    paymentMethod: string;
+    reference: string;
+    totalSellAmount: number;
+    netPayable: number;
+    closingBalance?: number;
+    previousBalance?: number;
+    createdAt?: string;
+}
+
+// Member Payments API (for Selling tab)
+export const memberPaymentsApi = {
+    getAll: async (params?: { memberId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.memberId) queryParams.append('memberId', params.memberId);
+        if (params?.startDate) queryParams.append('startDate', params.startDate);
+        if (params?.endDate) queryParams.append('endDate', params.endDate);
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.page) queryParams.append('page', params.page.toString());
+        const query = queryParams.toString();
+
+        return apiRequest<{ data: MemberPayment[] }>(`/member-payments${query ? `?${query}` : ''}`);
+    },
+
+    getMemberSummary: async (memberId: string) => {
+        return apiRequest<MemberPaymentSummary>(`/member-payments/member-summary/${memberId}`);
+    },
+
+    create: async (data: {
+        memberId: string;
+        amount: number;
+        milkAmount?: number;
+        paymentMethod?: string;
+        reference?: string;
+        notes?: string;
+    }) => {
+        return apiRequest<MemberPayment>('/member-payments', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    getById: async (id: string) => {
+        return apiRequest<MemberPayment>(`/member-payments/${id}`);
+    },
+};
+
 export const healthCheck = async (): Promise<boolean> => {
     try {
         const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`);
