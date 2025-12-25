@@ -69,7 +69,18 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
             });
         }
 
-        // Return current balance from member's sellingPaymentBalance
+        // Calculate unpaid selling amount (not yet settled)
+        const unpaidEntries = await SellingEntry.find({
+            member: member._id,
+            owner: req.userId,
+            isPaid: false
+        }).select('amount').lean();
+
+        const unpaidSellAmount = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+        const currentBalance = Number(member.sellingPaymentBalance || 0);
+        const netPayable = currentBalance + unpaidSellAmount;
+
         res.json({
             success: true,
             response: {
@@ -77,14 +88,15 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
                     id: member._id,
                     name: member.name,
                     mobile: member.mobile,
-                    currentBalance: member.sellingPaymentBalance || 0
+                    currentBalance
                 },
                 selling: {
                     totalLiters: member.totalLiters || 0,
-                    totalAmount: member.totalAmount || 0
+                    totalAmount: member.totalAmount || 0,
+                    unpaidAmount: unpaidSellAmount
                 },
-                netPayable: member.sellingPaymentBalance || 0,
-                closingBalance: member.sellingPaymentBalance || 0
+                netPayable,
+                closingBalance: netPayable
             }
         });
     } catch (error) {
@@ -99,7 +111,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
 // POST /api/member-payments - Create payment (settle member dues)
 router.post('/', auth, async (req, res) => {
     try {
-        const { memberId, amount, paymentMethod, reference, notes } = req.body;
+        const { memberId, amount, milkAmount, paymentMethod, reference, notes } = req.body;
 
         if (!memberId || !amount) {
             return res.status(400).json({
@@ -127,15 +139,22 @@ router.post('/', auth, async (req, res) => {
             isPaid: false
         }).sort({ date: 1 });
 
-        const totalSellAmount = unpaidEntries.reduce((sum, e) => sum + e.amount, 0);
+        const computedUnpaidTotal = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-        // Get previous balance from member's sellingPaymentBalance
-        const previousBalance = member.sellingPaymentBalance || 0;
+        // Previous balance carried forward
+        const previousBalance = Number(member.sellingPaymentBalance || 0);
 
-        const paymentAmount = parseFloat(amount);
+        const paymentAmount = Number.parseFloat(amount);
 
-        // Closing balance = previous balance - paid amount
-        const closingBalance = previousBalance - paymentAmount;
+        // Use manual milk amount if provided, otherwise use computed unpaid total
+        let totalSellAmount = computedUnpaidTotal;
+        if (milkAmount !== undefined && milkAmount !== null) {
+            const manual = Number.parseFloat(milkAmount);
+            if (!Number.isNaN(manual)) totalSellAmount = manual;
+        }
+
+        const netPayable = previousBalance + totalSellAmount;
+        const closingBalance = netPayable - paymentAmount;
 
         // Create payment record
         const payment = await MemberPayment.create({
@@ -147,7 +166,7 @@ router.post('/', auth, async (req, res) => {
             notes: notes?.trim() || '',
             settledEntries: unpaidEntries.map(e => e._id),
             totalSellAmount,
-            netPayable: previousBalance,
+            netPayable,
             previousBalance,
             closingBalance
         });
