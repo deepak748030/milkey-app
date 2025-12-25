@@ -39,13 +39,21 @@ router.get('/', auth, async (req, res) => {
             .limit(parseInt(limit))
             .lean();
 
+        // Add entryCount for each entry (how many times data pushed on same date for same member)
+        const entriesWithCount = entries.map(entry => {
+            return {
+                ...entry,
+                entryCount: entry.entryCount || 1
+            };
+        });
+
         const total = await SellingEntry.countDocuments(query);
 
         res.json({
             success: true,
             response: {
-                data: entries,
-                count: entries.length,
+                data: entriesWithCount,
+                count: entriesWithCount.length,
                 total,
                 page: parseInt(page),
                 pages: Math.ceil(total / parseInt(limit))
@@ -152,7 +160,8 @@ router.post('/', auth, async (req, res) => {
                 morningQuantity: incomingMorning,
                 eveningQuantity: incomingEvening,
                 rate: entryRate,
-                notes: notes?.trim() || ''
+                notes: notes?.trim() || '',
+                entryCount: 1
             });
 
             entry = created;
@@ -165,6 +174,7 @@ router.post('/', auth, async (req, res) => {
             entry.morningQuantity = Number(entry.morningQuantity || 0) + incomingMorning;
             entry.eveningQuantity = Number(entry.eveningQuantity || 0) + incomingEvening;
             entry.rate = entryRate;
+            entry.entryCount = (entry.entryCount || 1) + 1;
             if (notes !== undefined) entry.notes = notes?.trim() || '';
 
             await entry.save();

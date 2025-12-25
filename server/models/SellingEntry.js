@@ -40,6 +40,11 @@ const sellingEntrySchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    entryCount: {
+        type: Number,
+        default: 1,
+        min: [1, 'Entry count cannot be less than 1']
+    },
     notes: {
         type: String,
         trim: true,
