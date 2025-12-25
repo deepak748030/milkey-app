@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, Modal, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, Modal, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { X, FileText, Calendar as CalendarIcon, Printer, Plus, Edit2, Trash2, Code, UserPlus, Phone, MapPin, Search, User, Milk } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
@@ -9,6 +9,7 @@ import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
+import { useDebounce } from '@/hooks/useDebounce';
 
 interface CustomRange {
     id: string;
@@ -36,8 +37,9 @@ export default function PurchaseScreen() {
     const [entryRate, setEntryRate] = useState('');
     const [showEntryDateModal, setShowEntryDateModal] = useState(false);
 
-    const [historyFromDate, setHistoryFromDate] = useState<Date | null>(new Date());
-    const [historyToDate, setHistoryToDate] = useState<Date | null>(new Date());
+    // Initialize with null to show all data by default
+    const [historyFromDate, setHistoryFromDate] = useState<Date | null>(null);
+    const [historyToDate, setHistoryToDate] = useState<Date | null>(null);
     const [historyCollections, setHistoryCollections] = useState<MilkCollection[]>([]);
     const [historyTotals, setHistoryTotals] = useState({ quantity: 0, amount: 0 });
     const [selectedRanges, setSelectedRanges] = useState<string[]>([]);
@@ -45,6 +47,7 @@ export default function PurchaseScreen() {
     const [historyDateType, setHistoryDateType] = useState<'from' | 'to'>('from');
     const [tempCalendarDate, setTempCalendarDate] = useState<Date | null>(null);
     const [historyFilterCode, setHistoryFilterCode] = useState('');
+    const debouncedFilterCode = useDebounce(historyFilterCode, 500);
 
     const [customRanges, setCustomRanges] = useState<CustomRange[]>([
         { id: '1-10', label: '1-10', startDay: 1, endDay: 10 },
@@ -77,12 +80,10 @@ export default function PurchaseScreen() {
 
     useEffect(() => { fetchData(); }, []);
 
-    // Auto-fetch history when dates change
+    // Auto-fetch history on mount and when dates or filter code changes
     useEffect(() => {
-        if (historyFromDate && historyToDate) {
-            handleFetchHistory();
-        }
-    }, [historyFromDate, historyToDate]);
+        handleFetchHistory();
+    }, [historyFromDate, historyToDate, debouncedFilterCode]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -142,7 +143,7 @@ export default function PurchaseScreen() {
     );
 
     const totalAmount = (parseFloat(entryQty || '0') * parseFloat(entryRate || '0')).toFixed(2);
-    const formatDisplayDate = (date: Date | null) => { if (!date) return 'Select Date'; return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`; };
+    const formatDisplayDate = (date: Date | null) => { if (!date) return 'All'; return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`; };
     const formatApiDate = (date: Date | null) => { if (!date) return ''; return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; };
 
     const handleFarmerCodeChange = (code: string) => {
@@ -179,7 +180,25 @@ export default function PurchaseScreen() {
                 fat: entryFat ? parseFloat(entryFat) : undefined,
                 snf: entrySnf ? parseFloat(entrySnf) : undefined
             });
-            if (res.success) { showAlert('Success', 'Milk collection recorded'); handleClearEntry(); } else { showAlert('Error', res.message || 'Failed'); }
+            if (res.success) {
+                showAlert('Success', 'Milk collection recorded');
+                handleClearEntry();
+                // Clear all filters and refresh history to show all data including new entry
+                setSelectedRanges([]);
+                setHistoryFilterCode('');
+                setHistoryFromDate(null);
+                setHistoryToDate(null);
+                // Force refresh history after a short delay to ensure state is updated
+                setTimeout(async () => {
+                    try {
+                        const historyRes = await milkCollectionsApi.getAll({ limit: 100 });
+                        if (historyRes.success) {
+                            setHistoryCollections(historyRes.response?.data || []);
+                            setHistoryTotals(historyRes.response?.totals || { quantity: 0, amount: 0 });
+                        }
+                    } catch (e) { console.error('Failed to refresh history:', e); }
+                }, 300);
+            } else { showAlert('Error', res.message || 'Failed'); }
         } catch (error) { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
     };
@@ -200,7 +219,7 @@ export default function PurchaseScreen() {
             setSelectedRanges([rangeId]);
         }
     };
-    const handleClearRanges = () => { setSelectedRanges([]); setHistoryFromDate(new Date()); setHistoryToDate(new Date()); setHistoryFilterCode(''); };
+    const handleClearRanges = () => { setSelectedRanges([]); setHistoryFromDate(null); setHistoryToDate(null); setHistoryFilterCode(''); };
 
     const handleCreateRange = () => {
         const start = parseInt(newRangeStart), end = parseInt(newRangeEnd);
@@ -224,7 +243,7 @@ export default function PurchaseScreen() {
                 startDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(minDay).padStart(2, '0')}`;
                 endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(Math.min(maxDay, daysInMonth)).padStart(2, '0')}`;
             }
-            const res = await milkCollectionsApi.getAll({ startDate: startDate || undefined, endDate: endDate || undefined, farmerCode: historyFilterCode.trim().toUpperCase() || undefined, limit: 100 });
+            const res = await milkCollectionsApi.getAll({ startDate: startDate || undefined, endDate: endDate || undefined, farmerCode: debouncedFilterCode.trim().toUpperCase() || undefined, limit: 100 });
             if (res.success) { setHistoryCollections(res.response?.data || []); setHistoryTotals(res.response?.totals || { quantity: 0, amount: 0 }); }
         } catch (error) { showAlert('Error', 'Failed to fetch history'); }
         setLoading(false);
@@ -379,232 +398,226 @@ export default function PurchaseScreen() {
             <Modal visible={showHistoryDateModal} animationType="slide" transparent onRequestClose={() => setShowHistoryDateModal(false)}><View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>{historyDateType === 'from' ? 'From Date' : 'To Date'}</Text><Pressable onPress={() => setShowHistoryDateModal(false)}><X size={20} color={colors.foreground} /></Pressable></View><View style={styles.calendarBody}><Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} /></View><View style={styles.modalFooter}><Pressable style={styles.cancelModalBtn} onPress={() => setShowHistoryDateModal(false)}><Text style={styles.cancelModalBtnText}>Cancel</Text></Pressable><Pressable style={styles.confirmModalBtn} onPress={() => { if (tempCalendarDate) { if (historyDateType === 'from') setHistoryFromDate(tempCalendarDate); else setHistoryToDate(tempCalendarDate); } setShowHistoryDateModal(false); }}><Text style={styles.confirmModalBtnText}>Confirm</Text></Pressable></View></View></View></Modal>
             <Modal visible={showCreateRangeModal} animationType="slide" transparent onRequestClose={() => setShowCreateRangeModal(false)}><View style={styles.modalOverlay}><View style={styles.modalContent}><View style={styles.modalHeader}><Text style={styles.modalTitle}>Create Custom Range</Text><Pressable onPress={() => setShowCreateRangeModal(false)}><X size={20} color={colors.foreground} /></Pressable></View><View style={styles.rangeModalBody}><View style={styles.rangeInputRow}><View style={styles.rangeInputField}><Text style={styles.rangeInputLabel}>Start Day</Text><TextInput style={styles.rangeInput} value={newRangeStart} onChangeText={setNewRangeStart} keyboardType="number-pad" placeholder="1" placeholderTextColor={colors.mutedForeground} maxLength={2} /></View><Text style={styles.rangeDash}>—</Text><View style={styles.rangeInputField}><Text style={styles.rangeInputLabel}>End Day</Text><TextInput style={styles.rangeInput} value={newRangeEnd} onChangeText={setNewRangeEnd} keyboardType="number-pad" placeholder="10" placeholderTextColor={colors.mutedForeground} maxLength={2} /></View></View></View><View style={styles.modalFooter}><Pressable style={styles.cancelModalBtn} onPress={() => setShowCreateRangeModal(false)}><Text style={styles.cancelModalBtnText}>Cancel</Text></Pressable><Pressable style={styles.confirmModalBtn} onPress={handleCreateRange}><Text style={styles.confirmModalBtnText}>Create</Text></Pressable></View></View></View></Modal>
             {/* Improved Code Modal */}
-            <Modal visible={showCodeModal} animationType="slide" transparent={false} onRequestClose={() => setShowCodeModal(false)}>
-                <KeyboardAvoidingView
-                    style={styles.codeModalFullScreen}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                >
-                    {/* Header */}
-                    <View style={styles.codeModalHeader}>
-                        <View style={styles.codeModalHeaderLeft}>
-                            <View style={styles.codeModalIcon}>
-                                <Milk size={20} color="#fff" />
-                            </View>
-                            <Text style={styles.codeModalTitle}>Purchase Farmers</Text>
-                        </View>
-                        <Pressable style={styles.codeModalCloseBtn} onPress={() => { setShowCodeModal(false); clearFarmerForm(); setFarmerSearchQuery(''); }}>
-                            <X size={20} color={colors.foreground} />
-                        </Pressable>
-                    </View>
-
-                    {/* Tabs */}
-                    <View style={styles.codeModalTabs}>
-                        <Pressable
-                            style={[styles.codeModalTab, codeModalTab === 'list' && styles.codeModalTabActive]}
-                            onPress={() => { setCodeModalTab('list'); clearFarmerForm(); }}
-                        >
-                            <User size={16} color={codeModalTab === 'list' ? '#fff' : colors.mutedForeground} />
-                            <Text style={[styles.codeModalTabText, codeModalTab === 'list' && styles.codeModalTabTextActive]}>
-                                Select ({purchaseFarmers.length})
-                            </Text>
-                        </Pressable>
-                        <Pressable
-                            style={[styles.codeModalTab, codeModalTab === 'create' && styles.codeModalTabActive]}
-                            onPress={() => setCodeModalTab('create')}
-                        >
-                            <UserPlus size={16} color={codeModalTab === 'create' ? '#fff' : colors.mutedForeground} />
-                            <Text style={[styles.codeModalTabText, codeModalTab === 'create' && styles.codeModalTabTextActive]}>
-                                {editingFarmer ? 'Edit' : 'Add New'}
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    <ScrollView
-                        style={styles.codeModalBody}
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
-                        contentContainerStyle={styles.codeModalBodyContent}
-                    >
-                        {codeModalTab === 'list' ? (
-                            <View style={styles.farmerListContainer}>
-                                {/* Search Bar */}
-                                <View style={styles.farmerSearchContainer}>
-                                    <Search size={18} color={colors.mutedForeground} />
-                                    <TextInput
-                                        style={styles.farmerSearchInput}
-                                        value={farmerSearchQuery}
-                                        onChangeText={setFarmerSearchQuery}
-                                        placeholder="Search by code, name or mobile..."
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                    {farmerSearchQuery.length > 0 && (
-                                        <Pressable onPress={() => setFarmerSearchQuery('')}>
-                                            <X size={16} color={colors.mutedForeground} />
-                                        </Pressable>
-                                    )}
+            <Modal visible={showCodeModal} animationType="slide" transparent onRequestClose={() => setShowCodeModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.codeModalContent}>
+                        {/* Header */}
+                        <View style={styles.codeModalHeader}>
+                            <View style={styles.codeModalHeaderLeft}>
+                                <View style={styles.codeModalIcon}>
+                                    <Milk size={20} color="#fff" />
                                 </View>
+                                <Text style={styles.codeModalTitle}>Purchase Farmers</Text>
+                            </View>
+                            <Pressable style={styles.codeModalCloseBtn} onPress={() => { setShowCodeModal(false); clearFarmerForm(); setFarmerSearchQuery(''); }}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
 
-                                {filteredFarmers.length === 0 ? (
-                                    <View style={styles.emptyFarmersContainer}>
-                                        <View style={styles.emptyFarmersIcon}>
-                                            <User size={32} color={colors.mutedForeground} />
-                                        </View>
-                                        <Text style={styles.emptyFarmersTitle}>
-                                            {farmerSearchQuery ? 'No farmers found' : 'No farmers yet'}
-                                        </Text>
-                                        <Text style={styles.emptyFarmersSubtitle}>
-                                            {farmerSearchQuery ? 'Try a different search term' : 'Add your first farmer to get started'}
-                                        </Text>
-                                        {!farmerSearchQuery && (
-                                            <Pressable style={styles.emptyFarmersBtn} onPress={() => setCodeModalTab('create')}>
-                                                <Plus size={16} color="#fff" />
-                                                <Text style={styles.emptyFarmersBtnText}>Add Farmer</Text>
+                        {/* Tabs */}
+                        <View style={styles.codeModalTabs}>
+                            <Pressable
+                                style={[styles.codeModalTab, codeModalTab === 'list' && styles.codeModalTabActive]}
+                                onPress={() => { setCodeModalTab('list'); clearFarmerForm(); }}
+                            >
+                                <User size={16} color={codeModalTab === 'list' ? '#fff' : colors.mutedForeground} />
+                                <Text style={[styles.codeModalTabText, codeModalTab === 'list' && styles.codeModalTabTextActive]}>
+                                    Select ({purchaseFarmers.length})
+                                </Text>
+                            </Pressable>
+                            <Pressable
+                                style={[styles.codeModalTab, codeModalTab === 'create' && styles.codeModalTabActive]}
+                                onPress={() => setCodeModalTab('create')}
+                            >
+                                <UserPlus size={16} color={codeModalTab === 'create' ? '#fff' : colors.mutedForeground} />
+                                <Text style={[styles.codeModalTabText, codeModalTab === 'create' && styles.codeModalTabTextActive]}>
+                                    {editingFarmer ? 'Edit' : 'Add New'}
+                                </Text>
+                            </Pressable>
+                        </View>
+
+                        <ScrollView style={styles.codeModalBody} showsVerticalScrollIndicator={false}>
+                            {codeModalTab === 'list' ? (
+                                <View style={styles.farmerListContainer}>
+                                    {/* Search Bar */}
+                                    <View style={styles.farmerSearchContainer}>
+                                        <Search size={18} color={colors.mutedForeground} />
+                                        <TextInput
+                                            style={styles.farmerSearchInput}
+                                            value={farmerSearchQuery}
+                                            onChangeText={setFarmerSearchQuery}
+                                            placeholder="Search by code, name or mobile..."
+                                            placeholderTextColor={colors.mutedForeground}
+                                        />
+                                        {farmerSearchQuery.length > 0 && (
+                                            <Pressable onPress={() => setFarmerSearchQuery('')}>
+                                                <X size={16} color={colors.mutedForeground} />
                                             </Pressable>
                                         )}
                                     </View>
-                                ) : (
-                                    <View style={styles.farmerGridContainer}>
-                                        {filteredFarmers.map((farmer) => (
-                                            <Pressable
-                                                key={farmer._id}
-                                                style={styles.farmerCard}
-                                                onPress={() => handleSelectFarmer(farmer)}
-                                            >
-                                                <View style={styles.farmerCardHeader}>
-                                                    <View style={styles.farmerCodeBadge}>
-                                                        <Text style={styles.farmerCodeBadgeText}>{farmer.code}</Text>
-                                                    </View>
-                                                    <View style={styles.farmerCardActions}>
-                                                        <Pressable
-                                                            style={styles.farmerCardEditBtn}
-                                                            onPress={(e) => { e.stopPropagation(); handleEditFarmer(farmer); }}
-                                                        >
-                                                            <Edit2 size={14} color={colors.primary} />
-                                                        </Pressable>
-                                                        <Pressable
-                                                            style={styles.farmerCardDeleteBtn}
-                                                            onPress={(e) => { e.stopPropagation(); handleDeleteFarmer(farmer._id); }}
-                                                        >
-                                                            <Trash2 size={14} color="#ef4444" />
-                                                        </Pressable>
-                                                    </View>
-                                                </View>
-                                                <Text style={styles.farmerCardName} numberOfLines={1}>{farmer.name}</Text>
-                                                <View style={styles.farmerCardMobileRow}>
-                                                    <Phone size={12} color={colors.mutedForeground} />
-                                                    <Text style={styles.farmerCardMobile}>{farmer.mobile}</Text>
-                                                </View>
-                                                {farmer.totalQuantity > 0 && (
-                                                    <View style={styles.farmerCardStats}>
-                                                        <Text style={styles.farmerCardStatsText}>
-                                                            {farmer.totalQuantity.toFixed(1)}L • ₹{farmer.totalAmount.toFixed(0)}
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                            </Pressable>
-                                        ))}
-                                    </View>
-                                )}
-                            </View>
-                        ) : (
-                            <View style={styles.farmerFormContainer}>
-                                <View style={styles.farmerFormCard}>
-                                    <View style={styles.farmerFormField}>
-                                        <Text style={styles.farmerFormLabel}>
-                                            <Text style={styles.farmerFormLabelRequired}>* </Text>
-                                            Farmer Code
-                                        </Text>
-                                        <TextInput
-                                            style={[styles.farmerFormInput, editingFarmer && styles.farmerFormInputDisabled]}
-                                            value={newFarmerCode}
-                                            onChangeText={setNewFarmerCode}
-                                            placeholder="e.g. F001, A01"
-                                            placeholderTextColor={colors.mutedForeground}
-                                            editable={!editingFarmer}
-                                            autoCapitalize="characters"
-                                        />
-                                    </View>
-                                    <View style={styles.farmerFormField}>
-                                        <Text style={styles.farmerFormLabel}>
-                                            <Text style={styles.farmerFormLabelRequired}>* </Text>
-                                            Full Name
-                                        </Text>
-                                        <TextInput
-                                            style={styles.farmerFormInput}
-                                            value={newFarmerName}
-                                            onChangeText={setNewFarmerName}
-                                            placeholder="Enter farmer name"
-                                            placeholderTextColor={colors.mutedForeground}
-                                        />
-                                    </View>
-                                    <View style={styles.farmerFormField}>
-                                        <Text style={styles.farmerFormLabel}>
-                                            <Text style={styles.farmerFormLabelRequired}>* </Text>
-                                            Mobile Number
-                                        </Text>
-                                        <TextInput
-                                            style={styles.farmerFormInput}
-                                            value={newFarmerMobile}
-                                            onChangeText={setNewFarmerMobile}
-                                            placeholder="10-digit mobile number"
-                                            placeholderTextColor={colors.mutedForeground}
-                                            keyboardType="phone-pad"
-                                            maxLength={10}
-                                        />
-                                    </View>
-                                    <View style={styles.farmerFormField}>
-                                        <Text style={styles.farmerFormLabel}>Address (Optional)</Text>
-                                        <TextInput
-                                            style={[styles.farmerFormInput, styles.farmerFormTextarea]}
-                                            value={newFarmerAddress}
-                                            onChangeText={setNewFarmerAddress}
-                                            placeholder="Village, District..."
-                                            placeholderTextColor={colors.mutedForeground}
-                                            multiline
-                                            numberOfLines={2}
-                                        />
-                                    </View>
-                                </View>
 
-                                <View style={styles.farmerFormActions}>
-                                    {editingFarmer ? (
-                                        <>
+                                    {filteredFarmers.length === 0 ? (
+                                        <View style={styles.emptyFarmersContainer}>
+                                            <View style={styles.emptyFarmersIcon}>
+                                                <User size={32} color={colors.mutedForeground} />
+                                            </View>
+                                            <Text style={styles.emptyFarmersTitle}>
+                                                {farmerSearchQuery ? 'No farmers found' : 'No farmers yet'}
+                                            </Text>
+                                            <Text style={styles.emptyFarmersSubtitle}>
+                                                {farmerSearchQuery ? 'Try a different search term' : 'Add your first farmer to get started'}
+                                            </Text>
+                                            {!farmerSearchQuery && (
+                                                <Pressable style={styles.emptyFarmersBtn} onPress={() => setCodeModalTab('create')}>
+                                                    <Plus size={16} color="#fff" />
+                                                    <Text style={styles.emptyFarmersBtnText}>Add Farmer</Text>
+                                                </Pressable>
+                                            )}
+                                        </View>
+                                    ) : (
+                                        <View style={styles.farmerGridContainer}>
+                                            {filteredFarmers.map((farmer) => (
+                                                <Pressable
+                                                    key={farmer._id}
+                                                    style={styles.farmerCard}
+                                                    onPress={() => handleSelectFarmer(farmer)}
+                                                >
+                                                    <View style={styles.farmerCardHeader}>
+                                                        <View style={styles.farmerCodeBadge}>
+                                                            <Text style={styles.farmerCodeBadgeText}>{farmer.code}</Text>
+                                                        </View>
+                                                        <View style={styles.farmerCardActions}>
+                                                            <Pressable
+                                                                style={styles.farmerCardEditBtn}
+                                                                onPress={(e) => { e.stopPropagation(); handleEditFarmer(farmer); }}
+                                                            >
+                                                                <Edit2 size={14} color={colors.primary} />
+                                                            </Pressable>
+                                                            <Pressable
+                                                                style={styles.farmerCardDeleteBtn}
+                                                                onPress={(e) => { e.stopPropagation(); handleDeleteFarmer(farmer._id); }}
+                                                            >
+                                                                <Trash2 size={14} color="#ef4444" />
+                                                            </Pressable>
+                                                        </View>
+                                                    </View>
+                                                    <Text style={styles.farmerCardName} numberOfLines={1}>{farmer.name}</Text>
+                                                    <View style={styles.farmerCardMobileRow}>
+                                                        <Phone size={12} color={colors.mutedForeground} />
+                                                        <Text style={styles.farmerCardMobile}>{farmer.mobile}</Text>
+                                                    </View>
+                                                    {farmer.totalQuantity > 0 && (
+                                                        <View style={styles.farmerCardStats}>
+                                                            <Text style={styles.farmerCardStatsText}>
+                                                                {farmer.totalQuantity.toFixed(1)}L • ₹{farmer.totalAmount.toFixed(0)}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                </Pressable>
+                                            ))}
+                                        </View>
+                                    )}
+                                </View>
+                            ) : (
+                                <View style={styles.farmerFormContainer}>
+                                    <View style={styles.farmerFormCard}>
+                                        <View style={styles.farmerFormField}>
+                                            <Text style={styles.farmerFormLabel}>
+                                                <Text style={styles.farmerFormLabelRequired}>* </Text>
+                                                Farmer Code
+                                            </Text>
+                                            <TextInput
+                                                style={[styles.farmerFormInput, editingFarmer && styles.farmerFormInputDisabled]}
+                                                value={newFarmerCode}
+                                                onChangeText={setNewFarmerCode}
+                                                placeholder="e.g. F001, A01"
+                                                placeholderTextColor={colors.mutedForeground}
+                                                editable={!editingFarmer}
+                                                autoCapitalize="characters"
+                                            />
+                                        </View>
+                                        <View style={styles.farmerFormField}>
+                                            <Text style={styles.farmerFormLabel}>
+                                                <Text style={styles.farmerFormLabelRequired}>* </Text>
+                                                Full Name
+                                            </Text>
+                                            <TextInput
+                                                style={styles.farmerFormInput}
+                                                value={newFarmerName}
+                                                onChangeText={setNewFarmerName}
+                                                placeholder="Enter farmer name"
+                                                placeholderTextColor={colors.mutedForeground}
+                                            />
+                                        </View>
+                                        <View style={styles.farmerFormField}>
+                                            <Text style={styles.farmerFormLabel}>
+                                                <Text style={styles.farmerFormLabelRequired}>* </Text>
+                                                Mobile Number
+                                            </Text>
+                                            <TextInput
+                                                style={styles.farmerFormInput}
+                                                value={newFarmerMobile}
+                                                onChangeText={setNewFarmerMobile}
+                                                placeholder="10-digit mobile number"
+                                                placeholderTextColor={colors.mutedForeground}
+                                                keyboardType="phone-pad"
+                                                maxLength={10}
+                                            />
+                                        </View>
+                                        <View style={styles.farmerFormField}>
+                                            <Text style={styles.farmerFormLabel}>Address (Optional)</Text>
+                                            <TextInput
+                                                style={[styles.farmerFormInput, styles.farmerFormTextarea]}
+                                                value={newFarmerAddress}
+                                                onChangeText={setNewFarmerAddress}
+                                                placeholder="Village, District..."
+                                                placeholderTextColor={colors.mutedForeground}
+                                                multiline
+                                                numberOfLines={2}
+                                            />
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.farmerFormActions}>
+                                        {editingFarmer ? (
+                                            <>
+                                                <Pressable
+                                                    style={[styles.farmerFormSaveBtn, savingFarmer && styles.farmerFormSaveBtnDisabled]}
+                                                    onPress={handleUpdateFarmer}
+                                                    disabled={savingFarmer}
+                                                >
+                                                    {savingFarmer ? (
+                                                        <ActivityIndicator size="small" color="#fff" />
+                                                    ) : (
+                                                        <Text style={styles.farmerFormSaveBtnText}>Update Farmer</Text>
+                                                    )}
+                                                </Pressable>
+                                                <Pressable style={styles.farmerFormCancelBtn} onPress={clearFarmerForm}>
+                                                    <Text style={styles.farmerFormCancelBtnText}>Cancel</Text>
+                                                </Pressable>
+                                            </>
+                                        ) : (
                                             <Pressable
                                                 style={[styles.farmerFormSaveBtn, savingFarmer && styles.farmerFormSaveBtnDisabled]}
-                                                onPress={handleUpdateFarmer}
+                                                onPress={handleCreateFarmer}
                                                 disabled={savingFarmer}
                                             >
                                                 {savingFarmer ? (
                                                     <ActivityIndicator size="small" color="#fff" />
                                                 ) : (
-                                                    <Text style={styles.farmerFormSaveBtnText}>Update Farmer</Text>
+                                                    <>
+                                                        <Plus size={18} color="#fff" />
+                                                        <Text style={styles.farmerFormSaveBtnText}>Create Farmer</Text>
+                                                    </>
                                                 )}
                                             </Pressable>
-                                            <Pressable style={styles.farmerFormCancelBtn} onPress={clearFarmerForm}>
-                                                <Text style={styles.farmerFormCancelBtnText}>Cancel</Text>
-                                            </Pressable>
-                                        </>
-                                    ) : (
-                                        <Pressable
-                                            style={[styles.farmerFormSaveBtn, savingFarmer && styles.farmerFormSaveBtnDisabled]}
-                                            onPress={handleCreateFarmer}
-                                            disabled={savingFarmer}
-                                        >
-                                            {savingFarmer ? (
-                                                <ActivityIndicator size="small" color="#fff" />
-                                            ) : (
-                                                <>
-                                                    <Plus size={18} color="#fff" />
-                                                    <Text style={styles.farmerFormSaveBtnText}>Create Farmer</Text>
-                                                </>
-                                            )}
-                                        </Pressable>
-                                    )}
+                                        )}
+                                    </View>
                                 </View>
-                            </View>
-                        )}
-                    </ScrollView>
-                </KeyboardAvoidingView>
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
             </Modal>
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} />
             <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
@@ -678,8 +691,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     noDataRow: { paddingVertical: 24, alignItems: 'center', backgroundColor: colors.card },
     noDataText: { fontSize: 13, color: colors.mutedForeground },
     emptyText: { fontSize: 13, color: colors.mutedForeground, textAlign: 'center', marginTop: 16 },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 20 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+    modalContent: { backgroundColor: colors.card, borderRadius: 16, paddingBottom: 20, width: '100%', maxWidth: 400 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
     modalTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground },
     calendarBody: { padding: 8 },
@@ -723,21 +736,19 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     rangeInputLabel: { fontSize: 12, fontWeight: '500', color: colors.mutedForeground, marginBottom: 4 },
     rangeInput: { backgroundColor: colors.background, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16, fontWeight: '600', color: colors.foreground, textAlign: 'center', borderWidth: 1, borderColor: colors.border },
     rangeDash: { fontSize: 20, color: colors.mutedForeground, marginTop: 20 },
-    // Code Modal Full Screen Styles
-    codeModalFullScreen: { flex: 1, backgroundColor: colors.card },
-    codeModalContent: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '85%' },
-    codeModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card, paddingTop: Platform.OS === 'ios' ? 50 : 16 },
+    // Code Modal Improved Styles
+    codeModalContent: { backgroundColor: colors.card, borderRadius: 16, maxHeight: '85%', width: '100%', maxWidth: 400 },
+    codeModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
     codeModalHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     codeModalIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#22c55e', alignItems: 'center', justifyContent: 'center' },
     codeModalTitle: { fontSize: 18, fontWeight: '700', color: colors.foreground },
     codeModalCloseBtn: { padding: 8, backgroundColor: colors.muted, borderRadius: 10 },
-    codeModalTabs: { flexDirection: 'row', padding: 12, gap: 8, backgroundColor: colors.card },
+    codeModalTabs: { flexDirection: 'row', padding: 12, gap: 8 },
     codeModalTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
     codeModalTabActive: { backgroundColor: '#22c55e', borderColor: '#22c55e' },
     codeModalTabText: { fontSize: 14, fontWeight: '600', color: colors.mutedForeground },
     codeModalTabTextActive: { color: '#fff' },
-    codeModalBody: { flex: 1, paddingHorizontal: 12 },
-    codeModalBodyContent: { paddingBottom: 30, paddingTop: 12 },
+    codeModalBody: { paddingHorizontal: 12, paddingBottom: 20, maxHeight: 450 },
     farmerListContainer: { gap: 12 },
     farmerSearchContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.background, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: colors.border },
     farmerSearchInput: { flex: 1, fontSize: 14, color: colors.foreground, padding: 0 },

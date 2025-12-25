@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X } from 'lucide-react-native';
+import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -68,6 +68,7 @@ export default function RegisterScreen() {
     const [newMobile, setNewMobile] = useState('');
     const [newAddress, setNewAddress] = useState('');
     const [searchCode, setSearchCode] = useState('');
+    const [editingFarmer, setEditingFarmer] = useState<Farmer | null>(null);
 
     // Custom date ranges state
     const [customRanges, setCustomRanges] = useState<DateRange[]>([
@@ -311,6 +312,45 @@ export default function RegisterScreen() {
         setNewName('');
         setNewMobile('');
         setNewAddress('');
+        setEditingFarmer(null);
+    };
+
+    // Edit farmer - populate form with farmer data
+    const handleEditFarmer = (farmer: Farmer) => {
+        setEditingFarmer(farmer);
+        setNewCode(farmer.code);
+        setNewName(farmer.name);
+        setNewMobile(farmer.mobile);
+        setNewAddress(farmer.address || '');
+    };
+
+    // Update farmer
+    const handleUpdateFarmer = async () => {
+        if (!editingFarmer || !newName || !newMobile) {
+            showAlert('Error', 'Please fill name and mobile');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const res = await farmersApi.update(editingFarmer._id, {
+                name: newName,
+                mobile: newMobile,
+                address: newAddress,
+            });
+
+            if (res.success) {
+                showAlert('Success', 'Farmer updated successfully');
+                clearFarmerForm();
+                fetchData();
+            } else {
+                showAlert('Error', res.message || 'Failed to update farmer');
+            }
+        } catch (error) {
+            showAlert('Error', 'Failed to update farmer');
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Delete farmer
@@ -883,15 +923,15 @@ export default function RegisterScreen() {
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
                     </View>
                     {filteredAdvances.map((item) => {
-                        // Only show cross-line on amount for advances that are settled or partial (used in payments)
+                        // Only show cross-line for advances that are settled or partial (used in payments)
                         const isUsedInPayment = item.status === 'settled' || item.status === 'partial';
                         return (
-                            <View key={item._id} style={styles.tableRow}>
-                                <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.farmer?.code}</Text>
-                                <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'center' }]}>{item.farmer?.name || '-'}</Text>
-                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{item.note || '-'}</Text>
-                                <Text style={[styles.tableCell, { flex: 0.8, textAlign: 'center' }, isUsedInPayment && styles.settledAmountText]}>₹{item.amount}</Text>
-                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>
+                            <View key={item._id} style={[styles.tableRow, isUsedInPayment && styles.settledRow]}>
+                                <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.farmer?.code}</Text>
+                                <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.farmer?.name || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.note || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 0.8, color: isUsedInPayment ? colors.mutedForeground : colors.warning, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>₹{item.amount}</Text>
+                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>
                                     {new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                                 </Text>
                             </View>
@@ -912,10 +952,11 @@ export default function RegisterScreen() {
                 <View style={[styles.inputGroup, { flex: 0.4 }]}>
                     <Text style={styles.label}>Code</Text>
                     <TextInput
-                        style={styles.input}
+                        style={[styles.input, editingFarmer && { backgroundColor: colors.muted }]}
                         placeholder="Code"
                         value={newCode}
                         onChangeText={setNewCode}
+                        editable={!editingFarmer}
                         placeholderTextColor={colors.mutedForeground}
                     />
                 </View>
@@ -956,11 +997,17 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.buttonRow}>
-                <Pressable style={styles.saveBtn} onPress={handleAddFarmer} disabled={loading}>
-                    <Text style={styles.saveBtnText}>{loading ? 'Adding...' : 'Add Farmer'}</Text>
+                <Pressable
+                    style={[styles.saveBtn, editingFarmer && { backgroundColor: '#f59e0b' }]}
+                    onPress={editingFarmer ? handleUpdateFarmer : handleAddFarmer}
+                    disabled={loading}
+                >
+                    <Text style={styles.saveBtnText}>
+                        {loading ? (editingFarmer ? 'Updating...' : 'Adding...') : (editingFarmer ? 'Update Farmer' : 'Add Farmer')}
+                    </Text>
                 </Pressable>
                 <Pressable style={styles.clearBtn} onPress={clearFarmerForm}>
-                    <Text style={styles.clearBtnText}>Clear</Text>
+                    <Text style={styles.clearBtnText}>{editingFarmer ? 'Cancel' : 'Clear'}</Text>
                 </Pressable>
             </View>
 
@@ -979,16 +1026,19 @@ export default function RegisterScreen() {
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Mobile</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Act</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1.3 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Mobile</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.7 }]}>Actions</Text>
                     </View>
                     {filteredFarmers.map((item) => (
-                        <View key={item._id} style={styles.tableRow}>
+                        <View key={item._id} style={[styles.tableRow, editingFarmer?._id === item._id && { backgroundColor: colors.primary + '15' }]}>
                             <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.code}</Text>
-                            <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'center' }]}>{item.name}</Text>
-                            <Text style={[styles.tableCell, { flex: 1.2, textAlign: 'center' }]}>{item.mobile}</Text>
-                            <View style={{ flex: 0.5, alignItems: 'center' }}>
+                            <Text style={[styles.tableCell, { flex: 1.3, textAlign: 'center' }]}>{item.name}</Text>
+                            <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{item.mobile}</Text>
+                            <View style={{ flex: 0.7, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                                <Pressable style={styles.editBtn} onPress={() => handleEditFarmer(item)}>
+                                    <Edit2 size={14} color={colors.primary} />
+                                </Pressable>
                                 <Pressable style={styles.deleteBtn} onPress={() => handleDeleteFarmer(item._id, item.name)}>
                                     <Trash2 size={14} color={colors.destructive} />
                                 </Pressable>
@@ -1273,6 +1323,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     deleteBtn: {
         padding: 4,
         backgroundColor: colors.destructive + '20',
+        borderRadius: 4,
+    },
+    editBtn: {
+        padding: 4,
+        backgroundColor: colors.primary + '20',
         borderRadius: 4,
     },
     textInput: {
@@ -1605,10 +1660,13 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
     },
-    settledAmountText: {
+    settledRow: {
+        opacity: 0.6,
+        backgroundColor: 'rgba(0,0,0,0.03)',
+    },
+    settledText: {
         textDecorationLine: 'line-through',
-        textDecorationColor: '#EF4444',
-        color: '#EF4444',
+        color: '#999',
     },
     dateInputText: {
         flex: 1,
