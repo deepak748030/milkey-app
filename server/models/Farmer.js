@@ -44,6 +44,11 @@ const farmerSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    // Current balance (can be positive or negative, carries forward)
+    currentBalance: {
+        type: Number,
+        default: 0
+    },
     isActive: {
         type: Boolean,
         default: true

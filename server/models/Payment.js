@@ -64,6 +64,16 @@ const paymentSchema = new mongoose.Schema({
     netPayable: {
         type: Number,
         default: 0
+    },
+    // Closing balance after this payment (can be positive or negative)
+    closingBalance: {
+        type: Number,
+        default: 0
+    },
+    // Previous balance carried forward
+    previousBalance: {
+        type: Number,
+        default: 0
     }
 }, {
     timestamps: true

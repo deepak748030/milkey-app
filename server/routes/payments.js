@@ -201,9 +201,17 @@ router.post('/', auth, async (req, res) => {
         // Calculate totals
         const totalMilkAmount = unpaidCollections.reduce((sum, c) => sum + c.amount, 0);
         const totalAdvanceAmount = pendingAdvances.reduce((sum, a) => sum + (a.amount - a.settledAmount), 0);
-        const netPayable = totalMilkAmount - totalAdvanceAmount;
+
+        // Get previous balance from farmer (can be + or -)
+        const previousBalance = farmer.currentBalance || 0;
+
+        // Net payable = milk amount - advances + previous balance
+        const netPayable = totalMilkAmount - totalAdvanceAmount + previousBalance;
 
         const paymentAmount = parseFloat(amount);
+
+        // Closing balance = net payable - paid amount (can be + or -)
+        const closingBalance = netPayable - paymentAmount;
 
         // Create payment record
         const payment = await Payment.create({
@@ -219,7 +227,9 @@ router.post('/', auth, async (req, res) => {
             settledAdvances: pendingAdvances.map(a => a._id),
             totalMilkAmount,
             totalAdvanceDeduction: totalAdvanceAmount,
-            netPayable
+            netPayable,
+            previousBalance,
+            closingBalance
         });
 
         // Mark collections as paid
@@ -235,8 +245,9 @@ router.post('/', auth, async (req, res) => {
             await advance.save();
         }
 
-        // Update farmer pending amount
+        // Update farmer - set pending to 0 and save closing balance as current balance for next time
         farmer.pendingAmount = 0;
+        farmer.currentBalance = closingBalance;
         await farmer.save();
 
         const populatedPayment = await Payment.findById(payment._id)
