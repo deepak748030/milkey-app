@@ -69,7 +69,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
             });
         }
 
-        // Return current balance from member's pendingAmount
+        // Return current balance from member's sellingPaymentBalance
         res.json({
             success: true,
             response: {
@@ -77,14 +77,14 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
                     id: member._id,
                     name: member.name,
                     mobile: member.mobile,
-                    currentBalance: member.pendingAmount || 0
+                    currentBalance: member.sellingPaymentBalance || 0
                 },
                 selling: {
                     totalLiters: member.totalLiters || 0,
                     totalAmount: member.totalAmount || 0
                 },
-                netPayable: member.pendingAmount || 0,
-                closingBalance: member.pendingAmount || 0
+                netPayable: member.sellingPaymentBalance || 0,
+                closingBalance: member.sellingPaymentBalance || 0
             }
         });
     } catch (error) {
@@ -129,8 +129,8 @@ router.post('/', auth, async (req, res) => {
 
         const totalSellAmount = unpaidEntries.reduce((sum, e) => sum + e.amount, 0);
 
-        // Get previous balance from member's pendingAmount
-        const previousBalance = member.pendingAmount || 0;
+        // Get previous balance from member's sellingPaymentBalance
+        const previousBalance = member.sellingPaymentBalance || 0;
 
         const paymentAmount = parseFloat(amount);
 
@@ -158,8 +158,8 @@ router.post('/', auth, async (req, res) => {
             { isPaid: true }
         );
 
-        // Update member - set pendingAmount to closingBalance
-        member.pendingAmount = closingBalance;
+        // Update member - set sellingPaymentBalance to closingBalance
+        member.sellingPaymentBalance = closingBalance;
         await member.save();
 
         const populatedPayment = await MemberPayment.findById(payment._id)

@@ -40,6 +40,11 @@ const memberSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    // Separate balance for selling payments
+    sellingPaymentBalance: {
+        type: Number,
+        default: 0
+    },
     isActive: {
         type: Boolean,
         default: true
