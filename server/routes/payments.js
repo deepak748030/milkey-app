@@ -125,7 +125,7 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
                     code: farmer.code,
                     name: farmer.name,
                     mobile: farmer.mobile,
-                    currentBalance: farmer.pendingAmount || 0
+                    currentBalance: farmer.currentBalance || 0
                 },
                 milk: {
                     totalQuantity: milkData.totalQuantity,

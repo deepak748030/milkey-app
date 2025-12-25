@@ -157,6 +157,10 @@ export interface Payment {
     totalMilkAmount: number;
     totalAdvanceDeduction: number;
     netPayable: number;
+    closingBalance?: number;
+    previousBalance?: number;
+    periodStart?: string;
+    periodEnd?: string;
     createdAt?: string;
 }
 

@@ -526,10 +526,11 @@ export default function RegisterScreen() {
         }
     };
 
-    // Calculate closing balance with editable milk amount
+    // Calculate closing balance with editable milk amount + previous balance
     const currentMilkAmount = parseFloat(milkAmount) || 0;
     const advanceAmount = paymentFarmer ? paymentFarmer.advances.totalPending : 0;
-    const netPayable = currentMilkAmount - advanceAmount;
+    const previousBalance = paymentFarmer?.farmer?.currentBalance || 0;
+    const netPayable = currentMilkAmount - advanceAmount + previousBalance;
     const closingBalance = netPayable - (parseFloat(paidAmount) || 0);
 
     const renderPaymentsTab = () => (
@@ -702,6 +703,12 @@ export default function RegisterScreen() {
                                 style={styles.milkAmountInput}
                                 value={milkAmount}
                                 onChangeText={setMilkAmount}
+                                onFocus={() => {
+                                    // Clear if value is 0.00 or 0
+                                    if (milkAmount === '0.00' || milkAmount === '0') {
+                                        setMilkAmount('');
+                                    }
+                                }}
                                 keyboardType="numeric"
                                 placeholder="0.00"
                                 placeholderTextColor={colors.mutedForeground}
@@ -773,21 +780,41 @@ export default function RegisterScreen() {
             )}
 
             {/* Settlement History */}
-            <Text style={[styles.subTitle, { marginTop: 20 }]}>Settlement History</Text>
+            <Text style={[styles.subTitle, { marginTop: 16 }]}>Settlement History</Text>
             {payments.length > 0 ? (
-                <View style={styles.table}>
-                    <View style={styles.tableHeader}>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Name</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Amount</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
-                    </View>
+                <View style={{ gap: 8 }}>
                     {payments.slice(0, 10).map((p) => (
-                        <View key={p._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary }]}>{p.farmer?.code}</Text>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{p.farmer?.name}</Text>
-                            <Text style={[styles.tableCell, { flex: 1, color: colors.primary }]}>₹{p.amount}</Text>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{formatDateDDMMYYYY(p.date)}</Text>
+                        <View key={p._id} style={styles.historyCard}>
+                            {/* Header row: period + date */}
+                            <View style={styles.historyCardHeader}>
+                                <Text style={styles.historyPeriod}>
+                                    {formatDateDDMMYYYY(p.periodStart || p.date)} to {formatDateDDMMYYYY(p.periodEnd || p.date)}
+                                </Text>
+                                <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date)}</Text>
+                            </View>
+                            {/* Details */}
+                            <View style={styles.historyRow}>
+                                <Text style={styles.historyLabel}>Milk Amount:</Text>
+                                <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.totalMilkAmount || 0).toFixed(2)}</Text>
+                            </View>
+                            <View style={styles.historyRow}>
+                                <Text style={styles.historyLabel}>Advance:</Text>
+                                <Text style={[styles.historyValue, { color: colors.warning }]}>-₹{(p.totalAdvanceDeduction || 0).toFixed(2)}</Text>
+                            </View>
+                            <View style={styles.historyRow}>
+                                <Text style={styles.historyLabel}>Total Payable:</Text>
+                                <Text style={[styles.historyValue, { color: colors.foreground }]}>₹{(p.netPayable || 0).toFixed(2)}</Text>
+                            </View>
+                            <View style={[styles.historyRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, marginTop: 4 }]}>
+                                <Text style={styles.historyLabel}>Paid Amount:</Text>
+                                <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.amount || 0).toFixed(2)}</Text>
+                            </View>
+                            <View style={[styles.historyRow, { backgroundColor: colors.muted, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 6, marginBottom: -6, borderBottomLeftRadius: 6, borderBottomRightRadius: 6, marginTop: 6 }]}>
+                                <Text style={[styles.historyLabel, { fontWeight: '700' }]}>Closing Balance:</Text>
+                                <Text style={[styles.historyValue, { fontWeight: '700', color: (p.closingBalance || 0) >= 0 ? colors.primary : colors.destructive }]}>
+                                    ₹{(p.closingBalance || 0).toFixed(2)}
+                                </Text>
+                            </View>
                         </View>
                     ))}
                 </View>
@@ -1672,5 +1699,46 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
         fontSize: 13,
         color: colors.foreground,
+    },
+    // History card styles
+    historyCard: {
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+    },
+    historyCardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+        paddingBottom: 6,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.primary,
+    },
+    historyPeriod: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    historyDate: {
+        fontSize: 11,
+        color: colors.mutedForeground,
+    },
+    historyRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 2,
+    },
+    historyLabel: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+    },
+    historyValue: {
+        fontSize: 12,
+        fontWeight: '600',
     },
 });
