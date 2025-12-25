@@ -3,6 +3,8 @@ const router = express.Router();
 const MilkCollection = require('../models/MilkCollection');
 const Payment = require('../models/Payment');
 const Farmer = require('../models/Farmer');
+const Member = require('../models/Member');
+const SellingEntry = require('../models/SellingEntry');
 const auth = require('../middleware/auth');
 
 // Get milk collection report
@@ -376,6 +378,66 @@ router.get('/dashboard', auth, async (req, res) => {
             }
         });
     } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Home screen stats - includes sell quantity from SellingEntry and member count from Member model
+router.get('/home-stats', auth, async (req, res) => {
+    try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(today);
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const [
+            todayCollections,
+            todaySelling,
+            totalFarmers,
+            totalMembers
+        ] = await Promise.all([
+            // Today's milk collections (purchase)
+            MilkCollection.aggregate([
+                { $match: { owner: req.user._id, date: { $gte: today, $lte: todayEnd } } },
+                { $group: { _id: null, quantity: { $sum: '$quantity' }, amount: { $sum: '$amount' }, count: { $sum: 1 } } }
+            ]),
+            // Today's selling entries
+            SellingEntry.aggregate([
+                { $match: { owner: req.user._id, date: { $gte: today, $lte: todayEnd } } },
+                {
+                    $group: {
+                        _id: null,
+                        morningQty: { $sum: '$morningQuantity' },
+                        eveningQty: { $sum: '$eveningQuantity' },
+                        amount: { $sum: '$amount' },
+                        count: { $sum: 1 }
+                    }
+                }
+            ]),
+            // Total farmers from Farmer model with type 'farmer'
+            Farmer.countDocuments({ owner: req.user._id, isActive: true, type: 'farmer' }),
+            // Total members from Member model
+            Member.countDocuments({ owner: req.user._id, isActive: true })
+        ]);
+
+        const sellingData = todaySelling[0] || { morningQty: 0, eveningQty: 0, amount: 0, count: 0 };
+        const sellQuantity = (sellingData.morningQty || 0) + (sellingData.eveningQty || 0);
+
+        res.json({
+            success: true,
+            response: {
+                today: todayCollections[0] || { quantity: 0, amount: 0, count: 0 },
+                todaySell: {
+                    quantity: sellQuantity,
+                    amount: sellingData.amount || 0,
+                    count: sellingData.count || 0
+                },
+                totalFarmers,
+                totalMembers
+            }
+        });
+    } catch (error) {
+        console.error('Home stats error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 });
