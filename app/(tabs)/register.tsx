@@ -956,11 +956,11 @@ export default function RegisterScreen() {
                         const isUsedInPayment = item.status === 'settled' || item.status === 'partial';
                         return (
                             <View key={item._id} style={[styles.tableRow, isUsedInPayment && styles.settledRow]}>
-                                <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.farmer?.code}</Text>
-                                <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.farmer?.name || '-'}</Text>
-                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>{item.note || '-'}</Text>
-                                <Text style={[styles.tableCell, { flex: 0.8, color: isUsedInPayment ? colors.mutedForeground : colors.warning, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>₹{item.amount}</Text>
-                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }, isUsedInPayment && styles.settledText]}>
+                                <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.farmer?.code}</Text>
+                                <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'center' }]}>{item.farmer?.name || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{item.note || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 0.8, textAlign: 'center' }, isUsedInPayment ? styles.settledAmountText : { color: colors.warning }]}>₹{item.amount}</Text>
+                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>
                                     {new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                                 </Text>
                             </View>
@@ -1694,8 +1694,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.03)',
     },
     settledText: {
-        textDecorationLine: 'line-through',
         color: '#999',
+    },
+    settledAmountText: {
+        textDecorationLine: 'line-through',
+        color: colors.destructive,
     },
     dateInputText: {
         flex: 1,

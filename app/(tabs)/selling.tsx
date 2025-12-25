@@ -24,6 +24,7 @@ interface GroupedEntry {
     entryId: string;
     totalAmount: number;
     rate: number;
+    entryCount: number;
 }
 
 export default function SellingScreen() {
@@ -128,6 +129,7 @@ export default function SellingScreen() {
                     entryId: entry._id,
                     totalAmount: 0,
                     rate: entry.rate,
+                    entryCount: (entry as any).entryCount || 1,
                 };
             }
 
@@ -135,6 +137,7 @@ export default function SellingScreen() {
             groups[key].eveningQty += entry.eveningQuantity || 0;
             groups[key].entryId = entry._id;
             groups[key].totalAmount += entry.amount;
+            groups[key].entryCount = Math.max(groups[key].entryCount, (entry as any).entryCount || 1);
         });
 
         return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -407,6 +410,7 @@ export default function SellingScreen() {
             eveningQty: number;
             totalAmount: number;
             rate: number;
+            entryCount: number;
         }> = {};
 
         filteredEntries.forEach(entry => {
@@ -422,12 +426,14 @@ export default function SellingScreen() {
                     eveningQty: 0,
                     totalAmount: 0,
                     rate: entry.rate,
+                    entryCount: (entry as any).entryCount || 1,
                 };
             }
 
             groups[key].morningQty += entry.morningQuantity || 0;
             groups[key].eveningQty += entry.eveningQuantity || 0;
             groups[key].totalAmount += entry.amount;
+            groups[key].entryCount = Math.max(groups[key].entryCount, (entry as any).entryCount || 1);
         });
 
         return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -440,6 +446,7 @@ export default function SellingScreen() {
           <tr>
             <td>${formatDateDDMMYYYY(item.date)}</td>
             <td>${item.memberName}</td>
+            <td>${item.entryCount}</td>
             <td>${item.morningQty > 0 ? item.morningQty : '-'} + ${item.eveningQty > 0 ? item.eveningQty : '-'}</td>
             <td>₹${item.rate}</td>
             <td>₹${item.totalAmount.toFixed(0)}</td>
@@ -448,6 +455,7 @@ export default function SellingScreen() {
 
         const totalQty = groupedEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
         const totalAmt = groupedEntries.reduce((sum, e) => sum + e.totalAmount, 0);
+        const totalEntries = groupedEntries.reduce((sum, e) => sum + e.entryCount, 0);
 
         return `
           <html>
@@ -473,6 +481,7 @@ export default function SellingScreen() {
                 <tr>
                   <th>Date</th>
                   <th>Name</th>
+                  <th>Entry</th>
                   <th>M/E (L)</th>
                   <th>Rate</th>
                   <th>Amount</th>
@@ -481,6 +490,7 @@ export default function SellingScreen() {
               </table>
               <div class="summary">
                 <p>Total Days: ${groupedEntries.length}</p>
+                <p>Total Entries: ${totalEntries}</p>
                 <p>Total Quantity: ${totalQty.toFixed(2)} L</p>
                 <p>Total Amount: ₹${totalAmt.toFixed(2)}</p>
               </div>
@@ -743,6 +753,7 @@ export default function SellingScreen() {
                     <View style={styles.tableHeader}>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Entry</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>M/E (L)</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Amt</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Act</Text>
@@ -751,6 +762,7 @@ export default function SellingScreen() {
                         <View key={`${item.date}-${item.memberId}-${index}`} style={styles.tableRow}>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{formatDate(item.date)}</Text>
                             <Text style={[styles.tableCell, { flex: 1.2 }]} numberOfLines={1}>{item.memberName}</Text>
+                            <Text style={[styles.tableCell, { flex: 0.5, textAlign: 'center', color: colors.primary, fontWeight: '600' }]}>{item.entryCount}</Text>
                             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                                 <Text style={styles.meText}>
                                     {item.morningQty > 0 ? item.morningQty : '-'} + {item.eveningQty > 0 ? item.eveningQty : '-'}
@@ -930,99 +942,106 @@ export default function SellingScreen() {
         </View>
     );
 
-    // Member Modal - Full Screen Style with Keyboard Avoiding
+    // Member Modal - Centered (rebuilt)
     const renderMemberModal = () => (
         <Modal
             visible={showMemberModal}
-            animationType="slide"
-            transparent={false}
+            animationType="fade"
+            transparent
             onRequestClose={() => setShowMemberModal(false)}
         >
-            <KeyboardAvoidingView
-                style={styles.memberModalFullScreen}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
-                {/* Header */}
-                <View style={styles.memberModalHeader}>
-                    <View style={styles.memberModalHeaderLeft}>
-                        <View style={styles.memberModalIcon}>
-                            <User size={20} color="#fff" />
-                        </View>
-                        <Text style={styles.memberModalTitle}>{editingMember ? 'Edit Member' : 'Add New Member'}</Text>
-                    </View>
-                    <Pressable style={styles.memberModalCloseBtn} onPress={() => setShowMemberModal(false)}>
-                        <X size={20} color={colors.foreground} />
-                    </Pressable>
-                </View>
+            <View style={styles.centeredModalOverlay}>
+                {/* Tap outside to close */}
+                <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setShowMemberModal(false)} />
 
-                {/* Body */}
-                <ScrollView
-                    style={styles.memberModalBody}
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.memberModalBodyContent}
-                >
-                    <View style={styles.memberFormCard}>
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Rate Per Liter (₹) <Text style={{ color: colors.destructive }}>*</Text></Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="50"
-                                value={memberRatePerLiter}
-                                onChangeText={setMemberRatePerLiter}
-                                keyboardType="decimal-pad"
-                                placeholderTextColor={colors.mutedForeground}
-                            />
+                <View style={styles.centeredModalContainer}>
+                    <KeyboardAvoidingView
+                        style={{ flex: 1 }}
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    >
+                        {/* Header */}
+                        <View style={styles.memberModalHeader}>
+                            <View style={styles.memberModalHeaderLeft}>
+                                <View style={styles.memberModalIcon}>
+                                    <User size={20} color={colors.white} />
+                                </View>
+                                <Text style={styles.memberModalTitle}>{editingMember ? 'Edit Member' : 'Add New Member'}</Text>
+                            </View>
+                            <Pressable style={styles.memberModalCloseBtn} onPress={() => setShowMemberModal(false)}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
                         </View>
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Name <Text style={{ color: colors.destructive }}>*</Text></Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Full Name"
-                                value={memberName}
-                                onChangeText={setMemberName}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                        </View>
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Mobile <Text style={{ color: colors.destructive }}>*</Text></Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="10-digit number"
-                                value={memberMobile}
-                                onChangeText={setMemberMobile}
-                                keyboardType="phone-pad"
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                        </View>
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.label}>Address</Text>
-                            <TextInput
-                                style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
-                                placeholder="Village/City"
-                                value={memberAddress}
-                                onChangeText={setMemberAddress}
-                                placeholderTextColor={colors.mutedForeground}
-                                multiline
-                            />
-                        </View>
-                    </View>
-                </ScrollView>
 
-                {/* Footer */}
-                <View style={styles.memberModalFooter}>
-                    <Pressable style={styles.memberModalCancelBtn} onPress={() => setShowMemberModal(false)}>
-                        <Text style={styles.memberModalCancelBtnText}>Cancel</Text>
-                    </Pressable>
-                    <Pressable style={styles.memberModalSaveBtn} onPress={handleSaveMember} disabled={isLoading}>
-                        {isLoading ? (
-                            <ActivityIndicator size="small" color={colors.white} />
-                        ) : (
-                            <Text style={styles.memberModalSaveBtnText}>{editingMember ? 'Update Member' : 'Save Member'}</Text>
-                        )}
-                    </Pressable>
+                        {/* Body */}
+                        <ScrollView
+                            style={styles.memberModalBody}
+                            keyboardShouldPersistTaps="handled"
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.memberModalBodyContent}
+                        >
+                            <View style={styles.memberFormCard}>
+                                <View style={styles.modalInputGroup}>
+                                    <Text style={styles.label}>Rate Per Liter (₹) <Text style={{ color: colors.destructive }}>*</Text></Text>
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        placeholder="50"
+                                        value={memberRatePerLiter}
+                                        onChangeText={setMemberRatePerLiter}
+                                        keyboardType="decimal-pad"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View style={styles.modalInputGroup}>
+                                    <Text style={styles.label}>Name <Text style={{ color: colors.destructive }}>*</Text></Text>
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        placeholder="Full Name"
+                                        value={memberName}
+                                        onChangeText={setMemberName}
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View style={styles.modalInputGroup}>
+                                    <Text style={styles.label}>Mobile <Text style={{ color: colors.destructive }}>*</Text></Text>
+                                    <TextInput
+                                        style={styles.modalInput}
+                                        placeholder="10-digit number"
+                                        value={memberMobile}
+                                        onChangeText={setMemberMobile}
+                                        keyboardType="phone-pad"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+                                <View style={styles.modalInputGroup}>
+                                    <Text style={styles.label}>Address</Text>
+                                    <TextInput
+                                        style={[styles.modalInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                                        placeholder="Village/City"
+                                        value={memberAddress}
+                                        onChangeText={setMemberAddress}
+                                        placeholderTextColor={colors.mutedForeground}
+                                        multiline
+                                    />
+                                </View>
+                            </View>
+                        </ScrollView>
+
+                        {/* Footer */}
+                        <View style={styles.memberModalFooter}>
+                            <Pressable style={styles.memberModalCancelBtn} onPress={() => setShowMemberModal(false)}>
+                                <Text style={styles.memberModalCancelBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={styles.memberModalSaveBtn} onPress={handleSaveMember} disabled={isLoading}>
+                                {isLoading ? (
+                                    <ActivityIndicator size="small" color={colors.white} />
+                                ) : (
+                                    <Text style={styles.memberModalSaveBtnText}>{editingMember ? 'Update Member' : 'Save Member'}</Text>
+                                )}
+                            </Pressable>
+                        </View>
+                    </KeyboardAvoidingView>
                 </View>
-            </KeyboardAvoidingView>
+            </View>
         </Modal>
     );
 
@@ -1888,6 +1907,28 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: colors.border,
     },
+    // Centered Modal Styles
+    centeredModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    centeredModalContainer: {
+        width: '100%',
+        maxWidth: 420,
+        height: '80%',
+        maxHeight: '85%',
+        backgroundColor: colors.card,
+        borderRadius: 20,
+        overflow: 'hidden',
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+    },
     // Member Modal Full Screen Styles
     memberModalFullScreen: {
         flex: 1,
@@ -1901,7 +1942,6 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
         backgroundColor: colors.card,
-        paddingTop: Platform.OS === 'ios' ? 50 : 16,
     },
     memberModalHeaderLeft: {
         flexDirection: 'row',
@@ -1940,7 +1980,19 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         padding: 16,
         borderWidth: 1,
         borderColor: colors.border,
-        gap: 4,
+    },
+    modalInputGroup: {
+        marginBottom: 16,
+    },
+    modalInput: {
+        backgroundColor: isDark ? colors.muted : colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 12,
+        fontSize: 15,
+        color: colors.foreground,
     },
     memberModalFooter: {
         flexDirection: 'row',
