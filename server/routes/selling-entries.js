@@ -4,6 +4,15 @@ const SellingEntry = require('../models/SellingEntry');
 const Member = require('../models/Member');
 const auth = require('../middleware/auth');
 
+const normalizeToUtcStartOfDay = (value) => {
+    const d = value ? new Date(value) : new Date();
+    if (Number.isNaN(d.getTime())) {
+        const now = new Date();
+        return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    }
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+};
+
 // GET /api/selling-entries - Get all entries for current user
 router.get('/', auth, async (req, res) => {
     try {
@@ -54,12 +63,30 @@ router.get('/', auth, async (req, res) => {
 // POST /api/selling-entries
 router.post('/', auth, async (req, res) => {
     try {
-        const { memberId, quantity, rate, shift, date, notes } = req.body;
+        const {
+            memberId,
+            date,
+            rate,
+            notes,
+            // Backward compatible payload (optional)
+            shift,
+            quantity,
+            // New payload
+            morningQuantity,
+            eveningQuantity
+        } = req.body;
 
-        if (!memberId || !quantity || !rate || !shift) {
+        if (!memberId) {
             return res.status(400).json({
                 success: false,
-                message: 'Member, quantity, rate, and shift are required'
+                message: 'Member is required'
+            });
+        }
+
+        if (rate === undefined || rate === null || rate === '') {
+            return res.status(400).json({
+                success: false,
+                message: 'Rate is required'
             });
         }
 
@@ -77,28 +104,84 @@ router.post('/', auth, async (req, res) => {
             });
         }
 
-        const entryDate = date ? new Date(date) : new Date();
-        const qty = parseFloat(quantity);
+        const entryDate = normalizeToUtcStartOfDay(date);
         const entryRate = parseFloat(rate);
-        const amount = qty * entryRate;
 
-        const entry = await SellingEntry.create({
-            member: memberId,
+        if (Number.isNaN(entryRate)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid rate'
+            });
+        }
+
+        const hasShiftPayload = !!shift && quantity !== undefined && quantity !== null && quantity !== '';
+
+        const incomingMorningRaw = hasShiftPayload
+            ? (shift === 'morning' ? parseFloat(quantity) : 0)
+            : parseFloat(morningQuantity || 0);
+
+        const incomingEveningRaw = hasShiftPayload
+            ? (shift === 'evening' ? parseFloat(quantity) : 0)
+            : parseFloat(eveningQuantity || 0);
+
+        const incomingMorning = Number.isNaN(incomingMorningRaw) ? 0 : Math.max(0, incomingMorningRaw);
+        const incomingEvening = Number.isNaN(incomingEveningRaw) ? 0 : Math.max(0, incomingEveningRaw);
+
+        if (incomingMorning <= 0 && incomingEvening <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Morning or evening quantity is required'
+            });
+        }
+
+        // One entry per owner+member+date: create or add into existing
+        let entry = await SellingEntry.findOne({
             owner: req.userId,
-            date: entryDate,
-            shift,
-            quantity: qty,
-            rate: entryRate,
-            amount,
-            notes: notes?.trim() || ''
+            member: memberId,
+            date: entryDate
         });
 
-        // Update member totals
+        let deltaLiters = 0;
+        let deltaAmount = 0;
+
+        if (!entry) {
+            const created = await SellingEntry.create({
+                member: memberId,
+                owner: req.userId,
+                date: entryDate,
+                morningQuantity: incomingMorning,
+                eveningQuantity: incomingEvening,
+                rate: entryRate,
+                notes: notes?.trim() || ''
+            });
+
+            entry = created;
+            deltaLiters = incomingMorning + incomingEvening;
+            deltaAmount = Number(created.amount || 0);
+        } else {
+            const oldTotalQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+            const oldAmount = Number(entry.amount || 0);
+
+            entry.morningQuantity = Number(entry.morningQuantity || 0) + incomingMorning;
+            entry.eveningQuantity = Number(entry.eveningQuantity || 0) + incomingEvening;
+            entry.rate = entryRate;
+            if (notes !== undefined) entry.notes = notes?.trim() || '';
+
+            await entry.save();
+
+            const newTotalQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+            const newAmount = Number(entry.amount || 0);
+
+            deltaLiters = newTotalQty - oldTotalQty;
+            deltaAmount = newAmount - oldAmount;
+        }
+
+        // Update member totals by delta
         await Member.findByIdAndUpdate(memberId, {
             $inc: {
-                totalLiters: qty,
-                totalAmount: amount,
-                pendingAmount: amount
+                totalLiters: deltaLiters,
+                totalAmount: deltaAmount,
+                pendingAmount: deltaAmount
             }
         });
 
@@ -137,9 +220,10 @@ router.delete('/:id', auth, async (req, res) => {
         }
 
         // Reverse member totals
+        const totalQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
         await Member.findByIdAndUpdate(entry.member, {
             $inc: {
-                totalLiters: -entry.quantity,
+                totalLiters: -totalQty,
                 totalAmount: -entry.amount,
                 pendingAmount: -entry.amount
             }
