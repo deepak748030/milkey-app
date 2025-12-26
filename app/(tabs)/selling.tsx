@@ -35,7 +35,7 @@ export default function SellingScreen() {
 
     // Date picker state
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [datePickerTarget, setDatePickerTarget] = useState<'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd' | 'paymentStart' | 'paymentEnd'>('entry');
+    const [datePickerTarget, setDatePickerTarget] = useState<'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd'>('entry');
     const [tempCalendarDate, setTempCalendarDate] = useState<Date | null>(new Date());
 
     // Entry state
@@ -70,10 +70,31 @@ export default function SellingScreen() {
     const [savingPayment, setSavingPayment] = useState(false);
     const [paymentMemberSearch, setPaymentMemberSearch] = useState('');
     const [showPaymentMemberSuggestions, setShowPaymentMemberSuggestions] = useState(false);
-    // Payment period date range
-    const [paymentPeriodStart, setPaymentPeriodStart] = useState('');
-    const [paymentPeriodEnd, setPaymentPeriodEnd] = useState('');
-    const [paymentEntryIds, setPaymentEntryIds] = useState<string[]>([]);
+
+    // Calculation period state
+    const [calcStartDate, setCalcStartDate] = useState('');
+    const [calcEndDate, setCalcEndDate] = useState('');
+    const [showCalcDatePicker, setShowCalcDatePicker] = useState(false);
+    const [calcDateTarget, setCalcDateTarget] = useState<'start' | 'end'>('start');
+
+    // Date ranges state
+    interface DateRange {
+        id: string;
+        startDay: number;
+        endDay: number | 'End';
+        label: string;
+    }
+    const [dateRanges, setDateRanges] = useState<DateRange[]>([
+        { id: '1', startDay: 1, endDay: 10, label: '1-10' },
+        { id: '2', startDay: 11, endDay: 20, label: '11-20' },
+        { id: '3', startDay: 21, endDay: 'End', label: '21-End' },
+    ]);
+
+    // Add Range Modal state
+    const [showAddRangeModal, setShowAddRangeModal] = useState(false);
+    const [newRangeStartDay, setNewRangeStartDay] = useState('');
+    const [newRangeEndDay, setNewRangeEndDay] = useState('');
+    const [newRangeIsEnd, setNewRangeIsEnd] = useState(false);
 
     // Reports state - empty dates means show all data
     const [reportStartDate, setReportStartDate] = useState('');
@@ -305,55 +326,29 @@ export default function SellingScreen() {
         });
     };
 
-    // Fetch member summary for payment with date range filter
-    const fetchPaymentSummary = async (memberId: string, startDate?: string, endDate?: string) => {
-        setPaymentLoading(true);
-        try {
-            const params: { startDate?: string; endDate?: string } = {};
-            if (startDate) params.startDate = startDate;
-            if (endDate) params.endDate = endDate;
-
-            const res = await memberPaymentsApi.getMemberSummary(memberId, params);
-            if (res.success && res.response) {
-                setMemberSummary(res.response);
-                // Auto-fill milk amount from unpaid entries in period
-                const unpaidAmount = res.response.selling?.unpaidAmount || res.response.selling?.totalAmount || 0;
-                setMilkAmount(unpaidAmount.toString());
-                // Store entry IDs for settlement
-                const entryIds = res.response.selling?.entries?.map((e: any) => e._id) || [];
-                setPaymentEntryIds(entryIds);
-            } else {
-                setMemberSummary({ member: { currentBalance: selectedPaymentMember?.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
-                setMilkAmount('0');
-                setPaymentEntryIds([]);
-            }
-        } catch (error) {
-            setMemberSummary({ member: { currentBalance: selectedPaymentMember?.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
-            setMilkAmount('0');
-            setPaymentEntryIds([]);
-        } finally {
-            setPaymentLoading(false);
-        }
-    };
-
+    // Fetch member summary for payment
     const handleSelectPaymentMember = async (member: Member) => {
         setSelectedPaymentMember(member);
         setPaymentMemberSearch(member.name);
         setShowPaymentMemberSuggestions(false);
+        setPaymentLoading(true);
 
-        // Reset inputs for new selection
+        // Reset inputs for new selection - keep milk amount as 0, no auto-fill
         setPaymentAmount('');
         setMilkAmount('0');
-        setPaymentEntryIds([]);
 
-        // Fetch summary with current period filter
-        await fetchPaymentSummary(member._id, paymentPeriodStart, paymentPeriodEnd);
-    };
-
-    // Re-fetch summary when period changes
-    const handlePaymentPeriodChange = async (start: string, end: string) => {
-        if (selectedPaymentMember) {
-            await fetchPaymentSummary(selectedPaymentMember._id, start, end);
+        try {
+            const res = await memberPaymentsApi.getMemberSummary(member._id);
+            if (res.success && res.response) {
+                setMemberSummary(res.response);
+                // Don't auto-fill milk amount - user will enter manually
+            } else {
+                setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+            }
+        } catch (error) {
+            setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+        } finally {
+            setPaymentLoading(false);
         }
     };
 
@@ -377,9 +372,6 @@ export default function SellingScreen() {
                 amount,
                 milkAmount: Number.parseFloat(milkAmount) || 0,
                 paymentMethod,
-                periodStart: paymentPeriodStart || undefined,
-                periodEnd: paymentPeriodEnd || undefined,
-                entryIds: paymentEntryIds.length > 0 ? paymentEntryIds : undefined,
             });
 
             if (res.success) {
@@ -387,10 +379,7 @@ export default function SellingScreen() {
                 setSelectedPaymentMember(null);
                 setPaymentMemberSearch('');
                 setPaymentAmount('');
-                setMilkAmount('0');
                 setMemberSummary(null);
-                setPaymentEntryIds([]);
-                // Keep period dates for next payment
                 fetchData();
             } else {
                 showAlert('Error', res.message || 'Failed to save payment');
@@ -409,7 +398,6 @@ export default function SellingScreen() {
         setPaymentAmount('');
         setMilkAmount('0');
         setMemberSummary(null);
-        setPaymentEntryIds([]);
     };
 
     // Filtered members for payment search
@@ -512,22 +500,10 @@ export default function SellingScreen() {
             setRecentEntriesStartDate(date);
         } else if (datePickerTarget === 'recentEnd') {
             setRecentEntriesEndDate(date);
-        } else if (datePickerTarget === 'paymentStart') {
-            setPaymentPeriodStart(date);
-            // Re-fetch summary when start date changes
-            if (selectedPaymentMember) {
-                handlePaymentPeriodChange(date, paymentPeriodEnd);
-            }
-        } else if (datePickerTarget === 'paymentEnd') {
-            setPaymentPeriodEnd(date);
-            // Re-fetch summary when end date changes
-            if (selectedPaymentMember) {
-                handlePaymentPeriodChange(paymentPeriodStart, date);
-            }
         }
     };
 
-    const openDatePicker = (target: 'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd' | 'paymentStart' | 'paymentEnd') => {
+    const openDatePicker = (target: 'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd') => {
         setDatePickerTarget(target);
         // Set temp calendar date based on target
         if (target === 'entry') {
@@ -540,10 +516,6 @@ export default function SellingScreen() {
             setTempCalendarDate(recentEntriesStartDate ? new Date(recentEntriesStartDate) : new Date());
         } else if (target === 'recentEnd') {
             setTempCalendarDate(recentEntriesEndDate ? new Date(recentEntriesEndDate) : new Date());
-        } else if (target === 'paymentStart') {
-            setTempCalendarDate(paymentPeriodStart ? new Date(paymentPeriodStart) : new Date());
-        } else if (target === 'paymentEnd') {
-            setTempCalendarDate(paymentPeriodEnd ? new Date(paymentPeriodEnd) : new Date());
         }
         setShowDatePicker(true);
     };
@@ -1081,45 +1053,6 @@ export default function SellingScreen() {
 
     const renderPaymentTab = () => (
         <View>
-            {/* Payment Period Date Range */}
-            <View style={styles.paymentPeriodCard}>
-                <Text style={styles.paymentPeriodLabel}>Calculation Period</Text>
-                <View style={styles.paymentPeriodRow}>
-                    <Pressable style={styles.paymentDateBtn} onPress={() => openDatePicker('paymentStart')}>
-                        <CalendarIcon size={14} color={colors.primary} />
-                        <Text style={[styles.paymentDateText, !paymentPeriodStart && { color: colors.mutedForeground }]}>
-                            {paymentPeriodStart ? formatDate(paymentPeriodStart) : 'Start Date'}
-                        </Text>
-                    </Pressable>
-                    <Text style={styles.paymentDateSeparator}>→</Text>
-                    <Pressable style={styles.paymentDateBtn} onPress={() => openDatePicker('paymentEnd')}>
-                        <CalendarIcon size={14} color={colors.primary} />
-                        <Text style={[styles.paymentDateText, !paymentPeriodEnd && { color: colors.mutedForeground }]}>
-                            {paymentPeriodEnd ? formatDate(paymentPeriodEnd) : 'End Date'}
-                        </Text>
-                    </Pressable>
-                    {(paymentPeriodStart || paymentPeriodEnd) && (
-                        <Pressable
-                            style={styles.paymentClearPeriodBtn}
-                            onPress={() => {
-                                setPaymentPeriodStart('');
-                                setPaymentPeriodEnd('');
-                                if (selectedPaymentMember) {
-                                    handlePaymentPeriodChange('', '');
-                                }
-                            }}
-                        >
-                            <X size={14} color={colors.destructive} />
-                        </Pressable>
-                    )}
-                </View>
-                {(paymentPeriodStart || paymentPeriodEnd) && memberSummary?.selling?.entriesCount !== undefined && (
-                    <Text style={styles.paymentPeriodInfo}>
-                        {memberSummary.selling.entriesCount} unpaid entries in period
-                    </Text>
-                )}
-            </View>
-
             {/* Member Search */}
             <View style={styles.inputGroup}>
                 <Text style={styles.label}>Select Member</Text>
@@ -1202,11 +1135,108 @@ export default function SellingScreen() {
                             <Text style={styles.memberInfoMobile}>{selectedPaymentMember.mobile}</Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={styles.balanceLabel}>Previous Balance</Text>
+                            <Text style={styles.balanceLabel}>Current Balance</Text>
                             <Text style={[styles.balanceValue, { color: previousBalance >= 0 ? colors.primary : colors.destructive }]}>
                                 ₹{previousBalance.toFixed(2)}
                             </Text>
                         </View>
+                    </View>
+
+                    {/* Calculation Period Section */}
+                    <View style={styles.calcPeriodCard}>
+                        <Text style={styles.calcPeriodTitle}>Calculation Period</Text>
+
+                        {/* Date Selector */}
+                        <View style={styles.calcDateRow}>
+                            <Pressable
+                                style={styles.calcDateInput}
+                                onPress={() => {
+                                    setCalcDateTarget('start');
+                                    const date = calcStartDate ? new Date(calcStartDate) : new Date();
+                                    setTempCalendarDate(date);
+                                    setShowCalcDatePicker(true);
+                                }}
+                            >
+                                <CalendarIcon size={14} color={colors.mutedForeground} />
+                                <Text style={styles.calcDateText}>
+                                    {calcStartDate ? formatDateDDMMYYYY(calcStartDate) : 'Start Date'}
+                                </Text>
+                            </Pressable>
+                            <Text style={styles.calcDateSeparator}>to</Text>
+                            <Pressable
+                                style={styles.calcDateInput}
+                                onPress={() => {
+                                    setCalcDateTarget('end');
+                                    const date = calcEndDate ? new Date(calcEndDate) : new Date();
+                                    setTempCalendarDate(date);
+                                    setShowCalcDatePicker(true);
+                                }}
+                            >
+                                <CalendarIcon size={14} color={colors.mutedForeground} />
+                                <Text style={styles.calcDateText}>
+                                    {calcEndDate ? formatDateDDMMYYYY(calcEndDate) : 'End Date'}
+                                </Text>
+                            </Pressable>
+                        </View>
+
+                        {/* Date Ranges */}
+                        <Text style={styles.dateRangesLabel}>Date Ranges</Text>
+                        <View style={styles.dateRangesContainer}>
+                            {dateRanges.map((range) => (
+                                <View key={range.id} style={styles.dateRangeChip}>
+                                    <Pressable
+                                        style={styles.dateRangeChipContent}
+                                        onPress={() => {
+                                            // Get current month and year
+                                            const now = new Date();
+                                            const year = now.getFullYear();
+                                            const month = now.getMonth();
+
+                                            // Calculate start date using local format (avoid timezone issues)
+                                            const startDay = range.startDay;
+                                            const startDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`;
+
+                                            // Calculate end date
+                                            let endDateStr: string;
+                                            if (range.endDay === 'End') {
+                                                // Last day of month
+                                                const lastDay = new Date(year, month + 1, 0).getDate();
+                                                endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                                            } else {
+                                                endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(range.endDay).padStart(2, '0')}`;
+                                            }
+
+                                            setCalcStartDate(startDateStr);
+                                            setCalcEndDate(endDateStr);
+                                        }}
+                                    >
+                                        <Text style={styles.dateRangeChipText}>{range.label}</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        style={styles.dateRangeDeleteBtn}
+                                        onPress={() => {
+                                            setDateRanges(prev => prev.filter(r => r.id !== range.id));
+                                        }}
+                                    >
+                                        <Trash2 size={14} color={colors.destructive} />
+                                    </Pressable>
+                                </View>
+                            ))}
+                        </View>
+
+                        {/* Add Range Button */}
+                        <Pressable
+                            style={styles.addRangeBtn}
+                            onPress={() => {
+                                setNewRangeStartDay('');
+                                setNewRangeEndDay('');
+                                setNewRangeIsEnd(false);
+                                setShowAddRangeModal(true);
+                            }}
+                        >
+                            <Plus size={14} color={colors.primary} />
+                            <Text style={styles.addRangeBtnText}>Add Range</Text>
+                        </Pressable>
                     </View>
 
                     {/* Summary Card */}
@@ -1731,6 +1761,134 @@ export default function SellingScreen() {
                                 setShowDatePicker(false);
                             }}>
                                 <Text style={styles.confirmModalBtnText}>Confirm</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Calculation Period Date Picker Modal */}
+            <Modal visible={showCalcDatePicker} animationType="slide" transparent onRequestClose={() => setShowCalcDatePicker(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.dateModalContent}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={styles.dateModalTitle}>
+                                {calcDateTarget === 'start' ? 'Select Start Date' : 'Select End Date'}
+                            </Text>
+                            <Pressable onPress={() => setShowCalcDatePicker(false)}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+                        <View style={styles.calendarBody}>
+                            <Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} />
+                        </View>
+                        <View style={styles.dateModalFooter}>
+                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowCalcDatePicker(false)}>
+                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable style={styles.confirmModalBtn} onPress={() => {
+                                if (tempCalendarDate) {
+                                    const y = tempCalendarDate.getFullYear();
+                                    const m = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
+                                    const d = String(tempCalendarDate.getDate()).padStart(2, '0');
+                                    const dateStr = `${y}-${m}-${d}`;
+                                    if (calcDateTarget === 'start') {
+                                        setCalcStartDate(dateStr);
+                                    } else {
+                                        setCalcEndDate(dateStr);
+                                    }
+                                }
+                                setShowCalcDatePicker(false);
+                            }}>
+                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Add Range Modal */}
+            <Modal visible={showAddRangeModal} animationType="slide" transparent onRequestClose={() => setShowAddRangeModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.addRangeModalContent}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={styles.dateModalTitle}>Add Date Range</Text>
+                            <Pressable onPress={() => setShowAddRangeModal(false)}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+
+                        <View style={styles.addRangeModalBody}>
+                            <Text style={styles.addRangeInputLabel}>Start Day (1-31)</Text>
+                            <TextInput
+                                style={styles.addRangeInput}
+                                placeholder="e.g. 1"
+                                value={newRangeStartDay}
+                                onChangeText={setNewRangeStartDay}
+                                keyboardType="number-pad"
+                                maxLength={2}
+                                placeholderTextColor={colors.mutedForeground}
+                            />
+
+                            <Text style={styles.addRangeInputLabel}>End Day</Text>
+                            <View style={styles.endDayRow}>
+                                <TextInput
+                                    style={[styles.addRangeInput, { flex: 1, opacity: newRangeIsEnd ? 0.5 : 1 }]}
+                                    placeholder="e.g. 10"
+                                    value={newRangeEndDay}
+                                    onChangeText={setNewRangeEndDay}
+                                    keyboardType="number-pad"
+                                    maxLength={2}
+                                    editable={!newRangeIsEnd}
+                                    placeholderTextColor={colors.mutedForeground}
+                                />
+                                <Pressable
+                                    style={[styles.endOfMonthBtn, newRangeIsEnd && styles.endOfMonthBtnActive]}
+                                    onPress={() => setNewRangeIsEnd(!newRangeIsEnd)}
+                                >
+                                    <Text style={[styles.endOfMonthBtnText, newRangeIsEnd && styles.endOfMonthBtnTextActive]}>
+                                        End of Month
+                                    </Text>
+                                </Pressable>
+                            </View>
+                        </View>
+
+                        <View style={styles.dateModalFooter}>
+                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowAddRangeModal(false)}>
+                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable
+                                style={styles.confirmModalBtn}
+                                onPress={() => {
+                                    const startDay = parseInt(newRangeStartDay);
+                                    const endDay = newRangeIsEnd ? 'End' : parseInt(newRangeEndDay);
+
+                                    if (isNaN(startDay) || startDay < 1 || startDay > 31) {
+                                        showAlert('Error', 'Please enter a valid start day (1-31)');
+                                        return;
+                                    }
+
+                                    if (!newRangeIsEnd && (isNaN(endDay as number) || (endDay as number) < 1 || (endDay as number) > 31)) {
+                                        showAlert('Error', 'Please enter a valid end day (1-31)');
+                                        return;
+                                    }
+
+                                    if (!newRangeIsEnd && startDay > (endDay as number)) {
+                                        showAlert('Error', 'Start day must be less than end day');
+                                        return;
+                                    }
+
+                                    const newRange: DateRange = {
+                                        id: String(Date.now()),
+                                        startDay,
+                                        endDay,
+                                        label: newRangeIsEnd ? `${startDay}-End` : `${startDay}-${endDay}`,
+                                    };
+                                    setDateRanges(prev => [...prev, newRange]);
+                                    setShowAddRangeModal(false);
+                                }}
+                            >
+                                <Text style={styles.confirmModalBtnText}>Add</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -3066,55 +3224,152 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 12,
         color: colors.foreground,
     },
-    // Payment period styles
-    paymentPeriodCard: {
+    // Calculation Period styles
+    calcPeriodCard: {
         backgroundColor: colors.card,
-        borderRadius: 8,
-        padding: 12,
+        borderRadius: 10,
+        padding: 14,
         marginBottom: 12,
         borderWidth: 1,
         borderColor: colors.border,
     },
-    paymentPeriodLabel: {
+    calcPeriodTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: colors.foreground,
+        marginBottom: 12,
+    },
+    calcDateRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 16,
+    },
+    calcDateInput: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: isDark ? colors.muted : colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+    },
+    calcDateText: {
+        fontSize: 13,
+        color: colors.foreground,
+    },
+    calcDateSeparator: {
+        fontSize: 13,
+        color: colors.mutedForeground,
+        fontWeight: '500',
+    },
+    dateRangesLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.foreground,
+        marginBottom: 10,
+    },
+    dateRangesContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: 12,
+    },
+    dateRangeChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: isDark ? colors.muted : colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
+    dateRangeChipContent: {
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+    },
+    dateRangeChipText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    dateRangeDeleteBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 10,
+        borderLeftWidth: 1,
+        borderLeftColor: colors.border,
+    },
+    addRangeBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderWidth: 1,
+        borderColor: colors.primary,
+        borderRadius: 8,
+        borderStyle: 'dashed',
+        minWidth: 100,
+    },
+    addRangeBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.primary,
+    },
+    // Add Range Modal styles
+    addRangeModalContent: {
+        backgroundColor: colors.card,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: 20,
+    },
+    addRangeModalBody: {
+        padding: 20,
+    },
+    addRangeInputLabel: {
         fontSize: 13,
         fontWeight: '600',
         color: colors.foreground,
         marginBottom: 8,
     },
-    paymentPeriodRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    paymentDateBtn: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        backgroundColor: colors.muted,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        borderRadius: 6,
+    addRangeInput: {
+        backgroundColor: isDark ? colors.muted : colors.background,
         borderWidth: 1,
         borderColor: colors.border,
-    },
-    paymentDateText: {
-        fontSize: 12,
+        borderRadius: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 16,
         color: colors.foreground,
+        marginBottom: 16,
     },
-    paymentDateSeparator: {
-        fontSize: 14,
+    endDayRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    endOfMonthBtn: {
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        backgroundColor: isDark ? colors.muted : colors.background,
+    },
+    endOfMonthBtnActive: {
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
+    },
+    endOfMonthBtnText: {
+        fontSize: 13,
+        fontWeight: '600',
         color: colors.mutedForeground,
     },
-    paymentClearPeriodBtn: {
-        padding: 8,
-        borderRadius: 6,
-        backgroundColor: colors.muted,
-    },
-    paymentPeriodInfo: {
-        fontSize: 11,
-        color: colors.primary,
-        marginTop: 8,
-        fontWeight: '500',
+    endOfMonthBtnTextActive: {
+        color: colors.white,
     },
 });
