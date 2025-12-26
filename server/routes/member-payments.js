@@ -266,13 +266,29 @@ router.post('/', auth, async (req, res) => {
         const parsedReqMilkRate = Number(reqMilkRate);
         const parsedReqTotalQuantity = Number(reqTotalQuantity);
 
-        const finalTotalQuantity = Number.isFinite(parsedReqTotalQuantity) && parsedReqTotalQuantity > 0
-            ? parsedReqTotalQuantity
-            : computedTotalQuantity;
+        // Always prioritize computed quantity from actual selling entries
+        const finalTotalQuantity = computedTotalQuantity > 0
+            ? computedTotalQuantity
+            : (Number.isFinite(parsedReqTotalQuantity) && parsedReqTotalQuantity > 0 ? parsedReqTotalQuantity : 0);
 
-        const finalMilkRate = Number.isFinite(parsedReqMilkRate) && parsedReqMilkRate > 0
-            ? parsedReqMilkRate
-            : (computedTotalQuantity > 0 ? (totalSellAmount / computedTotalQuantity) : 0);
+        // For milk rate: use member's ratePerLiter if provided and valid, otherwise calculate from totalSellAmount / quantity
+        // This ensures the rate at the time of payment is saved (won't change if user updates their rate later)
+        const memberRateAtPayment = Number(member.ratePerLiter) || 0;
+        let finalMilkRate = 0;
+        if (Number.isFinite(parsedReqMilkRate) && parsedReqMilkRate > 0) {
+            finalMilkRate = parsedReqMilkRate;
+        } else if (memberRateAtPayment > 0) {
+            finalMilkRate = memberRateAtPayment;
+        } else if (finalTotalQuantity > 0 && totalSellAmount > 0) {
+            finalMilkRate = totalSellAmount / finalTotalQuantity;
+        }
+
+        // Log for debugging
+        console.log('Payment creation values:', {
+            reqMilkRate, reqTotalQuantity,
+            computedTotalQuantity, memberRateAtPayment,
+            finalTotalQuantity, finalMilkRate, totalSellAmount
+        });
 
         const netPayable = previousBalance + totalSellAmount;
         const closingBalance = netPayable - paymentAmount;

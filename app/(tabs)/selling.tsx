@@ -1374,31 +1374,19 @@ export default function SellingScreen() {
                                         </View>
                                     )}
 
-                                    {/* Milk Quantity */}
+                                    {/* Milk Quantity - directly from saved payment record */}
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Milk Quantity:</Text>
                                         <Text style={styles.historyValue}>
-                                            {(() => {
-                                                const qty = Number(p.totalQuantity ?? 0);
-                                                const rate = Number(p.milkRate ?? 0);
-                                                const amt = Number(p.totalSellAmount ?? 0);
-                                                const computedQty = qty > 0 ? qty : (rate > 0 ? amt / rate : 0);
-                                                return `${computedQty.toFixed(1)} L`;
-                                            })()}
+                                            {(Number(p.totalQuantity) || 0).toFixed(1)} L
                                         </Text>
                                     </View>
 
-                                    {/* Milk Rate */}
+                                    {/* Milk Rate - directly from saved payment record (rate at time of payment) */}
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Milk Rate:</Text>
                                         <Text style={styles.historyValue}>
-                                            {(() => {
-                                                const qty = Number(p.totalQuantity ?? 0);
-                                                const rate = Number(p.milkRate ?? 0);
-                                                const amt = Number(p.totalSellAmount ?? 0);
-                                                const computedRate = rate > 0 ? rate : (qty > 0 ? amt / qty : 0);
-                                                return `₹${computedRate.toFixed(2)}/L`;
-                                            })()}
+                                            ₹{(Number(p.milkRate) || 0).toFixed(2)}/L
                                         </Text>
                                     </View>
 

@@ -35,6 +35,11 @@ const memberPaymentSchema = new mongoose.Schema({
         trim: true,
         default: ''
     },
+    // Selling entries that were settled with this payment
+    settledEntries: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'SellingEntry'
+    }],
     // Period for which payment is made
     periodStart: {
         type: Date
@@ -42,13 +47,18 @@ const memberPaymentSchema = new mongoose.Schema({
     periodEnd: {
         type: Date
     },
-    // Selling entries that were settled with this payment
-    settledEntries: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'SellingEntry'
-    }],
     // Summary
     totalSellAmount: {
+        type: Number,
+        default: 0
+    },
+    // Total quantity in liters for the period (saved at time of payment)
+    totalQuantity: {
+        type: Number,
+        default: 0
+    },
+    // Milk rate per liter at time of payment (saved permanently so rate changes don't affect old records)
+    milkRate: {
         type: Number,
         default: 0
     },
