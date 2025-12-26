@@ -54,9 +54,11 @@ router.get('/', auth, async (req, res) => {
     }
 });
 
-// GET /api/member-payments/member-summary/:memberId - Get pending summary for a member
+// GET /api/member-payments/member-summary/:memberId - Get pending summary for a member with date range
 router.get('/member-summary/:memberId', auth, async (req, res) => {
     try {
+        const { startDate, endDate } = req.query;
+
         const member = await Member.findOne({
             _id: req.params.memberId,
             owner: req.userId
@@ -69,14 +71,35 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
             });
         }
 
-        // Calculate unpaid selling amount (not yet settled)
-        const unpaidEntries = await SellingEntry.find({
+        // Build date filter for entries
+        const dateFilter = {};
+        if (startDate || endDate) {
+            dateFilter.date = {};
+            if (startDate) {
+                dateFilter.date.$gte = new Date(startDate + 'T00:00:00.000Z');
+            }
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                dateFilter.date.$lte = end;
+            }
+        }
+
+        // Get entries that are not yet paid AND not already included in a payment for this period
+        // We check both isPaid flag and also check if entry was already settled in a payment
+        const entryQuery = {
             member: member._id,
             owner: req.userId,
-            isPaid: false
-        }).select('amount').lean();
+            isPaid: false,
+            ...dateFilter
+        };
+
+        const unpaidEntries = await SellingEntry.find(entryQuery)
+            .select('_id amount date morningQuantity eveningQuantity')
+            .lean();
 
         const unpaidSellAmount = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+        const unpaidQuantity = unpaidEntries.reduce((sum, e) => sum + Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0), 0);
 
         const currentBalance = Number(member.sellingPaymentBalance || 0);
         const netPayable = currentBalance + unpaidSellAmount;
@@ -91,9 +114,19 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
                     currentBalance
                 },
                 selling: {
-                    totalLiters: member.totalLiters || 0,
-                    totalAmount: member.totalAmount || 0,
-                    unpaidAmount: unpaidSellAmount
+                    totalLiters: unpaidQuantity,
+                    totalAmount: unpaidSellAmount,
+                    unpaidAmount: unpaidSellAmount,
+                    entriesCount: unpaidEntries.length,
+                    entries: unpaidEntries.map(e => ({
+                        _id: e._id,
+                        date: e.date,
+                        amount: e.amount
+                    }))
+                },
+                period: {
+                    startDate: startDate || null,
+                    endDate: endDate || null
                 },
                 netPayable,
                 closingBalance: netPayable
@@ -111,7 +144,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
 // POST /api/member-payments - Create payment (settle member dues)
 router.post('/', auth, async (req, res) => {
     try {
-        const { memberId, amount, milkAmount, paymentMethod, reference, notes } = req.body;
+        const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds } = req.body;
 
         if (!memberId || !amount) {
             return res.status(400).json({
@@ -132,12 +165,34 @@ router.post('/', auth, async (req, res) => {
             });
         }
 
-        // Get unpaid selling entries
-        const unpaidEntries = await SellingEntry.find({
+        // Build date filter for getting unpaid entries
+        const dateFilter = {};
+        if (periodStart || periodEnd) {
+            dateFilter.date = {};
+            if (periodStart) {
+                dateFilter.date.$gte = new Date(periodStart + 'T00:00:00.000Z');
+            }
+            if (periodEnd) {
+                const end = new Date(periodEnd);
+                end.setHours(23, 59, 59, 999);
+                dateFilter.date.$lte = end;
+            }
+        }
+
+        // Get unpaid selling entries for the period
+        const entryQuery = {
             member: member._id,
             owner: req.userId,
-            isPaid: false
-        }).sort({ date: 1 });
+            isPaid: false,
+            ...dateFilter
+        };
+
+        // If specific entry IDs provided, use those
+        if (entryIds && Array.isArray(entryIds) && entryIds.length > 0) {
+            entryQuery._id = { $in: entryIds };
+        }
+
+        const unpaidEntries = await SellingEntry.find(entryQuery).sort({ date: 1 });
 
         const computedUnpaidTotal = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
@@ -156,7 +211,7 @@ router.post('/', auth, async (req, res) => {
         const netPayable = previousBalance + totalSellAmount;
         const closingBalance = netPayable - paymentAmount;
 
-        // Create payment record
+        // Create payment record with period info
         const payment = await MemberPayment.create({
             member: member._id,
             owner: req.userId,
@@ -168,14 +223,18 @@ router.post('/', auth, async (req, res) => {
             totalSellAmount,
             netPayable,
             previousBalance,
-            closingBalance
+            closingBalance,
+            periodStart: periodStart ? new Date(periodStart) : null,
+            periodEnd: periodEnd ? new Date(periodEnd) : null
         });
 
         // Mark entries as paid
-        await SellingEntry.updateMany(
-            { _id: { $in: unpaidEntries.map(e => e._id) } },
-            { isPaid: true }
-        );
+        if (unpaidEntries.length > 0) {
+            await SellingEntry.updateMany(
+                { _id: { $in: unpaidEntries.map(e => e._id) } },
+                { isPaid: true }
+            );
+        }
 
         // Update member - set sellingPaymentBalance to closingBalance
         member.sellingPaymentBalance = closingBalance;
