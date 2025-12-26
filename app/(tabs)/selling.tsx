@@ -367,11 +367,20 @@ export default function SellingScreen() {
 
         setSavingPayment(true);
         try {
+            // Get member's milk rate
+            const memberRate = selectedPaymentMember.ratePerLiter || 0;
+            const milkAmountVal = Number.parseFloat(milkAmount) || 0;
+            const totalQuantityVal = memberRate > 0 ? milkAmountVal / memberRate : 0;
+
             const res = await memberPaymentsApi.create({
                 memberId: selectedPaymentMember._id,
                 amount,
-                milkAmount: Number.parseFloat(milkAmount) || 0,
+                milkAmount: milkAmountVal,
                 paymentMethod,
+                periodStart: calcStartDate || undefined,
+                periodEnd: calcEndDate || undefined,
+                totalQuantity: totalQuantityVal,
+                milkRate: memberRate,
             });
 
             if (res.success) {
@@ -1186,7 +1195,7 @@ export default function SellingScreen() {
                                 <View key={range.id} style={styles.dateRangeChip}>
                                     <Pressable
                                         style={styles.dateRangeChipContent}
-                                        onPress={() => {
+                                        onPress={async () => {
                                             // Get current month and year
                                             const now = new Date();
                                             const year = now.getFullYear();
@@ -1208,6 +1217,22 @@ export default function SellingScreen() {
 
                                             setCalcStartDate(startDateStr);
                                             setCalcEndDate(endDateStr);
+
+                                            // If member is selected, fetch unpaid milk amount for this date range
+                                            if (selectedPaymentMember) {
+                                                try {
+                                                    const res = await memberPaymentsApi.getMemberSummary(
+                                                        selectedPaymentMember._id,
+                                                        { startDate: startDateStr, endDate: endDateStr }
+                                                    );
+                                                    if (res.success && res.response) {
+                                                        const unpaidAmount = res.response.selling?.unpaidAmount || res.response.selling?.totalAmount || 0;
+                                                        setMilkAmount(unpaidAmount.toFixed(2));
+                                                    }
+                                                } catch (error) {
+                                                    console.error('Failed to fetch milk amount for date range:', error);
+                                                }
+                                            }
                                         }}
                                     >
                                         <Text style={styles.dateRangeChipText}>{range.label}</Text>
@@ -1245,20 +1270,9 @@ export default function SellingScreen() {
                             <Text style={styles.summaryLabel}>Milk Amount (₹):</Text>
                             <View style={styles.milkAmountWrapper}>
                                 <Text style={styles.milkAmountPrefix}>₹</Text>
-                                <TextInput
-                                    style={[styles.milkAmountInput, { minWidth: Math.max(40, (milkAmount.length || 1) * 12) }]}
-                                    placeholder="0"
-                                    value={milkAmount}
-                                    onChangeText={setMilkAmount}
-                                    onFocus={() => {
-                                        if (milkAmount === '0') setMilkAmount('');
-                                    }}
-                                    onBlur={() => {
-                                        if (!milkAmount.trim()) setMilkAmount('0');
-                                    }}
-                                    keyboardType="numeric"
-                                    placeholderTextColor={colors.mutedForeground}
-                                />
+                                <Text style={[styles.milkAmountInput, { minWidth: Math.max(40, (milkAmount.length || 1) * 12) }]}>
+                                    {milkAmount}
+                                </Text>
                             </View>
                         </View>
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
@@ -1332,14 +1346,52 @@ export default function SellingScreen() {
                                         </Text>
                                         <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
                                     </View>
+
+                                    {/* Date Range */}
+                                    {(p.periodStart || p.periodEnd) && (
+                                        <View style={[styles.historyRow, { backgroundColor: colors.muted, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 4, marginTop: -4 }]}>
+                                            <Text style={[styles.historyLabel, { fontSize: 11 }]}>Period:</Text>
+                                            <Text style={[styles.historyValue, { fontSize: 11, color: colors.mutedForeground }]}>
+                                                {(() => {
+                                                    const startDay = p.periodStart ? new Date(p.periodStart).getDate() : null;
+                                                    const endDay = p.periodEnd ? new Date(p.periodEnd).getDate() : null;
+                                                    const endDate = p.periodEnd ? new Date(p.periodEnd) : null;
+                                                    const isEndOfMonth = endDate ? endDate.getDate() === new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).getDate() : false;
+
+                                                    if (startDay && endDay) {
+                                                        return `${startDay}-${isEndOfMonth ? 'End' : endDay}`;
+                                                    }
+                                                    return `${p.periodStart ? formatDateDDMMYYYY(p.periodStart) : '-'} to ${p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}`;
+                                                })()}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {/* Milk Quantity */}
                                     <View style={styles.historyRow}>
-                                        <Text style={styles.historyLabel}>Milk Amount:</Text>
+                                        <Text style={styles.historyLabel}>Milk Quantity:</Text>
+                                        <Text style={styles.historyValue}>{(p.totalQuantity || 0).toFixed(1)} L</Text>
+                                    </View>
+
+                                    {/* Milk Rate */}
+                                    <View style={styles.historyRow}>
+                                        <Text style={styles.historyLabel}>Milk Rate:</Text>
+                                        <Text style={styles.historyValue}>₹{(p.milkRate || 0).toFixed(2)}/L</Text>
+                                    </View>
+
+                                    {/* Total Milk Amount */}
+                                    <View style={styles.historyRow}>
+                                        <Text style={styles.historyLabel}>Total Milk Amount:</Text>
                                         <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(2)}</Text>
                                     </View>
+
+                                    {/* Paid Amount */}
                                     <View style={styles.historyRow}>
-                                        <Text style={styles.historyLabel}>Amount Paid:</Text>
+                                        <Text style={styles.historyLabel}>Paid Amount:</Text>
                                         <Text style={[styles.historyValue, { color: colors.success }]}>₹{(p.amount || 0).toFixed(2)}</Text>
                                     </View>
+
+                                    {/* Closing Balance */}
                                     {p.closingBalance !== undefined && (
                                         <View style={[styles.historyRow, { backgroundColor: colors.muted, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 6, marginBottom: -6, borderBottomLeftRadius: 6, borderBottomRightRadius: 6, marginTop: 6 }]}>
                                             <Text style={[styles.historyLabel, { fontWeight: '700' }]}>Closing Balance:</Text>

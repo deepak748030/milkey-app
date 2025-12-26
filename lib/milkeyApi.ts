@@ -1010,14 +1010,7 @@ export const sellingEntriesApi = {
 // Member Payment Summary interface
 export interface MemberPaymentSummary {
     member: { id: string; name: string; mobile: string; currentBalance: number };
-    selling: {
-        totalLiters: number;
-        totalAmount: number;
-        unpaidAmount?: number;
-        entriesCount?: number;
-        entries?: Array<{ _id: string; date: string; amount: number }>;
-    };
-    period?: { startDate: string | null; endDate: string | null };
+    selling: { totalLiters: number; totalAmount: number; unpaidAmount?: number };
     netPayable: number;
     closingBalance: number;
 }
@@ -1031,9 +1024,13 @@ export interface MemberPayment {
     paymentMethod: string;
     reference: string;
     totalSellAmount: number;
+    totalQuantity?: number;
+    milkRate?: number;
     netPayable: number;
     closingBalance?: number;
     previousBalance?: number;
+    periodStart?: string;
+    periodEnd?: string;
     createdAt?: string;
 }
 
@@ -1068,7 +1065,8 @@ export const memberPaymentsApi = {
         notes?: string;
         periodStart?: string;
         periodEnd?: string;
-        entryIds?: string[];
+        totalQuantity?: number;
+        milkRate?: number;
     }) => {
         return apiRequest<MemberPayment>('/member-payments', {
             method: 'POST',
