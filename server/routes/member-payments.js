@@ -124,7 +124,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
             });
         }
 
-        // Build date filter for entries
+        // Build date filter for entries (SellingEntry dates are stored at UTC start-of-day)
         const dateFilter = {};
         if (startDate || endDate) {
             dateFilter.date = {};
@@ -132,9 +132,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
                 dateFilter.date.$gte = new Date(startDate + 'T00:00:00.000Z');
             }
             if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                dateFilter.date.$lte = end;
+                dateFilter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
             }
         }
 
@@ -218,7 +216,7 @@ router.post('/', auth, async (req, res) => {
             });
         }
 
-        // Build date filter for getting unpaid entries
+        // Build date filter for getting unpaid entries (SellingEntry dates are stored at UTC start-of-day)
         const dateFilter = {};
         if (periodStart || periodEnd) {
             dateFilter.date = {};
@@ -226,9 +224,7 @@ router.post('/', auth, async (req, res) => {
                 dateFilter.date.$gte = new Date(periodStart + 'T00:00:00.000Z');
             }
             if (periodEnd) {
-                const end = new Date(periodEnd);
-                end.setHours(23, 59, 59, 999);
-                dateFilter.date.$lte = end;
+                dateFilter.date.$lte = new Date(periodEnd + 'T23:59:59.999Z');
             }
         }
 

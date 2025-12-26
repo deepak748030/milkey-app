@@ -1214,9 +1214,9 @@ export default function SellingScreen() {
                                             // Calculate end date
                                             let endDateStr: string;
                                             if (range.endDay === 'End') {
-                                                // Last day of month
-                                                const lastDay = new Date(year, month + 1, 0).getDate();
-                                                endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                                                // Use today's date as end date
+                                                const today = now.getDate();
+                                                endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(today).padStart(2, '0')}`;
                                             } else {
                                                 endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(range.endDay).padStart(2, '0')}`;
                                             }
@@ -1362,11 +1362,9 @@ export default function SellingScreen() {
                                                 {(() => {
                                                     const startDay = p.periodStart ? new Date(p.periodStart).getDate() : null;
                                                     const endDay = p.periodEnd ? new Date(p.periodEnd).getDate() : null;
-                                                    const endDate = p.periodEnd ? new Date(p.periodEnd) : null;
-                                                    const isEndOfMonth = endDate ? endDate.getDate() === new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).getDate() : false;
 
                                                     if (startDay && endDay) {
-                                                        return `${startDay}-${isEndOfMonth ? 'End' : endDay}`;
+                                                        return `${startDay}-${endDay}`;
                                                     }
                                                     return `${p.periodStart ? formatDateDDMMYYYY(p.periodStart) : '-'} to ${p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}`;
                                                 })()}
