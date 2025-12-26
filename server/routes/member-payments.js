@@ -209,9 +209,17 @@ router.post('/', auth, async (req, res) => {
             if (!Number.isNaN(manual)) totalSellAmount = manual;
         }
 
-        // Use provided milkRate and totalQuantity if available, otherwise calculate
-        const finalMilkRate = (reqMilkRate !== undefined && reqMilkRate !== null) ? Number(reqMilkRate) : (computedTotalQuantity > 0 ? (totalSellAmount / computedTotalQuantity) : 0);
-        const finalTotalQuantity = (reqTotalQuantity !== undefined && reqTotalQuantity !== null) ? Number(reqTotalQuantity) : computedTotalQuantity;
+        // Use provided milkRate and totalQuantity only if they are valid (> 0), otherwise calculate from entries
+        const parsedReqMilkRate = Number(reqMilkRate);
+        const parsedReqTotalQuantity = Number(reqTotalQuantity);
+
+        const finalTotalQuantity = Number.isFinite(parsedReqTotalQuantity) && parsedReqTotalQuantity > 0
+            ? parsedReqTotalQuantity
+            : computedTotalQuantity;
+
+        const finalMilkRate = Number.isFinite(parsedReqMilkRate) && parsedReqMilkRate > 0
+            ? parsedReqMilkRate
+            : (computedTotalQuantity > 0 ? (totalSellAmount / computedTotalQuantity) : 0);
 
         const netPayable = previousBalance + totalSellAmount;
         const closingBalance = netPayable - paymentAmount;

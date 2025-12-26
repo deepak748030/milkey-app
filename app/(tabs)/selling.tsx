@@ -338,7 +338,12 @@ export default function SellingScreen() {
         setMilkAmount('0');
 
         try {
-            const res = await memberPaymentsApi.getMemberSummary(member._id);
+            const res = await memberPaymentsApi.getMemberSummary(
+                member._id,
+                calcStartDate || calcEndDate
+                    ? { startDate: calcStartDate || undefined, endDate: calcEndDate || undefined }
+                    : undefined
+            );
             if (res.success && res.response) {
                 setMemberSummary(res.response);
                 // Don't auto-fill milk amount - user will enter manually
@@ -367,10 +372,11 @@ export default function SellingScreen() {
 
         setSavingPayment(true);
         try {
-            // Get member's milk rate
+            // Get member's milk rate and total quantity from summary
             const memberRate = selectedPaymentMember.ratePerLiter || 0;
             const milkAmountVal = Number.parseFloat(milkAmount) || 0;
-            const totalQuantityVal = memberRate > 0 ? milkAmountVal / memberRate : 0;
+            // Use totalLiters from member summary (real quantity from selling entries for the period)
+            const totalQuantityFromSummary = memberSummary?.selling?.totalLiters || 0;
 
             const res = await memberPaymentsApi.create({
                 memberId: selectedPaymentMember._id,
@@ -379,7 +385,7 @@ export default function SellingScreen() {
                 paymentMethod,
                 periodStart: calcStartDate || undefined,
                 periodEnd: calcEndDate || undefined,
-                totalQuantity: totalQuantityVal,
+                totalQuantity: totalQuantityFromSummary,
                 milkRate: memberRate,
             });
 
@@ -1218,7 +1224,7 @@ export default function SellingScreen() {
                                             setCalcStartDate(startDateStr);
                                             setCalcEndDate(endDateStr);
 
-                                            // If member is selected, fetch unpaid milk amount for this date range
+                                            // If member is selected, fetch unpaid summary for this date range
                                             if (selectedPaymentMember) {
                                                 try {
                                                     const res = await memberPaymentsApi.getMemberSummary(
@@ -1226,11 +1232,12 @@ export default function SellingScreen() {
                                                         { startDate: startDateStr, endDate: endDateStr }
                                                     );
                                                     if (res.success && res.response) {
+                                                        setMemberSummary(res.response);
                                                         const unpaidAmount = res.response.selling?.unpaidAmount || res.response.selling?.totalAmount || 0;
                                                         setMilkAmount(unpaidAmount.toFixed(2));
                                                     }
                                                 } catch (error) {
-                                                    console.error('Failed to fetch milk amount for date range:', error);
+                                                    console.error('Failed to fetch milk summary for date range:', error);
                                                 }
                                             }
                                         }}
@@ -1370,13 +1377,29 @@ export default function SellingScreen() {
                                     {/* Milk Quantity */}
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Milk Quantity:</Text>
-                                        <Text style={styles.historyValue}>{(p.totalQuantity || 0).toFixed(1)} L</Text>
+                                        <Text style={styles.historyValue}>
+                                            {(() => {
+                                                const qty = Number(p.totalQuantity ?? 0);
+                                                const rate = Number(p.milkRate ?? 0);
+                                                const amt = Number(p.totalSellAmount ?? 0);
+                                                const computedQty = qty > 0 ? qty : (rate > 0 ? amt / rate : 0);
+                                                return `${computedQty.toFixed(1)} L`;
+                                            })()}
+                                        </Text>
                                     </View>
 
                                     {/* Milk Rate */}
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Milk Rate:</Text>
-                                        <Text style={styles.historyValue}>₹{(p.milkRate || 0).toFixed(2)}/L</Text>
+                                        <Text style={styles.historyValue}>
+                                            {(() => {
+                                                const qty = Number(p.totalQuantity ?? 0);
+                                                const rate = Number(p.milkRate ?? 0);
+                                                const amt = Number(p.totalSellAmount ?? 0);
+                                                const computedRate = rate > 0 ? rate : (qty > 0 ? amt / qty : 0);
+                                                return `₹${computedRate.toFixed(2)}/L`;
+                                            })()}
+                                        </Text>
                                     </View>
 
                                     {/* Total Milk Amount */}
