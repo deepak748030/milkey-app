@@ -35,7 +35,7 @@ export default function SellingScreen() {
 
     // Date picker state
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const [datePickerTarget, setDatePickerTarget] = useState<'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd'>('entry');
+    const [datePickerTarget, setDatePickerTarget] = useState<'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd' | 'paymentStart' | 'paymentEnd'>('entry');
     const [tempCalendarDate, setTempCalendarDate] = useState<Date | null>(new Date());
 
     // Entry state
@@ -70,32 +70,10 @@ export default function SellingScreen() {
     const [savingPayment, setSavingPayment] = useState(false);
     const [paymentMemberSearch, setPaymentMemberSearch] = useState('');
     const [showPaymentMemberSuggestions, setShowPaymentMemberSuggestions] = useState(false);
-
-    // Payment date range state
-    const [paymentStartDate, setPaymentStartDate] = useState(() => {
-        const d = new Date();
-        d.setDate(1);
-        return formatLocalDate(d);
-    });
-    const [paymentEndDate, setPaymentEndDate] = useState(() => formatLocalDate(new Date()));
-    const [showPaymentStartDatePicker, setShowPaymentStartDatePicker] = useState(false);
-    const [showPaymentEndDatePicker, setShowPaymentEndDatePicker] = useState(false);
-    const [paymentTempCalendarDate, setPaymentTempCalendarDate] = useState<Date | null>(null);
-
-    // Payment date ranges
-    const [paymentCustomRanges] = useState([
-        { id: '1', startDay: 1, endDay: 10, label: '1-10' },
-        { id: '2', startDay: 11, endDay: 20, label: '11-20' },
-        { id: '3', startDay: 21, endDay: 31, label: '21-End' },
-    ]);
-
-    // Helper to format date as YYYY-MM-DD without timezone shift
-    function formatLocalDate(date: Date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
+    // Payment period date range
+    const [paymentPeriodStart, setPaymentPeriodStart] = useState('');
+    const [paymentPeriodEnd, setPaymentPeriodEnd] = useState('');
+    const [paymentEntryIds, setPaymentEntryIds] = useState<string[]>([]);
 
     // Reports state - empty dates means show all data
     const [reportStartDate, setReportStartDate] = useState('');
@@ -327,70 +305,56 @@ export default function SellingScreen() {
         });
     };
 
-    // Fetch member summary for payment with date range
-    const handleSelectPaymentMember = async (member: Member) => {
-        setSelectedPaymentMember(member);
-        setPaymentMemberSearch(member.name);
-        setShowPaymentMemberSuggestions(false);
+    // Fetch member summary for payment with date range filter
+    const fetchPaymentSummary = async (memberId: string, startDate?: string, endDate?: string) => {
         setPaymentLoading(true);
-
-        // Reset inputs for new selection
-        setPaymentAmount('');
-
         try {
-            const res = await memberPaymentsApi.getMemberSummary(member._id, paymentStartDate, paymentEndDate);
+            const params: { startDate?: string; endDate?: string } = {};
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+
+            const res = await memberPaymentsApi.getMemberSummary(memberId, params);
             if (res.success && res.response) {
                 setMemberSummary(res.response);
-                // Auto-fill milk amount from server
+                // Auto-fill milk amount from unpaid entries in period
                 const unpaidAmount = res.response.selling?.unpaidAmount || res.response.selling?.totalAmount || 0;
-                setMilkAmount(unpaidAmount.toFixed(2));
+                setMilkAmount(unpaidAmount.toString());
+                // Store entry IDs for settlement
+                const entryIds = res.response.selling?.entries?.map((e: any) => e._id) || [];
+                setPaymentEntryIds(entryIds);
             } else {
-                setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+                setMemberSummary({ member: { currentBalance: selectedPaymentMember?.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
                 setMilkAmount('0');
+                setPaymentEntryIds([]);
             }
         } catch (error) {
-            setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+            setMemberSummary({ member: { currentBalance: selectedPaymentMember?.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
             setMilkAmount('0');
+            setPaymentEntryIds([]);
         } finally {
             setPaymentLoading(false);
         }
     };
 
-    // Recalculate when dates change
-    const handlePaymentRecalculate = async () => {
-        if (selectedPaymentMember) {
-            setPaymentLoading(true);
-            try {
-                const res = await memberPaymentsApi.getMemberSummary(selectedPaymentMember._id, paymentStartDate, paymentEndDate);
-                if (res.success && res.response) {
-                    setMemberSummary(res.response);
-                    const unpaidAmount = res.response.selling?.unpaidAmount || res.response.selling?.totalAmount || 0;
-                    setMilkAmount(unpaidAmount.toFixed(2));
-                }
-            } catch (error) {
-                console.error('Error recalculating:', error);
-            } finally {
-                setPaymentLoading(false);
-            }
-        }
+    const handleSelectPaymentMember = async (member: Member) => {
+        setSelectedPaymentMember(member);
+        setPaymentMemberSearch(member.name);
+        setShowPaymentMemberSuggestions(false);
+
+        // Reset inputs for new selection
+        setPaymentAmount('');
+        setMilkAmount('0');
+        setPaymentEntryIds([]);
+
+        // Fetch summary with current period filter
+        await fetchPaymentSummary(member._id, paymentPeriodStart, paymentPeriodEnd);
     };
 
-    // Apply payment custom date range
-    const applyPaymentCustomRange = (range: { startDay: number; endDay: number }) => {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
-
-        const start = new Date(year, month, range.startDay);
-        let end: Date;
-        if (range.endDay >= 28) {
-            end = new Date(year, month + 1, 0);
-        } else {
-            end = new Date(year, month, range.endDay);
+    // Re-fetch summary when period changes
+    const handlePaymentPeriodChange = async (start: string, end: string) => {
+        if (selectedPaymentMember) {
+            await fetchPaymentSummary(selectedPaymentMember._id, start, end);
         }
-
-        setPaymentStartDate(formatLocalDate(start));
-        setPaymentEndDate(formatLocalDate(end));
     };
 
     // Process payment
@@ -408,17 +372,14 @@ export default function SellingScreen() {
 
         setSavingPayment(true);
         try {
-            // Get entry IDs from summary to mark as paid
-            const entryIds = memberSummary?.selling?.entries?.map((e: any) => e._id) || [];
-
             const res = await memberPaymentsApi.create({
                 memberId: selectedPaymentMember._id,
                 amount,
                 milkAmount: Number.parseFloat(milkAmount) || 0,
                 paymentMethod,
-                periodStart: paymentStartDate,
-                periodEnd: paymentEndDate,
-                entryIds,
+                periodStart: paymentPeriodStart || undefined,
+                periodEnd: paymentPeriodEnd || undefined,
+                entryIds: paymentEntryIds.length > 0 ? paymentEntryIds : undefined,
             });
 
             if (res.success) {
@@ -428,6 +389,8 @@ export default function SellingScreen() {
                 setPaymentAmount('');
                 setMilkAmount('0');
                 setMemberSummary(null);
+                setPaymentEntryIds([]);
+                // Keep period dates for next payment
                 fetchData();
             } else {
                 showAlert('Error', res.message || 'Failed to save payment');
@@ -446,6 +409,7 @@ export default function SellingScreen() {
         setPaymentAmount('');
         setMilkAmount('0');
         setMemberSummary(null);
+        setPaymentEntryIds([]);
     };
 
     // Filtered members for payment search
@@ -548,10 +512,22 @@ export default function SellingScreen() {
             setRecentEntriesStartDate(date);
         } else if (datePickerTarget === 'recentEnd') {
             setRecentEntriesEndDate(date);
+        } else if (datePickerTarget === 'paymentStart') {
+            setPaymentPeriodStart(date);
+            // Re-fetch summary when start date changes
+            if (selectedPaymentMember) {
+                handlePaymentPeriodChange(date, paymentPeriodEnd);
+            }
+        } else if (datePickerTarget === 'paymentEnd') {
+            setPaymentPeriodEnd(date);
+            // Re-fetch summary when end date changes
+            if (selectedPaymentMember) {
+                handlePaymentPeriodChange(paymentPeriodStart, date);
+            }
         }
     };
 
-    const openDatePicker = (target: 'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd') => {
+    const openDatePicker = (target: 'entry' | 'reportStart' | 'reportEnd' | 'recentStart' | 'recentEnd' | 'paymentStart' | 'paymentEnd') => {
         setDatePickerTarget(target);
         // Set temp calendar date based on target
         if (target === 'entry') {
@@ -564,6 +540,10 @@ export default function SellingScreen() {
             setTempCalendarDate(recentEntriesStartDate ? new Date(recentEntriesStartDate) : new Date());
         } else if (target === 'recentEnd') {
             setTempCalendarDate(recentEntriesEndDate ? new Date(recentEntriesEndDate) : new Date());
+        } else if (target === 'paymentStart') {
+            setTempCalendarDate(paymentPeriodStart ? new Date(paymentPeriodStart) : new Date());
+        } else if (target === 'paymentEnd') {
+            setTempCalendarDate(paymentPeriodEnd ? new Date(paymentPeriodEnd) : new Date());
         }
         setShowDatePicker(true);
     };
@@ -1092,25 +1072,54 @@ export default function SellingScreen() {
     );
 
 
-    // Calculate balances - current balance carried forward, add current milk amount, subtract paid
-    const currentBalance = (memberSummary?.member?.currentBalance ?? selectedPaymentMember?.sellingPaymentBalance ?? 0);
+    // Calculate balances - previous balance carried forward, add current milk amount, subtract paid
+    const previousBalance = (memberSummary?.member?.currentBalance ?? selectedPaymentMember?.sellingPaymentBalance ?? 0);
     const currentMilkAmount = Number.parseFloat(milkAmount) || 0;
     const paidAmount = Number.parseFloat(paymentAmount) || 0;
-    const netPayable = currentBalance + currentMilkAmount;
+    const netPayable = previousBalance + currentMilkAmount;
     const closingBalance = netPayable - paidAmount;
-
-    // Helper function for date formatting
-    const formatDateDisplay = (dateStr: string) => {
-        if (!dateStr) return '';
-        const date = new Date(dateStr + 'T00:00:00');
-        const day = date.getDate().toString().padStart(2, '0');
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const year = date.getFullYear();
-        return `${day}/${month}/${year}`;
-    };
 
     const renderPaymentTab = () => (
         <View>
+            {/* Payment Period Date Range */}
+            <View style={styles.paymentPeriodCard}>
+                <Text style={styles.paymentPeriodLabel}>Calculation Period</Text>
+                <View style={styles.paymentPeriodRow}>
+                    <Pressable style={styles.paymentDateBtn} onPress={() => openDatePicker('paymentStart')}>
+                        <CalendarIcon size={14} color={colors.primary} />
+                        <Text style={[styles.paymentDateText, !paymentPeriodStart && { color: colors.mutedForeground }]}>
+                            {paymentPeriodStart ? formatDate(paymentPeriodStart) : 'Start Date'}
+                        </Text>
+                    </Pressable>
+                    <Text style={styles.paymentDateSeparator}>→</Text>
+                    <Pressable style={styles.paymentDateBtn} onPress={() => openDatePicker('paymentEnd')}>
+                        <CalendarIcon size={14} color={colors.primary} />
+                        <Text style={[styles.paymentDateText, !paymentPeriodEnd && { color: colors.mutedForeground }]}>
+                            {paymentPeriodEnd ? formatDate(paymentPeriodEnd) : 'End Date'}
+                        </Text>
+                    </Pressable>
+                    {(paymentPeriodStart || paymentPeriodEnd) && (
+                        <Pressable
+                            style={styles.paymentClearPeriodBtn}
+                            onPress={() => {
+                                setPaymentPeriodStart('');
+                                setPaymentPeriodEnd('');
+                                if (selectedPaymentMember) {
+                                    handlePaymentPeriodChange('', '');
+                                }
+                            }}
+                        >
+                            <X size={14} color={colors.destructive} />
+                        </Pressable>
+                    )}
+                </View>
+                {(paymentPeriodStart || paymentPeriodEnd) && memberSummary?.selling?.entriesCount !== undefined && (
+                    <Text style={styles.paymentPeriodInfo}>
+                        {memberSummary.selling.entriesCount} unpaid entries in period
+                    </Text>
+                )}
+            </View>
+
             {/* Member Search */}
             <View style={styles.inputGroup}>
                 <Text style={styles.label}>Select Member</Text>
@@ -1193,145 +1202,11 @@ export default function SellingScreen() {
                             <Text style={styles.memberInfoMobile}>{selectedPaymentMember.mobile}</Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={styles.balanceLabel}>Current Balance</Text>
-                            <Text style={[styles.balanceValue, { color: currentBalance >= 0 ? colors.primary : colors.destructive }]}>
-                                ₹{currentBalance.toFixed(2)}
+                            <Text style={styles.balanceLabel}>Previous Balance</Text>
+                            <Text style={[styles.balanceValue, { color: previousBalance >= 0 ? colors.primary : colors.destructive }]}>
+                                ₹{previousBalance.toFixed(2)}
                             </Text>
                         </View>
-                    </View>
-
-                    {/* Date Range */}
-                    <Text style={styles.sectionLabel}>Calculation Period</Text>
-                    <View style={styles.dateRow}>
-                        <Pressable
-                            style={styles.dateInputWrapper}
-                            onPress={() => {
-                                setPaymentTempCalendarDate(paymentStartDate ? new Date(paymentStartDate + 'T00:00:00') : new Date());
-                                setShowPaymentStartDatePicker(true);
-                            }}
-                        >
-                            <Text style={[styles.dateInputText, !paymentStartDate && { color: colors.mutedForeground }]}>
-                                {paymentStartDate ? formatDateDisplay(paymentStartDate) : 'Start Date'}
-                            </Text>
-                            <CalendarIcon size={16} color={colors.mutedForeground} />
-                        </Pressable>
-                        <Pressable
-                            style={styles.dateInputWrapper}
-                            onPress={() => {
-                                setPaymentTempCalendarDate(paymentEndDate ? new Date(paymentEndDate + 'T00:00:00') : new Date());
-                                setShowPaymentEndDatePicker(true);
-                            }}
-                        >
-                            <Text style={[styles.dateInputText, !paymentEndDate && { color: colors.mutedForeground }]}>
-                                {paymentEndDate ? formatDateDisplay(paymentEndDate) : 'End Date'}
-                            </Text>
-                            <CalendarIcon size={16} color={colors.mutedForeground} />
-                        </Pressable>
-                    </View>
-
-                    {/* Payment Start Date Picker Modal */}
-                    <Modal
-                        visible={showPaymentStartDatePicker}
-                        transparent
-                        animationType="slide"
-                        onRequestClose={() => setShowPaymentStartDatePicker(false)}
-                    >
-                        <View style={styles.modalOverlay}>
-                            <Pressable style={{ flex: 1 }} onPress={() => setShowPaymentStartDatePicker(false)} />
-                            <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
-                                <View style={styles.dateModalHeader}>
-                                    <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select Start Date</Text>
-                                    <Pressable onPress={() => setShowPaymentStartDatePicker(false)} style={{ padding: 4 }}>
-                                        <X size={20} color={colors.foreground} />
-                                    </Pressable>
-                                </View>
-                                <View style={{ alignItems: 'center', marginBottom: 12, padding: 10, backgroundColor: colors.muted, borderRadius: 8 }}>
-                                    <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Selected Date</Text>
-                                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.primary, marginTop: 2 }}>
-                                        {paymentTempCalendarDate ? `${String(paymentTempCalendarDate.getDate()).padStart(2, '0')}-${String(paymentTempCalendarDate.getMonth() + 1).padStart(2, '0')}-${paymentTempCalendarDate.getFullYear()}` : 'None'}
-                                    </Text>
-                                </View>
-                                <Calendar
-                                    onDateSelect={setPaymentTempCalendarDate}
-                                    selectedDate={paymentTempCalendarDate}
-                                />
-                                <View style={styles.dateModalFooter}>
-                                    <Pressable style={styles.cancelModalBtn} onPress={() => setShowPaymentStartDatePicker(false)}>
-                                        <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                                    </Pressable>
-                                    <Pressable style={styles.confirmModalBtn} onPress={() => {
-                                        if (paymentTempCalendarDate) {
-                                            setPaymentStartDate(formatLocalDate(paymentTempCalendarDate));
-                                        }
-                                        setShowPaymentStartDatePicker(false);
-                                        handlePaymentRecalculate();
-                                    }}>
-                                        <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        </View>
-                    </Modal>
-
-                    {/* Payment End Date Picker Modal */}
-                    <Modal
-                        visible={showPaymentEndDatePicker}
-                        transparent
-                        animationType="slide"
-                        onRequestClose={() => setShowPaymentEndDatePicker(false)}
-                    >
-                        <View style={styles.modalOverlay}>
-                            <Pressable style={{ flex: 1 }} onPress={() => setShowPaymentEndDatePicker(false)} />
-                            <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
-                                <View style={styles.dateModalHeader}>
-                                    <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select End Date</Text>
-                                    <Pressable onPress={() => setShowPaymentEndDatePicker(false)} style={{ padding: 4 }}>
-                                        <X size={20} color={colors.foreground} />
-                                    </Pressable>
-                                </View>
-                                <View style={{ alignItems: 'center', marginBottom: 12, padding: 10, backgroundColor: colors.muted, borderRadius: 8 }}>
-                                    <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Selected Date</Text>
-                                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.primary, marginTop: 2 }}>
-                                        {paymentTempCalendarDate ? `${String(paymentTempCalendarDate.getDate()).padStart(2, '0')}-${String(paymentTempCalendarDate.getMonth() + 1).padStart(2, '0')}-${paymentTempCalendarDate.getFullYear()}` : 'None'}
-                                    </Text>
-                                </View>
-                                <Calendar
-                                    onDateSelect={setPaymentTempCalendarDate}
-                                    selectedDate={paymentTempCalendarDate}
-                                />
-                                <View style={styles.dateModalFooter}>
-                                    <Pressable style={styles.cancelModalBtn} onPress={() => setShowPaymentEndDatePicker(false)}>
-                                        <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                                    </Pressable>
-                                    <Pressable style={styles.confirmModalBtn} onPress={() => {
-                                        if (paymentTempCalendarDate) {
-                                            setPaymentEndDate(formatLocalDate(paymentTempCalendarDate));
-                                        }
-                                        setShowPaymentEndDatePicker(false);
-                                        handlePaymentRecalculate();
-                                    }}>
-                                        <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                                    </Pressable>
-                                </View>
-                            </View>
-                        </View>
-                    </Modal>
-
-                    {/* Custom date ranges */}
-                    <Text style={styles.sectionLabel}>Date Ranges</Text>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                        {paymentCustomRanges.map((range) => (
-                            <Pressable
-                                key={range.id}
-                                style={{ backgroundColor: colors.primary + '20', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.primary + '40' }}
-                                onPress={() => {
-                                    applyPaymentCustomRange(range);
-                                    setTimeout(() => handlePaymentRecalculate(), 100);
-                                }}
-                            >
-                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>{range.label}</Text>
-                            </Pressable>
-                        ))}
                     </View>
 
                     {/* Summary Card */}
@@ -1356,13 +1231,6 @@ export default function SellingScreen() {
                                 />
                             </View>
                         </View>
-                        {memberSummary?.selling?.entriesCount > 0 && (
-                            <View style={styles.summaryRow}>
-                                <Text style={[styles.summaryLabel, { fontSize: 11, color: colors.mutedForeground }]}>
-                                    ({memberSummary.selling.entriesCount} entries, {memberSummary.selling.totalLiters?.toFixed(1) || 0} L)
-                                </Text>
-                            </View>
-                        )}
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
                             <Text style={[styles.summaryLabel, { fontWeight: '700' }]}>Total Payable:</Text>
                             <Text style={[styles.summaryValue, { fontWeight: '700', color: netPayable >= 0 ? colors.primary : colors.destructive }]}>
@@ -3198,26 +3066,55 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 12,
         color: colors.foreground,
     },
-    // Date range styles for payment tab
-    dateRow: {
-        flexDirection: 'row',
-        gap: 10,
+    // Payment period styles
+    paymentPeriodCard: {
+        backgroundColor: colors.card,
+        borderRadius: 8,
+        padding: 12,
         marginBottom: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
     },
-    dateInputWrapper: {
+    paymentPeriodLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.foreground,
+        marginBottom: 8,
+    },
+    paymentPeriodRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    paymentDateBtn: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        backgroundColor: isDark ? colors.muted : colors.background,
+        gap: 6,
+        backgroundColor: colors.muted,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 6,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: 8,
-        paddingHorizontal: 12,
-        paddingVertical: 10,
     },
-    dateInputText: {
-        fontSize: 13,
+    paymentDateText: {
+        fontSize: 12,
         color: colors.foreground,
+    },
+    paymentDateSeparator: {
+        fontSize: 14,
+        color: colors.mutedForeground,
+    },
+    paymentClearPeriodBtn: {
+        padding: 8,
+        borderRadius: 6,
+        backgroundColor: colors.muted,
+    },
+    paymentPeriodInfo: {
+        fontSize: 11,
+        color: colors.primary,
+        marginTop: 8,
+        fontWeight: '500',
     },
 });

@@ -35,6 +35,13 @@ const memberPaymentSchema = new mongoose.Schema({
         trim: true,
         default: ''
     },
+    // Period for which payment is made
+    periodStart: {
+        type: Date
+    },
+    periodEnd: {
+        type: Date
+    },
     // Selling entries that were settled with this payment
     settledEntries: [{
         type: mongoose.Schema.Types.ObjectId,

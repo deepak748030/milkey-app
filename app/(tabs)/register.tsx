@@ -5,7 +5,7 @@ import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2 } fr
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary, AdvanceItem } from '@/lib/milkeyApi';
+import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';

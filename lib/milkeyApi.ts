@@ -1034,8 +1034,6 @@ export interface MemberPayment {
     netPayable: number;
     closingBalance?: number;
     previousBalance?: number;
-    periodStart?: string;
-    periodEnd?: string;
     createdAt?: string;
 }
 
@@ -1053,10 +1051,10 @@ export const memberPaymentsApi = {
         return apiRequest<{ data: MemberPayment[] }>(`/member-payments${query ? `?${query}` : ''}`);
     },
 
-    getMemberSummary: async (memberId: string, startDate?: string, endDate?: string) => {
+    getMemberSummary: async (memberId: string, params?: { startDate?: string; endDate?: string }) => {
         const queryParams = new URLSearchParams();
-        if (startDate) queryParams.append('startDate', startDate);
-        if (endDate) queryParams.append('endDate', endDate);
+        if (params?.startDate) queryParams.append('startDate', params.startDate);
+        if (params?.endDate) queryParams.append('endDate', params.endDate);
         const query = queryParams.toString();
         return apiRequest<MemberPaymentSummary>(`/member-payments/member-summary/${memberId}${query ? `?${query}` : ''}`);
     },
