@@ -144,7 +144,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
 // POST /api/member-payments - Create payment (settle member dues)
 router.post('/', auth, async (req, res) => {
     try {
-        const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds } = req.body;
+        const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds, totalQuantity: reqTotalQuantity, milkRate: reqMilkRate } = req.body;
 
         if (!memberId || !amount) {
             return res.status(400).json({
@@ -195,6 +195,7 @@ router.post('/', auth, async (req, res) => {
         const unpaidEntries = await SellingEntry.find(entryQuery).sort({ date: 1 });
 
         const computedUnpaidTotal = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+        const computedTotalQuantity = unpaidEntries.reduce((sum, e) => sum + Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0), 0);
 
         // Previous balance carried forward
         const previousBalance = Number(member.sellingPaymentBalance || 0);
@@ -207,6 +208,10 @@ router.post('/', auth, async (req, res) => {
             const manual = Number.parseFloat(milkAmount);
             if (!Number.isNaN(manual)) totalSellAmount = manual;
         }
+
+        // Use provided milkRate and totalQuantity if available, otherwise calculate
+        const finalMilkRate = (reqMilkRate !== undefined && reqMilkRate !== null) ? Number(reqMilkRate) : (computedTotalQuantity > 0 ? (totalSellAmount / computedTotalQuantity) : 0);
+        const finalTotalQuantity = (reqTotalQuantity !== undefined && reqTotalQuantity !== null) ? Number(reqTotalQuantity) : computedTotalQuantity;
 
         const netPayable = previousBalance + totalSellAmount;
         const closingBalance = netPayable - paymentAmount;
@@ -221,6 +226,8 @@ router.post('/', auth, async (req, res) => {
             notes: notes?.trim() || '',
             settledEntries: unpaidEntries.map(e => e._id),
             totalSellAmount,
+            totalQuantity: finalTotalQuantity,
+            milkRate: finalMilkRate,
             netPayable,
             previousBalance,
             closingBalance,
