@@ -405,20 +405,16 @@ export default function PurchaseScreen() {
                                 <X size={20} color={colors.foreground} />
                             </Pressable>
                         </View>
-                        <View style={styles.selectedDateDisplay}>
-                            <Text style={styles.selectedDateLabel}>Selected Date</Text>
-                            <Text style={styles.selectedDateValue}>{tempCalendarDate ? formatDisplayDate(tempCalendarDate) : 'None'}</Text>
-                        </View>
                         <View style={styles.calendarBody}>
-                            <Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} />
-                        </View>
-                        <View style={styles.dateModalFooter}>
-                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowEntryDateModal(false)}>
-                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                            </Pressable>
-                            <Pressable style={styles.confirmModalBtn} onPress={() => { if (tempCalendarDate) setEntryDate(tempCalendarDate); setShowEntryDateModal(false); }}>
-                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                            </Pressable>
+                            <Calendar
+                                selectedDate={tempCalendarDate}
+                                onDateSelect={(date) => {
+                                    if (date) {
+                                        setEntryDate(date);
+                                        setShowEntryDateModal(false);
+                                    }
+                                }}
+                            />
                         </View>
                     </View>
                 </View>
@@ -434,20 +430,17 @@ export default function PurchaseScreen() {
                                 <X size={20} color={colors.foreground} />
                             </Pressable>
                         </View>
-                        <View style={styles.selectedDateDisplay}>
-                            <Text style={styles.selectedDateLabel}>Selected Date</Text>
-                            <Text style={styles.selectedDateValue}>{tempCalendarDate ? formatDisplayDate(tempCalendarDate) : 'None'}</Text>
-                        </View>
                         <View style={styles.calendarBody}>
-                            <Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} />
-                        </View>
-                        <View style={styles.dateModalFooter}>
-                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowHistoryDateModal(false)}>
-                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                            </Pressable>
-                            <Pressable style={styles.confirmModalBtn} onPress={() => { if (tempCalendarDate) { if (historyDateType === 'from') setHistoryFromDate(tempCalendarDate); else setHistoryToDate(tempCalendarDate); } setShowHistoryDateModal(false); }}>
-                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                            </Pressable>
+                            <Calendar
+                                selectedDate={tempCalendarDate}
+                                onDateSelect={(date) => {
+                                    if (date) {
+                                        if (historyDateType === 'from') setHistoryFromDate(date);
+                                        else setHistoryToDate(date);
+                                        setShowHistoryDateModal(false);
+                                    }
+                                }}
+                            />
                         </View>
                     </View>
                 </View>

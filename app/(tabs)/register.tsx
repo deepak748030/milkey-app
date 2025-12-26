@@ -643,32 +643,18 @@ export default function RegisterScreen() {
                                         <X size={20} color={colors.foreground} />
                                     </Pressable>
                                 </View>
-                                <View style={styles.selectedDateDisplay}>
-                                    <Text style={styles.selectedDateLabel}>Selected Date</Text>
-                                    <Text style={styles.selectedDateValue}>
-                                        {tempCalendarDate ? `${String(tempCalendarDate.getDate()).padStart(2, '0')}-${String(tempCalendarDate.getMonth() + 1).padStart(2, '0')}-${tempCalendarDate.getFullYear()}` : 'None'}
-                                    </Text>
-                                </View>
                                 <Calendar
-                                    onDateSelect={setTempCalendarDate}
+                                    onDateSelect={(date) => {
+                                        if (date) {
+                                            const year = date.getFullYear();
+                                            const month = String(date.getMonth() + 1).padStart(2, '0');
+                                            const day = String(date.getDate()).padStart(2, '0');
+                                            setDateStart(`${year}-${month}-${day}`);
+                                            setShowStartDatePicker(false);
+                                        }
+                                    }}
                                     selectedDate={tempCalendarDate}
                                 />
-                                <View style={styles.dateModalFooter}>
-                                    <Pressable style={styles.cancelModalBtn} onPress={() => setShowStartDatePicker(false)}>
-                                        <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                                    </Pressable>
-                                    <Pressable style={styles.confirmModalBtn} onPress={() => {
-                                        if (tempCalendarDate) {
-                                            const year = tempCalendarDate.getFullYear();
-                                            const month = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
-                                            const day = String(tempCalendarDate.getDate()).padStart(2, '0');
-                                            setDateStart(`${year}-${month}-${day}`);
-                                        }
-                                        setShowStartDatePicker(false);
-                                    }}>
-                                        <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                                    </Pressable>
-                                </View>
                             </View>
                         </View>
                     </Modal>
@@ -689,32 +675,18 @@ export default function RegisterScreen() {
                                         <X size={20} color={colors.foreground} />
                                     </Pressable>
                                 </View>
-                                <View style={styles.selectedDateDisplay}>
-                                    <Text style={styles.selectedDateLabel}>Selected Date</Text>
-                                    <Text style={styles.selectedDateValue}>
-                                        {tempCalendarDate ? `${String(tempCalendarDate.getDate()).padStart(2, '0')}-${String(tempCalendarDate.getMonth() + 1).padStart(2, '0')}-${tempCalendarDate.getFullYear()}` : 'None'}
-                                    </Text>
-                                </View>
                                 <Calendar
-                                    onDateSelect={setTempCalendarDate}
+                                    onDateSelect={(date) => {
+                                        if (date) {
+                                            const year = date.getFullYear();
+                                            const month = String(date.getMonth() + 1).padStart(2, '0');
+                                            const day = String(date.getDate()).padStart(2, '0');
+                                            setDateEnd(`${year}-${month}-${day}`);
+                                            setShowEndDatePicker(false);
+                                        }
+                                    }}
                                     selectedDate={tempCalendarDate}
                                 />
-                                <View style={styles.dateModalFooter}>
-                                    <Pressable style={styles.cancelModalBtn} onPress={() => setShowEndDatePicker(false)}>
-                                        <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                                    </Pressable>
-                                    <Pressable style={styles.confirmModalBtn} onPress={() => {
-                                        if (tempCalendarDate) {
-                                            const year = tempCalendarDate.getFullYear();
-                                            const month = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
-                                            const day = String(tempCalendarDate.getDate()).padStart(2, '0');
-                                            setDateEnd(`${year}-${month}-${day}`);
-                                        }
-                                        setShowEndDatePicker(false);
-                                    }}>
-                                        <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                                    </Pressable>
-                                </View>
                             </View>
                         </View>
                     </Modal>
@@ -1035,32 +1007,18 @@ export default function RegisterScreen() {
                                 <X size={20} color={colors.foreground} />
                             </Pressable>
                         </View>
-                        <View style={styles.selectedDateDisplay}>
-                            <Text style={styles.selectedDateLabel}>Selected Date</Text>
-                            <Text style={styles.selectedDateValue}>
-                                {tempCalendarDate ? `${String(tempCalendarDate.getDate()).padStart(2, '0')}-${String(tempCalendarDate.getMonth() + 1).padStart(2, '0')}-${tempCalendarDate.getFullYear()}` : 'None'}
-                            </Text>
-                        </View>
                         <Calendar
-                            onDateSelect={setTempCalendarDate}
+                            onDateSelect={(date) => {
+                                if (date) {
+                                    const year = date.getFullYear();
+                                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                                    const day = String(date.getDate()).padStart(2, '0');
+                                    setAdvDate(`${year}-${month}-${day}`);
+                                    setShowAdvDatePicker(false);
+                                }
+                            }}
                             selectedDate={tempCalendarDate}
                         />
-                        <View style={styles.dateModalFooter}>
-                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowAdvDatePicker(false)}>
-                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                            </Pressable>
-                            <Pressable style={styles.confirmModalBtn} onPress={() => {
-                                if (tempCalendarDate) {
-                                    const year = tempCalendarDate.getFullYear();
-                                    const month = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
-                                    const day = String(tempCalendarDate.getDate()).padStart(2, '0');
-                                    setAdvDate(`${year}-${month}-${day}`);
-                                }
-                                setShowAdvDatePicker(false);
-                            }}>
-                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                            </Pressable>
-                        </View>
                     </View>
                 </View>
             </Modal>

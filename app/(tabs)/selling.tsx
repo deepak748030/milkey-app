@@ -336,22 +336,65 @@ export default function SellingScreen() {
         // Reset inputs for new selection - keep milk amount as 0, no auto-fill
         setPaymentAmount('');
         setMilkAmount('0');
+        setCalcEndDate('');
+
+        // Find last payment for this member to get the last end date
+        const memberLastPayment = recentPayments.find(p => p.member?._id === member._id && p.periodEnd);
+        let startDateFromLastPayment = '';
+
+        if (memberLastPayment?.periodEnd) {
+            // Start from day after last payment's end date
+            const lastEndDate = new Date(memberLastPayment.periodEnd);
+            lastEndDate.setDate(lastEndDate.getDate() + 1);
+            startDateFromLastPayment = lastEndDate.toISOString().split('T')[0];
+        }
+
+        // Set the start date from last payment (for internal use)
+        setCalcStartDate(startDateFromLastPayment);
 
         try {
+            // Fetch summary - if we have a start date from last payment, use it
             const res = await memberPaymentsApi.getMemberSummary(
                 member._id,
-                calcStartDate || calcEndDate
-                    ? { startDate: calcStartDate || undefined, endDate: calcEndDate || undefined }
+                startDateFromLastPayment
+                    ? { startDate: startDateFromLastPayment, endDate: undefined }
                     : undefined
             );
             if (res.success && res.response) {
                 setMemberSummary(res.response);
-                // Don't auto-fill milk amount - user will enter manually
+                // Auto-fill milk amount with unpaid amount
+                const unpaidAmount = res.response.selling?.unpaidAmount || 0;
+                setMilkAmount(unpaidAmount.toFixed(2));
             } else {
                 setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
             }
         } catch (error) {
             setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+        } finally {
+            setPaymentLoading(false);
+        }
+    };
+
+    // Fetch summary when end date changes
+    const handleEndDateChange = async (endDate: string) => {
+        setCalcEndDate(endDate);
+
+        if (!selectedPaymentMember) return;
+
+        setPaymentLoading(true);
+        try {
+            const res = await memberPaymentsApi.getMemberSummary(
+                selectedPaymentMember._id,
+                { startDate: calcStartDate || undefined, endDate: endDate || undefined }
+            );
+            if (res.success && res.response) {
+                setMemberSummary(res.response);
+                // Auto-fill milk amount with unpaid amount for the period
+                const unpaidAmount = res.response.selling?.unpaidAmount || 0;
+                setMilkAmount(unpaidAmount.toFixed(2));
+            }
+        } catch (error) {
+            console.error('Failed to fetch summary for date range:', error);
         } finally {
             setPaymentLoading(false);
         }
@@ -685,9 +728,184 @@ export default function SellingScreen() {
         }
     };
 
+    // Print filtered entries
+    const handlePrintEntries = async () => {
+        if (groupedEntries.length === 0) {
+            showAlert('Error', 'No entries to print');
+            return;
+        }
+
+        const rows = groupedEntries.map(item => `
+            <tr>
+                <td>${formatDate(item.date)}</td>
+                <td>${item.memberName}</td>
+                <td style="text-align: center;">${item.entryCount}</td>
+                <td style="text-align: center;">${item.morningQty > 0 ? item.morningQty : '-'} + ${item.eveningQty > 0 ? item.eveningQty : '-'}</td>
+                <td style="text-align: right;">₹${item.rate}</td>
+                <td style="text-align: right;">₹${item.totalAmount.toFixed(0)}</td>
+            </tr>
+        `).join('');
+
+        const totalQty = groupedEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
+        const totalAmt = groupedEntries.reduce((sum, e) => sum + e.totalAmount, 0);
+        const totalEntries = groupedEntries.reduce((sum, e) => sum + e.entryCount, 0);
+
+        const periodText = recentEntriesStartDate || recentEntriesEndDate
+            ? `Period: ${recentEntriesStartDate ? formatDate(recentEntriesStartDate) : 'Start'} to ${recentEntriesEndDate ? formatDate(recentEntriesEndDate) : 'End'}`
+            : 'All Entries';
+        const memberText = recentEntriesMemberFilter
+            ? `Member: ${getSelectedRecentMemberName()}`
+            : 'All Members';
+
+        const html = `
+            <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                        h1 { color: #22c55e; text-align: center; margin-bottom: 5px; }
+                        .subtitle { text-align: center; color: #666; margin-bottom: 5px; font-size: 14px; }
+                        .filter-info { text-align: center; color: #888; margin-bottom: 20px; font-size: 12px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th { background-color: #22c55e; color: white; padding: 12px 8px; text-align: left; font-weight: 600; font-size: 12px; }
+                        td { padding: 10px 8px; border-bottom: 1px solid #e5e7eb; font-size: 12px; }
+                        tr:nth-child(even) { background-color: #f9fafb; }
+                        .summary { margin-top: 20px; padding: 15px; background-color: #f0fdf4; border-radius: 8px; }
+                        .summary-text { font-size: 14px; color: #333; margin: 5px 0; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Milk Selling Entries</h1>
+                    <p class="subtitle">${periodText}</p>
+                    <p class="filter-info">${memberText} | Generated: ${formatDate(new Date().toISOString().split('T')[0])}</p>
+                    <table>
+                        <tr>
+                            <th>Date</th>
+                            <th>Name</th>
+                            <th style="text-align: center;">Entry</th>
+                            <th style="text-align: center;">M/E (L)</th>
+                            <th style="text-align: right;">Rate</th>
+                            <th style="text-align: right;">Amount</th>
+                        </tr>
+                        ${rows}
+                    </table>
+                    <div class="summary">
+                        <p class="summary-text"><strong>Total Days:</strong> ${groupedEntries.length}</p>
+                        <p class="summary-text"><strong>Total Entries:</strong> ${totalEntries}</p>
+                        <p class="summary-text"><strong>Total Quantity:</strong> ${totalQty.toFixed(2)} L</p>
+                        <p class="summary-text"><strong>Total Amount:</strong> ₹${totalAmt.toFixed(2)}</p>
+                    </div>
+                </body>
+            </html>
+        `;
+
+        try {
+            await Print.printAsync({ html });
+        } catch (error) {
+            showAlert('Error', 'Failed to print');
+        }
+    };
+
     const handlePrint = async () => {
         try {
             const html = generateReportHTML();
+            await Print.printAsync({ html });
+        } catch (error) {
+            showAlert('Error', 'Failed to print');
+        }
+    };
+
+    // Generate Report HTML for member balance
+    const generateMemberBalanceReportHTML = () => {
+        const selectedReportMember = reportMemberFilter
+            ? members.find(m => m._id === reportMemberFilter)
+            : null;
+
+        const membersToShow = selectedReportMember ? [selectedReportMember] : members;
+        const totalBalance = members.reduce((sum, m) => sum + (m.sellingPaymentBalance ?? 0), 0);
+        const positiveBalance = members.filter(m => (m.sellingPaymentBalance ?? 0) > 0).reduce((sum, m) => sum + (m.sellingPaymentBalance ?? 0), 0);
+        const negativeBalance = members.filter(m => (m.sellingPaymentBalance ?? 0) < 0).reduce((sum, m) => sum + Math.abs(m.sellingPaymentBalance ?? 0), 0);
+
+        const rows = membersToShow.map((member, index) => `
+            <tr style="${index % 2 === 0 ? '' : 'background-color: #f9fafb;'}">
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${index + 1}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${member.name}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${formatDate(new Date().toISOString().split('T')[0])}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: ${(member.sellingPaymentBalance ?? 0) > 0 ? '#22c55e' : (member.sellingPaymentBalance ?? 0) < 0 ? '#ef4444' : '#333'};">
+                    ${(member.sellingPaymentBalance ?? 0) < 0 ? '-' : ''}₹${Math.abs(member.sellingPaymentBalance ?? 0).toFixed(2)}
+                </td>
+            </tr>
+        `).join('');
+
+        return `
+            <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                        h1 { color: #22c55e; text-align: center; margin-bottom: 5px; }
+                        .subtitle { text-align: center; color: #666; margin-bottom: 20px; font-size: 14px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th { background-color: #22c55e; color: white; padding: 12px 10px; text-align: left; font-weight: 600; }
+                        th:first-child, th:nth-child(3) { text-align: center; }
+                        th:last-child { text-align: right; }
+                        .summary { margin-top: 20px; padding: 15px; background-color: #f0fdf4; border-radius: 8px; }
+                        .summary-row { display: flex; justify-content: space-between; margin: 8px 0; }
+                        .summary-text { font-size: 14px; color: #333; margin: 5px 0; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Member Balance Report</h1>
+                    <p class="subtitle">${selectedReportMember ? `Member: ${selectedReportMember.name}` : 'All Members'} | Generated: ${formatDate(new Date().toISOString().split('T')[0])}</p>
+                    <table>
+                        <tr>
+                            <th style="width: 50px;">Sr.</th>
+                            <th>Member Name</th>
+                            <th style="width: 120px;">Date</th>
+                            <th style="width: 120px;">Balance</th>
+                        </tr>
+                        ${rows}
+                    </table>
+                    <div class="summary">
+                        <p class="summary-text"><strong>Total Members:</strong> ${membersToShow.length}</p>
+                        <p class="summary-text"><strong>Total Receivable:</strong> <span style="color: #22c55e;">₹${positiveBalance.toFixed(2)}</span></p>
+                        <p class="summary-text"><strong>Total Payable:</strong> <span style="color: #ef4444;">₹${negativeBalance.toFixed(2)}</span></p>
+                        <p class="summary-text"><strong>Net Balance:</strong> <span style="color: ${totalBalance >= 0 ? '#22c55e' : '#ef4444'};">${totalBalance < 0 ? '-' : ''}₹${Math.abs(totalBalance).toFixed(2)}</span></p>
+                    </div>
+                </body>
+            </html>
+        `;
+    };
+
+    // Handle Report PDF download
+    const handleReportPDF = async () => {
+        if (members.length === 0) {
+            showAlert('Error', 'No members to export');
+            return;
+        }
+
+        try {
+            const html = generateMemberBalanceReportHTML();
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            } else {
+                showAlert('PDF Generated', `Saved to: ${uri}`);
+            }
+        } catch (error) {
+            showAlert('Error', 'Failed to generate PDF');
+        }
+    };
+
+    // Handle Report Print
+    const handleReportPrint = async () => {
+        if (members.length === 0) {
+            showAlert('Error', 'No members to print');
+            return;
+        }
+
+        try {
+            const html = generateMemberBalanceReportHTML();
             await Print.printAsync({ html });
         } catch (error) {
             showAlert('Error', 'Failed to print');
@@ -916,7 +1134,6 @@ export default function SellingScreen() {
             {/* Recent Entries Section */}
             <View style={styles.entriesHeader}>
                 <Text style={styles.sectionTitle}>Recent Entries</Text>
-                <Text style={styles.lastCount}>({groupedEntries.length} days)</Text>
             </View>
 
             {/* Recent Entries Filters */}
@@ -991,6 +1208,15 @@ export default function SellingScreen() {
                             </View>
                         )}
                     </View>
+
+                    {/* Print Button */}
+                    <Pressable
+                        style={styles.printEntriesBtn}
+                        onPress={handlePrintEntries}
+                    >
+                        <Printer size={14} color={colors.white} />
+                        <Text style={styles.printEntriesBtnText}>Print</Text>
+                    </Pressable>
 
                     {/* Clear Filters Button */}
                     {(recentEntriesStartDate || recentEntriesEndDate || recentEntriesMemberFilter) && (
@@ -1124,9 +1350,6 @@ export default function SellingScreen() {
                                             <Text style={styles.suggestionName}>{member.name}</Text>
                                             <Text style={styles.suggestionCode}>{member.mobile}</Text>
                                         </View>
-                                        <Text style={[styles.suggestionBalance, { color: (member.sellingPaymentBalance ?? 0) >= 0 ? colors.success : colors.destructive }]}>
-                                            {(member.sellingPaymentBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(member.sellingPaymentBalance ?? 0).toFixed(2)}
-                                        </Text>
                                     </Pressable>
                                 ))
                             )}
@@ -1157,117 +1380,28 @@ export default function SellingScreen() {
                         </View>
                     </View>
 
-                    {/* Calculation Period Section */}
+                    {/* Calculation Period Section - End Date Only */}
                     <View style={styles.calcPeriodCard}>
-                        <Text style={styles.calcPeriodTitle}>Calculation Period</Text>
-
-                        {/* Date Selector */}
-                        <View style={styles.calcDateRow}>
-                            <Pressable
-                                style={styles.calcDateInput}
-                                onPress={() => {
-                                    setCalcDateTarget('start');
-                                    const date = calcStartDate ? new Date(calcStartDate) : new Date();
-                                    setTempCalendarDate(date);
-                                    setShowCalcDatePicker(true);
-                                }}
-                            >
-                                <CalendarIcon size={14} color={colors.mutedForeground} />
-                                <Text style={styles.calcDateText}>
-                                    {calcStartDate ? formatDateDDMMYYYY(calcStartDate) : 'Start Date'}
-                                </Text>
-                            </Pressable>
-                            <Text style={styles.calcDateSeparator}>to</Text>
-                            <Pressable
-                                style={styles.calcDateInput}
-                                onPress={() => {
-                                    setCalcDateTarget('end');
-                                    const date = calcEndDate ? new Date(calcEndDate) : new Date();
-                                    setTempCalendarDate(date);
-                                    setShowCalcDatePicker(true);
-                                }}
-                            >
-                                <CalendarIcon size={14} color={colors.mutedForeground} />
-                                <Text style={styles.calcDateText}>
-                                    {calcEndDate ? formatDateDDMMYYYY(calcEndDate) : 'End Date'}
-                                </Text>
-                            </Pressable>
+                        <View style={styles.calcPeriodHeader}>
+                            <Text style={styles.calcPeriodTitle}>Calculation Period</Text>
                         </View>
 
-                        {/* Date Ranges */}
-                        <Text style={styles.dateRangesLabel}>Date Ranges</Text>
-                        <View style={styles.dateRangesContainer}>
-                            {dateRanges.map((range) => (
-                                <View key={range.id} style={styles.dateRangeChip}>
-                                    <Pressable
-                                        style={styles.dateRangeChipContent}
-                                        onPress={async () => {
-                                            // Get current month and year
-                                            const now = new Date();
-                                            const year = now.getFullYear();
-                                            const month = now.getMonth();
-
-                                            // Calculate start date using local format (avoid timezone issues)
-                                            const startDay = range.startDay;
-                                            const startDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`;
-
-                                            // Calculate end date
-                                            let endDateStr: string;
-                                            if (range.endDay === 'End') {
-                                                // Use today's date as end date
-                                                const today = now.getDate();
-                                                endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(today).padStart(2, '0')}`;
-                                            } else {
-                                                endDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(range.endDay).padStart(2, '0')}`;
-                                            }
-
-                                            setCalcStartDate(startDateStr);
-                                            setCalcEndDate(endDateStr);
-
-                                            // If member is selected, fetch unpaid summary for this date range
-                                            if (selectedPaymentMember) {
-                                                try {
-                                                    const res = await memberPaymentsApi.getMemberSummary(
-                                                        selectedPaymentMember._id,
-                                                        { startDate: startDateStr, endDate: endDateStr }
-                                                    );
-                                                    if (res.success && res.response) {
-                                                        setMemberSummary(res.response);
-                                                        const unpaidAmount = res.response.selling?.unpaidAmount || res.response.selling?.totalAmount || 0;
-                                                        setMilkAmount(unpaidAmount.toFixed(2));
-                                                    }
-                                                } catch (error) {
-                                                    console.error('Failed to fetch milk summary for date range:', error);
-                                                }
-                                            }
-                                        }}
-                                    >
-                                        <Text style={styles.dateRangeChipText}>{range.label}</Text>
-                                    </Pressable>
-                                    <Pressable
-                                        style={styles.dateRangeDeleteBtn}
-                                        onPress={() => {
-                                            setDateRanges(prev => prev.filter(r => r.id !== range.id));
-                                        }}
-                                    >
-                                        <Trash2 size={14} color={colors.destructive} />
-                                    </Pressable>
-                                </View>
-                            ))}
-                        </View>
-
-                        {/* Add Range Button */}
                         <Pressable
-                            style={styles.addRangeBtn}
+                            style={styles.calcDateChip}
                             onPress={() => {
-                                setNewRangeStartDay('');
-                                setNewRangeEndDay('');
-                                setNewRangeIsEnd(false);
-                                setShowAddRangeModal(true);
+                                setCalcDateTarget('end');
+                                const date = calcEndDate ? new Date(calcEndDate) : new Date();
+                                setTempCalendarDate(date);
+                                setShowCalcDatePicker(true);
                             }}
                         >
-                            <Plus size={14} color={colors.primary} />
-                            <Text style={styles.addRangeBtnText}>Add Range</Text>
+                            <Text style={styles.calcDateChipLabel}>Till</Text>
+                            <View style={styles.calcDateChipValueRow}>
+                                <CalendarIcon size={12} color={colors.primary} />
+                                <Text style={[styles.calcDateChipValue, { color: colors.primary }]}>
+                                    {calcEndDate ? formatDateDDMMYYYY(calcEndDate) : 'Select Date'}
+                                </Text>
+                            </View>
                         </Pressable>
                     </View>
 
@@ -1351,26 +1485,14 @@ export default function SellingScreen() {
                                         <Text style={[styles.historyName, { color: colors.primary, fontWeight: '700' }]}>
                                             {p.member?.name || '-'}
                                         </Text>
+                                        {/* End Date in center */}
+                                        {p.periodEnd && (
+                                            <Text style={[styles.historyDate, { color: colors.mutedForeground, fontSize: 11 }]}>
+                                                Till: {formatDateDDMMYYYY(p.periodEnd)}
+                                            </Text>
+                                        )}
                                         <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
                                     </View>
-
-                                    {/* Date Range */}
-                                    {(p.periodStart || p.periodEnd) && (
-                                        <View style={[styles.historyRow, { backgroundColor: colors.muted, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 4, marginTop: -4 }]}>
-                                            <Text style={[styles.historyLabel, { fontSize: 11 }]}>Period:</Text>
-                                            <Text style={[styles.historyValue, { fontSize: 11, color: colors.mutedForeground }]}>
-                                                {(() => {
-                                                    const startDay = p.periodStart ? new Date(p.periodStart).getDate() : null;
-                                                    const endDay = p.periodEnd ? new Date(p.periodEnd).getDate() : null;
-
-                                                    if (startDay && endDay) {
-                                                        return `${startDay}-${endDay}`;
-                                                    }
-                                                    return `${p.periodStart ? formatDateDDMMYYYY(p.periodStart) : '-'} to ${p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}`;
-                                                })()}
-                                            </Text>
-                                        </View>
-                                    )}
 
                                     {/* Milk Quantity - directly from saved payment record */}
                                     <View style={styles.historyRow}>
@@ -1453,73 +1575,54 @@ export default function SellingScreen() {
     );
 
     const renderReportsTab = () => {
-        const filteredEntries = getFilteredEntries();
-        const totalQty = filteredEntries.reduce((s, e) => s + (e.morningQuantity || 0) + (e.eveningQuantity || 0), 0);
-        const totalAmt = filteredEntries.reduce((s, e) => s + e.amount, 0);
+        // Get selected member for report
+        const selectedReportMember = reportMemberFilter
+            ? members.find(m => m._id === reportMemberFilter)
+            : null;
 
-        // Group by member for summary
-        const memberSummaries: Record<string, { name: string; qty: number; amt: number }> = {};
-        filteredEntries.forEach(entry => {
-            const memberId = entry.member?._id || 'unknown';
-            if (!memberSummaries[memberId]) {
-                memberSummaries[memberId] = { name: entry.member?.name || 'Unknown', qty: 0, amt: 0 };
-            }
-            memberSummaries[memberId].qty += (entry.morningQuantity || 0) + (entry.eveningQuantity || 0);
-            memberSummaries[memberId].amt += entry.amount;
-        });
-        const memberSummaryList = Object.values(memberSummaries).sort((a, b) => b.amt - a.amt);
+        // Calculate totals for all members
+        const totalBalance = members.reduce((sum, m) => sum + (m.sellingPaymentBalance ?? 0), 0);
+        const totalQuantity = recentEntries.reduce((sum: number, e: SellingEntry) => sum + (e.morningQuantity ?? 0) + (e.eveningQuantity ?? 0), 0);
+        const totalMembers = members.length;
 
         return (
             <View>
                 <Text style={styles.sectionTitle}>Selling Report</Text>
 
-                {/* Summary Cards - At Top */}
-                <View style={styles.reportSummary}>
-                    <View style={styles.reportCard}>
-                        <Text style={styles.reportCardLabel}>Entries</Text>
-                        <Text style={styles.reportCardValue}>{filteredEntries.length}</Text>
+                {/* Top Summary Cards - Only show when no member is selected */}
+                {!selectedReportMember && (
+                    <View style={styles.reportSummary}>
+                        <View style={styles.reportCard}>
+                            <Text style={styles.reportCardLabel}>Total Members</Text>
+                            <Text style={styles.reportCardValue}>{totalMembers}</Text>
+                        </View>
+                        <View style={styles.reportCard}>
+                            <Text style={styles.reportCardLabel}>Total Quantity</Text>
+                            <Text style={styles.reportCardValue}>{totalQuantity.toFixed(1)} L</Text>
+                        </View>
+                        <View style={styles.reportCard}>
+                            <Text style={styles.reportCardLabel}>Total Balance</Text>
+                            <Text style={[styles.reportCardValue, { color: totalBalance >= 0 ? colors.success : colors.destructive }]}>
+                                ₹{Math.abs(totalBalance).toFixed(0)}
+                            </Text>
+                        </View>
                     </View>
-                    <View style={styles.reportCard}>
-                        <Text style={styles.reportCardLabel}>Quantity</Text>
-                        <Text style={styles.reportCardValue}>{totalQty.toFixed(1)} L</Text>
-                    </View>
-                    <View style={styles.reportCard}>
-                        <Text style={styles.reportCardLabel}>Amount</Text>
-                        <Text style={[styles.reportCardValue, { color: colors.success }]}>₹{totalAmt.toFixed(0)}</Text>
-                    </View>
-                </View>
+                )}
 
                 {/* Export Buttons */}
                 <View style={styles.exportBtnsRow}>
-                    <Pressable style={styles.pdfBtn} onPress={handlePDF}>
+                    <Pressable style={styles.pdfBtn} onPress={handleReportPDF}>
                         <FileText size={16} color={colors.white} />
                         <Text style={styles.exportText}>Download PDF</Text>
                     </Pressable>
-                    <Pressable style={styles.csvBtn} onPress={handlePrint}>
+                    <Pressable style={styles.csvBtn} onPress={handleReportPrint}>
                         <Printer size={14} color={colors.primary} />
                         <Text style={styles.csvBtnText}>Print</Text>
                     </Pressable>
                 </View>
 
-                {/* Filters */}
+                {/* Member Filter Only */}
                 <View style={styles.filterCard}>
-                    <Text style={styles.filterTitle}>Filters</Text>
-                    <View style={styles.dateFilterRow}>
-                        <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportStart')}>
-                            <CalendarIcon size={14} color={colors.primary} />
-                            <Text style={[styles.dateFilterText, !reportStartDate && { color: colors.mutedForeground }]}>
-                                {reportStartDate ? formatDate(reportStartDate) : 'Start Date'}
-                            </Text>
-                        </Pressable>
-                        <Text style={styles.dateFilterSeparator}>to</Text>
-                        <Pressable style={styles.dateFilterBtn} onPress={() => openDatePicker('reportEnd')}>
-                            <CalendarIcon size={14} color={colors.primary} />
-                            <Text style={[styles.dateFilterText, !reportEndDate && { color: colors.mutedForeground }]}>
-                                {reportEndDate ? formatDate(reportEndDate) : 'End Date'}
-                            </Text>
-                        </Pressable>
-                    </View>
-                    {/* Member Filter */}
                     <View style={styles.memberFilterRow}>
                         <Text style={styles.memberFilterLabel}>Member:</Text>
                         <Pressable
@@ -1570,28 +1673,43 @@ export default function SellingScreen() {
                     )}
                 </View>
 
-                {/* Member-wise Summary */}
-                {filteredEntries.length > 0 && (
-                    <View style={styles.memberSummarySection}>
-                        <Text style={styles.memberSummaryTitle}>Member-wise Summary</Text>
-                        <View style={styles.table}>
-                            <View style={styles.tableHeader}>
-                                <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
-                                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Member</Text>
-                                <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Qty (L)</Text>
-                                <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Amount</Text>
-                            </View>
-                            {filteredEntries.map((entry, index) => (
-                                <View key={index} style={styles.tableRow}>
-                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontSize: 10 }]}>{formatDateDDMMYYYY(entry.date)}</Text>
-                                    <Text style={[styles.tableCell, { flex: 1.5 }]} numberOfLines={1}>{entry.member?.name || '-'}</Text>
-                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{((entry.morningQuantity || 0) + (entry.eveningQuantity || 0)).toFixed(1)}</Text>
-                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', color: colors.primary, fontWeight: '600' }]}>₹{entry.amount.toFixed(0)}</Text>
-                                </View>
-                            ))}
+                {/* All Members Balance Table */}
+                <View style={styles.memberSummarySection}>
+                    <Text style={styles.memberSummaryTitle}>
+                        {selectedReportMember ? 'Member Details' : 'All Members Balance'}
+                    </Text>
+                    <View style={styles.table}>
+                        <View style={styles.tableHeader}>
+                            <Text style={[styles.tableHeaderCell, { flex: 0.5, textAlign: 'center' }]}>Sr</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Member Name</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1.2, textAlign: 'center' }]}>Date</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1.3, textAlign: 'right', paddingRight: 8 }]}>Current Balance</Text>
                         </View>
+                        {(selectedReportMember ? [selectedReportMember] : members).map((member, index) => (
+                            <View key={member._id} style={[styles.tableRow, index % 2 === 0 && { backgroundColor: colors.muted + '30' }]}>
+                                <Text style={[styles.tableCell, { flex: 0.5, textAlign: 'center', color: colors.mutedForeground }]}>{index + 1}</Text>
+                                <Text style={[styles.tableCell, { flex: 2, fontWeight: '500' }]} numberOfLines={1}>{member.name}</Text>
+                                <Text style={[styles.tableCell, { flex: 1.2, textAlign: 'center', fontSize: 11 }]}>{formatDate(new Date().toISOString().split('T')[0])}</Text>
+                                <Text style={[
+                                    styles.tableCell,
+                                    {
+                                        flex: 1.3,
+                                        textAlign: 'right',
+                                        paddingRight: 8,
+                                        fontWeight: '700',
+                                        color: (member.sellingPaymentBalance ?? 0) > 0
+                                            ? colors.success
+                                            : (member.sellingPaymentBalance ?? 0) < 0
+                                                ? colors.destructive
+                                                : colors.foreground
+                                    }
+                                ]}>
+                                    {(member.sellingPaymentBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(member.sellingPaymentBalance ?? 0).toFixed(0)}
+                                </Text>
+                            </View>
+                        ))}
                     </View>
-                )}
+                </View>
             </View>
         );
     };
@@ -1804,25 +1922,19 @@ export default function SellingScreen() {
                             </Pressable>
                         </View>
                         <View style={styles.calendarBody}>
-                            <Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} />
-                        </View>
-                        <View style={styles.dateModalFooter}>
-                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowDatePicker(false)}>
-                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                            </Pressable>
-                            <Pressable style={styles.confirmModalBtn} onPress={() => {
-                                if (tempCalendarDate) {
-                                    // Use local date format to avoid timezone issues
-                                    const y = tempCalendarDate.getFullYear();
-                                    const m = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
-                                    const d = String(tempCalendarDate.getDate()).padStart(2, '0');
-                                    const dateStr = `${y}-${m}-${d}`;
-                                    handleDateSelect(dateStr);
-                                }
-                                setShowDatePicker(false);
-                            }}>
-                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                            </Pressable>
+                            <Calendar
+                                selectedDate={tempCalendarDate}
+                                onDateSelect={(date) => {
+                                    if (date) {
+                                        const y = date.getFullYear();
+                                        const m = String(date.getMonth() + 1).padStart(2, '0');
+                                        const d = String(date.getDate()).padStart(2, '0');
+                                        const dateStr = `${y}-${m}-${d}`;
+                                        handleDateSelect(dateStr);
+                                        setShowDatePicker(false);
+                                    }
+                                }}
+                            />
                         </View>
                     </View>
                 </View>
@@ -1833,36 +1945,25 @@ export default function SellingScreen() {
                 <View style={styles.modalOverlay}>
                     <View style={styles.dateModalContent}>
                         <View style={styles.dateModalHeader}>
-                            <Text style={styles.dateModalTitle}>
-                                {calcDateTarget === 'start' ? 'Select Start Date' : 'Select End Date'}
-                            </Text>
+                            <Text style={styles.dateModalTitle}>Select Till Date</Text>
                             <Pressable onPress={() => setShowCalcDatePicker(false)}>
                                 <X size={20} color={colors.foreground} />
                             </Pressable>
                         </View>
                         <View style={styles.calendarBody}>
-                            <Calendar selectedDate={tempCalendarDate} onDateSelect={setTempCalendarDate} />
-                        </View>
-                        <View style={styles.dateModalFooter}>
-                            <Pressable style={styles.cancelModalBtn} onPress={() => setShowCalcDatePicker(false)}>
-                                <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                            </Pressable>
-                            <Pressable style={styles.confirmModalBtn} onPress={() => {
-                                if (tempCalendarDate) {
-                                    const y = tempCalendarDate.getFullYear();
-                                    const m = String(tempCalendarDate.getMonth() + 1).padStart(2, '0');
-                                    const d = String(tempCalendarDate.getDate()).padStart(2, '0');
-                                    const dateStr = `${y}-${m}-${d}`;
-                                    if (calcDateTarget === 'start') {
-                                        setCalcStartDate(dateStr);
-                                    } else {
-                                        setCalcEndDate(dateStr);
+                            <Calendar
+                                selectedDate={tempCalendarDate}
+                                onDateSelect={async (date) => {
+                                    if (date) {
+                                        const y = date.getFullYear();
+                                        const m = String(date.getMonth() + 1).padStart(2, '0');
+                                        const d = String(date.getDate()).padStart(2, '0');
+                                        const dateStr = `${y}-${m}-${d}`;
+                                        await handleEndDateChange(dateStr);
+                                        setShowCalcDatePicker(false);
                                     }
-                                }
-                                setShowCalcDatePicker(false);
-                            }}>
-                                <Text style={styles.confirmModalBtnText}>Confirm</Text>
-                            </Pressable>
+                                }}
+                            />
                         </View>
                     </View>
                 </View>
@@ -2473,6 +2574,32 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.foreground,
         marginBottom: 10,
     },
+    reportSummaryCard: {
+        backgroundColor: colors.card,
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    reportSummaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    reportSummaryLabel: {
+        fontSize: 14,
+        color: colors.mutedForeground,
+        fontWeight: '500',
+    },
+    reportSummaryValue: {
+        fontSize: 16,
+        color: colors.foreground,
+        fontWeight: '600',
+    },
     exportBtnsRow: {
         flexDirection: 'row',
         gap: 8,
@@ -3028,6 +3155,28 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontWeight: '500',
         color: colors.destructive,
     },
+    pdfDownloadBtn: {
+        backgroundColor: colors.primary,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    printEntriesBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: colors.primary,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+    },
+    printEntriesBtnText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.white,
+    },
     // Payment tab styles
     suggestionDropdown: {
         position: 'absolute',
@@ -3294,33 +3443,40 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
     },
+    calcPeriodHeader: {
+        marginBottom: 12,
+    },
     calcPeriodTitle: {
         fontSize: 14,
         fontWeight: '700',
         color: colors.foreground,
-        marginBottom: 12,
     },
-    calcDateRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 16,
-    },
-    calcDateInput: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        backgroundColor: isDark ? colors.muted : colors.background,
+    calcDateChip: {
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        backgroundColor: colors.primary + '10',
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: colors.primary,
         borderRadius: 8,
-        paddingHorizontal: 12,
+        paddingHorizontal: 14,
         paddingVertical: 10,
     },
-    calcDateText: {
+    calcDateChipLabel: {
+        fontSize: 10,
+        fontWeight: '500',
+        color: colors.mutedForeground,
+        marginBottom: 2,
+        textTransform: 'uppercase',
+    },
+    calcDateChipValue: {
         fontSize: 13,
+        fontWeight: '600',
         color: colors.foreground,
+    },
+    calcDateChipValueRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
     },
     calcDateSeparator: {
         fontSize: 13,
