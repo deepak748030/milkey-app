@@ -30,6 +30,59 @@ router.get('/', auth, async (req, res) => {
             .skip((parseInt(page) - 1) * parseInt(limit))
             .lean();
 
+        // Backfill derived fields for older payments that may have 0 values
+        // Compute from settledEntries (selling entries) for the selected period.
+        const paymentsNeedingFix = payments.filter(p => {
+            const qty = Number(p.totalQuantity ?? 0);
+            const rate = Number(p.milkRate ?? 0);
+            return (qty <= 0 || rate <= 0) && Array.isArray(p.settledEntries) && p.settledEntries.length > 0;
+        });
+
+        if (paymentsNeedingFix.length > 0) {
+            const allEntryIds = Array.from(
+                new Set(
+                    paymentsNeedingFix
+                        .flatMap(p => (p.settledEntries || []).map(id => String(id)))
+                )
+            );
+
+            const entries = await SellingEntry.find({ _id: { $in: allEntryIds } })
+                .select('_id morningQuantity eveningQuantity')
+                .lean();
+
+            const qtyByEntryId = new Map(entries.map(e => [String(e._id), Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0)]));
+
+            const bulkOps = [];
+
+            for (const p of paymentsNeedingFix) {
+                const computedQty = (p.settledEntries || []).reduce((sum, id) => sum + (qtyByEntryId.get(String(id)) || 0), 0);
+                const currentQty = Number(p.totalQuantity ?? 0);
+                const currentRate = Number(p.milkRate ?? 0);
+                const totalAmt = Number(p.totalSellAmount ?? 0);
+
+                const finalQty = currentQty > 0 ? currentQty : computedQty;
+                const finalRate = currentRate > 0 ? currentRate : (finalQty > 0 ? (totalAmt / finalQty) : 0);
+
+                // Update response payload
+                p.totalQuantity = finalQty;
+                p.milkRate = finalRate;
+
+                // Persist only if we computed meaningful values
+                if ((currentQty <= 0 && finalQty > 0) || (currentRate <= 0 && finalRate > 0)) {
+                    bulkOps.push({
+                        updateOne: {
+                            filter: { _id: p._id },
+                            update: { $set: { totalQuantity: finalQty, milkRate: finalRate } }
+                        }
+                    });
+                }
+            }
+
+            if (bulkOps.length > 0) {
+                await MemberPayment.bulkWrite(bulkOps);
+            }
+        }
+
         const total = await MemberPayment.countDocuments(query);
 
         res.json({
