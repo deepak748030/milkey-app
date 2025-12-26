@@ -1010,7 +1010,14 @@ export const sellingEntriesApi = {
 // Member Payment Summary interface
 export interface MemberPaymentSummary {
     member: { id: string; name: string; mobile: string; currentBalance: number };
-    selling: { totalLiters: number; totalAmount: number; unpaidAmount?: number };
+    selling: {
+        totalLiters: number;
+        totalAmount: number;
+        unpaidAmount?: number;
+        entriesCount?: number;
+        entries?: Array<{ _id: string; date: string; amount: number }>;
+    };
+    period?: { startDate: string | null; endDate: string | null };
     netPayable: number;
     closingBalance: number;
 }
@@ -1027,6 +1034,8 @@ export interface MemberPayment {
     netPayable: number;
     closingBalance?: number;
     previousBalance?: number;
+    periodStart?: string;
+    periodEnd?: string;
     createdAt?: string;
 }
 
@@ -1044,8 +1053,12 @@ export const memberPaymentsApi = {
         return apiRequest<{ data: MemberPayment[] }>(`/member-payments${query ? `?${query}` : ''}`);
     },
 
-    getMemberSummary: async (memberId: string) => {
-        return apiRequest<MemberPaymentSummary>(`/member-payments/member-summary/${memberId}`);
+    getMemberSummary: async (memberId: string, startDate?: string, endDate?: string) => {
+        const queryParams = new URLSearchParams();
+        if (startDate) queryParams.append('startDate', startDate);
+        if (endDate) queryParams.append('endDate', endDate);
+        const query = queryParams.toString();
+        return apiRequest<MemberPaymentSummary>(`/member-payments/member-summary/${memberId}${query ? `?${query}` : ''}`);
     },
 
     create: async (data: {
@@ -1055,6 +1068,9 @@ export const memberPaymentsApi = {
         paymentMethod?: string;
         reference?: string;
         notes?: string;
+        periodStart?: string;
+        periodEnd?: string;
+        entryIds?: string[];
     }) => {
         return apiRequest<MemberPayment>('/member-payments', {
             method: 'POST',

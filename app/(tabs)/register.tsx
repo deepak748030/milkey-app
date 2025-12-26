@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
@@ -168,7 +168,15 @@ export default function RegisterScreen() {
         }
     };
 
-    // Set date range from custom range
+    // Helper to format date as YYYY-MM-DD without timezone shift
+    const formatLocalDate = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    // Set date range from custom range and update upper date display
     const applyCustomRange = (range: DateRange) => {
         const now = new Date();
         const year = now.getFullYear();
@@ -182,8 +190,15 @@ export default function RegisterScreen() {
         } else {
             end = new Date(year, month, range.endDay);
         }
-        setDateStart(start.toISOString().split('T')[0]);
-        setDateEnd(end.toISOString().split('T')[0]);
+
+        const startStr = formatLocalDate(start);
+        const endStr = formatLocalDate(end);
+
+        setDateStart(startStr);
+        setDateEnd(endStr);
+
+        // Also update temp calendar date for visual feedback
+        setTempCalendarDate(start);
     };
 
     // Add new custom range
@@ -549,8 +564,20 @@ export default function RegisterScreen() {
                     onChangeText={setPaymentCode}
                     placeholderTextColor={colors.mutedForeground}
                     keyboardType="default"
+                    onSubmitEditing={() => {
+                        Keyboard.dismiss();
+                        handleFetchFarmerSummary();
+                    }}
+                    returnKeyType="go"
                 />
-                <Pressable style={styles.goBtn} onPress={handleFetchFarmerSummary} disabled={paymentLoading}>
+                <Pressable
+                    style={styles.goBtn}
+                    onPress={() => {
+                        Keyboard.dismiss();
+                        handleFetchFarmerSummary();
+                    }}
+                    disabled={paymentLoading}
+                >
                     <Text style={styles.goBtnText}>{paymentLoading ? '...' : 'Go'}</Text>
                 </Pressable>
             </View>
