@@ -936,6 +936,31 @@ export const customFormsApi = {
     },
 };
 
+// Balance Report types
+export interface MemberBalanceReport {
+    _id: string;
+    name: string;
+    mobile: string;
+    ratePerLiter: number;
+    currentBalance: number;
+    unpaidAmount: number;
+    totalBalance: number;
+    unpaidEntriesCount: number;
+    unpaidQuantity: number;
+    date: string;
+    lastPaymentDate: string | null;
+    lastPeriodEnd: string | null;
+}
+
+export interface BalanceReportSummary {
+    totalMembers: number;
+    totalReceivable: number;
+    totalPayable: number;
+    netBalance: number;
+    totalUnpaidAmount: number;
+    totalUnpaidQuantity: number;
+}
+
 // Members API (for Selling tab)
 export const membersApi = {
     getAll: async (params?: { search?: string }) => {
@@ -947,6 +972,10 @@ export const membersApi = {
 
     getById: async (id: string) => {
         return apiRequest<Member>(`/members/${id}`);
+    },
+
+    getBalanceReport: async () => {
+        return apiRequest<{ data: MemberBalanceReport[]; summary: BalanceReportSummary }>('/members/balance-report');
     },
 
     create: async (data: { name: string; mobile: string; address?: string; ratePerLiter: number }) => {

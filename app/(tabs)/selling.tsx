@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
-import { membersApi, sellingEntriesApi, memberPaymentsApi, Member, SellingEntry, MemberPayment, MemberPaymentSummary } from '@/lib/milkeyApi';
+import { membersApi, sellingEntriesApi, memberPaymentsApi, Member, SellingEntry, MemberPayment, MemberPaymentSummary, MemberBalanceReport, BalanceReportSummary } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
 import { exportPayments } from '@/lib/csvExport';
 import * as Print from 'expo-print';
@@ -101,6 +101,11 @@ export default function SellingScreen() {
     const [reportEndDate, setReportEndDate] = useState('');
     const [reportMemberFilter, setReportMemberFilter] = useState<string>(''); // Member ID filter for reports
     const [showReportMemberDropdown, setShowReportMemberDropdown] = useState(false);
+
+    // Balance Report state (fetched from server)
+    const [balanceReportData, setBalanceReportData] = useState<MemberBalanceReport[]>([]);
+    const [balanceReportSummary, setBalanceReportSummary] = useState<BalanceReportSummary | null>(null);
+    const [balanceReportLoading, setBalanceReportLoading] = useState(false);
 
     // Member state
     const [members, setMembers] = useState<Member[]>([]);
@@ -217,10 +222,11 @@ export default function SellingScreen() {
 
         try {
             setIsLoading(true);
-            const [membersRes, entriesRes, paymentsRes] = await Promise.all([
+            const [membersRes, entriesRes, paymentsRes, balanceReportRes] = await Promise.all([
                 membersApi.getAll(),
                 sellingEntriesApi.getAll({ limit: 50 }),
-                memberPaymentsApi.getAll({ limit: 10 })
+                memberPaymentsApi.getAll({ limit: 10 }),
+                membersApi.getBalanceReport()
             ]);
 
             if (membersRes.success) {
@@ -233,6 +239,10 @@ export default function SellingScreen() {
             }
             if (paymentsRes.success) {
                 setRecentPayments(paymentsRes.response?.data || []);
+            }
+            if (balanceReportRes.success) {
+                setBalanceReportData(balanceReportRes.response?.data || []);
+                setBalanceReportSummary(balanceReportRes.response?.summary || null);
             }
         } catch (error) {
             console.error('Fetch error:', error);
@@ -815,27 +825,30 @@ export default function SellingScreen() {
         }
     };
 
-    // Generate Report HTML for member balance
+    // Generate Report HTML for member balance - uses server balance report data
     const generateMemberBalanceReportHTML = () => {
         const selectedReportMember = reportMemberFilter
-            ? members.find(m => m._id === reportMemberFilter)
+            ? balanceReportData.find(m => m._id === reportMemberFilter)
             : null;
 
-        const membersToShow = selectedReportMember ? [selectedReportMember] : members;
-        const totalBalance = members.reduce((sum, m) => sum + (m.sellingPaymentBalance ?? 0), 0);
-        const positiveBalance = members.filter(m => (m.sellingPaymentBalance ?? 0) > 0).reduce((sum, m) => sum + (m.sellingPaymentBalance ?? 0), 0);
-        const negativeBalance = members.filter(m => (m.sellingPaymentBalance ?? 0) < 0).reduce((sum, m) => sum + Math.abs(m.sellingPaymentBalance ?? 0), 0);
+        const membersToShow = selectedReportMember ? [selectedReportMember] : balanceReportData;
+        const netBalance = balanceReportSummary?.netBalance || 0;
 
-        const rows = membersToShow.map((member, index) => `
+        const rows = membersToShow.map((member, index) => {
+            const balance = member.totalBalance;
+            const lastPeriodEnd = member.lastPeriodEnd ? formatDateDDMMYYYY(member.lastPeriodEnd) : '-';
+
+            return `
             <tr style="${index % 2 === 0 ? '' : 'background-color: #f9fafb;'}">
                 <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${index + 1}</td>
                 <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${member.name}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${formatDate(new Date().toISOString().split('T')[0])}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: ${(member.sellingPaymentBalance ?? 0) > 0 ? '#22c55e' : (member.sellingPaymentBalance ?? 0) < 0 ? '#ef4444' : '#333'};">
-                    ${(member.sellingPaymentBalance ?? 0) < 0 ? '-' : ''}₹${Math.abs(member.sellingPaymentBalance ?? 0).toFixed(2)}
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${formatDateDDMMYYYY(member.date)}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${lastPeriodEnd}</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: 600; color: ${balance > 0 ? '#22c55e' : balance < 0 ? '#ef4444' : '#333'};">
+                    ${balance < 0 ? '-' : balance > 0 ? '+' : ''}₹${Math.abs(balance).toFixed(0)}
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
 
         return `
             <html>
@@ -847,30 +860,28 @@ export default function SellingScreen() {
                         .subtitle { text-align: center; color: #666; margin-bottom: 20px; font-size: 14px; }
                         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
                         th { background-color: #22c55e; color: white; padding: 12px 10px; text-align: left; font-weight: 600; }
-                        th:first-child, th:nth-child(3) { text-align: center; }
+                        th:first-child, th:nth-child(3), th:nth-child(4) { text-align: center; }
                         th:last-child { text-align: right; }
                         .summary { margin-top: 20px; padding: 15px; background-color: #f0fdf4; border-radius: 8px; }
-                        .summary-row { display: flex; justify-content: space-between; margin: 8px 0; }
                         .summary-text { font-size: 14px; color: #333; margin: 5px 0; }
                     </style>
                 </head>
                 <body>
                     <h1>Member Balance Report</h1>
-                    <p class="subtitle">${selectedReportMember ? `Member: ${selectedReportMember.name}` : 'All Members'} | Generated: ${formatDate(new Date().toISOString().split('T')[0])}</p>
+                    <p class="subtitle">${selectedReportMember ? `Member: ${selectedReportMember.name}` : 'All Members'} | Generated: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
                     <table>
                         <tr>
                             <th style="width: 50px;">Sr.</th>
-                            <th>Member Name</th>
-                            <th style="width: 120px;">Date</th>
+                            <th>Name</th>
+                            <th style="width: 100px;">Date</th>
+                            <th style="width: 100px;">Till</th>
                             <th style="width: 120px;">Balance</th>
                         </tr>
                         ${rows}
                     </table>
                     <div class="summary">
                         <p class="summary-text"><strong>Total Members:</strong> ${membersToShow.length}</p>
-                        <p class="summary-text"><strong>Total Receivable:</strong> <span style="color: #22c55e;">₹${positiveBalance.toFixed(2)}</span></p>
-                        <p class="summary-text"><strong>Total Payable:</strong> <span style="color: #ef4444;">₹${negativeBalance.toFixed(2)}</span></p>
-                        <p class="summary-text"><strong>Net Balance:</strong> <span style="color: ${totalBalance >= 0 ? '#22c55e' : '#ef4444'};">${totalBalance < 0 ? '-' : ''}₹${Math.abs(totalBalance).toFixed(2)}</span></p>
+                        <p class="summary-text"><strong>Net Balance:</strong> <span style="color: ${netBalance >= 0 ? '#22c55e' : '#ef4444'};">${netBalance < 0 ? '-' : ''}₹${Math.abs(netBalance).toFixed(0)}</span></p>
                     </div>
                 </body>
             </html>
@@ -879,7 +890,7 @@ export default function SellingScreen() {
 
     // Handle Report PDF download
     const handleReportPDF = async () => {
-        if (members.length === 0) {
+        if (balanceReportData.length === 0) {
             showAlert('Error', 'No members to export');
             return;
         }
@@ -899,7 +910,7 @@ export default function SellingScreen() {
 
     // Handle Report Print
     const handleReportPrint = async () => {
-        if (members.length === 0) {
+        if (balanceReportData.length === 0) {
             showAlert('Error', 'No members to print');
             return;
         }
@@ -1577,15 +1588,20 @@ export default function SellingScreen() {
     );
 
     const renderReportsTab = () => {
-        // Get selected member for report
+        // Get selected member for report from balance report data (server data)
         const selectedReportMember = reportMemberFilter
-            ? members.find(m => m._id === reportMemberFilter)
+            ? balanceReportData.find(m => m._id === reportMemberFilter)
             : null;
 
-        // Calculate totals for all members
-        const totalBalance = members.reduce((sum, m) => sum + (m.sellingPaymentBalance ?? 0), 0);
-        const totalQuantity = recentEntries.reduce((sum: number, e: SellingEntry) => sum + (e.morningQuantity ?? 0) + (e.eveningQuantity ?? 0), 0);
-        const totalMembers = members.length;
+        // Use server-provided summary for totals
+        const totalMembers = balanceReportSummary?.totalMembers || 0;
+        const totalUnpaidQuantity = balanceReportSummary?.totalUnpaidQuantity || 0;
+        const netBalance = balanceReportSummary?.netBalance || 0;
+        const totalReceivable = balanceReportSummary?.totalReceivable || 0;
+        const totalPayable = balanceReportSummary?.totalPayable || 0;
+
+        // Data to display in table (filtered by selected member or all)
+        const displayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
 
         return (
             <View>
@@ -1599,17 +1615,18 @@ export default function SellingScreen() {
                             <Text style={styles.reportCardValue}>{totalMembers}</Text>
                         </View>
                         <View style={styles.reportCard}>
-                            <Text style={styles.reportCardLabel}>Total Quantity</Text>
-                            <Text style={styles.reportCardValue}>{totalQuantity.toFixed(1)} L</Text>
+                            <Text style={styles.reportCardLabel}>Unpaid Qty</Text>
+                            <Text style={styles.reportCardValue}>{totalUnpaidQuantity.toFixed(1)} L</Text>
                         </View>
                         <View style={styles.reportCard}>
-                            <Text style={styles.reportCardLabel}>Total Balance</Text>
-                            <Text style={[styles.reportCardValue, { color: totalBalance >= 0 ? colors.success : colors.destructive }]}>
-                                ₹{Math.abs(totalBalance).toFixed(0)}
+                            <Text style={styles.reportCardLabel}>Net Balance</Text>
+                            <Text style={[styles.reportCardValue, { color: netBalance >= 0 ? colors.success : colors.destructive }]}>
+                                {netBalance < 0 ? '-' : ''}₹{Math.abs(netBalance).toFixed(0)}
                             </Text>
                         </View>
                     </View>
                 )}
+
 
                 {/* Export Buttons */}
                 <View style={styles.exportBtnsRow}>
@@ -1657,7 +1674,7 @@ export default function SellingScreen() {
                                     <Text style={styles.memberFilterItemText}>All Members</Text>
                                     {!reportMemberFilter && <Check size={14} color={colors.primary} />}
                                 </Pressable>
-                                {members.map(member => (
+                                {balanceReportData.map(member => (
                                     <Pressable
                                         key={member._id}
                                         style={[styles.memberFilterItem, reportMemberFilter === member._id && styles.memberFilterItemActive]}
@@ -1680,53 +1697,54 @@ export default function SellingScreen() {
                     <Text style={styles.memberSummaryTitle}>
                         {selectedReportMember ? 'Member Details' : 'All Members Balance'}
                     </Text>
-                    <View style={styles.table}>
-                        <View style={styles.tableHeader}>
-                            <Text style={[styles.tableHeaderCell, { flex: 0.4, textAlign: 'center' }]}>Sr</Text>
-                            <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
-                            <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
-                            <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>DateG</Text>
-                            <Text style={[styles.tableHeaderCell, { flex: 1.1, textAlign: 'right', paddingRight: 4 }]}>Balance</Text>
-                        </View>
-                        {(selectedReportMember ? [selectedReportMember] : members).map((member, index) => {
-                            // Find last payment end date for this member
-                            const memberPayments = recentPayments.filter(p => p.member?._id === member._id && p.periodEnd);
-                            const lastPaymentEndDate = memberPayments.length > 0
-                                ? memberPayments.sort((a, b) => new Date(b.periodEnd || '').getTime() - new Date(a.periodEnd || '').getTime())[0]?.periodEnd
-                                : null;
 
-                            // Use server-calculated sellingPaymentBalance (handles all entries properly)
-                            // Positive = member owes money, Negative = member has credit/overpaid
-                            const balance = member.sellingPaymentBalance ?? 0;
+                    {balanceReportLoading ? (
+                        <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
+                    ) : displayData.length === 0 ? (
+                        <Text style={styles.emptyText}>No members found</Text>
+                    ) : (
+                        <View style={styles.table}>
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.tableHeaderCell, { flex: 0.4, textAlign: 'center' }]}>Sr</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Till</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 1.1, textAlign: 'right', paddingRight: 4 }]}>Balance</Text>
+                            </View>
+                            {displayData.map((member, index) => {
+                                // totalBalance = currentBalance (after last payment) + unpaidAmount (unpaid entries)
+                                // Positive = member owes money (receivable), Negative = member has credit/overpaid (payable)
+                                const balance = member.totalBalance;
 
-                            return (
-                                <View key={member._id} style={[styles.tableRow, index % 2 === 0 && { backgroundColor: colors.muted + '30' }]}>
-                                    <Text style={[styles.tableCell, { flex: 0.4, textAlign: 'center', color: colors.mutedForeground }]}>{index + 1}</Text>
-                                    <Text style={[styles.tableCell, { flex: 1.5, fontWeight: '500' }]} numberOfLines={1}>{member.name}</Text>
-                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontSize: 10 }]}>{formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</Text>
-                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontSize: 10, color: lastPaymentEndDate ? colors.primary : colors.mutedForeground }]}>
-                                        {lastPaymentEndDate ? formatDateDDMMYYYY(lastPaymentEndDate) : '-'}
-                                    </Text>
-                                    <Text style={[
-                                        styles.tableCell,
-                                        {
-                                            flex: 1.1,
-                                            textAlign: 'right',
-                                            paddingRight: 4,
-                                            fontWeight: '700',
-                                            color: balance > 0
-                                                ? colors.destructive
-                                                : balance < 0
+                                return (
+                                    <View key={member._id} style={[styles.tableRow, index % 2 === 0 && { backgroundColor: colors.muted + '30' }]}>
+                                        <Text style={[styles.tableCell, { flex: 0.4, textAlign: 'center', color: colors.mutedForeground }]}>{index + 1}</Text>
+                                        <Text style={[styles.tableCell, { flex: 1.5, fontWeight: '500' }]} numberOfLines={1}>{member.name}</Text>
+                                        <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontSize: 10 }]}>{formatDateDDMMYYYY(member.date)}</Text>
+                                        <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontSize: 10, color: member.lastPeriodEnd ? colors.primary : colors.mutedForeground }]}>
+                                            {member.lastPeriodEnd ? formatDateDDMMYYYY(member.lastPeriodEnd) : '-'}
+                                        </Text>
+                                        <Text style={[
+                                            styles.tableCell,
+                                            {
+                                                flex: 1.1,
+                                                textAlign: 'right',
+                                                paddingRight: 4,
+                                                fontWeight: '700',
+                                                color: balance > 0
                                                     ? colors.success
-                                                    : colors.foreground
-                                        }
-                                    ]}>
-                                        {balance < 0 ? '-' : balance > 0 ? '+' : ''}₹{Math.abs(balance).toFixed(0)}
-                                    </Text>
-                                </View>
-                            );
-                        })}
-                    </View>
+                                                    : balance < 0
+                                                        ? colors.destructive
+                                                        : colors.foreground
+                                            }
+                                        ]}>
+                                            {balance < 0 ? '-' : balance > 0 ? '+' : ''}₹{Math.abs(balance).toFixed(0)}
+                                        </Text>
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    )}
                 </View>
             </View>
         );
