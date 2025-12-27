@@ -1557,6 +1557,7 @@ export default function SellingScreen() {
                             <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Paid</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Balance</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Date</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Till</Text>
                         </View>
                         {/* Table Rows */}
                         {filteredPayments.slice(0, 15).map((p, index) => (
@@ -1566,6 +1567,7 @@ export default function SellingScreen() {
                                 <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', color: colors.success }]}>₹{(p.amount || 0).toFixed(0)}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', color: (p.closingBalance ?? 0) > 0 ? colors.success : (p.closingBalance ?? 0) < 0 ? colors.destructive : colors.mutedForeground }]}>{(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(0)}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', fontSize: 9 }]}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', fontSize: 9 }]}>{p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}</Text>
                             </View>
                         ))}
                     </View>
@@ -1680,34 +1682,50 @@ export default function SellingScreen() {
                     </Text>
                     <View style={styles.table}>
                         <View style={styles.tableHeader}>
-                            <Text style={[styles.tableHeaderCell, { flex: 0.5, textAlign: 'center' }]}>Sr</Text>
-                            <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Member Name</Text>
-                            <Text style={[styles.tableHeaderCell, { flex: 1.2, textAlign: 'center' }]}>Date</Text>
-                            <Text style={[styles.tableHeaderCell, { flex: 1.3, textAlign: 'right', paddingRight: 8 }]}>Current Balance</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 0.4, textAlign: 'center' }]}>Sr</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>DateG</Text>
+                            <Text style={[styles.tableHeaderCell, { flex: 1.1, textAlign: 'right', paddingRight: 4 }]}>Balance</Text>
                         </View>
-                        {(selectedReportMember ? [selectedReportMember] : members).map((member, index) => (
-                            <View key={member._id} style={[styles.tableRow, index % 2 === 0 && { backgroundColor: colors.muted + '30' }]}>
-                                <Text style={[styles.tableCell, { flex: 0.5, textAlign: 'center', color: colors.mutedForeground }]}>{index + 1}</Text>
-                                <Text style={[styles.tableCell, { flex: 2, fontWeight: '500' }]} numberOfLines={1}>{member.name}</Text>
-                                <Text style={[styles.tableCell, { flex: 1.2, textAlign: 'center', fontSize: 11 }]}>{formatDate(new Date().toISOString().split('T')[0])}</Text>
-                                <Text style={[
-                                    styles.tableCell,
-                                    {
-                                        flex: 1.3,
-                                        textAlign: 'right',
-                                        paddingRight: 8,
-                                        fontWeight: '700',
-                                        color: (member.sellingPaymentBalance ?? 0) > 0
-                                            ? colors.success
-                                            : (member.sellingPaymentBalance ?? 0) < 0
+                        {(selectedReportMember ? [selectedReportMember] : members).map((member, index) => {
+                            // Find last payment end date for this member
+                            const memberPayments = recentPayments.filter(p => p.member?._id === member._id && p.periodEnd);
+                            const lastPaymentEndDate = memberPayments.length > 0
+                                ? memberPayments.sort((a, b) => new Date(b.periodEnd || '').getTime() - new Date(a.periodEnd || '').getTime())[0]?.periodEnd
+                                : null;
+
+                            // Use server-calculated sellingPaymentBalance (handles all entries properly)
+                            // Positive = member owes money, Negative = member has credit/overpaid
+                            const balance = member.sellingPaymentBalance ?? 0;
+
+                            return (
+                                <View key={member._id} style={[styles.tableRow, index % 2 === 0 && { backgroundColor: colors.muted + '30' }]}>
+                                    <Text style={[styles.tableCell, { flex: 0.4, textAlign: 'center', color: colors.mutedForeground }]}>{index + 1}</Text>
+                                    <Text style={[styles.tableCell, { flex: 1.5, fontWeight: '500' }]} numberOfLines={1}>{member.name}</Text>
+                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontSize: 10 }]}>{formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</Text>
+                                    <Text style={[styles.tableCell, { flex: 1, textAlign: 'center', fontSize: 10, color: lastPaymentEndDate ? colors.primary : colors.mutedForeground }]}>
+                                        {lastPaymentEndDate ? formatDateDDMMYYYY(lastPaymentEndDate) : '-'}
+                                    </Text>
+                                    <Text style={[
+                                        styles.tableCell,
+                                        {
+                                            flex: 1.1,
+                                            textAlign: 'right',
+                                            paddingRight: 4,
+                                            fontWeight: '700',
+                                            color: balance > 0
                                                 ? colors.destructive
-                                                : colors.foreground
-                                    }
-                                ]}>
-                                    {(member.sellingPaymentBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(member.sellingPaymentBalance ?? 0).toFixed(0)}
-                                </Text>
-                            </View>
-                        ))}
+                                                : balance < 0
+                                                    ? colors.success
+                                                    : colors.foreground
+                                        }
+                                    ]}>
+                                        {balance < 0 ? '-' : balance > 0 ? '+' : ''}₹{Math.abs(balance).toFixed(0)}
+                                    </Text>
+                                </View>
+                            );
+                        })}
                     </View>
                 </View>
             </View>
