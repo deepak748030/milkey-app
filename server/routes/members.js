@@ -1,7 +1,135 @@
 const express = require('express');
 const router = express.Router();
 const Member = require('../models/Member');
+const SellingEntry = require('../models/SellingEntry');
+const MemberPayment = require('../models/MemberPayment');
 const auth = require('../middleware/auth');
+
+// GET /api/members/balance-report - Get all members with balance calculated from unpaid entries
+router.get('/balance-report', auth, async (req, res) => {
+    try {
+        // Get all active members for the user
+        const members = await Member.find({ owner: req.userId, isActive: true })
+            .sort({ name: 1 })
+            .lean();
+
+        // Get all unpaid selling entries grouped by member
+        const unpaidEntriesAggregation = await SellingEntry.aggregate([
+            {
+                $match: {
+                    owner: req.userId,
+                    isPaid: false
+                }
+            },
+            {
+                $group: {
+                    _id: '$member',
+                    unpaidAmount: { $sum: '$amount' },
+                    unpaidQuantity: { $sum: { $add: ['$morningQuantity', '$eveningQuantity'] } },
+                    unpaidEntriesCount: { $sum: 1 }
+                }
+            }
+        ]);
+
+        // Create a map for quick lookup
+        const unpaidByMember = new Map(
+            unpaidEntriesAggregation.map(item => [String(item._id), item])
+        );
+
+        // Get last payment date for each member
+        const lastPaymentsAggregation = await MemberPayment.aggregate([
+            {
+                $match: {
+                    owner: req.userId
+                }
+            },
+            {
+                $sort: { date: -1 }
+            },
+            {
+                $group: {
+                    _id: '$member',
+                    lastPaymentDate: { $first: '$date' },
+                    lastPeriodEnd: { $first: '$periodEnd' }
+                }
+            }
+        ]);
+
+        // Create a map for last payments
+        const lastPaymentByMember = new Map(
+            lastPaymentsAggregation.map(item => [String(item._id), item])
+        );
+
+        // Build the report data for each member
+        const reportData = members.map(member => {
+            const memberIdStr = String(member._id);
+            const unpaidData = unpaidByMember.get(memberIdStr) || {
+                unpaidAmount: 0,
+                unpaidQuantity: 0,
+                unpaidEntriesCount: 0
+            };
+            const lastPayment = lastPaymentByMember.get(memberIdStr);
+
+            // Current balance from member record (already includes previous settlements)
+            const currentBalance = Number(member.sellingPaymentBalance || 0);
+
+            // Total balance = current balance (from past) + unpaid entries amount
+            // Note: sellingPaymentBalance already includes settled entries, so we add only truly unpaid amounts
+            const totalBalance = currentBalance + unpaidData.unpaidAmount;
+
+            return {
+                _id: member._id,
+                name: member.name,
+                mobile: member.mobile,
+                ratePerLiter: member.ratePerLiter,
+                // Balance values
+                currentBalance, // From member record (balance after last payment)
+                unpaidAmount: unpaidData.unpaidAmount, // Sum of unpaid entries
+                totalBalance, // Total payable = currentBalance + unpaidAmount
+                unpaidEntriesCount: unpaidData.unpaidEntriesCount,
+                unpaidQuantity: unpaidData.unpaidQuantity,
+                // Date info
+                date: new Date().toISOString().split('T')[0], // Today's date
+                lastPaymentDate: lastPayment?.lastPaymentDate || null,
+                lastPeriodEnd: lastPayment?.lastPeriodEnd || null
+            };
+        });
+
+        // Calculate summary totals
+        const totalPositiveBalance = reportData
+            .filter(m => m.totalBalance > 0)
+            .reduce((sum, m) => sum + m.totalBalance, 0);
+
+        const totalNegativeBalance = reportData
+            .filter(m => m.totalBalance < 0)
+            .reduce((sum, m) => sum + Math.abs(m.totalBalance), 0);
+
+        const netBalance = reportData.reduce((sum, m) => sum + m.totalBalance, 0);
+        const totalUnpaidAmount = reportData.reduce((sum, m) => sum + m.unpaidAmount, 0);
+        const totalUnpaidQuantity = reportData.reduce((sum, m) => sum + m.unpaidQuantity, 0);
+
+        res.json({
+            success: true,
+            response: {
+                data: reportData,
+                summary: {
+                    totalMembers: members.length,
+                    totalReceivable: totalPositiveBalance, // Members who owe money
+                    totalPayable: totalNegativeBalance, // Members who have credit
+                    netBalance,
+                    totalUnpaidAmount,
+                    totalUnpaidQuantity
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get balance report error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get balance report'
+        });
+    }
+});
 
 // GET /api/members - Get all members for current user
 router.get('/', auth, async (req, res) => {
