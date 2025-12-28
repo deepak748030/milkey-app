@@ -333,20 +333,29 @@ export function AdminOrdersPage() {
                                     <label className="text-sm text-muted-foreground">Date</label>
                                     <p>{formatDate(selectedOrder.createdAt)}</p>
                                 </div>
-                                <div>
-                                    <label className="text-sm text-muted-foreground">Customer</label>
-                                    <p className="font-medium">{selectedOrder.user?.name}</p>
-                                    <p className="text-sm text-muted-foreground">{selectedOrder.user?.phone}</p>
-                                </div>
-                                <div>
-                                    <label className="text-sm text-muted-foreground">Total Amount</label>
-                                    <p className="text-xl font-bold text-primary">₹{selectedOrder.totalAmount?.toFixed(2)}</p>
+                            </div>
+
+                            <div className="bg-muted/30 p-4 rounded-lg">
+                                <label className="text-sm text-muted-foreground block mb-2">Customer Details</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="font-medium text-lg">{selectedOrder.user?.name || 'N/A'}</p>
+                                        <p className="text-muted-foreground">{selectedOrder.user?.email}</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-medium">{selectedOrder.user?.phone || 'N/A'}</p>
+                                    </div>
                                 </div>
                             </div>
 
                             <div>
                                 <label className="text-sm text-muted-foreground">Delivery Address</label>
-                                <p>{selectedOrder.deliveryAddress || 'N/A'}</p>
+                                <p className="font-medium">{selectedOrder.deliveryAddress || 'N/A'}</p>
+                            </div>
+
+                            <div>
+                                <label className="text-sm text-muted-foreground">Total Amount</label>
+                                <p className="text-xl font-bold text-primary">₹{selectedOrder.totalAmount?.toFixed(2)}</p>
                             </div>
 
                             <div>

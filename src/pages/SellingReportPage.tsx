@@ -1,6 +1,6 @@
 // File: src/pages/SellingReportPage.tsx
 import { useState, useEffect } from 'react'
-import { TrendingUp, TrendingDown, Users, IndianRupee, Droplet, FileText, User } from 'lucide-react'
+import { Users, IndianRupee, Droplet } from 'lucide-react'
 import {
     getBalanceReport,
     getAdminUsersList,
@@ -21,11 +21,10 @@ interface StatCardProps {
     title: string
     value: string | number
     icon: React.ReactNode
-    trend?: 'up' | 'down' | 'neutral'
     className?: string
 }
 
-function StatCard({ title, value, icon, trend, className }: StatCardProps) {
+function StatCard({ title, value, icon, className }: StatCardProps) {
     return (
         <div className={cn('bg-card border border-border rounded-xl p-4', className)}>
             <div className="flex items-start justify-between">
@@ -33,12 +32,7 @@ function StatCard({ title, value, icon, trend, className }: StatCardProps) {
                     <p className="text-sm text-muted-foreground">{title}</p>
                     <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
                 </div>
-                <div className={cn(
-                    'p-2 rounded-lg',
-                    trend === 'up' ? 'bg-success/10 text-success' :
-                        trend === 'down' ? 'bg-destructive/10 text-destructive' :
-                            'bg-muted text-muted-foreground'
-                )}>
+                <div className="p-2 rounded-lg bg-muted text-muted-foreground">
                     {icon}
                 </div>
             </div>
@@ -78,7 +72,13 @@ export function SellingReportPage() {
         fetchReport()
     }, [userId])
 
-    const formatCurrency = (val: number) => `₹${Math.abs(val).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+    // Format balance with proper sign
+    const formatBalance = (val: number) => {
+        if (val === 0) return '₹0'
+        const absVal = Math.abs(val)
+        const formatted = `₹${absVal.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+        return val > 0 ? `+${formatted}` : `-${formatted}`
+    }
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return '—'
@@ -89,13 +89,20 @@ export function SellingReportPage() {
         })
     }
 
+    // Get balance color - positive (we owe) = success, negative (member owes) = destructive
+    const getBalanceColor = (val: number) => {
+        if (val > 0) return 'text-success'
+        if (val < 0) return 'text-destructive'
+        return 'text-muted-foreground'
+    }
+
     return (
         <div className="space-y-6 animate-fade-in">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-foreground">Selling Report</h1>
-                    <p className="text-muted-foreground">Member balance summary and unpaid amounts</p>
+                    <p className="text-muted-foreground">Member balance summary</p>
                 </div>
             </div>
 
@@ -126,54 +133,30 @@ export function SellingReportPage() {
                 </div>
             </div>
 
-            {/* Summary Cards */}
+            {/* Summary Cards - 3 cards matching app */}
             {summary && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-3 gap-4">
                     <StatCard
                         title="Total Members"
                         value={summary.totalMembers}
                         icon={<Users className="w-5 h-5" />}
                     />
                     <StatCard
-                        title="Total Receivable"
-                        value={formatCurrency(summary.totalReceivable)}
-                        icon={<TrendingUp className="w-5 h-5" />}
-                        trend="up"
-                    />
-                    <StatCard
-                        title="Total Payable (Credit)"
-                        value={formatCurrency(summary.totalPayable)}
-                        icon={<TrendingDown className="w-5 h-5" />}
-                        trend="down"
+                        title="Unpaid Quantity"
+                        value={`${summary.totalUnpaidQuantity.toFixed(1)} L`}
+                        icon={<Droplet className="w-5 h-5" />}
                     />
                     <StatCard
                         title="Net Balance"
-                        value={`${summary.netBalance >= 0 ? '' : '-'}${formatCurrency(summary.netBalance)}`}
+                        value={formatBalance(summary.netBalance)}
                         icon={<IndianRupee className="w-5 h-5" />}
-                        trend={summary.netBalance >= 0 ? 'up' : 'down'}
-                    />
-                </div>
-            )}
-
-            {/* Additional Stats */}
-            {summary && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <StatCard
-                        title="Unpaid Milk Amount"
-                        value={formatCurrency(summary.totalUnpaidAmount)}
-                        icon={<FileText className="w-5 h-5" />}
-                    />
-                    <StatCard
-                        title="Unpaid Quantity"
-                        value={`${summary.totalUnpaidQuantity.toFixed(2)} L`}
-                        icon={<Droplet className="w-5 h-5" />}
                     />
                 </div>
             )}
 
             {/* Table */}
             {loading ? (
-                <TableSkeleton rows={10} columns={9} />
+                <TableSkeleton rows={10} columns={5} />
             ) : data.length === 0 ? (
                 <div className="bg-card border border-border rounded-xl p-12 text-center">
                     <p className="text-muted-foreground">No data found</p>
@@ -184,69 +167,59 @@ export function SellingReportPage() {
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Member</th>
-                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Mobile</th>
-                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Owner</th>
-                                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Rate/L</th>
-                                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Unpaid Qty</th>
-                                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Unpaid Amount</th>
-                                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Previous Balance</th>
-                                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Total Balance</th>
-                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Last Payment</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-16">Sr No.</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Name</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Date Created</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Last Payment Date</th>
+                                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">User Balance</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
-                                {data.map(item => (
+                                {data.map((item, index) => (
                                     <tr key={item._id} className="hover:bg-muted/30 transition-colors">
+                                        <td className="px-4 py-3 text-muted-foreground">
+                                            {index + 1}
+                                        </td>
                                         <td className="px-4 py-3">
                                             <span className="font-medium text-foreground">{item.name}</span>
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
-                                            {item.mobile}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1.5 text-muted-foreground">
-                                                <User className="w-3.5 h-3.5" />
-                                                <span className="truncate max-w-[100px]">
-                                                    {(item as any).owner?.name || 'Unknown'}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3 text-right text-muted-foreground">
-                                            ₹{item.ratePerLiter}
-                                        </td>
-                                        <td className="px-4 py-3 text-right text-muted-foreground">
-                                            {item.unpaidQuantity.toFixed(2)} L
-                                        </td>
-                                        <td className="px-4 py-3 text-right text-muted-foreground">
-                                            {formatCurrency(item.unpaidAmount)}
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <span className={cn(
-                                                item.currentBalance > 0 ? 'text-destructive' :
-                                                    item.currentBalance < 0 ? 'text-success' : 'text-muted-foreground'
-                                            )}>
-                                                {item.currentBalance !== 0 && (item.currentBalance > 0 ? '+' : '')}
-                                                {formatCurrency(item.currentBalance)}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <span className={cn(
-                                                'font-semibold',
-                                                item.totalBalance > 0 ? 'text-destructive' :
-                                                    item.totalBalance < 0 ? 'text-success' : 'text-foreground'
-                                            )}>
-                                                {item.totalBalance !== 0 && (item.totalBalance > 0 ? '+' : '-')}
-                                                {formatCurrency(item.totalBalance)}
-                                            </span>
+                                            {formatDate((item as any).createdAt)}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {formatDate(item.lastPaymentDate)}
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <span className={cn('font-semibold', getBalanceColor(item.totalBalance))}>
+                                                {formatBalance(item.totalBalance)}
+                                            </span>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Footer with totals */}
+                    <div className="bg-muted/30 border-t border-border px-4 py-3">
+                        <div className="flex flex-wrap gap-6 text-sm">
+                            <div>
+                                <span className="text-muted-foreground">Total Members:</span>
+                                <span className="ml-2 font-semibold text-foreground">{data.length}</span>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Unpaid Quantity:</span>
+                                <span className="ml-2 font-semibold text-foreground">
+                                    {data.reduce((sum, m) => sum + m.unpaidQuantity, 0).toFixed(1)} L
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Net Balance:</span>
+                                <span className={cn('ml-2 font-semibold', getBalanceColor(data.reduce((sum, m) => sum + m.totalBalance, 0)))}>
+                                    {formatBalance(data.reduce((sum, m) => sum + m.totalBalance, 0))}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

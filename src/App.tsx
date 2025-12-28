@@ -18,6 +18,10 @@ import { SellingMembersPage } from './pages/SellingMembersPage'
 import { SellingEntriesPage } from './pages/SellingEntriesPage'
 import { SellingPaymentsPage } from './pages/SellingPaymentsPage'
 import { SellingReportPage } from './pages/SellingReportPage'
+import { RegisterFarmersPage } from './pages/RegisterFarmersPage'
+import { RegisterAdvancesPage } from './pages/RegisterAdvancesPage'
+import { RegisterPaymentsPage } from './pages/RegisterPaymentsPage'
+import { ProductManagementPage } from './pages/ProductManagementPage'
 
 function App() {
     return (
@@ -40,6 +44,7 @@ function App() {
                         <Route index element={<DashboardPage />} />
                         <Route path="orders" element={<OrdersPage />} />
                         <Route path="products" element={<ProductsPage />} />
+                        <Route path="product-management" element={<ProductManagementPage />} />
                         <Route path="users" element={<UsersPage />} />
                         <Route path="banners" element={<BannersPage />} />
                         <Route path="admin-orders" element={<AdminOrdersPage />} />
@@ -48,6 +53,9 @@ function App() {
                         <Route path="selling-entries" element={<SellingEntriesPage />} />
                         <Route path="selling-payments" element={<SellingPaymentsPage />} />
                         <Route path="selling-report" element={<SellingReportPage />} />
+                        <Route path="register-farmers" element={<RegisterFarmersPage />} />
+                        <Route path="register-advances" element={<RegisterAdvancesPage />} />
+                        <Route path="register-payments" element={<RegisterPaymentsPage />} />
                         <Route path="settings" element={<SettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />

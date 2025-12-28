@@ -14,7 +14,8 @@ import {
     Image as ImageIcon,
     Upload,
     GripVertical,
-    Tag,
+    ArrowUp,
+    ArrowDown,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import {
@@ -23,10 +24,9 @@ import {
     updateBanner,
     deleteBanner,
     toggleBannerStatus,
-    getCategoriesAdmin,
+    uploadImage,
     Banner,
     Pagination,
-    Category,
 } from '../lib/api'
 
 interface BannerFormData {
@@ -35,7 +35,7 @@ interface BannerFormData {
     image: string
     badge: string
     gradient: string[]
-    linkType: 'category'
+    linkType: 'category' | 'product' | 'url' | 'none'
     linkValue: string
     order: number
 }
@@ -66,7 +66,7 @@ export function BannersPage() {
         image: '',
         badge: '',
         gradient: ['#22C55E', '#16A34A'],
-        linkType: 'category',
+        linkType: 'none',
         linkValue: '',
         order: 0,
     })
@@ -75,8 +75,6 @@ export function BannersPage() {
     const [toggleLoading, setToggleLoading] = useState<string | null>(null)
     const [imagePreview, setImagePreview] = useState<string>('')
     const [uploadLoading, setUploadLoading] = useState(false)
-    const [categories, setCategories] = useState<Category[]>([])
-    const [categoriesLoading, setCategoriesLoading] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
     const fetchBanners = useCallback(async () => {
@@ -87,7 +85,6 @@ export function BannersPage() {
                 limit: 10,
                 search,
                 status: statusFilter,
-                linkType: 'category',
             })
             if (response.success) {
                 setBanners(response.response.banners)
@@ -100,27 +97,9 @@ export function BannersPage() {
         }
     }, [page, search, statusFilter])
 
-    const fetchCategories = useCallback(async () => {
-        try {
-            setCategoriesLoading(true)
-            const response = await getCategoriesAdmin({ limit: 100, status: 'active' })
-            if (response.success) {
-                setCategories(response.response.categories || [])
-            }
-        } catch (error) {
-            console.error('Error fetching categories:', error)
-        } finally {
-            setCategoriesLoading(false)
-        }
-    }, [])
-
     useEffect(() => {
         fetchBanners()
     }, [fetchBanners])
-
-    useEffect(() => {
-        fetchCategories()
-    }, [fetchCategories])
 
     useEffect(() => {
         setPage(1)
@@ -135,22 +114,24 @@ export function BannersPage() {
                 image: banner.image,
                 badge: banner.badge || '',
                 gradient: banner.gradient || ['#22C55E', '#16A34A'],
-                linkType: 'category',
+                linkType: (banner.linkType as 'category' | 'product' | 'url' | 'none') || 'none',
                 linkValue: banner.linkValue || '',
                 order: banner.order || 0,
             })
             setImagePreview(banner.image)
         } else {
             setEditingBanner(null)
+            // Set next order number
+            const maxOrder = banners.length > 0 ? Math.max(...banners.map(b => b.order || 0)) : -1
             setFormData({
                 title: '',
                 subtitle: '',
                 image: '',
                 badge: '',
                 gradient: ['#22C55E', '#16A34A'],
-                linkType: 'category',
+                linkType: 'none',
                 linkValue: '',
-                order: banners.length,
+                order: maxOrder + 1,
             })
             setImagePreview('')
         }
@@ -166,16 +147,11 @@ export function BannersPage() {
             image: '',
             badge: '',
             gradient: ['#22C55E', '#16A34A'],
-            linkType: 'category',
+            linkType: 'none',
             linkValue: '',
             order: 0,
         })
         setImagePreview('')
-    }
-
-    const getCategoryName = (categoryId: string) => {
-        const category = categories.find(c => c._id === categoryId)
-        return category?.name || categoryId
     }
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -197,22 +173,33 @@ export function BannersPage() {
         setUploadLoading(true)
 
         try {
-            // Convert to base64 for preview and storage
+            // Convert to base64 and show preview
             const reader = new FileReader()
-            reader.onloadend = () => {
-                const base64String = reader.result as string
-                setImagePreview(base64String)
-                setFormData(prev => ({ ...prev, image: base64String }))
+            reader.onloadend = async () => {
+                const base64 = reader.result as string
+                setImagePreview(base64)
+
+                // Upload to server (which uses Cloudinary)
+                const response = await uploadImage(base64, 'banners')
+
+                if (response.success && response.response?.url) {
+                    setFormData(prev => ({ ...prev, image: response.response!.url }))
+                    setImagePreview(response.response.url)
+                } else {
+                    alert(response.message || 'Failed to upload image')
+                    setImagePreview('')
+                }
                 setUploadLoading(false)
             }
             reader.onerror = () => {
-                alert('Error reading file')
+                alert('Failed to read image file')
                 setUploadLoading(false)
             }
             reader.readAsDataURL(file)
         } catch (error) {
             console.error('Error uploading image:', error)
-            alert('Failed to upload image')
+            alert(error instanceof Error ? error.message : 'Failed to upload image')
+            setImagePreview('')
             setUploadLoading(false)
         }
     }
@@ -390,14 +377,15 @@ export function BannersPage() {
                                                 {banner.badge}
                                             </span>
                                         )}
+                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-muted text-muted-foreground">
+                                            Position: {banner.order + 1}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
                             <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                    <Tag className="w-3.5 h-3.5" />
-                                    <span>{banner.linkValue ? getCategoryName(banner.linkValue) : '—'}</span>
-                                    <span className="mx-1">•</span>
+                                    <GripVertical className="w-3.5 h-3.5" />
                                     <span>Order: {banner.order}</span>
                                 </div>
                                 <div className="flex items-center gap-1">
@@ -440,9 +428,9 @@ export function BannersPage() {
                                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Preview</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Details</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Badge</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Category</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Link Type</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Order</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Position</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
@@ -493,10 +481,7 @@ export function BannersPage() {
                                             )}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1.5">
-                                                <Tag className="w-3.5 h-3.5 text-muted-foreground" />
-                                                <span className="text-sm text-muted-foreground">{banner.linkValue ? getCategoryName(banner.linkValue) : '—'}</span>
-                                            </div>
+                                            <span className="text-sm text-muted-foreground capitalize">{banner.linkType || 'None'}</span>
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={cn('px-2 py-1 text-xs font-medium rounded-full', banner.isActive ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground')}>
@@ -505,8 +490,9 @@ export function BannersPage() {
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-1">
-                                                <GripVertical className="w-4 h-4 text-muted-foreground" />
-                                                <span className="text-sm text-muted-foreground">{banner.order}</span>
+                                                <span className="w-8 h-8 flex items-center justify-center bg-primary/10 text-primary rounded-lg text-sm font-bold">
+                                                    {banner.order + 1}
+                                                </span>
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">
@@ -608,11 +594,12 @@ export function BannersPage() {
                                     Banner Image *
                                 </label>
                                 <div
-                                    onClick={() => fileInputRef.current?.click()}
+                                    onClick={() => !uploadLoading && fileInputRef.current?.click()}
                                     className={cn(
                                         'relative border-2 border-dashed rounded-xl overflow-hidden cursor-pointer transition-colors',
                                         imagePreview ? 'border-primary' : 'border-border hover:border-primary/50',
-                                        'h-40'
+                                        'h-40',
+                                        uploadLoading && 'cursor-not-allowed'
                                     )}
                                     style={{
                                         background: formData.gradient
@@ -622,7 +609,10 @@ export function BannersPage() {
                                 >
                                     {uploadLoading ? (
                                         <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-                                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                            <div className="text-center">
+                                                <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+                                                <p className="text-sm text-muted-foreground mt-2">Uploading to Cloudinary...</p>
+                                            </div>
                                         </div>
                                     ) : imagePreview ? (
                                         <img
@@ -645,6 +635,9 @@ export function BannersPage() {
                                     onChange={handleImageUpload}
                                     className="hidden"
                                 />
+                                {formData.image && !formData.image.startsWith('data:') && (
+                                    <p className="text-xs text-success mt-1">✓ Image uploaded to Cloudinary</p>
+                                )}
                             </div>
 
                             {/* Title */}
@@ -714,49 +707,100 @@ export function BannersPage() {
                                 </div>
                             </div>
 
-                            {/* Category Selection */}
+                            {/* Link Type */}
                             <div>
                                 <label className="block text-sm font-medium text-foreground mb-1">
-                                    Select Category *
+                                    Link Type
                                 </label>
-                                {categoriesLoading ? (
-                                    <div className="flex items-center gap-2 px-4 py-2 bg-input border border-border rounded-lg">
-                                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                                        <span className="text-sm text-muted-foreground">Loading categories...</span>
-                                    </div>
-                                ) : (
-                                    <select
-                                        value={formData.linkValue}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, linkValue: e.target.value }))}
-                                        className="w-full px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                    >
-                                        <option value="">Select a category</option>
-                                        {categories.map(category => (
-                                            <option key={category._id} value={category._id}>
-                                                {category.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                )}
-                                {formData.linkValue && (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Category ID: {formData.linkValue}
-                                    </p>
-                                )}
+                                <select
+                                    value={formData.linkType}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, linkType: e.target.value as typeof formData.linkType, linkValue: '' }))}
+                                    className="w-full px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                    <option value="none">No Link</option>
+                                    <option value="category">Category</option>
+                                    <option value="product">Product</option>
+                                    <option value="url">External URL</option>
+                                </select>
                             </div>
 
-                            {/* Order */}
+                            {/* Link Value */}
+                            {formData.linkType !== 'none' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-foreground mb-1">
+                                        {formData.linkType === 'url' ? 'URL' : `${formData.linkType.charAt(0).toUpperCase() + formData.linkType.slice(1)} ID`}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.linkValue}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, linkValue: e.target.value }))}
+                                        placeholder={formData.linkType === 'url' ? 'https://example.com' : `Enter ${formData.linkType} ID`}
+                                        className="w-full px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Display Position */}
                             <div>
                                 <label className="block text-sm font-medium text-foreground mb-1">
-                                    Display Order
+                                    Display Position
                                 </label>
-                                <input
-                                    type="number"
-                                    value={formData.order}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
-                                    min={0}
-                                    className="w-full px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                />
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1">
+                                        <input
+                                            type="number"
+                                            value={formData.order}
+                                            onChange={(e) => setFormData(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
+                                            min={0}
+                                            className="w-full px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData(prev => ({ ...prev, order: Math.max(0, prev.order - 1) }))}
+                                            className="p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+                                            title="Move up"
+                                        >
+                                            <ArrowUp className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData(prev => ({ ...prev, order: prev.order + 1 }))}
+                                            className="p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+                                            title="Move down"
+                                        >
+                                            <ArrowDown className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Lower numbers appear first. Position {formData.order} will show as #{formData.order + 1} in carousel.
+                                </p>
+                            </div>
+
+                            {/* Quick Position Selection */}
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-2">
+                                    Quick Position Select
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((pos) => (
+                                        <button
+                                            key={pos}
+                                            type="button"
+                                            onClick={() => setFormData(prev => ({ ...prev, order: pos }))}
+                                            className={cn(
+                                                'w-10 h-10 rounded-lg border-2 text-sm font-bold transition-all',
+                                                formData.order === pos
+                                                    ? 'bg-primary text-primary-foreground border-primary'
+                                                    : 'bg-muted border-border hover:border-primary/50'
+                                            )}
+                                        >
+                                            {pos + 1}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
                             {/* Actions */}
@@ -770,7 +814,7 @@ export function BannersPage() {
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={formLoading}
+                                    disabled={formLoading || uploadLoading}
                                     className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {formLoading ? (

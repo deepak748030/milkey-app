@@ -298,15 +298,6 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
     )
 }
 
-function formatCurrency(amount: number): string {
-    if (amount >= 100000) {
-        return `₹${(amount / 100000).toFixed(1)}L`
-    } else if (amount >= 1000) {
-        return `₹${(amount / 1000).toFixed(1)}K`
-    }
-    return `₹${amount.toLocaleString()}`
-}
-
 export function UsersPage() {
     const [users, setUsers] = useState<User[]>([])
     const [pagination, setPagination] = useState<Pagination | null>(null)

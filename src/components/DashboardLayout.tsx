@@ -20,6 +20,9 @@ import {
     FileText,
     CreditCard,
     BarChart3,
+    UserPlus,
+    Banknote,
+    Wallet,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -29,11 +32,14 @@ const navItems = [
     { to: '/orders', icon: ShoppingBag, label: 'Orders' },
     { to: '/admin-orders', icon: ClipboardList, label: 'Admin Orders' },
     { to: '/purchase', icon: ShoppingCart, label: 'Purchase Data' },
+    { to: '/register-farmers', icon: UserPlus, label: 'Register Farmers' },
+    { to: '/register-advances', icon: Banknote, label: 'Register Advances' },
+    { to: '/register-payments', icon: Wallet, label: 'Register Payments' },
     { to: '/selling-members', icon: UserCheck, label: 'Selling Members' },
     { to: '/selling-entries', icon: FileText, label: 'Selling Entries' },
     { to: '/selling-payments', icon: CreditCard, label: 'Selling Payments' },
     { to: '/selling-report', icon: BarChart3, label: 'Selling Report' },
-    { to: '/products', icon: Package, label: 'Products' },
+    { to: '/product-management', icon: Package, label: 'Products' },
     { to: '/users', icon: Users, label: 'Users' },
     { to: '/banners', icon: Image, label: 'Banners' },
     { to: '/settings', icon: Settings, label: 'Settings' },

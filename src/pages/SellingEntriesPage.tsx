@@ -1,6 +1,6 @@
 // File: src/pages/SellingEntriesPage.tsx
 import { useState, useEffect, useCallback } from 'react'
-import { Calendar, Edit2, Trash2, Sun, Moon, X, User } from 'lucide-react'
+import { Edit2, Trash2, Sun, Moon, X, User } from 'lucide-react'
 import {
     getSellingEntries,
     getSellingMembersList,

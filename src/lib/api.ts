@@ -1131,13 +1131,20 @@ export const updateAdminOrderStatus = async (id: string, data: { status?: string
 
 // ==================== SELLING MODULE TYPES ====================
 
+export interface SellingMemberOwner {
+    _id: string
+    name: string
+    email: string
+    phone: string
+}
+
 export interface SellingMember {
     _id: string
     name: string
     mobile: string
     address: string
     ratePerLiter: number
-    owner: string
+    owner: SellingMemberOwner | string
     totalLiters: number
     totalAmount: number
     pendingAmount: number
@@ -1329,6 +1336,232 @@ export const deleteMemberPayment = async (id: string) => {
 
 export const getBalanceReport = async (params?: { userId?: string }) => {
     const response = await api.get('/admin/selling-report', { params })
+    return response.data
+}
+
+// ==================== ADMIN REGISTER FARMERS APIs ====================
+
+export interface RegisterFarmerOwner {
+    _id: string
+    name: string
+    email: string
+    phone: string
+}
+
+export interface RegisterFarmer {
+    _id: string
+    code: string
+    name: string
+    mobile: string
+    address: string
+    owner: RegisterFarmerOwner | string
+    type: 'farmer' | 'member'
+    totalPurchase: number
+    totalLiters: number
+    pendingAmount: number
+    currentBalance: number
+    isActive: boolean
+    createdAt: string
+    updatedAt: string
+}
+
+export const getRegisterFarmers = async (params: {
+    search?: string
+    page?: number
+    limit?: number
+    userId?: string
+}) => {
+    const response = await api.get('/admin/register-farmers', { params })
+    return response.data
+}
+
+export const getRegisterFarmerById = async (id: string) => {
+    const response = await api.get(`/admin/register-farmers/${id}`)
+    return response.data
+}
+
+export const updateRegisterFarmer = async (id: string, data: {
+    name?: string
+    mobile?: string
+    address?: string
+}) => {
+    const response = await api.put(`/admin/register-farmers/${id}`, data)
+    return response.data
+}
+
+export const deleteRegisterFarmer = async (id: string) => {
+    const response = await api.delete(`/admin/register-farmers/${id}`)
+    return response.data
+}
+
+// ==================== ADMIN REGISTER ADVANCES APIs ====================
+
+export interface RegisterAdvance {
+    _id: string
+    farmer: {
+        _id: string
+        code: string
+        name: string
+        mobile: string
+    } | null
+    owner: {
+        _id: string
+        name: string
+        email: string
+        phone: string
+    } | string
+    amount: number
+    date: string
+    note: string
+    status: 'pending' | 'settled' | 'partial'
+    settledAmount: number
+    createdAt: string
+    updatedAt: string
+}
+
+export const getRegisterAdvances = async (params: {
+    search?: string
+    page?: number
+    limit?: number
+    userId?: string
+    status?: string
+    startDate?: string
+    endDate?: string
+}) => {
+    const response = await api.get('/admin/register-advances', { params })
+    return response.data
+}
+
+// ==================== ADMIN REGISTER PAYMENTS APIs ====================
+
+export interface RegisterPayment {
+    _id: string
+    farmer: {
+        _id: string
+        code: string
+        name: string
+        mobile: string
+    } | null
+    owner: {
+        _id: string
+        name: string
+        email: string
+        phone: string
+    } | string
+    amount: number
+    date: string
+    periodStart: string
+    periodEnd: string
+    totalMilkAmount: number
+    totalAdvanceDeduction: number
+    netPayable: number
+    closingBalance: number
+    previousBalance: number
+    paymentMethod: string
+    reference: string
+    notes: string
+    createdAt: string
+    updatedAt: string
+}
+
+export const getRegisterPayments = async (params: {
+    search?: string
+    page?: number
+    limit?: number
+    userId?: string
+    startDate?: string
+    endDate?: string
+}) => {
+    const response = await api.get('/admin/register-payments', { params })
+    return response.data
+}
+
+// ==================== ADMIN PRODUCT MANAGEMENT ====================
+
+export interface AdminProduct {
+    _id: string
+    name: string
+    price: number
+    unit: string
+    icon: string
+    description: string
+    stock: number
+    image?: string
+    owner: {
+        _id: string
+        name: string
+        email: string
+        phone: string
+    } | string
+    isActive: boolean
+    createdAt: string
+    updatedAt: string
+}
+
+export const getAdminProducts = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    unit?: string
+    userId?: string
+}) => {
+    const response = await api.get('/admin/products', { params })
+    return response.data
+}
+
+export const getAdminProductById = async (id: string) => {
+    const response = await api.get(`/admin/products/${id}`)
+    return response.data
+}
+
+export const createAdminProduct = async (data: {
+    name: string
+    price: number
+    unit?: string
+    icon?: string
+    description?: string
+    stock?: number
+    image?: string
+}) => {
+    const response = await api.post('/admin/products', data)
+    return response.data
+}
+
+export const updateAdminProduct = async (id: string, data: {
+    name?: string
+    price?: number
+    unit?: string
+    icon?: string
+    description?: string
+    stock?: number
+    image?: string
+    isActive?: boolean
+}) => {
+    const response = await api.put(`/admin/products/${id}`, data)
+    return response.data
+}
+
+export const deleteAdminProduct = async (id: string) => {
+    const response = await api.delete(`/admin/products/${id}`)
+    return response.data
+}
+
+export const toggleAdminProductStatus = async (id: string) => {
+    const response = await api.put(`/admin/products/${id}/toggle`)
+    return response.data
+}
+
+// Image Upload API
+export const uploadImage = async (imageBase64: string, folder?: string): Promise<{
+    success: boolean
+    message?: string
+    response?: {
+        url: string
+        public_id: string
+    }
+}> => {
+    const response = await api.post('/admin/upload', { image: imageBase64, folder })
     return response.data
 }
 
