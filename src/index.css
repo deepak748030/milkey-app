@@ -1,0 +1,201 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    /* Dark purple background with green accents */
+    --background: 270 30% 8%;
+    --foreground: 0 0% 100%;
+
+    --card: 270 25% 14%;
+    --card-foreground: 0 0% 100%;
+
+    --primary: 142 76% 42%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 270 20% 22%;
+    --secondary-foreground: 142 76% 42%;
+
+    --muted: 270 20% 22%;
+    --muted-foreground: 220 9% 66%;
+
+    --accent: 142 76% 42%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 0%;
+
+    --border: 270 15% 28%;
+    --input: 270 20% 22%;
+    --ring: 142 76% 42%;
+
+    --sidebar: 270 30% 10%;
+    --sidebar-foreground: 220 14% 90%;
+    --sidebar-hover: 270 25% 18%;
+    --sidebar-active: 142 76% 42%;
+
+    --radius: 0.5rem;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+}
+
+/* Reduce sizes for large screens only */
+@media (min-width: 1024px) {
+    html {
+        font-size: 14px;
+    }
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Animation Classes */
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slide-in {
+    from {
+        transform: translateX(-100%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-in {
+    animation: slide-in 0.3s ease-out;
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Skeleton Loading */
+.skeleton {
+    background: linear-gradient(90deg,
+            hsl(var(--muted)) 25%,
+            hsl(var(--border)) 50%,
+            hsl(var(--muted)) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Table styles */
+.table-container {
+    @apply overflow-x-auto;
+}
+
+/* Button base styles */
+.btn {
+    @apply inline-flex items-center justify-center gap-2 font-medium transition-all duration-200;
+}
+
+.btn-primary {
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
+}
+
+.btn-secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
+}
+
+.btn-destructive {
+    @apply bg-destructive text-destructive-foreground hover:bg-destructive/90;
+}
+
+/* Input base styles */
+.input {
+    @apply w-full px-4 py-3 bg-card border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-ring transition-all;
+}
+
+/* Card styles */
+.card {
+    @apply bg-card border border-border rounded-xl p-6;
+}

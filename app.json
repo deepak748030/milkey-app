@@ -1,45 +1,8 @@
 {
   "expo": {
-    "name": "Milkey",
-    "slug": "milkey",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/milkey-logo.png",
-    "scheme": "milkey",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/milkey-logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0D4A6B"
-    },
-    "android": {
-      "package": "com.milkey.app",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/milkey-logo.png",
-        "backgroundColor": "#0D4A6B"
-      }
-    },
-    "ios": {
-      "supportsTablet": true
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "single",
-      "favicon": "./assets/images/milkey-logo.png"
-    },
-    "plugins": [
-      "expo-router",
-      "expo-font",
-      "expo-web-browser"
-    ],
-    "experiments": {
-      "typedRoutes": true
-    },
     "extra": {
-      "router": {},
       "eas": {
-        "projectId": "5105d798-655a-478f-9ff0-062ac18b4e0e"
+        "projectId": "871acfb5-6e9c-44d0-87d3-f5d921051c6d"
       }
     }
   }

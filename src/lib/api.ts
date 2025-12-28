@@ -1,0 +1,948 @@
+// File: src/lib/api.ts
+import axios from 'axios'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+
+const api = axios.create({
+    baseURL: API_URL,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+})
+
+// Add auth token to requests
+api.interceptors.request.use((config) => {
+    const token = localStorage.getItem('admin_token')
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+})
+
+// Handle auth errors
+// IMPORTANT: do NOT force-logout on every 401, because some endpoints can transiently return 401
+// (cold start / slow server / race), which was logging you out when navigating.
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            const token = localStorage.getItem('admin_token')
+            const isProfileCheck = error.config?.url?.includes('/admin/me')
+
+            // If there is no token at all, user is effectively logged out → go to login.
+            if (!token && !isProfileCheck) {
+                window.location.href = '/login'
+            }
+
+            // If token exists, keep session intact and let the UI handle the error.
+            // (No localStorage clearing, no hard redirect.)
+        }
+        return Promise.reject(error)
+    }
+)
+
+export interface Admin {
+    _id: string
+    name: string
+    email: string
+    avatar: string
+    role: string
+}
+
+export interface UserWallet {
+    balance: number
+    pendingBalance: number
+    totalEarnings: number
+    totalWithdrawn: number
+}
+
+export interface User {
+    _id: string
+    name: string
+    email: string
+    phone: string
+    avatar: string
+    isBlocked: boolean
+    memberSince: string
+    createdAt: string
+    wallet?: UserWallet
+}
+
+export interface VendorKYC {
+    name?: string
+    phone?: string
+    email?: string
+    aadhaarFrontImage?: string
+    aadhaarBackImage?: string
+    panCardImage?: string
+    bankAccountHolderName?: string
+    bankAccountNumber?: string
+    bankName?: string
+    ifscCode?: string
+    ownerLivePhoto?: string
+    verificationStatus?: 'pending' | 'verified' | 'rejected'
+    rejectionReason?: string
+    submittedAt?: string
+    verifiedAt?: string
+}
+
+export interface Vendor {
+    _id: string
+    name: string
+    email: string
+    phone: string
+    avatar: string
+    businessName: string
+    category: string
+    rating: number
+    reviewCount: number
+    isVerified: boolean
+    isBlocked: boolean
+    kycStatus: 'not_submitted' | 'pending' | 'verified' | 'rejected'
+    isActive: boolean
+    createdAt: string
+    description?: string
+    experienceYears?: number
+    address?: {
+        street?: string
+        city?: string
+        state?: string
+        pincode?: string
+    }
+    kyc?: VendorKYC
+    bankDetails?: {
+        accountHolderName?: string
+        accountNumber?: string
+        bankName?: string
+        ifscCode?: string
+        upiId?: string
+    }
+}
+
+export interface VendorDetailResponse {
+    success: boolean
+    response: {
+        vendor: Vendor
+    }
+}
+
+export interface Pagination {
+    page: number
+    limit: number
+    total: number
+    pages: number
+}
+
+export interface DashboardStats {
+    totalUsers: number
+    activeUsers: number
+    blockedUsers: number
+    totalVendors: number
+    activeVendors: number
+    blockedVendors: number
+    pendingKYC: number
+    verifiedVendors: number
+    recentUsers: number
+    recentVendors: number
+}
+
+export interface ChartDataPoint {
+    name: string
+    users?: number
+    vendors?: number
+    revenue?: number
+    bookings?: number
+}
+
+export interface PieChartDataPoint {
+    name: string
+    value: number
+    color: string
+}
+
+export interface DashboardAnalytics {
+    overview: {
+        totalUsers: number
+        activeUsers: number
+        blockedUsers: number
+        totalVendors: number
+        activeVendors: number
+        blockedVendors: number
+        pendingKYC: number
+        verifiedVendors: number
+        totalBookings: number
+        pendingBookings: number
+        confirmedBookings: number
+        completedBookings: number
+        cancelledBookings: number
+        totalRevenue: number
+        totalEvents: number
+        activeEvents: number
+        featuredEvents: number
+        inactiveEvents: number
+    }
+    periodStats: {
+        users: number
+        vendors: number
+        bookings: number
+        events: number
+        revenue: number
+        filter: string
+    }
+    charts: {
+        userGrowth: ChartDataPoint[]
+        bookingStatusDistribution: PieChartDataPoint[]
+        vendorKycDistribution: PieChartDataPoint[]
+        revenueTrend: ChartDataPoint[]
+        bookingsTrend: ChartDataPoint[]
+        eventsTrend: ChartDataPoint[]
+    }
+}
+
+export interface Category {
+    _id: string
+    name: string
+    image?: string
+    color?: string
+    itemsCount?: number
+    isActive: boolean
+    createdAt: string
+    updatedAt?: string
+}
+
+export interface Banner {
+    _id: string
+    title: string
+    subtitle?: string
+    image: string
+    badge?: string
+    gradient?: string[]
+    linkType: 'category'
+    linkValue?: string
+    isActive: boolean
+    order: number
+    createdAt: string
+    updatedAt?: string
+}
+
+export interface DeliveryPartner {
+    _id: string
+    name: string
+    phone: string
+    email?: string
+    avatar?: string
+    vehicle: {
+        type: 'bike' | 'scooter' | 'car' | 'bicycle'
+        number: string
+        model: string
+        color: string
+    }
+    documents?: {
+        aadhaar?: string
+        pan?: string
+        license?: string
+        selfie?: string
+    }
+    kycStatus: 'pending' | 'submitted' | 'approved' | 'rejected'
+    kycRejectionReason?: string
+    isActive: boolean
+    isOnline: boolean
+    isVerified: boolean
+    isBlocked: boolean
+    isProfileComplete: boolean
+    stats: {
+        totalDeliveries: number
+        rating: number
+        totalRatings: number
+    }
+    earnings: {
+        today: number
+        week: number
+        month: number
+        total: number
+    }
+    memberSince: string
+    createdAt: string
+    updatedAt?: string
+}
+
+export interface DeliveryPartnerStats {
+    total: number
+    active: number
+    online: number
+    blocked: number
+    verified: number
+    pendingKyc: number
+    submittedKyc: number
+    approvedKyc: number
+    rejectedKyc: number
+    totalEarnings: number
+    totalDeliveries: number
+}
+
+export interface Event {
+    _id: string
+    title: string
+    description?: string
+    category?: string
+    image?: string
+    images?: string[]
+    date?: string
+    time?: string
+    location: string
+    fullLocation?: string
+    price: number
+    mrp?: number
+    badge?: string
+    services?: string[]
+    capacity?: number
+    bookedCount?: number
+    rating?: number
+    reviews?: number
+    isFeatured?: boolean
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
+    vendor?: {
+        _id: string
+        name: string
+        businessName?: string
+        avatar?: string
+        email?: string
+        phone?: string
+    }
+}
+
+// Auth APIs
+export const adminLogin = async (email: string, password: string) => {
+    const response = await api.post('/admin/login', { email, password })
+    return response.data
+}
+
+export const getAdminProfile = async () => {
+    const response = await api.get('/admin/me')
+    return response.data
+}
+
+export const setupAdmin = async () => {
+    const response = await api.post('/admin/setup')
+    return response.data
+}
+
+// User APIs
+export const getUsers = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+}) => {
+    const response = await api.get('/admin/users', { params })
+    return response.data
+}
+
+export const getUserById = async (id: string) => {
+    const response = await api.get(`/admin/users/${id}`)
+    return response.data
+}
+
+export const toggleUserBlock = async (id: string, reason?: string) => {
+    const response = await api.put(`/admin/users/${id}/block`, { reason })
+    return response.data
+}
+
+// Vendor APIs
+export const getVendors = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    kycStatus?: string
+}) => {
+    const response = await api.get('/admin/vendors', { params })
+    return response.data
+}
+
+export const getVendorById = async (id: string): Promise<VendorDetailResponse> => {
+    const response = await api.get(`/admin/vendors/${id}`)
+    return response.data
+}
+
+export const toggleVendorBlock = async (id: string, reason?: string) => {
+    const response = await api.put(`/admin/vendors/${id}/block`, { reason })
+    return response.data
+}
+
+export const updateVendorKYC = async (id: string, status: 'verified' | 'rejected', rejectionReason?: string) => {
+    const response = await api.put(`/admin/vendors/${id}/kyc`, { status, rejectionReason })
+    return response.data
+}
+
+// Category APIs
+export const getCategoriesAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+}) => {
+    const response = await api.get('/admin/categories', { params })
+    return response.data
+}
+
+export const getCategoryByIdAdmin = async (id: string) => {
+    const response = await api.get(`/admin/categories/${id}`)
+    return response.data
+}
+
+export const createCategory = async (data: {
+    name: string
+    image?: string
+    color?: string
+}) => {
+    const response = await api.post('/admin/categories', data)
+    return response.data
+}
+
+export const updateCategory = async (id: string, data: {
+    name?: string
+    image?: string
+    color?: string
+    isActive?: boolean
+}) => {
+    const response = await api.put(`/admin/categories/${id}`, data)
+    return response.data
+}
+
+export const toggleCategoryStatus = async (id: string) => {
+    const response = await api.put(`/admin/categories/${id}/toggle`)
+    return response.data
+}
+
+export const deleteCategory = async (id: string) => {
+    const response = await api.delete(`/admin/categories/${id}`)
+    return response.data
+}
+
+// Banner APIs
+export const getBannersAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    linkType?: string
+}) => {
+    const response = await api.get('/admin/banners', { params })
+    return response.data
+}
+
+export const getBannerByIdAdmin = async (id: string) => {
+    const response = await api.get(`/admin/banners/${id}`)
+    return response.data
+}
+
+export const createBanner = async (data: {
+    title: string
+    subtitle?: string
+    image: string
+    badge?: string
+    gradient?: string[]
+    linkType?: string
+    linkValue?: string
+    order?: number
+}) => {
+    const response = await api.post('/admin/banners', data)
+    return response.data
+}
+
+export const updateBanner = async (id: string, data: {
+    title?: string
+    subtitle?: string
+    image?: string
+    badge?: string
+    gradient?: string[]
+    linkType?: string
+    linkValue?: string
+    order?: number
+    isActive?: boolean
+}) => {
+    const response = await api.put(`/admin/banners/${id}`, data)
+    return response.data
+}
+
+export const deleteBanner = async (id: string) => {
+    const response = await api.delete(`/admin/banners/${id}`)
+    return response.data
+}
+
+export const toggleBannerStatus = async (id: string) => {
+    const response = await api.put(`/admin/banners/${id}/toggle`)
+    return response.data
+}
+
+export const reorderBanners = async (bannerOrders: { id: string; order: number }[]) => {
+    const response = await api.put('/admin/banners/reorder', { bannerOrders })
+    return response.data
+}
+
+// Events APIs (for banner selection)
+export const getEventsAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    category?: string
+    featured?: string
+    sortBy?: string
+    sortOrder?: string
+}) => {
+    const response = await api.get('/admin/events', { params })
+    return response.data
+}
+
+export const getEventByIdAdmin = async (id: string) => {
+    const response = await api.get(`/admin/events/${id}`)
+    return response.data
+}
+
+export const updateEventAdmin = async (id: string, data: Partial<Event>) => {
+    const response = await api.put(`/admin/events/${id}`, data)
+    return response.data
+}
+
+export const toggleEventStatusAdmin = async (id: string) => {
+    const response = await api.patch(`/admin/events/${id}/toggle-status`)
+    return response.data
+}
+
+export const toggleEventFeaturedAdmin = async (id: string) => {
+    const response = await api.patch(`/admin/events/${id}/toggle-featured`)
+    return response.data
+}
+
+export const deleteEventAdmin = async (id: string) => {
+    const response = await api.delete(`/admin/events/${id}`)
+    return response.data
+}
+
+// Stats APIs
+export const getDashboardStats = async () => {
+    const response = await api.get('/admin/stats')
+    return response.data
+}
+
+export const getDashboardAnalytics = async (filter: 'today' | 'weekly' | 'monthly' | 'yearly' = 'monthly') => {
+    const response = await api.get('/admin/analytics', { params: { filter } })
+    return response.data as { success: boolean; response: DashboardAnalytics }
+}
+
+// Delivery Partner APIs
+export const getDeliveryPartnersAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    kycStatus?: string
+    isOnline?: string
+}) => {
+    const response = await api.get('/admin/delivery-partners', { params })
+    return response.data
+}
+
+export const getDeliveryPartnerByIdAdmin = async (id: string) => {
+    const response = await api.get(`/admin/delivery-partners/${id}`)
+    return response.data
+}
+
+export const getDeliveryPartnerStats = async () => {
+    const response = await api.get('/admin/delivery-partners/stats')
+    return response.data
+}
+
+export const toggleDeliveryPartnerBlock = async (id: string, reason?: string) => {
+    const response = await api.put(`/admin/delivery-partners/${id}/block`, { reason })
+    return response.data
+}
+
+export const updateDeliveryPartnerKYC = async (id: string, status: string, rejectionReason?: string) => {
+    const response = await api.put(`/admin/delivery-partners/${id}/kyc`, { status, rejectionReason })
+    return response.data
+}
+
+export const toggleDeliveryPartnerActive = async (id: string) => {
+    const response = await api.put(`/admin/delivery-partners/${id}/toggle-active`)
+    return response.data
+}
+
+export const updateDeliveryPartnerEarnings = async (id: string, amount: number, type: 'add' | 'deduct' | 'set', reason?: string) => {
+    const response = await api.put(`/admin/delivery-partners/${id}/earnings`, { amount, type, reason })
+    return response.data
+}
+
+// Order Types
+export interface OrderItem {
+    product: string
+    name: string
+    price: number
+    quantity: number
+    image: string
+}
+
+export interface OrderUser {
+    _id: string
+    name: string
+    phone: string
+    avatar?: string
+}
+
+export interface Order {
+    _id: string
+    orderNumber: string
+    user: OrderUser
+    items: OrderItem[]
+    shippingAddress: {
+        name: string
+        phone: string
+        address: string
+        city: string
+        state: string
+        pincode: string
+    }
+    paymentMethod: 'upi' | 'card' | 'wallet' | 'cod'
+    subtotal: number
+    discount: number
+    shipping: number
+    tax: number
+    total: number
+    status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled'
+    timeline: Array<{
+        status: string
+        date: string
+        completed: boolean
+    }>
+    deliveryPartner?: {
+        _id: string
+        name: string
+        phone: string
+        avatar?: string
+        vehicleType?: string
+    }
+    deliveredAt?: string
+    estimatedDeliveryTime?: string
+    createdAt: string
+}
+
+export interface OrderStats {
+    totalOrders: number
+    totalRevenue: number
+    avgOrderValue: number
+    todayOrders: number
+    todayRevenue: number
+    pending: number
+    confirmed: number
+    processing: number
+    shipped: number
+    out_for_delivery: number
+    delivered: number
+    cancelled: number
+}
+
+// Order API Functions
+export const getOrdersAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    paymentMethod?: string
+    dateFrom?: string
+    dateTo?: string
+}) => {
+    const response = await api.get('/admin/orders', { params })
+    return response.data
+}
+
+export const getOrderStats = async () => {
+    const response = await api.get('/admin/orders/stats')
+    return response.data
+}
+
+export const getOrderById = async (id: string) => {
+    const response = await api.get(`/admin/orders/${id}`)
+    return response.data
+}
+
+export const updateOrderStatus = async (id: string, status: string) => {
+    const response = await api.put(`/admin/orders/${id}/status`, { status })
+    return response.data
+}
+
+export const assignDeliveryPartner = async (id: string, deliveryPartnerId: string) => {
+    const response = await api.put(`/admin/orders/${id}/assign`, { deliveryPartnerId })
+    return response.data
+}
+
+// Coupon Types
+export interface Coupon {
+    _id: string
+    code: string
+    discountType: 'percentage' | 'fixed'
+    discountValue: number
+    minOrderValue: number
+    maxDiscount: number | null
+    usageLimit: number | null
+    usedCount: number
+    validFrom: string
+    validUntil: string
+    isActive: boolean
+    description: string
+    createdAt: string
+}
+
+export interface CouponStats {
+    totalCoupons: number
+    activeCoupons: number
+    expiredCoupons: number
+    totalUsage: number
+    percentageCoupons: number
+    fixedCoupons: number
+}
+
+export interface CouponFormData {
+    code: string
+    discountType: 'percentage' | 'fixed'
+    discountValue: number
+    minOrderValue: number
+    maxDiscount: number | null
+    usageLimit: number | null
+    validFrom: string
+    validUntil: string
+    description: string
+}
+
+// Coupon API Functions
+export const getCouponsAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    discountType?: string
+}) => {
+    const response = await api.get('/admin/coupons', { params })
+    return response.data
+}
+
+export const getCouponStats = async () => {
+    const response = await api.get('/admin/coupons/stats')
+    return response.data
+}
+
+export const getCouponById = async (id: string) => {
+    const response = await api.get(`/admin/coupons/${id}`)
+    return response.data
+}
+
+export const createCoupon = async (data: CouponFormData) => {
+    const response = await api.post('/admin/coupons', data)
+    return response.data
+}
+
+export const updateCoupon = async (id: string, data: Partial<CouponFormData & { isActive: boolean }>) => {
+    const response = await api.put(`/admin/coupons/${id}`, data)
+    return response.data
+}
+
+export const deleteCoupon = async (id: string) => {
+    const response = await api.delete(`/admin/coupons/${id}`)
+    return response.data
+}
+
+export const toggleCouponStatus = async (id: string) => {
+    const response = await api.put(`/admin/coupons/${id}/toggle`)
+    return response.data
+}
+
+// Product Types
+export interface Product {
+    _id: string
+    title: string
+    description: string
+    price: number
+    mrp: number
+    category: {
+        _id: string
+        name: string
+        color?: string
+    }
+    image: string
+    images: string[]
+    badge: string
+    location: string
+    fullLocation: string
+    rating: number
+    reviews: number
+    date: string
+    time: string
+    services: string[]
+    isActive: boolean
+    isTrending: boolean
+    isFashionPick: boolean
+    createdAt: string
+    updatedAt?: string
+}
+
+export interface ProductStats {
+    totalProducts: number
+    activeProducts: number
+    inactiveProducts: number
+    trendingProducts: number
+    fashionPickProducts: number
+}
+
+// Product API Functions
+export const getProductsAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    category?: string
+    trending?: string
+    fashionPick?: string
+    minPrice?: number
+    maxPrice?: number
+}) => {
+    const response = await api.get('/admin/products', { params })
+    return response.data
+}
+
+export const getProductStats = async () => {
+    const response = await api.get('/admin/products/stats')
+    return response.data
+}
+
+export const getProductByIdAdmin = async (id: string) => {
+    const response = await api.get(`/admin/products/${id}`)
+    return response.data
+}
+
+export const toggleProductTrending = async (id: string) => {
+    const response = await api.put(`/admin/products/${id}/trending`)
+    return response.data
+}
+
+export const toggleProductFashionPick = async (id: string) => {
+    const response = await api.put(`/admin/products/${id}/fashion-pick`)
+    return response.data
+}
+
+export const toggleProductStatus = async (id: string) => {
+    const response = await api.put(`/admin/products/${id}/toggle`)
+    return response.data
+}
+
+export const deleteProductAdmin = async (id: string) => {
+    const response = await api.delete(`/admin/products/${id}`)
+    return response.data
+}
+
+// Admin Settings APIs
+export interface AdminActivity {
+    admin: Admin
+    activity: {
+        lastLogin: string
+        accountCreated: string
+        stats: {
+            totalOrders: number
+            totalUsers: number
+            totalCoupons: number
+            totalCategories: number
+            totalBanners: number
+            totalDeliveryPartners: number
+        }
+    }
+}
+
+export const updateAdminProfile = async (data: { name?: string; email?: string; avatar?: string }) => {
+    const response = await api.put('/admin/profile', data)
+    return response.data
+}
+
+export const updateAdminPassword = async (currentPassword: string, newPassword: string) => {
+    const response = await api.put('/admin/password', { currentPassword, newPassword })
+    return response.data
+}
+
+export const getAdminActivity = async () => {
+    const response = await api.get('/admin/activity')
+    return response.data
+}
+
+// Withdrawal Types
+export interface WithdrawalRequest {
+    _id: string
+    requestId: string
+    requesterType: 'vendor' | 'delivery_partner'
+    user?: { _id: string; name: string; phone: string; avatar?: string }
+    deliveryPartner?: { _id: string; name: string; phone: string; avatar?: string }
+    amount: number
+    paymentMethod: string
+    paymentDetails?: {
+        upiId?: string
+        accountHolderName?: string
+        accountNumber?: string
+        ifscCode?: string
+        bankName?: string
+        mobileNumber?: string
+    }
+    status: 'pending' | 'processing' | 'completed' | 'rejected'
+    adminNotes?: string
+    rejectionReason?: string
+    transactionReference?: string
+    balanceBefore: number
+    balanceAfter?: number
+    createdAt: string
+    updatedAt?: string
+}
+
+export interface WithdrawalStats {
+    pending: number
+    processing: number
+    completed: number
+    rejected: number
+    pendingAmount: number
+    processingAmount: number
+    completedAmount: number
+    rejectedAmount: number
+}
+
+// Withdrawal APIs
+export const getWithdrawalsAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    requesterType?: string
+}) => {
+    const response = await api.get('/admin/withdrawals', { params })
+    return response.data
+}
+
+export const getWithdrawalStats = async () => {
+    const response = await api.get('/admin/withdrawals/stats')
+    return response.data
+}
+
+export const updateWithdrawalStatus = async (
+    id: string,
+    status: string,
+    adminNotes?: string,
+    transactionReference?: string,
+    rejectionReason?: string
+) => {
+    const response = await api.put(`/admin/withdrawals/${id}/status`, {
+        status,
+        adminNotes,
+        transactionReference,
+        rejectionReason,
+    })
+    return response.data
+}
+
+export default api
