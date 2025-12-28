@@ -214,8 +214,23 @@ router.post('/', auth, async (req, res) => {
         const closingBalance = netPayable - paymentAmount;
 
         // Use client-provided period dates if available, otherwise use collection dates
-        const periodStart = clientPeriodStart ? new Date(clientPeriodStart) : unpaidCollections[0]?.date;
-        const periodEnd = clientPeriodEnd ? new Date(clientPeriodEnd) : unpaidCollections[unpaidCollections.length - 1]?.date;
+        // Parse dates with time component to avoid timezone issues
+        let periodStart = null;
+        let periodEnd = null;
+
+        if (clientPeriodStart) {
+            // Add time component to prevent timezone shift
+            periodStart = new Date(clientPeriodStart + 'T12:00:00');
+        } else if (unpaidCollections.length > 0) {
+            periodStart = unpaidCollections[0].date;
+        }
+
+        if (clientPeriodEnd) {
+            // Add time component to prevent timezone shift
+            periodEnd = new Date(clientPeriodEnd + 'T12:00:00');
+        } else if (unpaidCollections.length > 0) {
+            periodEnd = unpaidCollections[unpaidCollections.length - 1].date;
+        }
 
         // Create payment record
         const payment = await Payment.create({
