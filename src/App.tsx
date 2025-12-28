@@ -14,6 +14,10 @@ import { ProductsPage } from './pages/ProductsPage'
 import DeleteAccountPage from './pages/DeleteAccountPage'
 import { AdminOrdersPage } from './pages/AdminOrdersPage'
 import { AdminPurchasePage } from './pages/adminPurchasePage'
+import { SellingMembersPage } from './pages/SellingMembersPage'
+import { SellingEntriesPage } from './pages/SellingEntriesPage'
+import { SellingPaymentsPage } from './pages/SellingPaymentsPage'
+import { SellingReportPage } from './pages/SellingReportPage'
 
 function App() {
     return (
@@ -40,6 +44,10 @@ function App() {
                         <Route path="banners" element={<BannersPage />} />
                         <Route path="admin-orders" element={<AdminOrdersPage />} />
                         <Route path="purchase" element={<AdminPurchasePage />} />
+                        <Route path="selling-members" element={<SellingMembersPage />} />
+                        <Route path="selling-entries" element={<SellingEntriesPage />} />
+                        <Route path="selling-payments" element={<SellingPaymentsPage />} />
+                        <Route path="selling-report" element={<SellingReportPage />} />
                         <Route path="settings" element={<SettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />

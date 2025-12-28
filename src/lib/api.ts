@@ -1129,4 +1129,207 @@ export const updateAdminOrderStatus = async (id: string, data: { status?: string
     return response.data
 }
 
+// ==================== SELLING MODULE TYPES ====================
+
+export interface SellingMember {
+    _id: string
+    name: string
+    mobile: string
+    address: string
+    ratePerLiter: number
+    owner: string
+    totalLiters: number
+    totalAmount: number
+    pendingAmount: number
+    sellingPaymentBalance: number
+    isActive: boolean
+    createdAt: string
+    updatedAt: string
+}
+
+export interface SellingEntry {
+    _id: string
+    member: {
+        _id: string
+        name: string
+        mobile: string
+        ratePerLiter: number
+    } | null
+    owner: string
+    date: string
+    morningQuantity: number
+    eveningQuantity: number
+    rate: number
+    amount: number
+    isPaid: boolean
+    entryCount: number
+    notes: string
+    createdAt: string
+    updatedAt: string
+}
+
+export interface MemberPayment {
+    _id: string
+    member: {
+        _id: string
+        name: string
+        mobile: string
+    } | null
+    owner: string
+    amount: number
+    date: string
+    paymentMethod: 'cash' | 'upi' | 'bank' | 'cheque'
+    reference: string
+    notes: string
+    settledEntries: string[]
+    periodStart: string | null
+    periodEnd: string | null
+    totalSellAmount: number
+    totalQuantity: number
+    milkRate: number
+    netPayable: number
+    closingBalance: number
+    previousBalance: number
+    createdAt: string
+    updatedAt: string
+}
+
+export interface BalanceReportItem {
+    _id: string
+    name: string
+    mobile: string
+    ratePerLiter: number
+    currentBalance: number
+    unpaidAmount: number
+    totalBalance: number
+    unpaidEntriesCount: number
+    unpaidQuantity: number
+    date: string
+    lastPaymentDate: string | null
+    lastPeriodEnd: string | null
+}
+
+export interface BalanceReportSummary {
+    totalMembers: number
+    totalReceivable: number
+    totalPayable: number
+    netBalance: number
+    totalUnpaidAmount: number
+    totalUnpaidQuantity: number
+}
+
+// ==================== ADMIN SELLING MEMBER APIs ====================
+
+export const getSellingMembers = async (params: {
+    search?: string
+    page?: number
+    limit?: number
+    userId?: string
+}) => {
+    const response = await api.get('/admin/selling-members', { params })
+    return response.data
+}
+
+export const getSellingMembersList = async (params?: { userId?: string }) => {
+    const response = await api.get('/admin/selling-members/list', { params })
+    return response.data
+}
+
+export const getSellingMemberById = async (id: string) => {
+    const response = await api.get(`/admin/selling-members/${id}`)
+    return response.data
+}
+
+export const createSellingMember = async (data: {
+    name: string
+    mobile: string
+    address?: string
+    ratePerLiter?: number
+}) => {
+    const response = await api.post('/admin/selling-members', data)
+    return response.data
+}
+
+export const updateSellingMember = async (id: string, data: {
+    name?: string
+    mobile?: string
+    address?: string
+    ratePerLiter?: number
+}) => {
+    const response = await api.put(`/admin/selling-members/${id}`, data)
+    return response.data
+}
+
+export const deleteSellingMember = async (id: string) => {
+    const response = await api.delete(`/admin/selling-members/${id}`)
+    return response.data
+}
+
+// ==================== ADMIN SELLING ENTRY APIs ====================
+
+export const getSellingEntries = async (params: {
+    page?: number
+    limit?: number
+    memberId?: string
+    userId?: string
+    startDate?: string
+    endDate?: string
+    isPaid?: string
+}) => {
+    const response = await api.get('/admin/selling-entries', { params })
+    return response.data
+}
+
+export const getSellingEntryById = async (id: string) => {
+    const response = await api.get(`/admin/selling-entries/${id}`)
+    return response.data
+}
+
+export const updateSellingEntry = async (id: string, data: {
+    morningQuantity?: number
+    eveningQuantity?: number
+    rate?: number
+    notes?: string
+    isPaid?: boolean
+}) => {
+    const response = await api.put(`/admin/selling-entries/${id}`, data)
+    return response.data
+}
+
+export const deleteSellingEntry = async (id: string) => {
+    const response = await api.delete(`/admin/selling-entries/${id}`)
+    return response.data
+}
+
+// ==================== ADMIN MEMBER PAYMENT APIs ====================
+
+export const getMemberPayments = async (params: {
+    page?: number
+    limit?: number
+    memberId?: string
+    userId?: string
+    startDate?: string
+    endDate?: string
+}) => {
+    const response = await api.get('/admin/member-payments', { params })
+    return response.data
+}
+
+export const getMemberPaymentById = async (id: string) => {
+    const response = await api.get(`/admin/member-payments/${id}`)
+    return response.data
+}
+
+export const deleteMemberPayment = async (id: string) => {
+    const response = await api.delete(`/admin/member-payments/${id}`)
+    return response.data
+}
+
+// ==================== ADMIN BALANCE REPORT API ====================
+
+export const getBalanceReport = async (params?: { userId?: string }) => {
+    const response = await api.get('/admin/selling-report', { params })
+    return response.data
+}
+
 export default api

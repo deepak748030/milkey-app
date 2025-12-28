@@ -16,6 +16,10 @@ import {
     Milk,
     ClipboardList,
     ShoppingCart,
+    UserCheck,
+    FileText,
+    CreditCard,
+    BarChart3,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -25,6 +29,10 @@ const navItems = [
     { to: '/orders', icon: ShoppingBag, label: 'Orders' },
     { to: '/admin-orders', icon: ClipboardList, label: 'Admin Orders' },
     { to: '/purchase', icon: ShoppingCart, label: 'Purchase Data' },
+    { to: '/selling-members', icon: UserCheck, label: 'Selling Members' },
+    { to: '/selling-entries', icon: FileText, label: 'Selling Entries' },
+    { to: '/selling-payments', icon: CreditCard, label: 'Selling Payments' },
+    { to: '/selling-report', icon: BarChart3, label: 'Selling Report' },
     { to: '/products', icon: Package, label: 'Products' },
     { to: '/users', icon: Users, label: 'Users' },
     { to: '/banners', icon: Image, label: 'Banners' },
