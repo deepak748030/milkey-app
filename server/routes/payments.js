@@ -163,9 +163,9 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
 // POST /api/payments - Create payment (settle farmer dues)
 router.post('/', auth, async (req, res) => {
     try {
-        const { farmerCode, amount, paymentMethod, reference, notes, totalMilkAmount: providedMilkAmount } = req.body;
+        const { farmerCode, amount, paymentMethod, reference, notes, totalMilkAmount: providedMilkAmount, periodStart: clientPeriodStart, periodEnd: clientPeriodEnd } = req.body;
 
-        if (!farmerCode || !amount) {
+        if (!farmerCode || amount === undefined || amount === null) {
             return res.status(400).json({
                 success: false,
                 message: 'Farmer code and amount are required'
@@ -208,10 +208,14 @@ router.post('/', auth, async (req, res) => {
         // Net payable = milk amount - advances + previous balance
         const netPayable = totalMilkAmount - totalAdvanceAmount + previousBalance;
 
-        const paymentAmount = parseFloat(amount);
+        const paymentAmount = parseFloat(amount) || 0;
 
         // Closing balance = net payable - paid amount (can be + or -)
         const closingBalance = netPayable - paymentAmount;
+
+        // Use client-provided period dates if available, otherwise use collection dates
+        const periodStart = clientPeriodStart ? new Date(clientPeriodStart) : unpaidCollections[0]?.date;
+        const periodEnd = clientPeriodEnd ? new Date(clientPeriodEnd) : unpaidCollections[unpaidCollections.length - 1]?.date;
 
         // Create payment record
         const payment = await Payment.create({
@@ -221,8 +225,8 @@ router.post('/', auth, async (req, res) => {
             paymentMethod: paymentMethod || 'cash',
             reference: reference?.trim() || '',
             notes: notes?.trim() || '',
-            periodStart: unpaidCollections[0]?.date,
-            periodEnd: unpaidCollections[unpaidCollections.length - 1]?.date,
+            periodStart,
+            periodEnd,
             settledCollections: unpaidCollections.map(c => c._id),
             settledAdvances: pendingAdvances.map(a => a._id),
             totalMilkAmount,
