@@ -14,7 +14,7 @@ const paymentSchema = new mongoose.Schema({
     amount: {
         type: Number,
         required: [true, 'Amount is required'],
-        min: [1, 'Amount must be at least 1']
+        min: [0, 'Amount cannot be negative']
     },
     date: {
         type: Date,
