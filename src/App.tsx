@@ -6,16 +6,14 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardLayout } from './components/DashboardLayout'
 import { DashboardPage } from './pages/DashboardPage'
 import { UsersPage } from './pages/UsersPage'
-import { CategoriesPage } from './pages/CategoriesPage'
 import { BannersPage } from './pages/BannersPage'
-import { DeliveryPartnersPage } from './pages/DeliveryPartnersPage'
 import { OrdersPage } from './pages/OrdersPage'
-import { CouponsPage } from './pages/CouponsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
 import { ProductsPage } from './pages/ProductsPage'
-import { WithdrawalsPage } from './pages/WithdrawalsPage'
 import DeleteAccountPage from './pages/DeleteAccountPage'
+import { AdminOrdersPage } from './pages/AdminOrdersPage'
+import { AdminPurchasePage } from './pages/adminPurchasePage'
 
 function App() {
     return (
@@ -39,11 +37,9 @@ function App() {
                         <Route path="orders" element={<OrdersPage />} />
                         <Route path="products" element={<ProductsPage />} />
                         <Route path="users" element={<UsersPage />} />
-                        <Route path="categories" element={<CategoriesPage />} />
-                        <Route path="coupons" element={<CouponsPage />} />
                         <Route path="banners" element={<BannersPage />} />
-                        <Route path="delivery-partners" element={<DeliveryPartnersPage />} />
-                        <Route path="withdrawals" element={<WithdrawalsPage />} />
+                        <Route path="admin-orders" element={<AdminOrdersPage />} />
+                        <Route path="purchase" element={<AdminPurchasePage />} />
                         <Route path="settings" element={<SettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, AlertCircle, Loader2, ChefHat, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle, Loader2, Milk, ArrowRight } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { setupAdmin } from '../lib/api'
 
@@ -59,7 +59,7 @@ export function LoginPage() {
                 <div
                     className="absolute inset-0 bg-cover bg-center"
                     style={{
-                        backgroundImage: `url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=2070&auto=format&fit=crop')`,
+                        backgroundImage: `url('https://images.unsplash.com/photo-1550583724-b2692b85b150?q=80&w=2070&auto=format&fit=crop')`,
                     }}
                 />
                 {/* Overlay */}
@@ -70,32 +70,32 @@ export function LoginPage() {
                     {/* Logo */}
                     <div className="flex items-center gap-3">
                         <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
-                            <ChefHat className="w-8 h-8 text-white" />
+                            <Milk className="w-8 h-8 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold tracking-tight">The Art Of</h1>
-                            <p className="text-3xl font-bold text-orange-300">भ ओ जन</p>
+                            <h1 className="text-3xl font-bold tracking-tight">Milkey</h1>
+                            <p className="text-sm text-white/80">Dairy Management System</p>
                         </div>
                     </div>
 
                     {/* Main Text */}
                     <div className="max-w-md">
                         <h2 className="text-4xl xl:text-5xl font-bold leading-tight mb-6">
-                            Manage Your Food Business Like Never Before
+                            Manage Your Dairy Business Like Never Before
                         </h2>
                         <p className="text-lg text-white/80 leading-relaxed">
-                            A powerful admin dashboard to manage orders, users, delivery partners, and grow your food delivery business efficiently.
+                            A powerful admin dashboard to manage farmers, milk collections, payments, and grow your dairy business efficiently.
                         </p>
 
                         {/* Features */}
                         <div className="mt-8 space-y-4">
                             {[
-                                'Real-time order tracking & management',
-                                'Complete analytics & insights',
-                                'Delivery partner management',
+                                'Real-time milk collection tracking',
+                                'Complete farmer & payment management',
+                                'Detailed analytics & insights',
                             ].map((feature, index) => (
                                 <div key={index} className="flex items-center gap-3">
-                                    <div className="w-2 h-2 rounded-full bg-orange-400" />
+                                    <div className="w-2 h-2 rounded-full bg-primary-foreground" />
                                     <span className="text-white/90">{feature}</span>
                                 </div>
                             ))}
@@ -104,7 +104,7 @@ export function LoginPage() {
 
                     {/* Footer */}
                     <div className="text-sm text-white/60">
-                        © 2025 The Art Of भ ओ जन. All rights reserved.
+                        © 2025 Milkey. All rights reserved.
                     </div>
                 </div>
             </div>
@@ -115,10 +115,10 @@ export function LoginPage() {
                     {/* Mobile Logo */}
                     <div className="lg:hidden text-center mb-8">
                         <div className="inline-flex items-center justify-center p-4 bg-primary rounded-2xl mb-4">
-                            <ChefHat className="w-10 h-10 text-primary-foreground" />
+                            <Milk className="w-10 h-10 text-primary-foreground" />
                         </div>
-                        <h1 className="text-xl font-bold text-foreground">The Art Of</h1>
-                        <p className="text-2xl font-bold text-primary">भ ओ जन</p>
+                        <h1 className="text-2xl font-bold text-foreground">Milkey</h1>
+                        <p className="text-muted-foreground">Dairy Management System</p>
                     </div>
 
                     {/* Welcome Text */}
@@ -154,7 +154,7 @@ export function LoginPage() {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                placeholder="admin@bhojan.com"
+                                placeholder="admin@milkey.com"
                                 className="w-full px-4 py-3.5 bg-muted/50 border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-muted-foreground/60"
                                 required
                             />
@@ -212,7 +212,7 @@ export function LoginPage() {
                     {/* Setup Section */}
                     <div className="mt-8 pt-8 border-t border-border">
                         <p className="text-sm text-muted-foreground text-center mb-4">
-                            {/* First time? Create default admin account */}
+                            First time? Create default admin account
                         </p>
                         <button
                             onClick={handleSetup}
@@ -226,8 +226,8 @@ export function LoginPage() {
                     {/* Help Text */}
                     <p className="text-center text-sm text-muted-foreground mt-6">
                         Need help? Contact{' '}
-                        <a href="mailto:support@bhojan.com" className="text-primary hover:underline">
-                            support@bhaojan.com
+                        <a href="mailto:support@milkey.com" className="text-primary hover:underline">
+                            support@milkey.com
                         </a>
                     </p>
                 </div>

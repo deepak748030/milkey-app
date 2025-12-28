@@ -1,22 +1,21 @@
-// File: src/components/DashboardLayout.tsx 2024
+// File: src/components/DashboardLayout.tsx - Milkey Admin
 import { useState } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import {
     LayoutDashboard,
     Users,
-    FolderOpen,
     Image,
-    Truck,
     Menu,
     X,
     LogOut,
     ChevronLeft,
     ChevronRight,
     ShoppingBag,
-    Ticket,
     Settings,
     Package,
-    Wallet,
+    Milk,
+    ClipboardList,
+    ShoppingCart,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -24,13 +23,11 @@ import { useAuth } from '../context/AuthContext'
 const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/orders', icon: ShoppingBag, label: 'Orders' },
+    { to: '/admin-orders', icon: ClipboardList, label: 'Admin Orders' },
+    { to: '/purchase', icon: ShoppingCart, label: 'Purchase Data' },
     { to: '/products', icon: Package, label: 'Products' },
     { to: '/users', icon: Users, label: 'Users' },
-    { to: '/categories', icon: FolderOpen, label: 'Categories' },
-    { to: '/coupons', icon: Ticket, label: 'Coupons' },
     { to: '/banners', icon: Image, label: 'Banners' },
-    { to: '/delivery-partners', icon: Truck, label: 'Delivery Partners' },
-    { to: '/withdrawals', icon: Wallet, label: 'Withdrawals' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
@@ -63,11 +60,16 @@ export function DashboardLayout() {
                     'h-16 flex items-center border-b border-border/30 px-4',
                     sidebarOpen ? 'justify-between' : 'justify-center'
                 )}>
-                    {sidebarOpen && (
-                        <div>
-                            <h1 className="text-lg font-bold text-foreground leading-tight">The Art Of</h1>
-                            <p className="text-xl font-bold text-primary leading-tight">भ ओ जन</p>
+                    {sidebarOpen ? (
+                        <div className="flex items-center gap-2">
+                            <Milk className="w-7 h-7 text-primary" />
+                            <div>
+                                <h1 className="text-xl font-bold text-foreground leading-tight">Milkey</h1>
+                                <p className="text-xs text-muted-foreground">Admin Dashboard</p>
+                            </div>
                         </div>
+                    ) : (
+                        <Milk className="w-6 h-6 text-primary" />
                     )}
                     <button
                         onClick={() => setSidebarOpen(!sidebarOpen)}

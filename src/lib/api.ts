@@ -66,6 +66,8 @@ export interface User {
     memberSince: string
     createdAt: string
     wallet?: UserWallet
+    role?: string
+    address?: string
 }
 
 export interface VendorKYC {
@@ -342,6 +344,17 @@ export const getUsers = async (params: {
 
 export const getUserById = async (id: string) => {
     const response = await api.get(`/admin/users/${id}`)
+    return response.data
+}
+
+export const updateUser = async (id: string, data: {
+    name?: string
+    email?: string
+    phone?: string
+    address?: string
+    role?: string
+}) => {
+    const response = await api.put(`/admin/users/${id}`, data)
     return response.data
 }
 
@@ -942,6 +955,177 @@ export const updateWithdrawalStatus = async (
         transactionReference,
         rejectionReason,
     })
+    return response.data
+}
+
+// Admin Order Interface (different from customer Order)
+export interface AdminOrderItem {
+    product: string
+    name: string
+    price: number
+    quantity: number
+    total: number
+}
+
+export interface AdminOrder {
+    _id: string
+    orderNumber: string
+    user: {
+        _id: string
+        name: string
+        email: string
+        phone: string
+    }
+    items: AdminOrderItem[]
+    totalAmount: number
+    status: string
+    paymentStatus: string
+    paymentMethod: string
+    deliveryAddress?: string
+    notes?: string
+    createdAt: string
+    updatedAt: string
+}
+
+// Milk Collection (Purchase) Interfaces
+export interface MilkCollection {
+    _id: string
+    purchaseFarmer: {
+        _id: string
+        code: string
+        name: string
+        mobile: string
+    } | null
+    farmerCode: string
+    owner: {
+        _id: string
+        name: string
+        email: string
+    }
+    date: string
+    shift: 'morning' | 'evening'
+    quantity: number
+    fat: number
+    snf: number
+    rate: number
+    amount: number
+    isPaid: boolean
+    notes?: string
+    createdAt: string
+    updatedAt: string
+}
+
+// Orders APIs
+export const getAdminOrders = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    paymentStatus?: string
+    startDate?: string
+    endDate?: string
+    userId?: string
+}) => {
+    const response = await api.get('/admin/orders', { params })
+    return response.data
+}
+
+export const getAdminOrderById = async (id: string) => {
+    const response = await api.get(`/admin/orders/${id}`)
+    return response.data
+}
+
+export const updateAdminOrder = async (id: string, data: {
+    status?: string
+    paymentStatus?: string
+    notes?: string
+}) => {
+    const response = await api.put(`/admin/orders/${id}`, data)
+    return response.data
+}
+
+export const deleteAdminOrder = async (id: string) => {
+    const response = await api.delete(`/admin/orders/${id}`)
+    return response.data
+}
+
+// Milk Collections (Purchase) APIs
+export const getAdminMilkCollections = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    shift?: string
+    isPaid?: string
+    startDate?: string
+    endDate?: string
+    userId?: string
+    farmerId?: string
+}) => {
+    const response = await api.get('/admin/milk-collections', { params })
+    return response.data
+}
+
+export const getAdminMilkCollectionById = async (id: string) => {
+    const response = await api.get(`/admin/milk-collections/${id}`)
+    return response.data
+}
+
+export const updateAdminMilkCollection = async (id: string, data: {
+    quantity?: number
+    fat?: number
+    snf?: number
+    rate?: number
+    isPaid?: boolean
+    notes?: string
+}) => {
+    const response = await api.put(`/admin/milk-collections/${id}`, data)
+    return response.data
+}
+
+export const deleteAdminMilkCollection = async (id: string) => {
+    const response = await api.delete(`/admin/milk-collections/${id}`)
+    return response.data
+}
+
+// Note: AdminOrder interface is defined above at line 961
+
+export interface AdminMilkCollection {
+    _id: string
+    purchaseFarmer: {
+        _id: string
+        code: string
+        name: string
+        mobile: string
+    } | null
+    farmerCode: string
+    owner: {
+        _id: string
+        name: string
+        email: string
+        phone: string
+    }
+    date: string
+    shift: 'morning' | 'evening'
+    quantity: number
+    fat: number
+    snf: number
+    rate: number
+    amount: number
+    isPaid: boolean
+    notes?: string
+    createdAt: string
+    updatedAt: string
+}
+
+// Get list of users for dropdowns
+export const getAdminUsersList = async () => {
+    const response = await api.get('/admin/users/list')
+    return response.data
+}
+
+// Update admin order (different endpoint than customer orders)
+export const updateAdminOrderStatus = async (id: string, data: { status?: string; paymentStatus?: string; notes?: string }) => {
+    const response = await api.put(`/admin/orders/${id}`, data)
     return response.data
 }
 
