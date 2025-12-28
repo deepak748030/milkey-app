@@ -143,7 +143,7 @@ export default function PurchaseScreen() {
     );
 
     const totalAmount = (parseFloat(entryQty || '0') * parseFloat(entryRate || '0')).toFixed(2);
-    const formatDisplayDate = (date: Date | null) => { if (!date) return 'All'; return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`; };
+    const formatDisplayDate = (date: Date | null) => { if (!date) return 'All'; return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`; };
     const formatApiDate = (date: Date | null) => { if (!date) return ''; return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; };
 
     const handleFarmerCodeChange = (code: string) => {
@@ -294,7 +294,7 @@ export default function PurchaseScreen() {
             <tbody>
                 ${historyCollections.map(c => `
                 <tr>
-                    <td>${new Date(c.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
+                    <td>${String(new Date(c.date).getDate()).padStart(2, '0')}/${String(new Date(c.date).getMonth() + 1).padStart(2, '0')}/${new Date(c.date).getFullYear()}</td>
                     <td>${c.shift === 'morning' ? '🌅 AM' : '🌙 PM'}</td>
                     <td>${c.fat || '-'}</td>
                     <td>${c.snf || '-'}</td>
@@ -365,7 +365,7 @@ export default function PurchaseScreen() {
                                 {historyCollections.map((item, index) => (
                                     <View key={item._id} style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
                                         <Text style={[styles.tableCell, styles.tableCellCode, { color: colors.primary, fontWeight: '600' }]}>{item.farmerCode || '-'}</Text>
-                                        <Text style={[styles.tableCell, styles.tableCellDate]}>{new Date(item.date).toISOString().split('T')[0]}</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellDate]}>{`${String(new Date(item.date).getDate()).padStart(2, '0')}/${String(new Date(item.date).getMonth() + 1).padStart(2, '0')}/${new Date(item.date).getFullYear()}`}</Text>
                                         <Text style={[styles.tableCell, styles.tableCellSession, { color: item.shift === 'morning' ? '#f59e0b' : '#3b82f6' }]}>{item.shift}</Text>
                                         <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.fat || '-'}</Text>
                                         <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.snf || '-'}</Text>
