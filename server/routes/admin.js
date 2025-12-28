@@ -7,6 +7,12 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 const MilkCollection = require('../models/MilkCollection');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
+const Member = require('../models/Member');
+const SellingEntry = require('../models/SellingEntry');
+const Subscription = require('../models/Subscription');
+const Farmer = require('../models/Farmer');
+const Banner = require('../models/Banner');
+const Product = require('../models/Product');
 const { uploadToCloudinary } = require('../lib/cloudinary');
 
 // Simple password hashing
@@ -458,39 +464,302 @@ router.put('/users/:id/block', adminAuth, async (req, res) => {
     }
 });
 
-// GET /api/admin/dashboard - Dashboard stats
+// GET /api/admin/dashboard - Comprehensive Dashboard analytics
 router.get('/dashboard', adminAuth, async (req, res) => {
     try {
+        const filter = req.query.filter || 'monthly';
+
+        // Calculate date ranges
+        const now = new Date();
+        let startDate;
+        let previousStartDate;
+        let previousEndDate;
+
+        switch (filter) {
+            case 'today':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                previousStartDate = new Date(startDate);
+                previousStartDate.setDate(previousStartDate.getDate() - 1);
+                previousEndDate = startDate;
+                break;
+            case 'weekly':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                previousStartDate = new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+                previousEndDate = startDate;
+                break;
+            case 'yearly':
+                startDate = new Date(now.getFullYear(), 0, 1);
+                previousStartDate = new Date(now.getFullYear() - 1, 0, 1);
+                previousEndDate = startDate;
+                break;
+            case 'monthly':
+            default:
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                previousEndDate = startDate;
+                break;
+        }
+
+        // Execute all queries in parallel for maximum performance
         const [
+            // User stats
             totalUsers,
             activeUsers,
             blockedUsers,
-            recentUsers,
-            totalOrders,
-            pendingOrders,
-            totalMilkCollections
+            newUsers,
+            previousNewUsers,
+            // Farmer stats
+            totalFarmers,
+            activeFarmers,
+            // Member stats
+            totalMembers,
+            activeMembers,
+            // Subscription stats
+            totalSubscriptions,
+            activeSubscriptions,
+            // Selling stats
+            totalSellingEntries,
+            paidSellingEntries,
+            unpaidSellingEntries,
+            // Purchase stats
+            totalMilkCollections,
+            paidMilkCollections,
+            unpaidMilkCollections,
+            // Banner stats
+            totalBanners,
+            activeBanners,
+            // Product stats
+            totalProducts,
+            activeProducts,
+            // Aggregations for amounts
+            sellingStats,
+            purchaseStats,
+            // Monthly growth data (last 6 months)
+            userGrowth,
+            sellingGrowth,
+            purchaseGrowth,
+            // Subscription distribution
+            subscriptionDistribution
         ] = await Promise.all([
+            // User counts
             User.countDocuments(),
             User.countDocuments({ isBlocked: false }),
             User.countDocuments({ isBlocked: true }),
-            User.countDocuments({
-                createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-            }),
-            Order.countDocuments(),
-            Order.countDocuments({ status: 'pending' }),
-            MilkCollection.countDocuments()
+            User.countDocuments({ createdAt: { $gte: startDate } }),
+            User.countDocuments({ createdAt: { $gte: previousStartDate, $lt: previousEndDate } }),
+            // Farmer counts
+            Farmer.countDocuments(),
+            Farmer.countDocuments({ isActive: true }),
+            // Member counts
+            Member.countDocuments(),
+            Member.countDocuments({ isActive: true }),
+            // Subscription counts
+            Subscription.countDocuments(),
+            Subscription.countDocuments({ isActive: true }),
+            // Selling Entry counts
+            SellingEntry.countDocuments(),
+            SellingEntry.countDocuments({ isPaid: true }),
+            SellingEntry.countDocuments({ isPaid: false }),
+            // Milk Collection counts
+            MilkCollection.countDocuments(),
+            MilkCollection.countDocuments({ isPaid: true }),
+            MilkCollection.countDocuments({ isPaid: false }),
+            // Banner counts
+            Banner.countDocuments(),
+            Banner.countDocuments({ isActive: true }),
+            // Product counts
+            Product.countDocuments(),
+            Product.countDocuments({ isActive: true }),
+            // Selling aggregation
+            SellingEntry.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalAmount: { $sum: '$amount' },
+                        totalQuantity: { $sum: { $add: ['$morningQuantity', '$eveningQuantity'] } },
+                        paidAmount: { $sum: { $cond: ['$isPaid', '$amount', 0] } },
+                        unpaidAmount: { $sum: { $cond: ['$isPaid', 0, '$amount'] } }
+                    }
+                }
+            ]),
+            // Purchase aggregation
+            MilkCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalAmount: { $sum: '$amount' },
+                        totalQuantity: { $sum: '$quantity' },
+                        paidAmount: { $sum: { $cond: ['$isPaid', '$amount', 0] } },
+                        unpaidAmount: { $sum: { $cond: ['$isPaid', 0, '$amount'] } }
+                    }
+                }
+            ]),
+            // User growth (last 6 months)
+            User.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } }
+            ]),
+            // Selling growth (last 6 months)
+            SellingEntry.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                        amount: { $sum: '$amount' },
+                        quantity: { $sum: { $add: ['$morningQuantity', '$eveningQuantity'] } }
+                    }
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } }
+            ]),
+            // Purchase growth (last 6 months)
+            MilkCollection.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                        amount: { $sum: '$amount' },
+                        quantity: { $sum: '$quantity' }
+                    }
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } }
+            ]),
+            // Subscription tab distribution
+            Subscription.aggregate([
+                { $match: { isActive: true } },
+                { $unwind: '$applicableTabs' },
+                {
+                    $group: {
+                        _id: '$applicableTabs',
+                        count: { $sum: 1 }
+                    }
+                }
+            ])
         ]);
+
+        // Process selling stats
+        const sellingData = sellingStats[0] || { totalAmount: 0, totalQuantity: 0, paidAmount: 0, unpaidAmount: 0 };
+        const purchaseData = purchaseStats[0] || { totalAmount: 0, totalQuantity: 0, paidAmount: 0, unpaidAmount: 0 };
+
+        // Format monthly growth data
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthlyGrowthData = [];
+
+        for (let i = 5; i >= 0; i--) {
+            const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const year = targetDate.getFullYear();
+            const month = targetDate.getMonth() + 1;
+            const monthName = monthNames[targetDate.getMonth()];
+
+            const userEntry = userGrowth.find(u => u._id.year === year && u._id.month === month);
+            const sellingEntry = sellingGrowth.find(s => s._id.year === year && s._id.month === month);
+            const purchaseEntry = purchaseGrowth.find(p => p._id.year === year && p._id.month === month);
+
+            monthlyGrowthData.push({
+                name: monthName,
+                users: userEntry?.count || 0,
+                sellingAmount: sellingEntry?.amount || 0,
+                purchaseAmount: purchaseEntry?.amount || 0,
+                sellingQty: sellingEntry?.quantity || 0,
+                purchaseQty: purchaseEntry?.quantity || 0
+            });
+        }
+
+        // Subscription distribution for pie chart
+        const subscriptionTabData = [
+            { name: 'Purchase', value: subscriptionDistribution.find(s => s._id === 'purchase')?.count || 0, color: '#8b5cf6' },
+            { name: 'Selling', value: subscriptionDistribution.find(s => s._id === 'selling')?.count || 0, color: '#3b82f6' },
+            { name: 'Register', value: subscriptionDistribution.find(s => s._id === 'register')?.count || 0, color: '#22c55e' }
+        ];
+
+        // User status distribution for pie chart
+        const userStatusData = [
+            { name: 'Active', value: activeUsers, color: '#22c55e' },
+            { name: 'Blocked', value: blockedUsers, color: '#ef4444' }
+        ];
+
+        // Selling payment status
+        const sellingPaymentData = [
+            { name: 'Paid', value: paidSellingEntries, color: '#22c55e' },
+            { name: 'Unpaid', value: unpaidSellingEntries, color: '#f59e0b' }
+        ];
+
+        // Purchase payment status
+        const purchasePaymentData = [
+            { name: 'Paid', value: paidMilkCollections, color: '#22c55e' },
+            { name: 'Unpaid', value: unpaidMilkCollections, color: '#f59e0b' }
+        ];
+
+        // Calculate user growth percentage
+        const userGrowthPercent = previousNewUsers > 0
+            ? Math.round(((newUsers - previousNewUsers) / previousNewUsers) * 100)
+            : newUsers > 0 ? 100 : 0;
 
         res.json({
             success: true,
             response: {
-                totalUsers,
-                activeUsers,
-                blockedUsers,
-                recentUsers,
-                totalOrders,
-                pendingOrders,
-                totalMilkCollections
+                overview: {
+                    totalUsers,
+                    activeUsers,
+                    blockedUsers,
+                    totalFarmers,
+                    activeFarmers,
+                    totalMembers,
+                    activeMembers,
+                    totalSubscriptions,
+                    activeSubscriptions,
+                    totalSellingEntries,
+                    paidSellingEntries,
+                    unpaidSellingEntries,
+                    totalMilkCollections,
+                    paidMilkCollections,
+                    unpaidMilkCollections,
+                    totalBanners,
+                    activeBanners,
+                    totalProducts,
+                    activeProducts
+                },
+                periodStats: {
+                    newUsers,
+                    userGrowthPercent,
+                    filter
+                },
+                selling: {
+                    totalAmount: sellingData.totalAmount,
+                    totalQuantity: sellingData.totalQuantity,
+                    paidAmount: sellingData.paidAmount,
+                    unpaidAmount: sellingData.unpaidAmount
+                },
+                purchase: {
+                    totalAmount: purchaseData.totalAmount,
+                    totalQuantity: purchaseData.totalQuantity,
+                    paidAmount: purchaseData.paidAmount,
+                    unpaidAmount: purchaseData.unpaidAmount
+                },
+                charts: {
+                    monthlyGrowth: monthlyGrowthData,
+                    subscriptionDistribution: subscriptionTabData,
+                    userStatusDistribution: userStatusData,
+                    sellingPaymentDistribution: sellingPaymentData,
+                    purchasePaymentDistribution: purchasePaymentData
+                }
             }
         });
     } catch (error) {
@@ -501,8 +770,6 @@ router.get('/dashboard', adminAuth, async (req, res) => {
         });
     }
 });
-
-// ==================== ORDERS ROUTES ====================
 
 // GET /api/admin/orders - Get all orders with server-side pagination
 router.get('/orders', adminAuth, async (req, res) => {
@@ -928,10 +1195,6 @@ router.get('/users-list', adminAuth, async (req, res) => {
 });
 
 // ==================== SELLING MODULE ROUTES ====================
-
-const Member = require('../models/Member');
-const SellingEntry = require('../models/SellingEntry');
-const MemberPayment = require('../models/MemberPayment');
 
 // ==================== SELLING MEMBERS ====================
 
@@ -1494,7 +1757,7 @@ router.get('/selling-report', adminAuth, async (req, res) => {
             .sort({ name: 1 })
             .lean();
 
-        // Get all unpaid selling entries grouped by member
+        // Get all unpaid selling entries grouped by member with latest date (Till date)
         const entryQuery = { isPaid: false };
         if (userId) {
             entryQuery.owner = userId;
@@ -1502,12 +1765,14 @@ router.get('/selling-report', adminAuth, async (req, res) => {
 
         const unpaidEntriesAggregation = await SellingEntry.aggregate([
             { $match: entryQuery },
+            { $sort: { date: -1 } },
             {
                 $group: {
                     _id: '$member',
                     unpaidAmount: { $sum: '$amount' },
                     unpaidQuantity: { $sum: { $add: ['$morningQuantity', '$eveningQuantity'] } },
-                    unpaidEntriesCount: { $sum: 1 }
+                    unpaidEntriesCount: { $sum: 1 },
+                    tillDate: { $max: '$date' }  // Latest unpaid entry date
                 }
             }
         ]);
@@ -1543,7 +1808,8 @@ router.get('/selling-report', adminAuth, async (req, res) => {
             const unpaidData = unpaidByMember.get(memberIdStr) || {
                 unpaidAmount: 0,
                 unpaidQuantity: 0,
-                unpaidEntriesCount: 0
+                unpaidEntriesCount: 0,
+                tillDate: null
             };
             const lastPayment = lastPaymentByMember.get(memberIdStr);
 
@@ -1563,7 +1829,8 @@ router.get('/selling-report', adminAuth, async (req, res) => {
                 unpaidQuantity: unpaidData.unpaidQuantity,
                 createdAt: member.createdAt,
                 lastPaymentDate: lastPayment?.lastPaymentDate || null,
-                lastPeriodEnd: lastPayment?.lastPeriodEnd || null
+                lastPeriodEnd: lastPayment?.lastPeriodEnd || null,
+                tillDate: unpaidData.tillDate || null  // Till date from latest unpaid entry
             };
         });
 
@@ -1604,7 +1871,7 @@ router.get('/selling-report', adminAuth, async (req, res) => {
 
 // ==================== REGISTER FARMERS ROUTES ====================
 
-const Farmer = require('../models/Farmer');
+// const Farmer = require('../models/Farmer');
 
 // GET /api/admin/register-farmers - Get all register farmers with pagination, search, owner filter
 router.get('/register-farmers', adminAuth, async (req, res) => {
@@ -1763,7 +2030,7 @@ router.delete('/register-farmers/:id', adminAuth, async (req, res) => {
 
 // ==================== REGISTER ADVANCES ROUTES ====================
 
-const Advance = require('../models/Advance');
+// const Advance = require('../models/Advance');
 
 // GET /api/admin/register-advances - Get all advances with pagination, search, owner filter
 router.get('/register-advances', adminAuth, async (req, res) => {
@@ -1855,7 +2122,7 @@ router.get('/register-advances', adminAuth, async (req, res) => {
 
 // ==================== REGISTER PAYMENTS ROUTES ====================
 
-const Payment = require('../models/Payment');
+// const Payment = require('../models/Payment');
 
 // GET /api/admin/register-payments - Get all payments with pagination, search, owner filter
 router.get('/register-payments', adminAuth, async (req, res) => {
@@ -1937,7 +2204,7 @@ router.get('/register-payments', adminAuth, async (req, res) => {
 
 // ==================== PRODUCT MANAGEMENT ROUTES ====================
 
-const Product = require('../models/Product');
+// const Product = require('../models/Product');
 
 // GET /api/admin/products - Get all products with filters
 router.get('/products', adminAuth, async (req, res) => {
@@ -2174,7 +2441,7 @@ router.put('/products/:id/toggle', adminAuth, async (req, res) => {
 
 // ==================== BANNER MANAGEMENT ROUTES ====================
 
-const Banner = require('../models/Banner');
+// const Banner = require('../models/Banner');
 
 // GET /api/admin/banners - Get all banners with filters
 router.get('/banners', adminAuth, async (req, res) => {

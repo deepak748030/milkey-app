@@ -543,8 +543,8 @@ export const getDashboardStats = async () => {
 }
 
 export const getDashboardAnalytics = async (filter: 'today' | 'weekly' | 'monthly' | 'yearly' = 'monthly') => {
-    const response = await api.get('/admin/analytics', { params: { filter } })
-    return response.data as { success: boolean; response: DashboardAnalytics }
+    const response = await api.get('/admin/dashboard', { params: { filter } })
+    return response.data
 }
 
 // Delivery Partner APIs
@@ -1562,6 +1562,69 @@ export const uploadImage = async (imageBase64: string, folder?: string): Promise
     }
 }> => {
     const response = await api.post('/admin/upload', { image: imageBase64, folder })
+    return response.data
+}
+
+// ==================== SUBSCRIPTION APIs ====================
+
+export interface Subscription {
+    _id: string
+    name: string
+    amount: number
+    durationMonths: number
+    applicableTabs: string[]
+    description?: string
+    isActive: boolean
+    createdAt: string
+    updatedAt?: string
+}
+
+export const getSubscriptions = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    tab?: string
+}) => {
+    const response = await api.get('/subscriptions', { params })
+    return response.data
+}
+
+export const getSubscriptionById = async (id: string) => {
+    const response = await api.get(`/subscriptions/${id}`)
+    return response.data
+}
+
+export const createSubscription = async (data: {
+    name: string
+    amount: number
+    durationMonths: number
+    applicableTabs: string[]
+    description?: string
+}) => {
+    const response = await api.post('/subscriptions', data)
+    return response.data
+}
+
+export const updateSubscription = async (id: string, data: {
+    name?: string
+    amount?: number
+    durationMonths?: number
+    applicableTabs?: string[]
+    description?: string
+    isActive?: boolean
+}) => {
+    const response = await api.put(`/subscriptions/${id}`, data)
+    return response.data
+}
+
+export const toggleSubscriptionStatus = async (id: string) => {
+    const response = await api.put(`/subscriptions/${id}/toggle`)
+    return response.data
+}
+
+export const deleteSubscription = async (id: string) => {
+    const response = await api.delete(`/subscriptions/${id}`)
     return response.data
 }
 

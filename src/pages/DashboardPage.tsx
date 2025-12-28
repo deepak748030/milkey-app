@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import {
-    Users, UserCheck, UserX, TrendingUp, Filter, RefreshCw,
-    ShoppingBag, Truck, Ticket, FolderOpen, Image, IndianRupee,
-    Clock, CheckCircle, XCircle, Wifi
+    Users, UserCheck, UserX, Filter, RefreshCw,
+    Milk, Package, Image, IndianRupee, CreditCard, UserPlus,
+    BarChart3, ArrowUpRight, ArrowDownRight
 } from 'lucide-react'
 import { getDashboardAnalytics } from '../lib/api'
 import { cn } from '../lib/utils'
@@ -22,6 +22,7 @@ interface StatCardProps {
     prefix?: string
     suffix?: string
     trend?: number
+    subValue?: string
 }
 
 function StatCardSkeleton() {
@@ -38,7 +39,7 @@ function StatCardSkeleton() {
     )
 }
 
-function StatCard({ title, value, icon: Icon, color, isLoading, prefix = '', suffix = '' }: StatCardProps) {
+function StatCard({ title, value, icon: Icon, color, isLoading, prefix = '', suffix = '', trend, subValue }: StatCardProps) {
     if (isLoading) return <StatCardSkeleton />
 
     const displayValue = typeof value === 'number' ? value.toLocaleString('en-IN') : value
@@ -51,6 +52,22 @@ function StatCard({ title, value, icon: Icon, color, isLoading, prefix = '', suf
                     <p className="text-2xl font-bold text-foreground mt-1">
                         {prefix}{displayValue}{suffix}
                     </p>
+                    {subValue && (
+                        <p className="text-xs text-muted-foreground mt-1">{subValue}</p>
+                    )}
+                    {trend !== undefined && (
+                        <div className={cn(
+                            'flex items-center gap-1 mt-2 text-xs font-medium',
+                            trend >= 0 ? 'text-green-500' : 'text-red-500'
+                        )}>
+                            {trend >= 0 ? (
+                                <ArrowUpRight className="w-3 h-3" />
+                            ) : (
+                                <ArrowDownRight className="w-3 h-3" />
+                            )}
+                            {Math.abs(trend)}% from last period
+                        </div>
+                    )}
                 </div>
                 <div className={cn('p-2.5 rounded-lg', color)}>
                     <Icon className="w-5 h-5" />
@@ -172,7 +189,7 @@ export function DashboardPage() {
                     <p className="text-sm text-muted-foreground mb-1">{label}</p>
                     {payload.map((entry: any, index: number) => (
                         <p key={index} className="text-sm font-medium" style={{ color: entry.color }}>
-                            {entry.name}: {entry.name === 'Revenue' ? `₹${entry.value.toLocaleString('en-IN')}` : entry.value.toLocaleString()}
+                            {entry.name}: {entry.name.includes('Amount') ? `₹${entry.value.toLocaleString('en-IN')}` : entry.value.toLocaleString()}
                         </p>
                     ))}
                 </div>
@@ -181,40 +198,41 @@ export function DashboardPage() {
         return null
     }
 
+    const formatCurrency = (value: number) => `₹${value.toLocaleString('en-IN')}`
+
     // Stats sections
     const userStats = [
         { title: 'Total Users', value: analytics?.overview.totalUsers || 0, icon: Users, color: 'bg-primary/10 text-primary' },
         { title: 'Active Users', value: analytics?.overview.activeUsers || 0, icon: UserCheck, color: 'bg-green-500/10 text-green-500' },
         { title: 'Blocked Users', value: analytics?.overview.blockedUsers || 0, icon: UserX, color: 'bg-red-500/10 text-red-500' },
-        { title: `New (${filter})`, value: analytics?.periodStats.users || 0, icon: TrendingUp, color: 'bg-blue-500/10 text-blue-500' },
+        { title: `New Users (${filter})`, value: analytics?.periodStats.newUsers || 0, icon: UserPlus, color: 'bg-blue-500/10 text-blue-500', trend: analytics?.periodStats.userGrowthPercent },
     ]
 
-    const orderStats = [
-        { title: 'Total Orders', value: analytics?.overview.totalOrders || 0, icon: ShoppingBag, color: 'bg-purple-500/10 text-purple-500' },
-        { title: 'Pending', value: analytics?.overview.pendingOrders || 0, icon: Clock, color: 'bg-yellow-500/10 text-yellow-500' },
-        { title: 'Delivered', value: analytics?.overview.deliveredOrders || 0, icon: CheckCircle, color: 'bg-green-500/10 text-green-500' },
-        { title: 'Cancelled', value: analytics?.overview.cancelledOrders || 0, icon: XCircle, color: 'bg-red-500/10 text-red-500' },
+    const sellingStats = [
+        { title: 'Total Selling Amount', value: formatCurrency(analytics?.selling?.totalAmount || 0), icon: IndianRupee, color: 'bg-emerald-500/10 text-emerald-500' },
+        { title: 'Paid Amount', value: formatCurrency(analytics?.selling?.paidAmount || 0), icon: CreditCard, color: 'bg-green-500/10 text-green-500' },
+        { title: 'Unpaid Amount', value: formatCurrency(analytics?.selling?.unpaidAmount || 0), icon: IndianRupee, color: 'bg-amber-500/10 text-amber-500' },
+        { title: 'Total Quantity (L)', value: `${(analytics?.selling?.totalQuantity || 0).toFixed(1)} L`, icon: Milk, color: 'bg-blue-500/10 text-blue-500' },
     ]
 
-    const revenueStats = [
-        { title: 'Total Revenue', value: `₹${(analytics?.overview.totalRevenue || 0).toLocaleString('en-IN')}`, icon: IndianRupee, color: 'bg-emerald-500/10 text-emerald-500' },
-        { title: `Revenue (${filter})`, value: `₹${(analytics?.periodStats.revenue || 0).toLocaleString('en-IN')}`, icon: TrendingUp, color: 'bg-teal-500/10 text-teal-500' },
-        { title: 'Active Coupons', value: analytics?.overview.activeCoupons || 0, icon: Ticket, color: 'bg-pink-500/10 text-pink-500' },
-        { title: 'Active Banners', value: analytics?.overview.activeBanners || 0, icon: Image, color: 'bg-orange-500/10 text-orange-500' },
+    const purchaseStats = [
+        { title: 'Total Purchase Amount', value: formatCurrency(analytics?.purchase?.totalAmount || 0), icon: IndianRupee, color: 'bg-violet-500/10 text-violet-500' },
+        { title: 'Paid Amount', value: formatCurrency(analytics?.purchase?.paidAmount || 0), icon: CreditCard, color: 'bg-green-500/10 text-green-500' },
+        { title: 'Unpaid Amount', value: formatCurrency(analytics?.purchase?.unpaidAmount || 0), icon: IndianRupee, color: 'bg-amber-500/10 text-amber-500' },
+        { title: 'Total Quantity (L)', value: `${(analytics?.purchase?.totalQuantity || 0).toFixed(1)} L`, icon: Milk, color: 'bg-cyan-500/10 text-cyan-500' },
     ]
 
-    const deliveryStats = [
-        { title: 'Total Partners', value: analytics?.overview.totalDeliveryPartners || 0, icon: Truck, color: 'bg-indigo-500/10 text-indigo-500' },
-        { title: 'Active', value: analytics?.overview.activeDeliveryPartners || 0, icon: UserCheck, color: 'bg-green-500/10 text-green-500' },
-        { title: 'Online Now', value: analytics?.overview.onlineDeliveryPartners || 0, icon: Wifi, color: 'bg-blue-500/10 text-blue-500' },
-        { title: 'Pending KYC', value: analytics?.overview.pendingKycPartners || 0, icon: Clock, color: 'bg-yellow-500/10 text-yellow-500' },
+    const managementStats = [
+        { title: 'Total Farmers', value: analytics?.overview.totalFarmers || 0, icon: Users, color: 'bg-orange-500/10 text-orange-500', subValue: `${analytics?.overview.activeFarmers || 0} active` },
+        { title: 'Total Members', value: analytics?.overview.totalMembers || 0, icon: UserCheck, color: 'bg-indigo-500/10 text-indigo-500', subValue: `${analytics?.overview.activeMembers || 0} active` },
+        { title: 'Subscriptions', value: analytics?.overview.totalSubscriptions || 0, icon: CreditCard, color: 'bg-pink-500/10 text-pink-500', subValue: `${analytics?.overview.activeSubscriptions || 0} active` },
+        { title: 'Products', value: analytics?.overview.totalProducts || 0, icon: Package, color: 'bg-teal-500/10 text-teal-500', subValue: `${analytics?.overview.activeProducts || 0} active` },
     ]
 
-    const otherStats = [
-        { title: 'Categories', value: analytics?.overview.totalCategories || 0, icon: FolderOpen, color: 'bg-cyan-500/10 text-cyan-500' },
-        { title: 'Active Categories', value: analytics?.overview.activeCategories || 0, icon: CheckCircle, color: 'bg-green-500/10 text-green-500' },
-        { title: 'Total Coupons', value: analytics?.overview.totalCoupons || 0, icon: Ticket, color: 'bg-violet-500/10 text-violet-500' },
-        { title: 'Total Banners', value: analytics?.overview.totalBanners || 0, icon: Image, color: 'bg-rose-500/10 text-rose-500' },
+    const contentStats = [
+        { title: 'Total Selling Entries', value: analytics?.overview.totalSellingEntries || 0, icon: BarChart3, color: 'bg-blue-500/10 text-blue-500' },
+        { title: 'Total Milk Collections', value: analytics?.overview.totalMilkCollections || 0, icon: Milk, color: 'bg-purple-500/10 text-purple-500' },
+        { title: 'Active Banners', value: analytics?.overview.activeBanners || 0, icon: Image, color: 'bg-rose-500/10 text-rose-500', subValue: `of ${analytics?.overview.totalBanners || 0} total` },
     ]
 
     return (
@@ -224,7 +242,7 @@ export function DashboardPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
                     <p className="text-muted-foreground text-sm mt-0.5">
-                        Welcome to The Art Of भ ओ जन Admin Panel
+                        Welcome to Milkey Admin Panel
                     </p>
                 </div>
 
@@ -272,64 +290,83 @@ export function DashboardPage() {
                 </div>
             </div>
 
-            {/* Orders Section */}
+            {/* Selling Section */}
             <div>
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Orders Overview</h2>
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Selling Overview</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {orderStats.map((stat) => (
+                    {sellingStats.map((stat) => (
                         <StatCard key={stat.title} {...stat} isLoading={isLoading} />
                     ))}
                 </div>
             </div>
 
-            {/* Revenue Section */}
+            {/* Purchase Section */}
             <div>
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Revenue & Promotions</h2>
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Purchase Overview</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {revenueStats.map((stat) => (
+                    {purchaseStats.map((stat) => (
                         <StatCard key={stat.title} {...stat} isLoading={isLoading} />
                     ))}
                 </div>
             </div>
 
-            {/* Delivery Partners Section */}
+            {/* Management Stats */}
             <div>
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Delivery Partners</h2>
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Management Overview</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {deliveryStats.map((stat) => (
+                    {managementStats.map((stat) => (
                         <StatCard key={stat.title} {...stat} isLoading={isLoading} />
                     ))}
                 </div>
             </div>
 
-            {/* Other Stats */}
+            {/* Content Stats */}
             <div>
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Content Management</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {otherStats.map((stat) => (
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Activity Overview</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {contentStats.map((stat) => (
                         <StatCard key={stat.title} {...stat} isLoading={isLoading} />
                     ))}
                 </div>
             </div>
 
-            {/* Charts Row 1 - Growth & Revenue Trends */}
+            {/* Charts Row 1 - Growth Trends */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Monthly Growth Chart */}
+                {/* Monthly User Growth Chart */}
                 {isLoading ? (
                     <ChartSkeleton />
                 ) : (
                     <div className="bg-card border border-border rounded-xl p-5">
-                        <h3 className="text-base font-semibold text-foreground mb-4">Monthly Growth Trend</h3>
+                        <h3 className="text-base font-semibold text-foreground mb-4">Monthly User Growth</h3>
+                        <ResponsiveContainer width="100%" height={280}>
+                            <BarChart data={analytics?.charts.monthlyGrowth || []}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                                <Tooltip content={<CustomTooltip />} />
+                                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }} />
+                                <Bar dataKey="users" name="New Users" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                )}
+
+                {/* Selling & Purchase Amount Trend */}
+                {isLoading ? (
+                    <ChartSkeleton />
+                ) : (
+                    <div className="bg-card border border-border rounded-xl p-5">
+                        <h3 className="text-base font-semibold text-foreground mb-4">Revenue Trend (₹)</h3>
                         <ResponsiveContainer width="100%" height={280}>
                             <ComposedChart data={analytics?.charts.monthlyGrowth || []}>
                                 <defs>
-                                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                                    <linearGradient id="colorSelling" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorPurchase" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.3} />
                                         <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0} />
-                                    </linearGradient>
-                                    <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={CHART_COLORS.secondary} stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor={CHART_COLORS.secondary} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -337,118 +374,72 @@ export function DashboardPage() {
                                 <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                                 <Tooltip content={<CustomTooltip />} />
                                 <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }} />
-                                <Area type="monotone" dataKey="users" name="Users" stroke={CHART_COLORS.primary} strokeWidth={2} fillOpacity={1} fill="url(#colorUsers)" />
-                                <Line type="monotone" dataKey="orders" name="Orders" stroke={CHART_COLORS.secondary} strokeWidth={2} dot={{ r: 3 }} />
+                                <Area type="monotone" dataKey="sellingAmount" name="Selling Amount" stroke={CHART_COLORS.success} strokeWidth={2} fillOpacity={1} fill="url(#colorSelling)" />
+                                <Line type="monotone" dataKey="purchaseAmount" name="Purchase Amount" stroke={CHART_COLORS.primary} strokeWidth={2} dot={{ r: 3 }} />
                             </ComposedChart>
                         </ResponsiveContainer>
                     </div>
                 )}
+            </div>
 
-                {/* Revenue Trend */}
+            {/* Charts Row 2 - Quantity Trends */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Quantity Trend */}
                 {isLoading ? (
                     <ChartSkeleton />
                 ) : (
                     <div className="bg-card border border-border rounded-xl p-5">
-                        <h3 className="text-base font-semibold text-foreground mb-4">Revenue Trend (₹)</h3>
+                        <h3 className="text-base font-semibold text-foreground mb-4">Quantity Trend (Liters)</h3>
                         <ResponsiveContainer width="100%" height={280}>
                             <AreaChart data={analytics?.charts.monthlyGrowth || []}>
                                 <defs>
-                                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0} />
+                                    <linearGradient id="colorSellingQty" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor={CHART_COLORS.secondary} stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor={CHART_COLORS.secondary} stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorPurchaseQty" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor={CHART_COLORS.accent} stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor={CHART_COLORS.accent} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
+                                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                                 <Tooltip content={<CustomTooltip />} />
-                                <Area type="monotone" dataKey="revenue" name="Revenue" stroke={CHART_COLORS.success} strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
+                                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '12px' }} />
+                                <Area type="monotone" dataKey="sellingQty" name="Selling Qty" stroke={CHART_COLORS.secondary} strokeWidth={2} fillOpacity={1} fill="url(#colorSellingQty)" />
+                                <Area type="monotone" dataKey="purchaseQty" name="Purchase Qty" stroke={CHART_COLORS.accent} strokeWidth={2} fillOpacity={1} fill="url(#colorPurchaseQty)" />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
                 )}
-            </div>
 
-            {/* Charts Row 2 - Daily Orders Bar Chart */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {isLoading ? (
-                    <ChartSkeleton />
-                ) : (
-                    <div className="bg-card border border-border rounded-xl p-5">
-                        <h3 className="text-base font-semibold text-foreground mb-4">Daily Orders (Last 7 Days)</h3>
-                        <ResponsiveContainer width="100%" height={280}>
-                            <BarChart data={analytics?.charts.dailyOrders || []}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="orders" name="Orders" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                )}
-
-                {isLoading ? (
-                    <ChartSkeleton />
-                ) : (
-                    <div className="bg-card border border-border rounded-xl p-5">
-                        <h3 className="text-base font-semibold text-foreground mb-4">Daily Revenue (Last 7 Days)</h3>
-                        <ResponsiveContainer width="100%" height={280}>
-                            <BarChart data={analytics?.charts.dailyOrders || []}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`} />
-                                <Tooltip content={<CustomTooltip />} />
-                                <Bar dataKey="revenue" name="Revenue" fill={CHART_COLORS.success} radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                )}
+                {/* User Status Distribution */}
+                <PieChartCard
+                    title="User Status Distribution"
+                    data={analytics?.charts.userStatusDistribution || []}
+                    isLoading={isLoading}
+                />
             </div>
 
             {/* Charts Row 3 - Pie Charts */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <PieChartCard
-                    title="Order Status"
-                    data={analytics?.charts.orderStatusDistribution || []}
+                    title="Selling Payment Status"
+                    data={analytics?.charts.sellingPaymentDistribution || []}
                     isLoading={isLoading}
                 />
                 <PieChartCard
-                    title="Payment Methods"
-                    data={analytics?.charts.paymentMethodDistribution || []}
+                    title="Purchase Payment Status"
+                    data={analytics?.charts.purchasePaymentDistribution || []}
                     isLoading={isLoading}
                 />
                 <PieChartCard
-                    title="Delivery Partners"
-                    data={analytics?.charts.deliveryPartnerStatus || []}
-                    isLoading={isLoading}
-                />
-                <PieChartCard
-                    title="Coupon Status"
-                    data={analytics?.charts.couponStatus || []}
+                    title="Subscription by Tab"
+                    data={analytics?.charts.subscriptionDistribution || []}
                     isLoading={isLoading}
                 />
             </div>
-
-            {/* Top Categories */}
-            {analytics?.charts.topCategories?.length > 0 && (
-                <div className="bg-card border border-border rounded-xl p-5">
-                    <h3 className="text-base font-semibold text-foreground mb-4">Top Categories by Orders</h3>
-                    <ResponsiveContainer width="100%" height={250}>
-                        <BarChart data={analytics.charts.topCategories} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis type="number" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
-                            <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={100} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="value" name="Orders" radius={[0, 4, 4, 0]}>
-                                {analytics.charts.topCategories.map((entry: any, index: number) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            )}
         </div>
     )
 }

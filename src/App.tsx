@@ -7,7 +7,6 @@ import { DashboardLayout } from './components/DashboardLayout'
 import { DashboardPage } from './pages/DashboardPage'
 import { UsersPage } from './pages/UsersPage'
 import { BannersPage } from './pages/BannersPage'
-import { OrdersPage } from './pages/OrdersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
 import { ProductsPage } from './pages/ProductsPage'
@@ -22,6 +21,7 @@ import { RegisterFarmersPage } from './pages/RegisterFarmersPage'
 import { RegisterAdvancesPage } from './pages/RegisterAdvancesPage'
 import { RegisterPaymentsPage } from './pages/RegisterPaymentsPage'
 import { ProductManagementPage } from './pages/ProductManagementPage'
+import { SubscriptionsPage } from './pages/SubscriptionsPage'
 
 function App() {
     return (
@@ -42,7 +42,6 @@ function App() {
                         }
                     >
                         <Route index element={<DashboardPage />} />
-                        <Route path="orders" element={<OrdersPage />} />
                         <Route path="products" element={<ProductsPage />} />
                         <Route path="product-management" element={<ProductManagementPage />} />
                         <Route path="users" element={<UsersPage />} />
@@ -56,6 +55,7 @@ function App() {
                         <Route path="register-farmers" element={<RegisterFarmersPage />} />
                         <Route path="register-advances" element={<RegisterAdvancesPage />} />
                         <Route path="register-payments" element={<RegisterPaymentsPage />} />
+                        <Route path="subscriptions" element={<SubscriptionsPage />} />
                         <Route path="settings" element={<SettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />

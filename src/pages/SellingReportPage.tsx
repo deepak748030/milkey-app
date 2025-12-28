@@ -170,7 +170,7 @@ export function SellingReportPage() {
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground w-16">Sr No.</th>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Name</th>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Date Created</th>
-                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Last Payment Date</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Till</th>
                                     <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">User Balance</th>
                                 </tr>
                             </thead>
@@ -187,7 +187,7 @@ export function SellingReportPage() {
                                             {formatDate((item as any).createdAt)}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
-                                            {formatDate(item.lastPaymentDate)}
+                                            {formatDate((item as any).tillDate)}
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <span className={cn('font-semibold', getBalanceColor(item.totalBalance))}>

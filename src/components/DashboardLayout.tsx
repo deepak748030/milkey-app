@@ -10,7 +10,6 @@ import {
     LogOut,
     ChevronLeft,
     ChevronRight,
-    ShoppingBag,
     Settings,
     Package,
     Milk,
@@ -23,13 +22,13 @@ import {
     UserPlus,
     Banknote,
     Wallet,
+    CreditCard as SubscriptionIcon,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
 
 const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/orders', icon: ShoppingBag, label: 'Orders' },
     { to: '/admin-orders', icon: ClipboardList, label: 'Admin Orders' },
     { to: '/purchase', icon: ShoppingCart, label: 'Purchase Data' },
     { to: '/register-farmers', icon: UserPlus, label: 'Register Farmers' },
@@ -42,6 +41,7 @@ const navItems = [
     { to: '/product-management', icon: Package, label: 'Products' },
     { to: '/users', icon: Users, label: 'Users' },
     { to: '/banners', icon: Image, label: 'Banners' },
+    { to: '/subscriptions', icon: SubscriptionIcon, label: 'Subscriptions' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
