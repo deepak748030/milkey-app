@@ -102,6 +102,7 @@ router.post('/register', async (req, res) => {
                     email: user.email,
                     phone: user.phone,
                     avatar: user.avatar,
+                    address: user.address,
                     role: user.role,
                     referralCode: user.referralCode,
                     memberSince: user.createdAt
@@ -170,6 +171,7 @@ router.post('/login', async (req, res) => {
                     email: user.email,
                     phone: user.phone,
                     avatar: user.avatar,
+                    address: user.address,
                     role: user.role,
                     referralCode: user.referralCode,
                     memberSince: user.createdAt
@@ -196,6 +198,7 @@ router.get('/me', auth, async (req, res) => {
                 email: req.user.email,
                 phone: req.user.phone,
                 avatar: req.user.avatar,
+                address: req.user.address,
                 role: req.user.role,
                 referralCode: req.user.referralCode,
                 memberSince: req.user.createdAt
@@ -213,11 +216,12 @@ router.get('/me', auth, async (req, res) => {
 // PUT /api/auth/profile
 router.put('/profile', auth, async (req, res) => {
     try {
-        const { name, avatar } = req.body;
+        const { name, avatar, address } = req.body;
         const updates = {};
 
         if (name) updates.name = name.trim();
         if (avatar !== undefined) updates.avatar = avatar;
+        if (address !== undefined) updates.address = address.trim();
 
         const user = await User.findByIdAndUpdate(
             req.userId,
@@ -234,6 +238,7 @@ router.put('/profile', auth, async (req, res) => {
                 email: user.email,
                 phone: user.phone,
                 avatar: user.avatar,
+                address: user.address,
                 role: user.role,
                 referralCode: user.referralCode,
                 memberSince: user.createdAt

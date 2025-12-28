@@ -31,6 +31,11 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    address: {
+        type: String,
+        default: '',
+        maxlength: [500, 'Address cannot exceed 500 characters']
+    },
     role: {
         type: String,
         enum: ['owner', 'staff', 'farmer'],
