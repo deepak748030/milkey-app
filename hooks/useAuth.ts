@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     getCurrentUser,
     isAuthLoading,
     subscribeToAuth,
     clearAuth,
-    AuthUser
+    AuthUser,
+    initializeAuth
 } from '@/lib/authStore';
 
 export const useAuth = () => {
@@ -24,10 +25,15 @@ export const useAuth = () => {
         await clearAuth();
     };
 
+    const refreshUser = useCallback(async () => {
+        await initializeAuth();
+    }, []);
+
     return {
         user,
         loading,
         isAuthenticated: !!user,
         logout,
+        refreshUser,
     };
 };

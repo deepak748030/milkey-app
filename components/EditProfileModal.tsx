@@ -15,6 +15,7 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -32,6 +33,7 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
         setName(result.response.name);
         setEmail(result.response.email);
         setPhone(result.response.phone);
+        setAddress(result.response.address || '');
         setSelectedImage(result.response.avatar);
       } else {
         // Fallback to stored user
@@ -40,6 +42,7 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
           setName(user.name);
           setEmail(user.email);
           setPhone(user.phone);
+          setAddress((user as any).address || '');
           setSelectedImage(user.avatar);
         }
       }
@@ -50,6 +53,7 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
         setName(user.name);
         setEmail(user.email);
         setPhone(user.phone);
+        setAddress((user as any).address || '');
         setSelectedImage(user.avatar);
       }
     }
@@ -83,11 +87,12 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
     setLoading(true);
 
     try {
-      const updateData: { name?: string; email?: string; avatar?: string } = {};
+      const updateData: { name?: string; email?: string; avatar?: string; address?: string } = {};
 
       if (name.trim()) updateData.name = name.trim();
       if (email.trim()) updateData.email = email.trim();
       if (selectedImage) updateData.avatar = selectedImage;
+      updateData.address = address.trim();
 
       const result = await authApi.updateProfile(updateData);
 
@@ -180,6 +185,20 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
                   keyboardType="phone-pad"
                 />
                 <Text style={styles.helperText}>Phone number cannot be changed</Text>
+              </View>
+
+              <View style={styles.fieldContainer}>
+                <Text style={styles.label}>Address</Text>
+                <TextInput
+                  style={[styles.input, styles.addressInput]}
+                  placeholder="Enter your full address (used for product delivery)"
+                  value={address}
+                  onChangeText={setAddress}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+                <Text style={styles.helperText}>This address will be used for product delivery</Text>
               </View>
             </View>
 
@@ -300,6 +319,10 @@ const styles = StyleSheet.create({
   disabledInput: {
     backgroundColor: colors.muted,
     color: colors.mutedForeground,
+  },
+  addressInput: {
+    minHeight: 80,
+    paddingTop: 12,
   },
   helperText: {
     fontSize: 12,

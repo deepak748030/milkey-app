@@ -1,290 +1,125 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getAuthToken } from './authStore';
 
-// API Base URL - Vercel deployed server
+// API Base URL - Change this to your server URL
+// const API_BASE_URL = 'http://localhost:5000/api';
+// const API_BASE_URL = 'https://planify-app-server.vercel.app/api';
 const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
-// const API_BASE_URL = 'http://localhost:5000/api'
 
+// Server Base URL (without /api) for constructing image URLs
 export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
+
+// Helper function to get full image URL from path
+export const getImageUrl = (imagePath: string | undefined | null): string => {
+    if (!imagePath) return '';
+
+    // If already a full URL, return as is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+        return imagePath;
+    }
+
+    // If it's a path, construct full URL
+    if (imagePath.startsWith('/')) {
+        return `${SERVER_BASE_URL}${imagePath}`;
+    }
+
+    // Otherwise add leading slash and construct URL
+    return `${SERVER_BASE_URL}/${imagePath}`;
+};
+
+// Token storage keys
+const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
 
 // Types
 export interface ApiResponse<T> {
     success: boolean;
     message?: string;
+    request?: any;
     response?: T;
 }
 
-export interface Farmer {
-    _id: string;
-    code: string;
+export interface AuthUser {
+    id: string;
     name: string;
-    mobile: string;
+    email: string;
+    phone: string;
+    avatar: string;
     address: string;
-    rate?: number;
-    type: 'farmer' | 'member';
-    totalPurchase: number;
-    totalLiters: number;
-    pendingAmount: number;
-    isActive: boolean;
+    isBlocked: boolean;
+    memberSince: string;
 }
 
-export interface Member {
-    _id: string;
-    name: string;
-    mobile: string;
-    address: string;
-    ratePerLiter: number;
-    totalLiters: number;
-    totalAmount: number;
-    pendingAmount: number;
-    sellingPaymentBalance: number;
-    isActive: boolean;
+export interface LoginResponse {
+    token: string;
+    user: AuthUser;
 }
 
-export interface SellingEntry {
-    _id: string;
-    member: { _id: string; name: string; mobile: string; ratePerLiter: number };
-    date: string;
-    morningQuantity: number;
-    eveningQuantity: number;
-    rate: number;
-    amount: number;
-    isPaid: boolean;
-    notes: string;
-}
+// Get stored token
+export const getToken = async (): Promise<string | null> => {
+    try {
+        return await AsyncStorage.getItem(TOKEN_KEY);
+    } catch {
+        return null;
+    }
+};
 
-export interface PurchaseFarmer {
-    _id: string;
-    code: string;
-    name: string;
-    mobile: string;
-    address: string;
-    totalQuantity: number;
-    totalAmount: number;
-    lastPurchaseDate?: string;
-    isActive: boolean;
-}
+// Store token
+export const setToken = async (token: string): Promise<void> => {
+    try {
+        await AsyncStorage.setItem(TOKEN_KEY, token);
+    } catch (error) {
+        console.error('Error storing token:', error);
+    }
+};
 
-export interface Advance {
-    _id: string;
-    farmer: { _id: string; code: string; name: string };
-    amount: number;
-    date: string;
-    note: string;
-    status: 'pending' | 'settled' | 'partial';
-    settledAmount: number;
-}
+// Remove token
+export const removeToken = async (): Promise<void> => {
+    try {
+        await AsyncStorage.removeItem(TOKEN_KEY);
+    } catch (error) {
+        console.error('Error removing token:', error);
+    }
+};
 
-export interface Product {
-    _id: string;
-    name: string;
-    price: number;
-    unit: string;
-    icon: string;
-    description: string;
-    stock: number;
-    isActive: boolean;
-}
+// Get stored user
+export const getStoredUser = async (): Promise<AuthUser | null> => {
+    try {
+        const user = await AsyncStorage.getItem(USER_KEY);
+        return user ? JSON.parse(user) : null;
+    } catch {
+        return null;
+    }
+};
 
-export interface Order {
-    _id: string;
-    orderNumber: string;
-    items: Array<{
-        product: string;
-        name: string;
-        price: number;
-        quantity: number;
-        total: number;
-    }>;
-    totalAmount: number;
-    status: string;
-    paymentStatus: string;
-    createdAt: string;
-}
+// Store user
+export const setStoredUser = async (user: AuthUser): Promise<void> => {
+    try {
+        await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+    } catch (error) {
+        console.error('Error storing user:', error);
+    }
+};
 
-export interface UserStats {
-    farmers: number;
-    totalSales: number;
-    pendingAdvances: number;
-}
+// Remove user
+export const removeStoredUser = async (): Promise<void> => {
+    try {
+        await AsyncStorage.removeItem(USER_KEY);
+    } catch (error) {
+        console.error('Error removing user:', error);
+    }
+};
 
-export interface MilkCollection {
-    _id: string;
-    purchaseFarmer: { _id: string; code: string; name: string; mobile: string } | null;
-    farmerCode?: string;
-    date: string;
-    shift: 'morning' | 'evening';
-    quantity: number;
-    fat: number;
-    snf: number;
-    rate: number;
-    amount: number;
-    isPaid: boolean;
-    notes: string;
-}
-
-export interface TodaySummary {
-    morning: { quantity: number; amount: number; farmers: number };
-    evening: { quantity: number; amount: number; farmers: number };
-    total: { quantity: number; amount: number; farmers: number };
-}
-
-export interface AdvanceItem {
-    _id: string;
-    amount: number;
-    settledAmount: number;
-    remaining: number;
-    date: string;
-    note: string;
-    status: 'pending' | 'settled' | 'partial';
-}
-
-export interface FarmerPaymentSummary {
-    farmer: { id: string; code: string; name: string; mobile: string; currentBalance?: number };
-    milk: { totalQuantity: number; totalAmount: number; collections: number; periodStart: string; periodEnd: string };
-    advances: { totalPending: number; count: number; items?: AdvanceItem[] };
-    netPayable: number;
-    closingBalance: number;
-    advanceBalance?: number;
-}
-
-export interface Payment {
-    _id: string;
-    farmer: { _id: string; code: string; name: string };
-    amount: number;
-    date: string;
-    paymentMethod: string;
-    reference: string;
-    totalMilkAmount: number;
-    totalAdvanceDeduction: number;
-    netPayable: number;
-    closingBalance?: number;
-    previousBalance?: number;
-    periodStart?: string;
-    periodEnd?: string;
-    createdAt?: string;
-}
-
-export interface RateChart {
-    _id: string;
-    name: string;
-    milkType: 'cow' | 'buffalo' | 'mixed';
-    calculationType: 'fat_only' | 'fat_snf' | 'fixed';
-    fixedRate: number;
-    fatRate: number;
-    snfRate: number;
-    baseFat: number;
-    baseSnf: number;
-    baseRate: number;
-    isActive: boolean;
-}
-
-export interface ReportSummary {
-    totalQuantity: number;
-    totalAmount: number;
-    avgRate: number;
-    avgFat: number;
-    avgSnf: number;
-    morningQty: number;
-    eveningQty: number;
-    farmersCount: number;
-    collectionsCount: number;
-}
-
-export interface MilkReport {
-    period: { startDate: string; endDate: string };
-    summary: ReportSummary;
-    groupedData: any[];
-    details: any[];
-}
-
-export interface PaymentReport {
-    period: { startDate: string; endDate: string };
-    summary: {
-        totalPayments: number;
-        totalAmount: number;
-        totalMilkAmount: number;
-        totalAdvanceDeduction: number;
-        farmersCount: number;
-        byMethod: { cash: number; upi: number; bank: number; cheque: number };
-    };
-    groupedByFarmer: any[];
-    details: any[];
-}
-
-export interface FarmerStatement {
-    farmer: { _id: string; code: string; name: string; mobile: string };
-    period: { startDate: string; endDate: string };
-    summary: {
-        totalMilk: number;
-        totalMilkAmount: number;
-        totalPayments: number;
-        closingBalance: number;
-        collectionsCount: number;
-        paymentsCount: number;
-    };
-    statement: Array<{
-        date: string;
-        type: 'collection' | 'payment';
-        description: string;
-        credit: number;
-        debit: number;
-        balance: number;
-    }>;
-}
-
-export interface Feedback {
-    _id: string;
-    type: 'feedback' | 'complaint' | 'suggestion' | 'query' | 'bug_report';
-    subject: string;
-    message: string;
-    priority: 'low' | 'medium' | 'high';
-    status: 'pending' | 'in_review' | 'resolved' | 'closed';
-    adminResponse?: string;
-    respondedAt?: string;
-    createdAt: string;
-}
-
-export interface DashboardStats {
-    today: { quantity: number; amount: number; count: number };
-    thisMonth: { quantity: number; amount: number; count: number };
-    weekPayments: { amount: number; count: number };
-    totalFarmers: number;
-    totalMembers: number;
-}
-
-export interface HomeStats {
-    today: { quantity: number; amount: number; count: number };
-    todaySell: { quantity: number; amount: number; count: number };
-    totalFarmers: number;
-    totalMembers: number;
-}
-
-export interface ReferralData {
-    code: string;
-    stats: {
-        totalReferrals: number;
-        activeUsers: number;
-        totalEarnings: number;
-        pendingEarnings: number;
-        commissionRate: number;
-    };
-    referrals: Array<{
-        id: string;
-        name: string;
-        date: string;
-        earnings: number;
-        status: string;
-    }>;
-}
-
-// API Request helper with auth
+// API Request helper
 const apiRequest = async <T>(
     endpoint: string,
     options: RequestInit = {}
 ): Promise<ApiResponse<T>> => {
     try {
-        const token = await getAuthToken();
+        const token = await getToken();
+
+        // Debug logging
+        console.log(`API Request: ${options.method || 'GET'} ${endpoint}`);
+        console.log(`Token present: ${token ? 'Yes' : 'No'}`);
 
         const headers: HeadersInit = {
             'Content-Type': 'application/json',
@@ -293,6 +128,9 @@ const apiRequest = async <T>(
 
         if (token) {
             (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+            console.log('Authorization header added');
+        } else {
+            console.log('No token - Authorization header NOT added');
         }
 
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -300,822 +138,712 @@ const apiRequest = async <T>(
             headers,
         });
 
-        // Some errors return non-JSON, so guard parsing
-        let data: any = null;
-        try {
-            data = await response.json();
-        } catch {
-            data = null;
-        }
+        const data = await response.json();
+        console.log(`API Response: ${response.status} - ${data.success ? 'Success' : data.message}`);
 
         if (!response.ok) {
-            const serverMessage = data?.message || data?.error || 'Something went wrong';
-            const message = `${serverMessage} (HTTP ${response.status})`;
-
-            // Helpful auth hint
-            if (response.status === 401) {
-                return {
-                    success: false,
-                    message: `Session expired. Please login again. (HTTP 401)`,
-                };
-            }
-
-            console.error('API error:', {
-                endpoint,
-                status: response.status,
-                message: serverMessage,
-                body: data,
-            });
-
             return {
                 success: false,
-                message,
+                message: data.message || 'Something went wrong',
+                request: data.request,
+                response: null as any,
             };
         }
 
-        return (data ?? { success: true, response: null }) as ApiResponse<T>;
+        return data;
     } catch (error) {
-        console.error('API Request error:', { endpoint, error });
+        console.error('API Request error:', error);
         return {
             success: false,
-            message: error instanceof Error ? error.message : 'Network error',
+            message: error instanceof Error ? error.message : 'Network error. Please check your connection.',
+            response: null as any,
         };
     }
 };
 
-// Farmers API
-export const farmersApi = {
-    getAll: async (params?: { type?: 'farmer' | 'member' }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.type) queryParams.append('type', params.type);
-        const query = queryParams.toString();
-        return apiRequest<{ data: Farmer[]; count: number }>(`/farmers${query ? `?${query}` : ''}`);
-    },
-
-    getByCode: async (code: string) => {
-        return apiRequest<Farmer>(`/farmers/code/${code}`);
-    },
-
-    create: async (data: { code: string; name: string; mobile: string; address?: string; type?: 'farmer' | 'member' }) => {
-        return apiRequest<Farmer>('/farmers', {
+// Auth API calls
+export const authApi = {
+    // Register new user
+    register: async (data: { name: string; email: string; phone: string; avatar?: string }) => {
+        return apiRequest<{ phone: string; isNewUser: boolean }>('/auth/register', {
             method: 'POST',
             body: JSON.stringify(data),
         });
     },
 
-    update: async (id: string, data: { name?: string; mobile?: string; address?: string }) => {
-        return apiRequest<Farmer>(`/farmers/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-    },
-
-    delete: async (id: string) => {
-        return apiRequest<void>(`/farmers/${id}`, {
-            method: 'DELETE',
-        });
-    },
-};
-
-// Purchase Farmers API (for Purchase tab only)
-export const purchaseFarmersApi = {
-    getAll: async (params?: { search?: string }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.search) queryParams.append('search', params.search);
-        const query = queryParams.toString();
-        return apiRequest<{ data: PurchaseFarmer[]; count: number }>(`/purchase-farmers${query ? `?${query}` : ''}`);
-    },
-
-    getByCode: async (code: string) => {
-        return apiRequest<PurchaseFarmer>(`/purchase-farmers/code/${code}`);
-    },
-
-    create: async (data: { code: string; name: string; mobile: string; address?: string }) => {
-        return apiRequest<PurchaseFarmer>('/purchase-farmers', {
+    // Login existing user
+    login: async (phone: string) => {
+        return apiRequest<{ phone: string; isNewUser: boolean; isBlocked: boolean }>('/auth/login', {
             method: 'POST',
-            body: JSON.stringify(data),
+            body: JSON.stringify({ phone }),
         });
     },
 
-    update: async (id: string, data: { name?: string; mobile?: string; address?: string }) => {
-        return apiRequest<PurchaseFarmer>(`/purchase-farmers/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-    },
-
-    updateStats: async (id: string, data: { quantity: number; amount: number }) => {
-        return apiRequest<PurchaseFarmer>(`/purchase-farmers/${id}/stats`, {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-    },
-
-    delete: async (id: string) => {
-        return apiRequest<void>(`/purchase-farmers/${id}`, {
-            method: 'DELETE',
-        });
-    },
-};
-
-// Advances API
-export const advancesApi = {
-    getAll: async (params?: { farmerId?: string; status?: string }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.farmerId) queryParams.append('farmerId', params.farmerId);
-        if (params?.status) queryParams.append('status', params.status);
-        const query = queryParams.toString();
-
-        return apiRequest<{ data: Advance[] }>(`/advances${query ? `?${query}` : ''}`);
-    },
-
-    create: async (data: { farmerCode: string; amount: number; date?: string; note?: string }) => {
-        return apiRequest<Advance>('/advances', {
+    // Verify OTP
+    verifyOtp: async (phone: string, otp: string, expoPushToken?: string) => {
+        const result = await apiRequest<LoginResponse>('/auth/verify-otp', {
             method: 'POST',
-            body: JSON.stringify(data),
+            body: JSON.stringify({ phone, otp, expoPushToken }),
         });
+
+        // Store token and user on successful verification
+        if (result.success && result.response) {
+            await setToken(result.response.token);
+            await setStoredUser(result.response.user);
+        }
+
+        return result;
     },
 
-    settle: async (id: string, settledAmount?: number) => {
-        return apiRequest<Advance>(`/advances/${id}/settle`, {
-            method: 'PUT',
-            body: JSON.stringify({ settledAmount }),
-        });
-    },
-
-    delete: async (id: string) => {
-        return apiRequest<void>(`/advances/${id}`, {
-            method: 'DELETE',
-        });
-    },
-};
-
-// Products API
-export const productsApi = {
-    getAll: async () => {
-        return apiRequest<{ data: Product[]; count: number }>('/products');
-    },
-
-    getDefault: async () => {
-        return apiRequest<{ data: Array<{ id: string; name: string; price: number; icon: string; unit: string }> }>('/products/default');
-    },
-
-    create: async (data: { name: string; price: number; unit?: string; icon?: string }) => {
-        return apiRequest<Product>('/products', {
+    // Resend OTP
+    resendOtp: async (phone: string) => {
+        return apiRequest<{ phone: string; otpSent: boolean }>('/auth/resend-otp', {
             method: 'POST',
-            body: JSON.stringify(data),
+            body: JSON.stringify({ phone }),
         });
     },
 
-    update: async (id: string, data: Partial<Product>) => {
-        return apiRequest<Product>(`/products/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-    },
-
-    delete: async (id: string) => {
-        return apiRequest<void>(`/products/${id}`, {
-            method: 'DELETE',
-        });
-    },
-
-    seed: async () => {
-        return apiRequest<{ data: Product[] }>('/products/seed', {
-            method: 'POST',
-        });
-    },
-};
-
-// Orders API
-export const ordersApi = {
-    getAll: async (params?: { status?: string; page?: number; limit?: number }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.status) queryParams.append('status', params.status);
-        if (params?.page) queryParams.append('page', params.page.toString());
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        const query = queryParams.toString();
-
-        return apiRequest<{ data: Order[] }>(`/orders${query ? `?${query}` : ''}`);
-    },
-
-    create: async (data: {
-        items: Array<{ id: string; name: string; price: number; quantity: number }>;
-        deliveryAddress?: string;
-        notes?: string;
-        paymentMethod?: string;
-    }) => {
-        return apiRequest<Order>('/orders', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    },
-
-    updateStatus: async (id: string, status: string) => {
-        return apiRequest<Order>(`/orders/${id}/status`, {
-            method: 'PUT',
-            body: JSON.stringify({ status }),
-        });
-    },
-
-    cancel: async (id: string) => {
-        return apiRequest<void>(`/orders/${id}`, {
-            method: 'DELETE',
-        });
-    },
-};
-
-// Users API
-export const usersApi = {
-    getStats: async () => {
-        return apiRequest<UserStats>('/users/stats');
-    },
-
-    getProfile: async () => {
-        return apiRequest<any>('/users/profile');
-    },
-
-    updateProfile: async (data: { name?: string; avatar?: string }) => {
-        return apiRequest<any>('/auth/profile', {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-    },
-};
-
-// Referrals API
-export const referralsApi = {
-    getData: async () => {
-        return apiRequest<ReferralData>('/referrals');
-    },
-
-    validate: async (code: string) => {
-        return apiRequest<{ valid: boolean; referrerName: string }>('/referrals/validate', {
-            method: 'POST',
-            body: JSON.stringify({ code }),
-        });
-    },
-};
-
-// Milk Collections API
-export const milkCollectionsApi = {
-    getAll: async (params?: {
-        farmerCode?: string;
-        date?: string;
-        startDate?: string;
-        endDate?: string;
-        shift?: string;
-        isPaid?: boolean;
-        limit?: number;
-        page?: number;
-    }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.farmerCode) queryParams.append('farmerCode', params.farmerCode);
-        if (params?.date) queryParams.append('date', params.date);
-        if (params?.startDate) queryParams.append('startDate', params.startDate);
-        if (params?.endDate) queryParams.append('endDate', params.endDate);
-        if (params?.shift) queryParams.append('shift', params.shift);
-        if (params?.isPaid !== undefined) queryParams.append('isPaid', String(params.isPaid));
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        if (params?.page) queryParams.append('page', params.page.toString());
-        const query = queryParams.toString();
-
-        return apiRequest<{ data: MilkCollection[]; count: number; totals: { quantity: number; amount: number } }>(
-            `/milk-collections${query ? `?${query}` : ''}`
-        );
-    },
-
-    getTodaySummary: async () => {
-        return apiRequest<TodaySummary>('/milk-collections/today');
-    },
-
-    create: async (data: {
-        farmerCode: string;
-        purchaseFarmerId?: string;
-        quantity: number;
-        rate: number;
-        date?: string;
-        shift?: 'morning' | 'evening';
-        fat?: number;
-        snf?: number;
-        notes?: string;
-    }) => {
-        return apiRequest<MilkCollection>('/milk-collections', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    },
-
-    update: async (id: string, data: Partial<{ quantity: number; rate: number; fat: number; snf: number; notes: string }>) => {
-        return apiRequest<MilkCollection>(`/milk-collections/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-    },
-
-    delete: async (id: string) => {
-        return apiRequest<void>(`/milk-collections/${id}`, {
-            method: 'DELETE',
-        });
-    },
-};
-
-// Payments API
-export const paymentsApi = {
-    getAll: async (params?: { farmerId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.farmerId) queryParams.append('farmerId', params.farmerId);
-        if (params?.startDate) queryParams.append('startDate', params.startDate);
-        if (params?.endDate) queryParams.append('endDate', params.endDate);
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        if (params?.page) queryParams.append('page', params.page.toString());
-        const query = queryParams.toString();
-
-        return apiRequest<{ data: Payment[] }>(`/payments${query ? `?${query}` : ''}`);
-    },
-
-    getFarmerSummary: async (farmerCode: string, startDate?: string, endDate?: string) => {
-        const queryParams = new URLSearchParams();
-        if (startDate) queryParams.append('startDate', startDate);
-        if (endDate) queryParams.append('endDate', endDate);
-        const query = queryParams.toString();
-        return apiRequest<FarmerPaymentSummary>(`/payments/farmer-summary/${farmerCode}${query ? `?${query}` : ''}`);
-    },
-
-    create: async (data: {
-        farmerCode: string;
-        amount: number;
-        paymentMethod?: string;
-        reference?: string;
-        notes?: string;
-        totalMilkAmount?: number;
-        periodStart?: string;
-        periodEnd?: string;
-    }) => {
-        return apiRequest<Payment>('/payments', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    },
-
-    getById: async (id: string) => {
-        return apiRequest<Payment>(`/payments/${id}`);
-    },
-};
-
-// Rate Charts API
-export const rateChartsApi = {
-    getAll: async () => {
-        return apiRequest<{ data: RateChart[] }>('/rate-charts');
-    },
-
-    getActive: async () => {
-        return apiRequest<RateChart>('/rate-charts/active');
-    },
-
-    calculate: async (fat: number, snf: number) => {
-        return apiRequest<{ rate: number; fat: number; snf: number; chartName: string }>('/rate-charts/calculate', {
-            method: 'POST',
-            body: JSON.stringify({ fat, snf }),
-        });
-    },
-
-    create: async (data: Partial<RateChart>) => {
-        return apiRequest<RateChart>('/rate-charts', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    },
-
-    update: async (id: string, data: Partial<RateChart>) => {
-        return apiRequest<RateChart>(`/rate-charts/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-    },
-
-    getTable: async (params?: { fatMin?: number; fatMax?: number; snfMin?: number; snfMax?: number; step?: number }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.fatMin) queryParams.append('fatMin', params.fatMin.toString());
-        if (params?.fatMax) queryParams.append('fatMax', params.fatMax.toString());
-        if (params?.snfMin) queryParams.append('snfMin', params.snfMin.toString());
-        if (params?.snfMax) queryParams.append('snfMax', params.snfMax.toString());
-        if (params?.step) queryParams.append('step', params.step.toString());
-        const query = queryParams.toString();
-
-        return apiRequest<{ chart: RateChart; table: Array<{ fat: number; rates: Array<{ snf: number; rate: number }> }> }>(
-            `/rate-charts/table${query ? `?${query}` : ''}`
-        );
-    },
-};
-
-// Reports API
-export const reportsApi = {
-    getMilkCollections: async (params: {
-        startDate: string;
-        endDate: string;
-        farmerCode?: string;
-        shift?: string;
-        groupBy?: 'date' | 'farmer';
-    }) => {
-        const queryParams = new URLSearchParams();
-        queryParams.append('startDate', params.startDate);
-        queryParams.append('endDate', params.endDate);
-        if (params.farmerCode) queryParams.append('farmerCode', params.farmerCode);
-        if (params.shift) queryParams.append('shift', params.shift);
-        if (params.groupBy) queryParams.append('groupBy', params.groupBy);
-
-        return apiRequest<MilkReport>(`/reports/milk-collections?${queryParams.toString()}`);
-    },
-
-    getPayments: async (params: {
-        startDate: string;
-        endDate: string;
-        farmerCode?: string;
-        paymentMethod?: string;
-    }) => {
-        const queryParams = new URLSearchParams();
-        queryParams.append('startDate', params.startDate);
-        queryParams.append('endDate', params.endDate);
-        if (params.farmerCode) queryParams.append('farmerCode', params.farmerCode);
-        if (params.paymentMethod) queryParams.append('paymentMethod', params.paymentMethod);
-
-        return apiRequest<PaymentReport>(`/reports/payments?${queryParams.toString()}`);
-    },
-
-    getFarmerStatement: async (farmerCode: string, startDate?: string, endDate?: string) => {
-        const queryParams = new URLSearchParams();
-        if (startDate) queryParams.append('startDate', startDate);
-        if (endDate) queryParams.append('endDate', endDate);
-        const query = queryParams.toString();
-
-        return apiRequest<FarmerStatement>(`/reports/farmer-statement/${farmerCode}${query ? `?${query}` : ''}`);
-    },
-
-    getDashboard: async (params?: { farmerType?: 'farmer' | 'member' }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.farmerType) queryParams.append('farmerType', params.farmerType);
-        const query = queryParams.toString();
-        return apiRequest<DashboardStats>(`/reports/dashboard${query ? `?${query}` : ''}`);
-    },
-
-    getHomeStats: async () => {
-        return apiRequest<HomeStats>('/reports/home-stats');
-    },
-
-    getAnalytics: async (params?: { period?: string; days?: number }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.period) queryParams.append('period', params.period);
-        if (params?.days) queryParams.append('days', params.days.toString());
-        const query = queryParams.toString();
-
-        return apiRequest<{
-            period: { startDate: string; endDate: string };
-            chartData: Array<{
-                date: string;
-                label: string;
-                quantity: number;
-                amount: number;
-                morningQty: number;
-                eveningQty: number;
-                payments: number;
-            }>;
-            totals: {
-                totalQuantity: number;
-                totalAmount: number;
-                totalPayments: number;
-                avgDailyQty: number;
-                maxQty: number;
-                minQty: number;
-            };
-        }>(`/reports/analytics${query ? `?${query}` : ''}`);
-    },
-
-    getTopFarmers: async (params?: { days?: number; limit?: number }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.days) queryParams.append('days', params.days.toString());
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        const query = queryParams.toString();
-
-        return apiRequest<Array<{
-            farmer: { _id: string; code: string; name: string };
-            totalQuantity: number;
-            totalAmount: number;
-            collections: number;
-            avgRate: number;
-        }>>(`/reports/top-farmers${query ? `?${query}` : ''}`);
-    },
-};
-
-// Feedback API
-export const feedbackApi = {
-    getMyFeedbacks: async () => {
-        return apiRequest<{ data: Feedback[] }>('/feedback/my');
-    },
-
-    submit: async (data: {
-        type: string;
-        subject: string;
-        message: string;
-        priority?: string
-    }) => {
-        return apiRequest<Feedback>('/feedback', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    },
-
-    getById: async (id: string) => {
-        return apiRequest<Feedback>(`/feedback/${id}`);
-    },
-
-    // Admin endpoints
-    getAll: async (params?: { status?: string; type?: string; page?: number; limit?: number }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.status) queryParams.append('status', params.status);
-        if (params?.type) queryParams.append('type', params.type);
-        if (params?.page) queryParams.append('page', params.page.toString());
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        const query = queryParams.toString();
-
-        return apiRequest<{ data: Feedback[]; total: number; page: number; pages: number }>(
-            `/feedback${query ? `?${query}` : ''}`
-        );
-    },
-
-    getStats: async () => {
-        return apiRequest<{ total: number; pending: number; inReview: number; resolved: number; byType: any }>(
-            '/feedback/stats'
-        );
-    },
-
-    updateStatus: async (id: string, status: string, adminResponse?: string) => {
-        return apiRequest<Feedback>(`/feedback/${id}/status`, {
-            method: 'PUT',
-            body: JSON.stringify({ status, adminResponse }),
-        });
-    },
-};
-
-// Auth API
-export const authApiNew = {
-    login: async (email: string, password: string) => {
-        return apiRequest<{ token: string; user: any }>('/auth/login', {
-            method: 'POST',
-            body: JSON.stringify({ email, password }),
-        });
-    },
-
-    register: async (data: { name: string; email: string; phone: string; password: string; referralCode?: string }) => {
-        return apiRequest<{ token: string; user: any }>('/auth/register', {
-            method: 'POST',
-            body: JSON.stringify(data),
-        });
-    },
-
-    logout: async () => {
-        return apiRequest<void>('/auth/logout', {
-            method: 'POST',
-        });
-    },
-
+    // Get current user profile
     getMe: async () => {
-        return apiRequest<any>('/auth/me');
-    },
-};
-
-// Custom Forms API
-export interface CustomForm {
-    _id: string;
-    formName: string;
-    fields: { label: string; value: string }[];
-    status: 'pending' | 'reviewed' | 'approved' | 'rejected';
-    adminNotes?: string;
-    createdAt: string;
-    user?: { _id: string; name: string; email: string; phone: string };
-}
-
-export const customFormsApi = {
-    getAll: async (params?: { page?: number; limit?: number }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.page) queryParams.append('page', params.page.toString());
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        const query = queryParams.toString();
-        return apiRequest<{ data: CustomForm[]; count: number; hasMore: boolean }>(
-            `/custom-forms${query ? `?${query}` : ''}`
-        );
-    },
-
-    getAdminForms: async (params?: { page?: number; limit?: number; status?: string }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.page) queryParams.append('page', params.page.toString());
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        if (params?.status) queryParams.append('status', params.status);
-        const query = queryParams.toString();
-        return apiRequest<{ data: CustomForm[]; count: number; hasMore: boolean }>(
-            `/custom-forms/admin${query ? `?${query}` : ''}`
-        );
-    },
-
-    create: async (data: { formName: string; fields: { label: string; value: string }[] }) => {
-        return apiRequest<CustomForm>('/custom-forms', {
-            method: 'POST',
-            body: JSON.stringify(data),
+        return apiRequest<AuthUser>('/auth/me', {
+            method: 'GET',
         });
     },
 
-    updateStatus: async (id: string, data: { status: string; adminNotes?: string }) => {
-        return apiRequest<CustomForm>(`/custom-forms/${id}/status`, {
+    // Update profile
+    updateProfile: async (data: { name?: string; email?: string; avatar?: string }) => {
+        const result = await apiRequest<AuthUser>('/auth/profile', {
             method: 'PUT',
             body: JSON.stringify(data),
         });
+
+        // Update stored user on success
+        if (result.success && result.response) {
+            await setStoredUser(result.response);
+        }
+
+        return result;
     },
 
-    delete: async (id: string) => {
-        return apiRequest<void>(`/custom-forms/${id}`, {
-            method: 'DELETE',
+    // Update push token
+    updatePushToken: async (expoPushToken: string) => {
+        return apiRequest<{ tokenUpdated: boolean; isBlocked: boolean }>('/auth/push-token', {
+            method: 'PUT',
+            body: JSON.stringify({ expoPushToken }),
         });
+    },
+
+    // Logout
+    logout: async () => {
+        const result = await apiRequest<{ loggedOut: boolean }>('/auth/logout', {
+            method: 'POST',
+        });
+
+        // Clear stored data
+        await removeToken();
+        await removeStoredUser();
+
+        return result;
     },
 };
 
-// Balance Report types
-export interface MemberBalanceReport {
+
+
+// Category type
+export interface Category {
     _id: string;
     name: string;
-    mobile: string;
-    ratePerLiter: number;
-    currentBalance: number;
-    unpaidAmount: number;
-    totalBalance: number;
-    unpaidEntriesCount: number;
-    unpaidQuantity: number;
+    slug: string;
+    description: string;
+    isActive: boolean;
+    order: number;
+}
+
+// Event Vendor type (for API responses)
+export interface EventVendor {
+    _id: string;
+    name: string;
+    avatar: string;
+    rating: number;
+    phone?: string;
+    email?: string;
+    businessName?: string;
+    experience?: string;
+    experienceYears?: number;
+}
+
+// Minimal event type for listings (home/search screens)
+export interface MinimalServerEvent {
+    _id: string;
+    title: string;
+    image: string;
+    location: string;
+    price: number;
+    mrp?: number;
+    rating: number;
+    reviews: number;
+    badge?: string;
+}
+
+// Full Event type (from server)
+export interface ServerEvent {
+    _id: string;
+    title: string;
+    description: string;
+    category: string;
+    image: string;
+    images: string[];
     date: string;
-    lastPaymentDate: string | null;
-    lastPeriodEnd: string | null;
+    time: string;
+    location: string;
+    fullLocation: string;
+    price: number;
+    mrp: number;
+    badge?: string;
+    services: string[];
+    rating: number;
+    reviews: number;
+    isFeatured: boolean;
+    isActive: boolean;
+    vendor: EventVendor;
+    createdAt: string;
+    updatedAt: string;
 }
 
-export interface BalanceReportSummary {
-    totalMembers: number;
-    totalReceivable: number;
-    totalPayable: number;
-    netBalance: number;
-    totalUnpaidAmount: number;
-    totalUnpaidQuantity: number;
+// Pagination type
+export interface Pagination {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
 }
 
-// Members API (for Selling tab)
-export const membersApi = {
-    getAll: async (params?: { search?: string }) => {
+// Events API calls
+export const eventsApi = {
+    // Get all events with minimal fields for listings (home/search screens)
+    getAll: async (params?: {
+        category?: string;
+        city?: string;
+        minPrice?: number;
+        maxPrice?: number;
+        search?: string;
+        featured?: boolean;
+        minRating?: number;
+        sortBy?: 'price_asc' | 'price_desc' | 'rating_desc' | 'newest';
+        page?: number;
+        limit?: number;
+        fields?: 'minimal' | 'full';
+    }) => {
         const queryParams = new URLSearchParams();
+        if (params?.category) queryParams.append('category', params.category);
+        if (params?.city) queryParams.append('city', params.city);
+        if (params?.minPrice) queryParams.append('minPrice', params.minPrice.toString());
+        if (params?.maxPrice) queryParams.append('maxPrice', params.maxPrice.toString());
         if (params?.search) queryParams.append('search', params.search);
-        const query = queryParams.toString();
-        return apiRequest<{ data: Member[]; count: number }>(`/members${query ? `?${query}` : ''}`);
+        if (params?.featured) queryParams.append('featured', 'true');
+        if (params?.minRating) queryParams.append('minRating', params.minRating.toString());
+        if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.fields) queryParams.append('fields', params.fields);
+
+        const queryString = queryParams.toString();
+        return apiRequest<{ data: MinimalServerEvent[]; pagination: Pagination }>(`/events${queryString ? `?${queryString}` : ''}`, {
+            method: 'GET',
+        });
     },
 
+    // Get single event with full details
     getById: async (id: string) => {
-        return apiRequest<Member>(`/members/${id}`);
+        return apiRequest<ServerEvent>(`/events/${id}`, {
+            method: 'GET',
+        });
     },
 
-    getBalanceReport: async () => {
-        return apiRequest<{ data: MemberBalanceReport[]; summary: BalanceReportSummary }>('/members/balance-report');
+    // Get featured events
+    getFeatured: async () => {
+        return apiRequest<ServerEvent[]>('/events/featured', {
+            method: 'GET',
+        });
     },
 
-    create: async (data: { name: string; mobile: string; address?: string; ratePerLiter: number }) => {
-        return apiRequest<Member>('/members', {
+    // Get events by category
+    getByCategory: async (category: string, page?: number, limit?: number) => {
+        const queryParams = new URLSearchParams();
+        if (page) queryParams.append('page', page.toString());
+        if (limit) queryParams.append('limit', limit.toString());
+
+        const queryString = queryParams.toString();
+        return apiRequest<{ data: ServerEvent[]; pagination: Pagination }>(`/events/category/${encodeURIComponent(category)}${queryString ? `?${queryString}` : ''}`, {
+            method: 'GET',
+        });
+    },
+
+    // Search events
+    search: async (query: string, page?: number, limit?: number) => {
+        const queryParams = new URLSearchParams();
+        queryParams.append('q', query);
+        if (page) queryParams.append('page', page.toString());
+        if (limit) queryParams.append('limit', limit.toString());
+
+        return apiRequest<{ data: ServerEvent[]; query: string; pagination: Pagination }>(`/events/search?${queryParams.toString()}`, {
+            method: 'GET',
+        });
+    },
+};
+
+// Categories API calls
+export const categoriesApi = {
+    // Get all categories
+    getAll: async () => {
+        return apiRequest<Category[]>('/categories', {
+            method: 'GET',
+        });
+    },
+
+    // Get category by slug
+    getBySlug: async (slug: string) => {
+        return apiRequest<Category>(`/categories/${slug}`, {
+            method: 'GET',
+        });
+    },
+
+    // Seed default categories (call once)
+    seed: async () => {
+        return apiRequest<Category[]>('/categories/seed', {
+            method: 'POST',
+        });
+    },
+};
+
+// Banner types
+export interface ServerBanner {
+    _id: string;
+    title: string;
+    image: string;
+    badge: string;
+    type: 'event' | 'category';
+    eventId?: string;
+    categorySlug?: string;
+    order: number;
+}
+
+// Banners API calls
+export const bannersApi = {
+    // Get all active banners
+    getAll: async () => {
+        return apiRequest<ServerBanner[]>('/banners', {
+            method: 'GET',
+        });
+    },
+
+    // Seed default banners
+    seed: async () => {
+        return apiRequest<{ count: number; data: ServerBanner[] }>('/banners/seed', {
+            method: 'POST',
+        });
+    },
+};
+
+
+
+// Booking types
+export interface ServerBooking {
+    _id: string;
+    user: {
+        _id: string;
+        name: string;
+        email: string;
+        phone: string;
+    };
+    event: {
+        _id: string;
+        title: string;
+        images: string[];
+        date: string;
+        time: string;
+        location: string;
+        fullLocation?: string;
+        price: number;
+        services?: string[];
+        vendor?: EventVendor;
+    };
+    bookingDate: string;
+    eventDate: string;
+    guests: number;
+    totalAmount: number;
+    status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+    paymentStatus: 'pending' | 'paid' | 'refunded' | 'failed';
+    paymentId?: string;
+    notes?: string;
+    cancellationReason?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+// Bookings API calls
+export const bookingsApi = {
+    // Create a new booking
+    create: async (data: {
+        eventId: string;
+        eventDate: string;
+        guests?: number;
+        notes?: string;
+        paymentMethod?: string;
+    }) => {
+        return apiRequest<ServerBooking>('/bookings', {
             method: 'POST',
             body: JSON.stringify(data),
         });
     },
 
-    update: async (id: string, data: { name?: string; mobile?: string; address?: string; ratePerLiter?: number }) => {
-        return apiRequest<Member>(`/members/${id}`, {
+    // Get user's bookings
+    getMyBookings: async (params?: {
+        status?: string;
+        page?: number;
+        limit?: number;
+    }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.status) queryParams.append('status', params.status);
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+        const queryString = queryParams.toString();
+        return apiRequest<{ data: ServerBooking[]; pagination: Pagination }>(`/bookings${queryString ? `?${queryString}` : ''}`, {
+            method: 'GET',
+        });
+    },
+
+    // Get single booking
+    getById: async (id: string) => {
+        return apiRequest<ServerBooking>(`/bookings/${id}`, {
+            method: 'GET',
+        });
+    },
+
+    // Cancel booking
+    cancel: async (id: string, reason?: string) => {
+        return apiRequest<ServerBooking>(`/bookings/${id}/cancel`, {
+            method: 'PUT',
+            body: JSON.stringify({ reason }),
+        });
+    },
+
+    // Update payment status
+    updatePayment: async (id: string, data: { paymentStatus: string; paymentId?: string }) => {
+        return apiRequest<ServerBooking>(`/bookings/${id}/payment`, {
             method: 'PUT',
             body: JSON.stringify(data),
         });
     },
 
-    delete: async (id: string) => {
-        return apiRequest<void>(`/members/${id}`, {
-            method: 'DELETE',
+    // Get booked dates for an event
+    getBookedDates: async (eventId: string) => {
+        return apiRequest<string[]>(`/bookings/event/${eventId}/booked-dates`, {
+            method: 'GET',
         });
     },
 };
 
-// Selling Entries API (for Selling tab)
-export const sellingEntriesApi = {
-    getAll: async (params?: { memberId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.memberId) queryParams.append('memberId', params.memberId);
-        if (params?.startDate) queryParams.append('startDate', params.startDate);
-        if (params?.endDate) queryParams.append('endDate', params.endDate);
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        if (params?.page) queryParams.append('page', params.page.toString());
-        const query = queryParams.toString();
+// Transaction types
+export interface ServerTransaction {
+    _id: string;
+    type: 'debit' | 'refund';
+    amount: number;
+    paymentMethod: 'upi' | 'card' | 'wallet' | 'netbanking' | 'cash';
+    status: 'pending' | 'completed' | 'failed';
+    createdAt: string;
+    bookingId: string;
+    event: {
+        _id: string;
+        title: string;
+        image: string | null;
+    } | null;
+}
 
-        return apiRequest<{ data: SellingEntry[]; count: number; total: number; page: number; pages: number }>(
-            `/selling-entries${query ? `?${query}` : ''}`
+// Transactions API calls
+export const transactionsApi = {
+    // Get user's transactions
+    getMyTransactions: async (params?: {
+        type?: 'debit' | 'refund';
+        page?: number;
+        limit?: number;
+    }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.type) queryParams.append('type', params.type);
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+        const queryString = queryParams.toString();
+        return apiRequest<{ data: ServerTransaction[]; pagination: Pagination }>(`/transactions${queryString ? `?${queryString}` : ''}`, {
+            method: 'GET',
+        });
+    },
+
+    // Get single transaction
+    getById: async (id: string) => {
+        return apiRequest<ServerTransaction>(`/transactions/${id}`, {
+            method: 'GET',
+        });
+    },
+};
+
+// Notification types
+export interface ServerNotification {
+    id: string;
+    title: string;
+    message: string;
+    type: 'booking' | 'payment' | 'reminder' | 'promotion' | 'chat' | 'system';
+    timestamp: string;
+    read: boolean;
+    data?: {
+        bookingId?: string;
+        eventId?: string;
+        [key: string]: any;
+    } | null;
+}
+
+// Notifications API calls
+export const notificationsApi = {
+    // Get user's notifications
+    getNotifications: async (params?: { page?: number; limit?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+        const queryString = queryParams.toString();
+        return apiRequest<{ data: ServerNotification[]; unreadCount: number; pagination: Pagination }>(
+            `/notifications${queryString ? `?${queryString}` : ''}`,
+            { method: 'GET' }
         );
     },
 
-    create: async (data: {
-        memberId: string;
-        rate: number;
-        date?: string;
-        notes?: string;
-        morningQuantity?: number;
-        eveningQuantity?: number;
-    }) => {
-        return apiRequest<SellingEntry>('/selling-entries', {
-            method: 'POST',
-            body: JSON.stringify(data),
+    // Mark notification as read
+    markAsRead: async (id: string) => {
+        return apiRequest<{ message: string }>(`/notifications/${id}/read`, {
+            method: 'PUT',
         });
     },
 
-    delete: async (id: string) => {
-        return apiRequest<void>(`/selling-entries/${id}`, {
+    // Mark all as read
+    markAllAsRead: async () => {
+        return apiRequest<{ message: string }>('/notifications/read-all', {
+            method: 'PUT',
+        });
+    },
+
+    // Delete notification
+    deleteNotification: async (id: string) => {
+        return apiRequest<{ message: string }>(`/notifications/${id}`, {
+            method: 'DELETE',
+        });
+    },
+
+    // Clear all notifications
+    clearAll: async () => {
+        return apiRequest<{ message: string }>('/notifications/clear-all', {
             method: 'DELETE',
         });
     },
 };
 
-// Member Payment Summary interface
-export interface MemberPaymentSummary {
-    member: { id: string; name: string; mobile: string; currentBalance: number };
-    selling: { totalLiters: number; totalAmount: number; unpaidAmount?: number };
-    netPayable: number;
-    closingBalance: number;
-}
-
-// Member Payment interface
-export interface MemberPayment {
+// Review types
+export interface ServerReview {
     _id: string;
-    member: { _id: string; name: string; mobile: string };
-    amount: number;
-    date: string;
-    paymentMethod: string;
-    reference: string;
-    totalSellAmount: number;
-    totalQuantity?: number;
-    milkRate?: number;
-    netPayable: number;
-    closingBalance?: number;
-    previousBalance?: number;
-    periodStart?: string;
-    periodEnd?: string;
-    createdAt?: string;
+    user: {
+        _id: string;
+        name: string;
+        avatar: string;
+    };
+    event: string;
+    rating: number;
+    comment: string;
+    createdAt: string;
+    updatedAt: string;
 }
 
-// Member Payments API (for Selling tab)
-export const memberPaymentsApi = {
-    getAll: async (params?: { memberId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
+export interface ReviewStats {
+    avgRating: number;
+    totalReviews: number;
+}
+
+// Reviews API calls
+export const reviewsApi = {
+    // Get reviews for an event
+    getEventReviews: async (eventId: string, params?: { page?: number; limit?: number }) => {
         const queryParams = new URLSearchParams();
-        if (params?.memberId) queryParams.append('memberId', params.memberId);
-        if (params?.startDate) queryParams.append('startDate', params.startDate);
-        if (params?.endDate) queryParams.append('endDate', params.endDate);
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.page) queryParams.append('page', params.page.toString());
-        const query = queryParams.toString();
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
 
-        return apiRequest<{ data: MemberPayment[] }>(`/member-payments${query ? `?${query}` : ''}`);
+        const queryString = queryParams.toString();
+        return apiRequest<{ data: ServerReview[]; stats: ReviewStats; pagination: Pagination }>(
+            `/reviews/event/${eventId}${queryString ? `?${queryString}` : ''}`,
+            { method: 'GET' }
+        );
     },
 
-    getMemberSummary: async (memberId: string, params?: { startDate?: string; endDate?: string }) => {
-        const queryParams = new URLSearchParams();
-        if (params?.startDate) queryParams.append('startDate', params.startDate);
-        if (params?.endDate) queryParams.append('endDate', params.endDate);
-        const query = queryParams.toString();
-        return apiRequest<MemberPaymentSummary>(`/member-payments/member-summary/${memberId}${query ? `?${query}` : ''}`);
-    },
-
-    create: async (data: {
-        memberId: string;
-        amount: number;
-        milkAmount?: number;
-        paymentMethod?: string;
-        reference?: string;
-        notes?: string;
-        periodStart?: string;
-        periodEnd?: string;
-        totalQuantity?: number;
-        milkRate?: number;
-    }) => {
-        return apiRequest<MemberPayment>('/member-payments', {
+    // Create a review
+    create: async (data: { eventId: string; bookingId?: string; rating: number; comment: string }) => {
+        return apiRequest<ServerReview>('/reviews', {
             method: 'POST',
             body: JSON.stringify(data),
         });
     },
 
-    getById: async (id: string) => {
-        return apiRequest<MemberPayment>(`/member-payments/${id}`);
+    // Check if user can review
+    canReview: async (eventId: string) => {
+        return apiRequest<{ canReview: boolean; reason?: string; existingReview?: { _id: string; rating: number; comment: string } }>(
+            `/reviews/can-review/${eventId}`,
+            { method: 'GET' }
+        );
+    },
+
+    // Update a review
+    update: async (id: string, data: { rating?: number; comment?: string }) => {
+        return apiRequest<ServerReview>(`/reviews/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+
+    // Delete a review
+    delete: async (id: string) => {
+        return apiRequest<{ message: string }>(`/reviews/${id}`, {
+            method: 'DELETE',
+        });
     },
 };
 
+// Chat types - Optimized response from server
+export interface ChatMessage {
+    _id: string;
+    message: string;
+    messageType: 'text' | 'image' | 'file';
+    senderModel: 'User' | 'Vendor';
+    isRead: boolean;
+    createdAt: string;
+    // Optional fields - only present in socket messages
+    conversationId?: string;
+    sender?: {
+        _id: string;
+        name?: string;
+    };
+}
+
+export interface ChatConversation {
+    conversationId: string;
+    partner: {
+        id: string;
+        name: string;
+        avatar?: string;
+    };
+    lastMessage: string;
+    lastMessageTime: string;
+    unreadCount: number;
+}
+
+// Chat API calls
+export const chatApi = {
+    // Send a message
+    sendMessage: async (data: { receiverId: string; message: string; messageType?: 'text' | 'image' | 'file' }) => {
+        return apiRequest<ChatMessage>('/chat/send', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    // Get all conversations
+    getConversations: async () => {
+        return apiRequest<{ data: ChatConversation[] }>('/chat/conversations', {
+            method: 'GET',
+        });
+    },
+
+    // Get conversation messages
+    getConversation: async (partnerId: string, params?: { page?: number; limit?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+        const queryString = queryParams.toString();
+        return apiRequest<{ data: ChatMessage[] }>(
+            `/chat/conversation/${partnerId}${queryString ? `?${queryString}` : ''}`,
+            { method: 'GET' }
+        );
+    },
+
+    // Mark messages as read
+    markAsRead: async (conversationId: string) => {
+        return apiRequest<{ message: string }>(`/chat/read/${conversationId}`, {
+            method: 'PUT',
+        });
+    },
+
+    // Delete a single message (soft delete for user)
+    deleteMessage: async (messageId: string) => {
+        return apiRequest<{ message: string }>(`/chat/message/${messageId}`, {
+            method: 'DELETE',
+        });
+    },
+
+    // Delete entire conversation (soft delete for user)
+    deleteConversation: async (partnerId: string) => {
+        return apiRequest<{ message: string }>(`/chat/conversation/${partnerId}`, {
+            method: 'DELETE',
+        });
+    },
+
+    // Get online status for a user/vendor
+    getOnlineStatus: async (userId: string) => {
+        return apiRequest<{ userId: string; isOnline: boolean }>(`/chat/online/${userId}`, {
+            method: 'GET',
+        });
+    },
+};
+
+// App Rating API
+export const appRatingApi = {
+    // Check if user has rated
+    checkRating: async () => {
+        return apiRequest<{ hasRated: boolean; rating: number | null }>('/app-rating/check', {
+            method: 'GET',
+        });
+    },
+
+    // Submit rating
+    submitRating: async (data: {
+        rating: number;
+        feedback?: string;
+        platform?: string;
+        appVersion?: string;
+        deviceInfo?: string;
+    }) => {
+        return apiRequest<any>('/app-rating', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    // Skip rating
+    skipRating: async () => {
+        return apiRequest<{ message: string }>('/app-rating/skip', {
+            method: 'POST',
+        });
+    },
+};
+
+// Health check
 export const healthCheck = async (): Promise<boolean> => {
     try {
-        const response = await fetch(`${API_BASE_URL.replace('/api', '')}/health`);
+        const response = await fetch(`${API_BASE_URL}/health`);
         const data = await response.json();
         return data.success === true;
     } catch {
         return false;
     }
+};
+
+// Socket URL for real-time chat
+export const getSocketUrl = () => {
+    return API_BASE_URL.replace('/api', '');
 };

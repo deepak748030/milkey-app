@@ -1,19 +1,21 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users, MessageSquare, Package, FileEdit } from 'lucide-react-native';
+import { User, Settings, Bell, HelpCircle, LogOut, ChevronRight, Sun, Moon, Users, MessageSquare, Package, FileEdit, Edit2, MapPin } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
 import { authApiNew } from '@/lib/milkeyApi';
-import { clearAuth } from '@/lib/authStore';
+import { clearAuth, updateAuthUser } from '@/lib/authStore';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { EditProfileModal } from '@/components/EditProfileModal';
 
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const styles = createStyles(colors, isDark);
 
@@ -51,6 +53,9 @@ export default function ProfileScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Profile Card */}
         <View style={styles.profileCard}>
+          <Pressable style={styles.editButton} onPress={() => setShowEditModal(true)}>
+            <Edit2 size={18} color={colors.primary} />
+          </Pressable>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
               <User size={40} color={colors.white} />
@@ -62,6 +67,12 @@ export default function ProfileScreen() {
             <Text style={styles.contactText}>{user?.phone || ''}</Text>
             <Text style={styles.contactText}>{user?.email || ''}</Text>
           </View>
+          {user?.address && (
+            <View style={styles.addressContainer}>
+              <MapPin size={14} color={colors.mutedForeground} />
+              <Text style={styles.addressText}>{user.address}</Text>
+            </View>
+          )}
           {user?.referralCode && (
             <View style={styles.referralBadge}>
               <Text style={styles.referralLabel}>Your Code:</Text>
@@ -109,6 +120,14 @@ export default function ProfileScreen() {
         </Pressable>
       </ScrollView>
 
+      <EditProfileModal
+        isVisible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSave={() => {
+          refreshUser?.();
+        }}
+      />
+
       <ConfirmationModal
         visible={showLogoutModal}
         onClose={() => setShowLogoutModal(false)}
@@ -145,6 +164,18 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: colors.border,
+    position: 'relative',
+  },
+  editButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarContainer: {
     marginBottom: 12,
@@ -177,6 +208,19 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 12,
     color: colors.mutedForeground,
     marginBottom: 2,
+  },
+  addressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  addressText: {
+    fontSize: 12,
+    color: colors.mutedForeground,
+    flex: 1,
+    textAlign: 'center',
   },
   referralBadge: {
     flexDirection: 'row',
