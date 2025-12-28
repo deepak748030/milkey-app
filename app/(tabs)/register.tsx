@@ -241,13 +241,13 @@ export default function RegisterScreen() {
 
     // Save payment/settlement
     const handleSaveSettlement = async () => {
-        if (!paymentFarmer || !paidAmount) {
-            showAlert('Error', 'Please enter paid amount');
+        if (!paymentFarmer) {
+            showAlert('Error', 'Please select a farmer first');
             return;
         }
 
-        const amount = parseFloat(paidAmount);
-        if (isNaN(amount) || amount <= 0) {
+        const amount = parseFloat(paidAmount) || 0;
+        if (isNaN(amount) || amount < 0) {
             showAlert('Error', 'Please enter a valid amount');
             return;
         }
@@ -255,12 +255,16 @@ export default function RegisterScreen() {
         setSavingPayment(true);
         try {
             const milkAmountValue = parseFloat(milkAmount) || 0;
+            console.log('Creating payment with period:', { periodStart: dateStart, periodEnd: dateEnd });
             const res = await paymentsApi.create({
                 farmerCode: paymentFarmer.farmer.code,
                 amount,
                 paymentMethod: 'cash',
                 totalMilkAmount: milkAmountValue,
+                periodStart: dateStart,
+                periodEnd: dateEnd,
             });
+            console.log('Payment response:', JSON.stringify(res));
 
             if (res.success) {
                 showAlert('Success', 'Settlement saved successfully');
@@ -862,13 +866,10 @@ export default function RegisterScreen() {
                                                 {p.farmer?.name || '-'}
                                             </Text>
                                         </View>
-                                        <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date)}</Text>
-                                    </View>
-                                    <View style={[styles.historyRow, { marginBottom: 4 }]}>
-                                        <Text style={[styles.historyLabel, { fontSize: 10 }]}>Period:</Text>
-                                        <Text style={[styles.historyValue, { fontSize: 10, color: colors.mutedForeground }]}>
+                                        <Text style={[styles.historyPeriod, { color: colors.mutedForeground, fontSize: 11 }]}>
                                             {formatDateDDMMYYYY(p.periodStart || p.date)} - {formatDateDDMMYYYY(p.periodEnd || p.date)}
                                         </Text>
+                                        <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date)}</Text>
                                     </View>
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Milk Amount:</Text>
@@ -1922,6 +1923,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         paddingBottom: 6,
         borderBottomWidth: 1,
         borderBottomColor: colors.primary,
+        gap: 4,
     },
     historyPeriod: {
         fontSize: 12,
