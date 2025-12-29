@@ -319,4 +319,81 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
+// PUT /api/payments/:id - Update payment
+router.put('/:id', auth, async (req, res) => {
+    try {
+        const { amount, paymentMethod, reference, notes, totalMilkAmount, periodStart, periodEnd } = req.body;
+
+        const payment = await Payment.findOne({
+            _id: req.params.id,
+            owner: req.userId
+        });
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found'
+            });
+        }
+
+        // Get farmer for balance update
+        const farmer = await Farmer.findById(payment.farmer);
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Associated farmer not found'
+            });
+        }
+
+        // Calculate the difference in payment amount
+        const oldPaymentAmount = payment.amount;
+        const newPaymentAmount = amount !== undefined ? parseFloat(amount) : oldPaymentAmount;
+        const paymentDifference = newPaymentAmount - oldPaymentAmount;
+
+        // Recalculate closing balance if amount or milk amount changes
+        const newMilkAmount = totalMilkAmount !== undefined ? parseFloat(totalMilkAmount) : payment.totalMilkAmount;
+        const netPayable = newMilkAmount - payment.totalAdvanceDeduction + payment.previousBalance;
+        const newClosingBalance = netPayable - newPaymentAmount;
+
+        // Update payment fields
+        payment.amount = newPaymentAmount;
+        payment.totalMilkAmount = newMilkAmount;
+        payment.netPayable = netPayable;
+        payment.closingBalance = newClosingBalance;
+
+        if (paymentMethod) payment.paymentMethod = paymentMethod;
+        if (reference !== undefined) payment.reference = reference.trim();
+        if (notes !== undefined) payment.notes = notes.trim();
+
+        if (periodStart) {
+            payment.periodStart = new Date(periodStart + 'T12:00:00');
+        }
+        if (periodEnd) {
+            payment.periodEnd = new Date(periodEnd + 'T12:00:00');
+        }
+
+        await payment.save();
+
+        // Update farmer's current balance based on payment difference
+        farmer.currentBalance = farmer.currentBalance - paymentDifference;
+        await farmer.save();
+
+        const populatedPayment = await Payment.findById(payment._id)
+            .populate('farmer', 'code name')
+            .lean();
+
+        res.json({
+            success: true,
+            message: 'Payment updated successfully',
+            response: populatedPayment
+        });
+    } catch (error) {
+        console.error('Update payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update payment'
+        });
+    }
+});
+
 module.exports = router;
