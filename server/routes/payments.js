@@ -160,6 +160,11 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
     }
 });
 
+// Helper function to check if two date ranges overlap
+const rangesOverlap = (start1, end1, start2, end2) => {
+    return start1 <= end2 && end1 >= start2;
+};
+
 // POST /api/payments - Create payment (settle farmer dues)
 router.post('/', auth, async (req, res) => {
     try {
@@ -182,6 +187,50 @@ router.post('/', auth, async (req, res) => {
                 success: false,
                 message: 'Farmer not found'
             });
+        }
+
+        // Use client-provided period dates if available, otherwise use collection dates
+        // Parse dates with time component to avoid timezone issues
+        let periodStart = null;
+        let periodEnd = null;
+
+        if (clientPeriodStart) {
+            periodStart = new Date(clientPeriodStart + 'T12:00:00');
+        }
+
+        if (clientPeriodEnd) {
+            periodEnd = new Date(clientPeriodEnd + 'T12:00:00');
+        }
+
+        // **VALIDATION: Check for overlapping payment periods for the same farmer**
+        if (periodStart && periodEnd) {
+            const existingPayments = await Payment.find({
+                farmer: farmer._id,
+                owner: req.userId,
+                periodStart: { $ne: null },
+                periodEnd: { $ne: null }
+            }).lean();
+
+            const overlappingPayments = existingPayments.filter(p => {
+                const existingStart = new Date(p.periodStart);
+                const existingEnd = new Date(p.periodEnd);
+                return rangesOverlap(periodStart, periodEnd, existingStart, existingEnd);
+            });
+
+            if (overlappingPayments.length > 0) {
+                const conflictPeriods = overlappingPayments.map(p => {
+                    const s = new Date(p.periodStart);
+                    const e = new Date(p.periodEnd);
+                    return `${s.getDate()}/${s.getMonth() + 1}/${s.getFullYear()} - ${e.getDate()}/${e.getMonth() + 1}/${e.getFullYear()}`;
+                }).join(', ');
+
+                console.log(`Payment period conflict for farmer ${farmerCode}: Requested ${clientPeriodStart} to ${clientPeriodEnd} overlaps with ${conflictPeriods}`);
+
+                return res.status(400).json({
+                    success: false,
+                    message: `Payment period overlaps with existing settlement(s): ${conflictPeriods}. Please select a different date range.`
+                });
+            }
         }
 
         // Get unpaid collections
@@ -213,22 +262,11 @@ router.post('/', auth, async (req, res) => {
         // Closing balance = net payable - paid amount (can be + or -)
         const closingBalance = netPayable - paymentAmount;
 
-        // Use client-provided period dates if available, otherwise use collection dates
-        // Parse dates with time component to avoid timezone issues
-        let periodStart = null;
-        let periodEnd = null;
-
-        if (clientPeriodStart) {
-            // Add time component to prevent timezone shift
-            periodStart = new Date(clientPeriodStart + 'T12:00:00');
-        } else if (unpaidCollections.length > 0) {
+        // If period dates not provided from client, use collection dates
+        if (!periodStart && unpaidCollections.length > 0) {
             periodStart = unpaidCollections[0].date;
         }
-
-        if (clientPeriodEnd) {
-            // Add time component to prevent timezone shift
-            periodEnd = new Date(clientPeriodEnd + 'T12:00:00');
-        } else if (unpaidCollections.length > 0) {
+        if (!periodEnd && unpaidCollections.length > 0) {
             periodEnd = unpaidCollections[unpaidCollections.length - 1].date;
         }
 
@@ -343,6 +381,44 @@ router.put('/:id', auth, async (req, res) => {
                 success: false,
                 message: 'Associated farmer not found'
             });
+        }
+
+        // **VALIDATION: Check for overlapping payment periods when updating dates**
+        if (periodStart || periodEnd) {
+            const newPeriodStart = periodStart ? new Date(periodStart + 'T12:00:00') : payment.periodStart;
+            const newPeriodEnd = periodEnd ? new Date(periodEnd + 'T12:00:00') : payment.periodEnd;
+
+            if (newPeriodStart && newPeriodEnd) {
+                // Find other payments for this farmer (excluding the current one being updated)
+                const existingPayments = await Payment.find({
+                    farmer: payment.farmer,
+                    owner: req.userId,
+                    _id: { $ne: payment._id }, // Exclude current payment
+                    periodStart: { $ne: null },
+                    periodEnd: { $ne: null }
+                }).lean();
+
+                const overlappingPayments = existingPayments.filter(p => {
+                    const existingStart = new Date(p.periodStart);
+                    const existingEnd = new Date(p.periodEnd);
+                    return rangesOverlap(newPeriodStart, newPeriodEnd, existingStart, existingEnd);
+                });
+
+                if (overlappingPayments.length > 0) {
+                    const conflictPeriods = overlappingPayments.map(p => {
+                        const s = new Date(p.periodStart);
+                        const e = new Date(p.periodEnd);
+                        return `${s.getDate()}/${s.getMonth() + 1}/${s.getFullYear()} - ${e.getDate()}/${e.getMonth() + 1}/${e.getFullYear()}`;
+                    }).join(', ');
+
+                    console.log(`Payment update period conflict for farmer: Requested period overlaps with ${conflictPeriods}`);
+
+                    return res.status(400).json({
+                        success: false,
+                        message: `Payment period overlaps with existing settlement(s): ${conflictPeriods}. Please select a different date range.`
+                    });
+                }
+            }
         }
 
         // Calculate the difference in payment amount
