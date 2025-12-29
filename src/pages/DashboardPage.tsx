@@ -210,15 +210,11 @@ export function DashboardPage() {
 
     const sellingStats = [
         { title: 'Total Selling Amount', value: formatCurrency(analytics?.selling?.totalAmount || 0), icon: IndianRupee, color: 'bg-emerald-500/10 text-emerald-500' },
-        { title: 'Paid Amount', value: formatCurrency(analytics?.selling?.paidAmount || 0), icon: CreditCard, color: 'bg-green-500/10 text-green-500' },
-        { title: 'Unpaid Amount', value: formatCurrency(analytics?.selling?.unpaidAmount || 0), icon: IndianRupee, color: 'bg-amber-500/10 text-amber-500' },
         { title: 'Total Quantity (L)', value: `${(analytics?.selling?.totalQuantity || 0).toFixed(1)} L`, icon: Milk, color: 'bg-blue-500/10 text-blue-500' },
     ]
 
     const purchaseStats = [
         { title: 'Total Purchase Amount', value: formatCurrency(analytics?.purchase?.totalAmount || 0), icon: IndianRupee, color: 'bg-violet-500/10 text-violet-500' },
-        { title: 'Paid Amount', value: formatCurrency(analytics?.purchase?.paidAmount || 0), icon: CreditCard, color: 'bg-green-500/10 text-green-500' },
-        { title: 'Unpaid Amount', value: formatCurrency(analytics?.purchase?.unpaidAmount || 0), icon: IndianRupee, color: 'bg-amber-500/10 text-amber-500' },
         { title: 'Total Quantity (L)', value: `${(analytics?.purchase?.totalQuantity || 0).toFixed(1)} L`, icon: Milk, color: 'bg-cyan-500/10 text-cyan-500' },
     ]
 
@@ -293,7 +289,7 @@ export function DashboardPage() {
             {/* Selling Section */}
             <div>
                 <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Selling Overview</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                     {sellingStats.map((stat) => (
                         <StatCard key={stat.title} {...stat} isLoading={isLoading} />
                     ))}
@@ -303,7 +299,7 @@ export function DashboardPage() {
             {/* Purchase Section */}
             <div>
                 <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Purchase Overview</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                     {purchaseStats.map((stat) => (
                         <StatCard key={stat.title} {...stat} isLoading={isLoading} />
                     ))}
@@ -423,15 +419,10 @@ export function DashboardPage() {
             </div>
 
             {/* Charts Row 3 - Pie Charts */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <PieChartCard
                     title="Selling Payment Status"
                     data={analytics?.charts.sellingPaymentDistribution || []}
-                    isLoading={isLoading}
-                />
-                <PieChartCard
-                    title="Purchase Payment Status"
-                    data={analytics?.charts.purchasePaymentDistribution || []}
                     isLoading={isLoading}
                 />
                 <PieChartCard

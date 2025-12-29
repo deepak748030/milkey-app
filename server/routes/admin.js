@@ -14,8 +14,11 @@ const Farmer = require('../models/Farmer');
 const Banner = require('../models/Banner');
 const Product = require('../models/Product');
 const { uploadToCloudinary } = require('../lib/cloudinary');
+const Payment = require('../models/Payment');
+const Advance = require('../models/Advance');
+const MemberPayment = require('../models/MemberPayment');
 
-// Simple password hashing
+// Simple password hashing MemberPayment
 const hashPassword = (password) => {
     return crypto.createHash('sha256').update(password).digest('hex');
 };
