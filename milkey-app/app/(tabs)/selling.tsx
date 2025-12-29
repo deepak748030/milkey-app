@@ -11,6 +11,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { useLocalSearchParams } from 'expo-router';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
 
@@ -29,9 +30,17 @@ interface GroupedEntry {
 
 export default function SellingScreen() {
     const { colors, isDark } = useTheme();
+    const { tab } = useLocalSearchParams<{ tab?: string }>();
     const [activeTab, setActiveTab] = useState<TabType>('Entry');
     const [isLoading, setIsLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Set active tab from URL params
+    useEffect(() => {
+        if (tab && ['Entry', 'Payment', 'Reports', 'Member'].includes(tab)) {
+            setActiveTab(tab as TabType);
+        }
+    }, [tab]);
 
     // Date picker state
     const [showDatePicker, setShowDatePicker] = useState(false);

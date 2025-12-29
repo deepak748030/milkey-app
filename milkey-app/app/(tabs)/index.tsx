@@ -7,6 +7,7 @@ import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
 import { productsApi, reportsApi, Product, HomeStats } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
+import { Plus, Wallet } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
@@ -216,6 +217,28 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Quick Actions */}
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.quickActionsRow}>
+          <Pressable
+            style={styles.quickActionCard}
+            onPress={() => router.push('/(tabs)/selling?tab=Entry')}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
+              <Plus size={20} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>Entry</Text>
+          </Pressable>
+          <Pressable
+            style={styles.quickActionCard}
+            onPress={() => router.push('/(tabs)/register?tab=Advances')}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
+              <Wallet size={20} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>Advance</Text>
+          </Pressable>
+        </View>
 
         {/* Products */}
         <Text style={styles.sectionTitle}>Products</Text>
@@ -321,7 +344,35 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     padding: 10,
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: 6,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 10,
+  },
+  quickActionCard: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  quickActionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.foreground,
   },
   overviewMain: {
     flexDirection: 'row',

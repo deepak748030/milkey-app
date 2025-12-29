@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2 } from 'lucide-react-native';
@@ -9,6 +9,8 @@ import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerP
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
+import { PaymentRangeCalendar, BlockedPeriod } from '@/components/PaymentRangeCalendar';
+import { useLocalSearchParams } from 'expo-router';
 
 // Helper function to format date as dd/mm/yyyy
 const formatDateDDMMYYYY = (dateStr: string) => {
@@ -32,9 +34,17 @@ interface DateRange {
 
 export default function RegisterScreen() {
     const { colors, isDark } = useTheme();
+    const { tab } = useLocalSearchParams<{ tab?: string }>();
     const [activeTab, setActiveTab] = useState<TabType>('Farmers');
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Set active tab from URL params
+    useEffect(() => {
+        if (tab && ['Payments', 'Advances', 'Farmers'].includes(tab)) {
+            setActiveTab(tab as TabType);
+        }
+    }, [tab]);
 
     // Data state
     const [farmers, setFarmers] = useState<Farmer[]>([]);
@@ -87,9 +97,25 @@ export default function RegisterScreen() {
     // Payment date pickers
     const [showStartDatePicker, setShowStartDatePicker] = useState(false);
     const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+    const [dateSelectingType, setDateSelectingType] = useState<'start' | 'end'>('start');
 
     // Temp calendar date for confirmation
     const [tempCalendarDate, setTempCalendarDate] = useState<Date | null>(null);
+
+    // Compute blocked periods from existing payments for the selected farmer
+    const blockedPeriods = useMemo((): BlockedPeriod[] => {
+        if (!paymentFarmer) return [];
+
+        // Get all payments for this farmer
+        const farmerPayments = payments.filter(p => p.farmer?.code === paymentFarmer.farmer.code);
+
+        return farmerPayments
+            .filter(p => p.periodStart && p.periodEnd)
+            .map(p => ({
+                startDate: new Date(p.periodStart!).toISOString().split('T')[0],
+                endDate: new Date(p.periodEnd!).toISOString().split('T')[0],
+            }));
+    }, [paymentFarmer, payments]);
 
     // Modal state
     const [alertVisible, setAlertVisible] = useState(false);
@@ -97,6 +123,34 @@ export default function RegisterScreen() {
     const [alertMessage, setAlertMessage] = useState('');
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void }>({ title: '', message: '', onConfirm: () => { } });
+
+    // Edit payment modal state
+    const [editPaymentVisible, setEditPaymentVisible] = useState(false);
+    const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+    const [editPaidAmount, setEditPaidAmount] = useState('');
+    const [editMilkAmount, setEditMilkAmount] = useState('');
+    const [editPeriodStart, setEditPeriodStart] = useState('');
+    const [editPeriodEnd, setEditPeriodEnd] = useState('');
+    const [showEditStartDatePicker, setShowEditStartDatePicker] = useState(false);
+    const [showEditEndDatePicker, setShowEditEndDatePicker] = useState(false);
+    const [updatingPayment, setUpdatingPayment] = useState(false);
+
+    // Compute blocked periods for edit modal (exclude the current payment being edited)
+    const editBlockedPeriods = useMemo((): BlockedPeriod[] => {
+        if (!editingPayment) return [];
+
+        // Get all payments for this farmer except the one being edited
+        const farmerPayments = payments.filter(
+            p => p.farmer?.code === editingPayment.farmer?.code && p._id !== editingPayment._id
+        );
+
+        return farmerPayments
+            .filter(p => p.periodStart && p.periodEnd)
+            .map(p => ({
+                startDate: new Date(p.periodStart!).toISOString().split('T')[0],
+                endDate: new Date(p.periodEnd!).toISOString().split('T')[0],
+            }));
+    }, [editingPayment, payments]);
 
     const showAlert = (title: string, message: string) => {
         setAlertTitle(title);
@@ -112,6 +166,86 @@ export default function RegisterScreen() {
     useEffect(() => {
         fetchData();
     }, []);
+
+    // Effect to auto-adjust dates when blockedPeriods change (farmer selected)
+    useEffect(() => {
+        if (blockedPeriods.length === 0 || !paymentFarmer) return;
+
+        // Check if current date range overlaps with any blocked period
+        const checkOverlap = (startStr: string, endStr: string): boolean => {
+            const start = new Date(startStr);
+            const end = new Date(endStr);
+            return blockedPeriods.some(period => {
+                const blockedStart = new Date(period.startDate);
+                const blockedEnd = new Date(period.endDate);
+                return start <= blockedEnd && end >= blockedStart;
+            });
+        };
+
+        if (checkOverlap(dateStart, dateEnd)) {
+            // Find the next available date range
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const lastDay = new Date(year, month + 1, 0).getDate();
+
+            // Try to find a valid start date after all blocked periods
+            let foundValidRange = false;
+
+            // Get all blocked dates as sorted array
+            const allBlockedDates: Date[] = [];
+            blockedPeriods.forEach(period => {
+                const start = new Date(period.startDate);
+                const end = new Date(period.endDate);
+                const current = new Date(start);
+                while (current <= end) {
+                    allBlockedDates.push(new Date(current));
+                    current.setDate(current.getDate() + 1);
+                }
+            });
+
+            // Find first available day
+            for (let day = 1; day <= lastDay; day++) {
+                const testDate = new Date(year, month, day);
+                const testDateStr = testDate.toISOString().split('T')[0];
+                const isBlocked = allBlockedDates.some(bd =>
+                    bd.getFullYear() === testDate.getFullYear() &&
+                    bd.getMonth() === testDate.getMonth() &&
+                    bd.getDate() === testDate.getDate()
+                );
+
+                if (!isBlocked) {
+                    // Found an available start date, now find available end date
+                    let endDay = day;
+                    for (let ed = day; ed <= lastDay; ed++) {
+                        const endTestDate = new Date(year, month, ed);
+                        const isEndBlocked = allBlockedDates.some(bd =>
+                            bd.getFullYear() === endTestDate.getFullYear() &&
+                            bd.getMonth() === endTestDate.getMonth() &&
+                            bd.getDate() === endTestDate.getDate()
+                        );
+                        if (isEndBlocked) break;
+                        endDay = ed;
+                    }
+
+                    const newStart = new Date(year, month, day);
+                    const newEnd = new Date(year, month, endDay);
+                    setDateStart(newStart.toISOString().split('T')[0]);
+                    setDateEnd(newEnd.toISOString().split('T')[0]);
+                    foundValidRange = true;
+                    break;
+                }
+            }
+
+            // If no valid range found this month, clear the dates
+            if (!foundValidRange) {
+                // Reset to empty or show warning
+                const nextMonth = new Date(year, month + 1, 1);
+                setDateStart(nextMonth.toISOString().split('T')[0]);
+                setDateEnd(nextMonth.toISOString().split('T')[0]);
+            }
+        }
+    }, [blockedPeriods, paymentFarmer]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -176,6 +310,22 @@ export default function RegisterScreen() {
         return `${year}-${month}-${day}`;
     };
 
+    // Helper to check if two date ranges overlap
+    const rangesOverlap = (start1: Date, end1: Date, start2: Date, end2: Date): boolean => {
+        return start1 <= end2 && end1 >= start2;
+    };
+
+    // Helper to get overlapping periods for a date range
+    const getOverlappingPeriodsForRange = (startStr: string, endStr: string): BlockedPeriod[] => {
+        const start = new Date(startStr);
+        const end = new Date(endStr);
+        return blockedPeriods.filter(period => {
+            const blockedStart = new Date(period.startDate);
+            const blockedEnd = new Date(period.endDate);
+            return rangesOverlap(start, end, blockedStart, blockedEnd);
+        });
+    };
+
     // Set date range from custom range and update upper date display
     const applyCustomRange = (range: DateRange) => {
         const now = new Date();
@@ -193,6 +343,18 @@ export default function RegisterScreen() {
 
         const startStr = formatLocalDate(start);
         const endStr = formatLocalDate(end);
+
+        // Check if the range overlaps with existing blocked periods
+        const overlapping = getOverlappingPeriodsForRange(startStr, endStr);
+        if (overlapping.length > 0) {
+            const periodsList = overlapping.map(p => {
+                const s = new Date(p.startDate);
+                const e = new Date(p.endDate);
+                return `${s.getDate()}/${s.getMonth() + 1}/${s.getFullYear()} - ${e.getDate()}/${e.getMonth() + 1}/${e.getFullYear()}`;
+            }).join('\n');
+            showAlert('Date Conflict', `This date range overlaps with existing payment period(s):\n\n${periodsList}\n\nPlease select a different range.`);
+            return;
+        }
 
         setDateStart(startStr);
         setDateEnd(endStr);
@@ -252,6 +414,18 @@ export default function RegisterScreen() {
             return;
         }
 
+        // Final validation: check if the selected range overlaps with existing payments
+        const overlapping = getOverlappingPeriodsForRange(dateStart, dateEnd);
+        if (overlapping.length > 0) {
+            const periodsList = overlapping.map(p => {
+                const s = new Date(p.startDate);
+                const e = new Date(p.endDate);
+                return `${s.getDate()}/${s.getMonth() + 1}/${s.getFullYear()} - ${e.getDate()}/${e.getMonth() + 1}/${e.getFullYear()}`;
+            }).join('\n');
+            showAlert('Date Conflict', `Cannot save payment. The selected period overlaps with existing payment(s):\n\n${periodsList}`);
+            return;
+        }
+
         setSavingPayment(true);
         try {
             const milkAmountValue = parseFloat(milkAmount) || 0;
@@ -288,6 +462,75 @@ export default function RegisterScreen() {
         setPaymentFarmer(null);
         setPaidAmount('');
         setMilkAmount('');
+    };
+
+    // Handle edit payment - open modal with payment data
+    const handleEditPayment = (payment: Payment) => {
+        setEditingPayment(payment);
+        setEditPaidAmount((payment.amount || 0).toString());
+        setEditMilkAmount((payment.totalMilkAmount || 0).toString());
+        // Set period dates
+        const periodStartStr = payment.periodStart ? new Date(payment.periodStart).toISOString().split('T')[0] : '';
+        const periodEndStr = payment.periodEnd ? new Date(payment.periodEnd).toISOString().split('T')[0] : '';
+        setEditPeriodStart(periodStartStr);
+        setEditPeriodEnd(periodEndStr);
+        setEditPaymentVisible(true);
+    };
+
+    // Save updated payment
+    const handleUpdatePayment = async () => {
+        if (!editingPayment) return;
+
+        const amount = parseFloat(editPaidAmount) || 0;
+        const milkAmount = parseFloat(editMilkAmount) || 0;
+
+        if (amount < 0 || milkAmount < 0) {
+            showAlert('Error', 'Please enter valid amounts');
+            return;
+        }
+
+        setUpdatingPayment(true);
+        try {
+            const updateData: any = {
+                amount,
+                totalMilkAmount: milkAmount,
+            };
+
+            // Add period dates if set
+            if (editPeriodStart) {
+                updateData.periodStart = editPeriodStart;
+            }
+            if (editPeriodEnd) {
+                updateData.periodEnd = editPeriodEnd;
+            }
+
+            const res = await paymentsApi.update(editingPayment._id, updateData);
+
+            if (res.success) {
+                showAlert('Success', 'Payment updated successfully');
+                setEditPaymentVisible(false);
+                setEditingPayment(null);
+                fetchData();
+            } else {
+                showAlert('Error', res.message || 'Failed to update payment');
+            }
+        } catch (error) {
+            showAlert('Error', 'Failed to update payment');
+        } finally {
+            setUpdatingPayment(false);
+        }
+    };
+
+    // Close edit modal
+    const closeEditPaymentModal = () => {
+        setEditPaymentVisible(false);
+        setEditingPayment(null);
+        setEditPaidAmount('');
+        setEditMilkAmount('');
+        setEditPeriodStart('');
+        setEditPeriodEnd('');
+        setShowEditStartDatePicker(false);
+        setShowEditEndDatePicker(false);
     };
 
     // Lookup farmer name when code changes
@@ -608,7 +851,7 @@ export default function RegisterScreen() {
                         <Pressable
                             style={styles.dateInputWrapper}
                             onPress={() => {
-                                setTempCalendarDate(dateStart ? new Date(dateStart + 'T00:00:00') : new Date());
+                                setDateSelectingType('start');
                                 setShowStartDatePicker(true);
                             }}
                         >
@@ -620,7 +863,7 @@ export default function RegisterScreen() {
                         <Pressable
                             style={styles.dateInputWrapper}
                             onPress={() => {
-                                setTempCalendarDate(dateEnd ? new Date(dateEnd + 'T00:00:00') : new Date());
+                                setDateSelectingType('end');
                                 setShowEndDatePicker(true);
                             }}
                         >
@@ -631,7 +874,7 @@ export default function RegisterScreen() {
                         </Pressable>
                     </View>
 
-                    {/* Start Date Picker Modal */}
+                    {/* Start Date Picker Modal with Range Calendar */}
                     <Modal
                         visible={showStartDatePicker}
                         transparent
@@ -640,30 +883,26 @@ export default function RegisterScreen() {
                     >
                         <View style={styles.dateModalOverlay}>
                             <Pressable style={{ flex: 1 }} onPress={() => setShowStartDatePicker(false)} />
-                            <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
-                                <View style={styles.dateModalHeader}>
-                                    <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select Start Date</Text>
-                                    <Pressable onPress={() => setShowStartDatePicker(false)} style={styles.dateModalClose}>
-                                        <X size={20} color={colors.foreground} />
-                                    </Pressable>
-                                </View>
-                                <Calendar
-                                    onDateSelect={(date) => {
-                                        if (date) {
-                                            const year = date.getFullYear();
-                                            const month = String(date.getMonth() + 1).padStart(2, '0');
-                                            const day = String(date.getDate()).padStart(2, '0');
-                                            setDateStart(`${year}-${month}-${day}`);
-                                            setShowStartDatePicker(false);
-                                        }
+                            <View style={[styles.dateModalContent, { backgroundColor: isDark ? colors.card : '#fff' }]}>
+                                <PaymentRangeCalendar
+                                    startDate={dateStart}
+                                    endDate={dateEnd}
+                                    onStartDateSelect={(date) => {
+                                        setDateStart(date);
+                                        setShowStartDatePicker(false);
                                     }}
-                                    selectedDate={tempCalendarDate}
+                                    onEndDateSelect={(date) => {
+                                        setDateEnd(date);
+                                    }}
+                                    blockedPeriods={blockedPeriods}
+                                    selectingType="start"
+                                    onClose={() => setShowStartDatePicker(false)}
                                 />
                             </View>
                         </View>
                     </Modal>
 
-                    {/* End Date Picker Modal */}
+                    {/* End Date Picker Modal with Range Calendar */}
                     <Modal
                         visible={showEndDatePicker}
                         transparent
@@ -672,24 +911,20 @@ export default function RegisterScreen() {
                     >
                         <View style={styles.dateModalOverlay}>
                             <Pressable style={{ flex: 1 }} onPress={() => setShowEndDatePicker(false)} />
-                            <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
-                                <View style={styles.dateModalHeader}>
-                                    <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select End Date</Text>
-                                    <Pressable onPress={() => setShowEndDatePicker(false)} style={styles.dateModalClose}>
-                                        <X size={20} color={colors.foreground} />
-                                    </Pressable>
-                                </View>
-                                <Calendar
-                                    onDateSelect={(date) => {
-                                        if (date) {
-                                            const year = date.getFullYear();
-                                            const month = String(date.getMonth() + 1).padStart(2, '0');
-                                            const day = String(date.getDate()).padStart(2, '0');
-                                            setDateEnd(`${year}-${month}-${day}`);
-                                            setShowEndDatePicker(false);
-                                        }
+                            <View style={[styles.dateModalContent, { backgroundColor: isDark ? colors.card : '#fff' }]}>
+                                <PaymentRangeCalendar
+                                    startDate={dateStart}
+                                    endDate={dateEnd}
+                                    onStartDateSelect={(date) => {
+                                        setDateStart(date);
                                     }}
-                                    selectedDate={tempCalendarDate}
+                                    onEndDateSelect={(date) => {
+                                        setDateEnd(date);
+                                        setShowEndDatePicker(false);
+                                    }}
+                                    blockedPeriods={blockedPeriods}
+                                    selectingType="end"
+                                    onClose={() => setShowEndDatePicker(false)}
                                 />
                             </View>
                         </View>
@@ -858,7 +1093,7 @@ export default function RegisterScreen() {
                             {filteredPayments.slice(0, 10).map((p) => (
                                 <View key={p._id} style={styles.historyCard}>
                                     <View style={styles.historyCardHeader}>
-                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                                             <Text style={[styles.historyPeriod, { color: colors.primary, fontWeight: '700' }]}>
                                                 {p.farmer?.code || '-'}
                                             </Text>
@@ -869,7 +1104,12 @@ export default function RegisterScreen() {
                                         <Text style={[styles.historyPeriod, { color: colors.mutedForeground, fontSize: 11 }]}>
                                             {formatDateDDMMYYYY(p.periodStart || p.date)} - {formatDateDDMMYYYY(p.periodEnd || p.date)}
                                         </Text>
-                                        <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date)}</Text>
+                                        <Pressable
+                                            style={styles.editPaymentBtn}
+                                            onPress={() => handleEditPayment(p)}
+                                        >
+                                            <Edit2 size={14} color={colors.primary} />
+                                        </Pressable>
                                     </View>
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Milk Amount:</Text>
@@ -888,7 +1128,12 @@ export default function RegisterScreen() {
                                         <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.amount || 0).toFixed(2)}</Text>
                                     </View>
                                     <View style={[styles.historyRow, { backgroundColor: colors.muted, marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 6, marginBottom: -6, borderBottomLeftRadius: 6, borderBottomRightRadius: 6, marginTop: 6 }]}>
-                                        <Text style={[styles.historyLabel, { fontWeight: '700' }]}>Closing Balance:</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <Text style={[styles.historyLabel, { fontWeight: '700' }]}>Closing Balance:</Text>
+                                            <Text style={[styles.historyLabel, { fontSize: 10, color: colors.mutedForeground }]}>
+                                                Created: {formatDateDDMMYYYY(p.createdAt || p.date)}
+                                            </Text>
+                                        </View>
                                         <Text style={[styles.historyValue, { fontWeight: '700', color: (p.closingBalance || 0) >= 0 ? colors.primary : colors.destructive }]}>
                                             ₹{(p.closingBalance || 0).toFixed(2)}
                                         </Text>
@@ -1249,6 +1494,173 @@ export default function RegisterScreen() {
                 cancelText="Cancel"
                 confirmDestructive
             />
+
+            {/* Edit Payment Modal */}
+            <Modal
+                visible={editPaymentVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={closeEditPaymentModal}
+            >
+                <View style={styles.dateModalOverlay}>
+                    <Pressable style={{ flex: 1 }} onPress={closeEditPaymentModal} />
+                    <View style={[styles.editPaymentModalContent, { backgroundColor: colors.card }]}>
+                        <View style={styles.editPaymentModalHeader}>
+                            <Text style={[styles.editPaymentModalTitle, { color: colors.foreground }]}>Edit Payment</Text>
+                            <Pressable onPress={closeEditPaymentModal} style={styles.dateModalClose}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+
+                        {editingPayment && (
+                            <ScrollView style={styles.editPaymentModalBody} showsVerticalScrollIndicator={false}>
+                                <Text style={[styles.editPaymentFarmerInfo, { color: colors.primary }]}>
+                                    {editingPayment.farmer?.code} - {editingPayment.farmer?.name}
+                                </Text>
+
+                                {/* Editable Period Dates */}
+                                <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground, marginTop: 12, marginBottom: 6 }]}>Period</Text>
+                                <View style={styles.dateRow}>
+                                    <Pressable
+                                        style={styles.dateInputWrapper}
+                                        onPress={() => {
+                                            setTempCalendarDate(editPeriodStart ? new Date(editPeriodStart + 'T00:00:00') : new Date());
+                                            setShowEditStartDatePicker(true);
+                                        }}
+                                    >
+                                        <Text style={[styles.dateInputText, !editPeriodStart && { color: colors.mutedForeground }]}>
+                                            {editPeriodStart ? formatDateDDMMYYYY(editPeriodStart) : 'Start Date'}
+                                        </Text>
+                                        <CalendarIcon size={16} color={colors.mutedForeground} />
+                                    </Pressable>
+                                    <Pressable
+                                        style={styles.dateInputWrapper}
+                                        onPress={() => {
+                                            setTempCalendarDate(editPeriodEnd ? new Date(editPeriodEnd + 'T00:00:00') : new Date());
+                                            setShowEditEndDatePicker(true);
+                                        }}
+                                    >
+                                        <Text style={[styles.dateInputText, !editPeriodEnd && { color: colors.mutedForeground }]}>
+                                            {editPeriodEnd ? formatDateDDMMYYYY(editPeriodEnd) : 'End Date'}
+                                        </Text>
+                                        <CalendarIcon size={16} color={colors.mutedForeground} />
+                                    </Pressable>
+                                </View>
+
+                                <View style={styles.editPaymentInputGroup}>
+                                    <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground }]}>Milk Amount (₹)</Text>
+                                    <TextInput
+                                        style={[styles.editPaymentInput, { backgroundColor: colors.secondary, color: colors.foreground }]}
+                                        value={editMilkAmount}
+                                        onChangeText={setEditMilkAmount}
+                                        keyboardType="numeric"
+                                        placeholder="Enter milk amount"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+
+                                <View style={styles.editPaymentInputGroup}>
+                                    <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground }]}>Paid Amount (₹)</Text>
+                                    <TextInput
+                                        style={[styles.editPaymentInput, { backgroundColor: colors.secondary, color: colors.foreground }]}
+                                        value={editPaidAmount}
+                                        onChangeText={setEditPaidAmount}
+                                        keyboardType="numeric"
+                                        placeholder="Enter paid amount"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+
+                                <View style={styles.editPaymentSummary}>
+                                    <View style={styles.editPaymentSummaryRow}>
+                                        <Text style={[styles.editPaymentSummaryLabel, { color: colors.mutedForeground }]}>Advance Deduction:</Text>
+                                        <Text style={[styles.editPaymentSummaryValue, { color: colors.warning }]}>
+                                            ₹{(editingPayment.totalAdvanceDeduction || 0).toFixed(2)}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.editPaymentSummaryRow}>
+                                        <Text style={[styles.editPaymentSummaryLabel, { color: colors.mutedForeground }]}>Previous Balance:</Text>
+                                        <Text style={[styles.editPaymentSummaryValue, { color: colors.foreground }]}>
+                                            ₹{(editingPayment.previousBalance || 0).toFixed(2)}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                <View style={styles.editPaymentBtnRow}>
+                                    <Pressable style={[styles.editPaymentCancelBtn, { backgroundColor: colors.muted }]} onPress={closeEditPaymentModal}>
+                                        <Text style={[styles.editPaymentCancelBtnText, { color: colors.foreground }]}>Cancel</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        style={[styles.editPaymentSaveBtn, { backgroundColor: colors.primary }]}
+                                        onPress={handleUpdatePayment}
+                                        disabled={updatingPayment}
+                                    >
+                                        <Text style={styles.editPaymentSaveBtnText}>
+                                            {updatingPayment ? 'Saving...' : 'Save Changes'}
+                                        </Text>
+                                    </Pressable>
+                                </View>
+                            </ScrollView>
+                        )}
+
+                        {/* Edit Start Date Picker Modal */}
+                        <Modal
+                            visible={showEditStartDatePicker}
+                            transparent
+                            animationType="slide"
+                            onRequestClose={() => setShowEditStartDatePicker(false)}
+                        >
+                            <View style={styles.dateModalOverlay}>
+                                <Pressable style={{ flex: 1 }} onPress={() => setShowEditStartDatePicker(false)} />
+                                <View style={[styles.dateModalContent, { backgroundColor: isDark ? colors.card : '#fff' }]}>
+                                    <PaymentRangeCalendar
+                                        startDate={editPeriodStart}
+                                        endDate={editPeriodEnd}
+                                        onStartDateSelect={(date) => {
+                                            setEditPeriodStart(date);
+                                            setShowEditStartDatePicker(false);
+                                        }}
+                                        onEndDateSelect={(date) => {
+                                            setEditPeriodEnd(date);
+                                        }}
+                                        blockedPeriods={editBlockedPeriods}
+                                        selectingType="start"
+                                        onClose={() => setShowEditStartDatePicker(false)}
+                                    />
+                                </View>
+                            </View>
+                        </Modal>
+
+                        {/* Edit End Date Picker Modal */}
+                        <Modal
+                            visible={showEditEndDatePicker}
+                            transparent
+                            animationType="slide"
+                            onRequestClose={() => setShowEditEndDatePicker(false)}
+                        >
+                            <View style={styles.dateModalOverlay}>
+                                <Pressable style={{ flex: 1 }} onPress={() => setShowEditEndDatePicker(false)} />
+                                <View style={[styles.dateModalContent, { backgroundColor: isDark ? colors.card : '#fff' }]}>
+                                    <PaymentRangeCalendar
+                                        startDate={editPeriodStart}
+                                        endDate={editPeriodEnd}
+                                        onStartDateSelect={(date) => {
+                                            setEditPeriodStart(date);
+                                        }}
+                                        onEndDateSelect={(date) => {
+                                            setEditPeriodEnd(date);
+                                            setShowEditEndDatePicker(false);
+                                        }}
+                                        blockedPeriods={editBlockedPeriods}
+                                        selectingType="end"
+                                        onClose={() => setShowEditEndDatePicker(false)}
+                                    />
+                                </View>
+                            </View>
+                        </Modal>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -1947,5 +2359,100 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     historyValue: {
         fontSize: 12,
         fontWeight: '600',
+    },
+    // Edit payment button style
+    editPaymentBtn: {
+        padding: 6,
+        backgroundColor: 'rgba(74, 144, 226, 0.15)',
+        borderRadius: 6,
+    },
+    // Edit Payment Modal styles
+    editPaymentModalContent: {
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: 30,
+    },
+    editPaymentModalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    editPaymentModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    editPaymentModalBody: {
+        padding: 16,
+    },
+    editPaymentFarmerInfo: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    editPaymentPeriod: {
+        fontSize: 13,
+        marginBottom: 16,
+    },
+    editPaymentInputGroup: {
+        marginBottom: 16,
+    },
+    editPaymentLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        marginBottom: 6,
+    },
+    editPaymentInput: {
+        borderRadius: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 16,
+    },
+    editPaymentSummary: {
+        backgroundColor: colors.muted,
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 20,
+    },
+    editPaymentSummaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 4,
+    },
+    editPaymentSummaryLabel: {
+        fontSize: 13,
+    },
+    editPaymentSummaryValue: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    editPaymentBtnRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    editPaymentCancelBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    editPaymentCancelBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    editPaymentSaveBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    editPaymentSaveBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#fff',
     },
 });

@@ -649,6 +649,8 @@ export const paymentsApi = {
         reference?: string;
         notes?: string;
         totalMilkAmount?: number;
+        periodStart?: string;
+        periodEnd?: string;
     }) => {
         return apiRequest<Payment>('/payments', {
             method: 'POST',
@@ -658,6 +660,21 @@ export const paymentsApi = {
 
     getById: async (id: string) => {
         return apiRequest<Payment>(`/payments/${id}`);
+    },
+
+    update: async (id: string, data: {
+        amount?: number;
+        paymentMethod?: string;
+        reference?: string;
+        notes?: string;
+        totalMilkAmount?: number;
+        periodStart?: string;
+        periodEnd?: string;
+    }) => {
+        return apiRequest<Payment>(`/payments/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
     },
 };
 
