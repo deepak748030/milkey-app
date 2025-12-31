@@ -145,7 +145,7 @@ export function SellingPaymentsPage() {
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
-                                <option key={u._id} value={u._id}>{u.name}</option>
+                                <option key={u._id} value={u._id}>{u.name} - {u.phone}</option>
                             ))}
                         </select>
                     </div>

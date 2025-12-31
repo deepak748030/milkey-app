@@ -4,8 +4,6 @@ import {
     Filter,
     Eye,
     Trash2,
-    ChevronLeft,
-    ChevronRight,
     Package,
     Clock,
     CheckCircle,
@@ -14,6 +12,7 @@ import {
     RefreshCw,
     X
 } from 'lucide-react'
+import { Pagination } from '@/components/Pagination'
 import { getAdminOrders, updateAdminOrderStatus, deleteAdminOrder, type AdminOrder } from '@/lib/api'
 
 const statusColors: Record<string, string> = {
@@ -163,7 +162,7 @@ export function AdminOrdersPage() {
                     <Filter className="w-4 h-4" />
                     <span className="font-medium">Filters</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -171,13 +170,13 @@ export function AdminOrdersPage() {
                             placeholder="Search orders..."
                             value={search}
                             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-                            className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                            className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                         />
                     </div>
                     <select
                         value={status}
                         onChange={(e) => { setStatus(e.target.value); setPage(1) }}
-                        className="px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                        className="px-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm"
                     >
                         <option value="all">All Status</option>
                         <option value="pending">Pending</option>
@@ -189,7 +188,7 @@ export function AdminOrdersPage() {
                     <select
                         value={paymentStatus}
                         onChange={(e) => { setPaymentStatus(e.target.value); setPage(1) }}
-                        className="px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                        className="px-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm"
                     >
                         <option value="all">All Payment</option>
                         <option value="pending">Pending</option>
@@ -201,21 +200,89 @@ export function AdminOrdersPage() {
                         type="date"
                         value={startDate}
                         onChange={(e) => { setStartDate(e.target.value); setPage(1) }}
-                        className="px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                        className="px-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm"
                         placeholder="Start Date"
                     />
                     <input
                         type="date"
                         value={endDate}
                         onChange={(e) => { setEndDate(e.target.value); setPage(1) }}
-                        className="px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                        className="px-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm"
                         placeholder="End Date"
                     />
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="flex justify-between mb-3">
+                                <div className="h-4 bg-muted rounded w-24"></div>
+                                <div className="h-6 bg-muted rounded-full w-20"></div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="h-4 bg-muted rounded w-32"></div>
+                                <div className="h-4 bg-muted rounded w-20"></div>
+                            </div>
+                        </div>
+                    ))
+                ) : orders.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <Package className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
+                        <p className="text-sm text-muted-foreground">No orders found</p>
+                    </div>
+                ) : (
+                    orders.map((order) => (
+                        <div key={order._id} className="bg-card border border-border rounded-xl p-4">
+                            <div className="flex items-start justify-between mb-3">
+                                <div>
+                                    <p className="font-mono text-sm font-medium text-foreground">{order.orderNumber}</p>
+                                    <p className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</p>
+                                </div>
+                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusColors[order.status]}`}>
+                                    {statusIcons[order.status]}
+                                    {order.status}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Customer</p>
+                                    <p className="text-sm font-medium text-foreground truncate">{order.user?.name || 'N/A'}</p>
+                                    <p className="text-xs text-muted-foreground">{order.user?.phone}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Amount</p>
+                                    <p className="text-sm font-semibold text-foreground">₹{order.totalAmount?.toFixed(2)}</p>
+                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${paymentStatusColors[order.paymentStatus]}`}>
+                                        {order.paymentStatus}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => { setSelectedOrder(order); setShowDetailModal(true) }}
+                                    className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+                                >
+                                    <Eye className="w-4 h-4" />
+                                    View
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(order._id)}
+                                    disabled={actionLoading}
+                                    className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm bg-destructive/10 text-destructive hover:bg-destructive/20 rounded-lg transition-colors"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">
@@ -285,33 +352,13 @@ export function AdminOrdersPage() {
                         </tbody>
                     </table>
                 </div>
-
-                {/* Pagination */}
-                {pagination.pages > 1 && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-                        <p className="text-sm text-muted-foreground">
-                            Showing {((page - 1) * pagination.limit) + 1} - {Math.min(page * pagination.limit, pagination.total)} of {pagination.total}
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={page === 1}
-                                className="p-2 hover:bg-muted rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </button>
-                            <span className="text-sm">Page {page} of {pagination.pages}</span>
-                            <button
-                                onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
-                                disabled={page === pagination.pages}
-                                className="p-2 hover:bg-muted rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
+            {/* Pagination */}
+            <Pagination
+                page={page}
+                totalPages={pagination.pages}
+                onPageChange={setPage}
+            />
 
             {/* Detail Modal */}
             {showDetailModal && selectedOrder && (

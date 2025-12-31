@@ -4,8 +4,6 @@ import {
     Filter,
     Edit2,
     Trash2,
-    ChevronLeft,
-    ChevronRight,
     Milk,
     Sun,
     Moon,
@@ -13,6 +11,7 @@ import {
     X,
     Save
 } from 'lucide-react'
+import { Pagination } from '@/components/Pagination'
 import {
     getAdminMilkCollections,
     updateAdminMilkCollection,
@@ -239,11 +238,11 @@ export function AdminPurchasePage() {
                     <select
                         value={userId}
                         onChange={(e) => { setUserId(e.target.value); setPage(1) }}
-                        className="px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                        className="px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm"
                     >
-                        <option value="">All Users</option>
+                        <option value="">All Owners</option>
                         {users.map(user => (
-                            <option key={user._id} value={user._id}>{user.name} ({user.phone})</option>
+                            <option key={user._id} value={user._id}>{user.name} - {user.phone}</option>
                         ))}
                     </select>
                     <select
@@ -365,33 +364,13 @@ export function AdminPurchasePage() {
                         </tbody>
                     </table>
                 </div>
-
-                {/* Pagination */}
-                {pagination.pages > 1 && (
-                    <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-                        <p className="text-sm text-muted-foreground">
-                            Showing {((page - 1) * pagination.limit) + 1} - {Math.min(page * pagination.limit, pagination.total)} of {pagination.total}
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={page === 1}
-                                className="p-2 hover:bg-muted rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <ChevronLeft className="w-4 h-4" />
-                            </button>
-                            <span className="text-sm">Page {page} of {pagination.pages}</span>
-                            <button
-                                onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
-                                disabled={page === pagination.pages}
-                                className="p-2 hover:bg-muted rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <ChevronRight className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
+            {/* Pagination */}
+            <Pagination
+                page={page}
+                totalPages={pagination.pages}
+                onPageChange={setPage}
+            />
 
             {/* Edit Modal */}
             {showEditModal && selectedCollection && (
