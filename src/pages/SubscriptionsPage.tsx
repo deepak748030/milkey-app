@@ -228,16 +228,91 @@ export function SubscriptionsPage() {
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="h-5 bg-muted rounded w-32 mb-2" />
+                            <div className="h-4 bg-muted rounded w-20 mb-3" />
+                            <div className="flex gap-2">
+                                <div className="h-6 bg-muted rounded-full w-16" />
+                                <div className="h-6 bg-muted rounded-full w-16" />
+                            </div>
+                        </div>
+                    ))
+                ) : subscriptions.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <CreditCard className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
+                        <p className="text-sm text-muted-foreground">No subscriptions found</p>
+                    </div>
+                ) : (
+                    subscriptions.map(sub => (
+                        <div key={sub._id} className="bg-card border border-border rounded-xl p-4">
+                            <div className="flex items-start justify-between mb-3">
+                                <div>
+                                    <p className="font-medium text-foreground">{sub.name}</p>
+                                    {sub.description && (
+                                        <p className="text-xs text-muted-foreground line-clamp-1">{sub.description}</p>
+                                    )}
+                                </div>
+                                <span className={cn(
+                                    'px-2 py-0.5 rounded-full text-xs font-medium',
+                                    sub.isActive ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground'
+                                )}>
+                                    {sub.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mb-3">
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Amount</p>
+                                    <p className="text-sm font-semibold text-foreground">{formatAmount(sub.amount)}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Duration</p>
+                                    <p className="text-sm font-medium text-foreground">{formatDuration(sub.durationMonths)}</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1 mb-3">
+                                {sub.applicableTabs?.map(tab => (
+                                    <span key={tab} className={cn('px-2 py-0.5 rounded text-xs font-medium capitalize', getTabBadge(tab))}>
+                                        {tab}
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="flex items-center justify-end gap-1 pt-2 border-t border-border">
+                                <button
+                                    onClick={() => handleToggleStatus(sub._id)}
+                                    className="p-2 rounded-lg hover:bg-muted transition-colors"
+                                >
+                                    {sub.isActive ? (
+                                        <ToggleRight className="w-5 h-5 text-success" />
+                                    ) : (
+                                        <ToggleLeft className="w-5 h-5 text-muted-foreground" />
+                                    )}
+                                </button>
+                                <button onClick={() => openEditModal(sub)} className="p-2 rounded-lg hover:bg-muted transition-colors">
+                                    <Edit2 className="w-5 h-5 text-muted-foreground" />
+                                </button>
+                                <button onClick={() => handleDelete(sub._id)} className="p-2 rounded-lg hover:bg-destructive/10 transition-colors">
+                                    <Trash2 className="w-5 h-5 text-destructive" />
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
             {loading ? (
-                <TableSkeleton rows={5} columns={6} />
+                <div className="hidden md:block"><TableSkeleton rows={5} columns={6} /></div>
             ) : subscriptions.length === 0 ? (
-                <div className="bg-card border border-border rounded-xl p-12 text-center">
+                <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
                     <CreditCard className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-muted-foreground">No subscriptions found</p>
                 </div>
             ) : (
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">

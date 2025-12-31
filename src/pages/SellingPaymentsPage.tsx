@@ -158,7 +158,7 @@ export function SellingPaymentsPage() {
                         >
                             <option value="">All Members</option>
                             {members.map(m => (
-                                <option key={m._id} value={m._id}>{m.name}</option>
+                                <option key={m._id} value={m._id}>{m.name} - {m.mobile}</option>
                             ))}
                         </select>
                     </div>
@@ -191,15 +191,87 @@ export function SellingPaymentsPage() {
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="flex justify-between mb-2">
+                                <div className="h-4 bg-muted rounded w-24" />
+                                <div className="h-5 bg-muted rounded w-20" />
+                            </div>
+                            <div className="h-5 bg-muted rounded w-32 mb-3" />
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="h-12 bg-muted rounded" />
+                                <div className="h-12 bg-muted rounded" />
+                            </div>
+                        </div>
+                    ))
+                ) : payments.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <p className="text-sm text-muted-foreground">No payments found</p>
+                    </div>
+                ) : (
+                    payments.map(payment => (
+                        <div key={payment._id} className="bg-card border border-border rounded-xl p-4">
+                            <div className="flex items-start justify-between mb-2">
+                                <span className="text-sm text-muted-foreground">{formatDate(payment.date)}</span>
+                                <div className="flex items-center gap-1.5 text-muted-foreground capitalize text-sm">
+                                    {paymentMethodIcons[payment.paymentMethod] || null}
+                                    <span>{payment.paymentMethod}</span>
+                                </div>
+                            </div>
+                            <p className="font-medium text-foreground mb-1">{payment.member?.name || 'Unknown'}</p>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
+                                <User className="w-3 h-3" />
+                                {(payment as any).owner?.name || 'Unknown'}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Quantity</p>
+                                    <p className="font-medium text-foreground">{payment.totalQuantity?.toFixed(2) || 0} L</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Milk Amount</p>
+                                    <p className="font-medium text-foreground">{formatCurrency(payment.totalSellAmount)}</p>
+                                </div>
+                                <div className="bg-success/10 rounded-lg p-2">
+                                    <p className="text-[10px] text-success uppercase">Paid</p>
+                                    <p className="font-semibold text-success">{formatCurrency(payment.amount)}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Balance</p>
+                                    <p className={cn(
+                                        'font-medium',
+                                        payment.closingBalance > 0 ? 'text-destructive' :
+                                            payment.closingBalance < 0 ? 'text-success' : 'text-foreground'
+                                    )}>
+                                        {formatCurrency(payment.closingBalance)}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-1 pt-2 border-t border-border">
+                                <button onClick={() => setSelectedPayment(payment)} className="p-2 hover:bg-muted rounded-lg transition-colors">
+                                    <Eye className="w-4 h-4 text-muted-foreground" />
+                                </button>
+                                <button onClick={() => handleDelete(payment._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
             {loading ? (
-                <TableSkeleton rows={10} columns={11} />
+                <div className="hidden md:block"><TableSkeleton rows={10} columns={11} /></div>
             ) : payments.length === 0 ? (
-                <div className="bg-card border border-border rounded-xl p-12 text-center">
+                <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
                     <p className="text-muted-foreground">No payments found</p>
                 </div>
             ) : (
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">

@@ -16,7 +16,6 @@ import {
 } from 'lucide-react'
 import {
     getAdminProducts,
-    getAdminUsersList,
     createAdminProduct,
     updateAdminProduct,
     deleteAdminProduct,
@@ -65,10 +64,10 @@ export function ProductManagementPage() {
     const [search, setSearch] = useState('')
     const [status, setStatus] = useState('all')
     const [unit, setUnit] = useState('all')
-    const [userId, setUserId] = useState('')
+
     const [page, setPage] = useState(1)
     const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 10 })
-    const [users, setUsers] = useState<{ _id: string; name: string; email: string }[]>([])
+
     const [showModal, setShowModal] = useState(false)
     const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null)
     const [formData, setFormData] = useState<ProductFormData>(defaultFormData)
@@ -86,8 +85,7 @@ export function ProductManagementPage() {
                 limit: 10,
                 search,
                 status: status !== 'all' ? status : undefined,
-                unit: unit !== 'all' ? unit : undefined,
-                userId: userId || undefined
+                unit: unit !== 'all' ? unit : undefined
             })
             if (response.success) {
                 setProducts(response.response.products)
@@ -98,22 +96,7 @@ export function ProductManagementPage() {
         } finally {
             setLoading(false)
         }
-    }, [page, search, status, unit, userId])
-
-    const fetchUsers = async () => {
-        try {
-            const response = await getAdminUsersList()
-            if (response.success) {
-                setUsers(response.response)
-            }
-        } catch (error) {
-            console.error('Failed to fetch users:', error)
-        }
-    }
-
-    useEffect(() => {
-        fetchUsers()
-    }, [])
+    }, [page, search, status, unit])
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -291,7 +274,7 @@ export function ProductManagementPage() {
                     <Filter className="w-4 h-4" />
                     <span className="font-medium">Filters</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -302,16 +285,6 @@ export function ProductManagementPage() {
                             className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                         />
                     </div>
-                    <select
-                        value={userId}
-                        onChange={(e) => { setUserId(e.target.value); setPage(1) }}
-                        className="px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
-                    >
-                        <option value="">All Owners</option>
-                        {users.map(user => (
-                            <option key={user._id} value={user._id}>{user.name}</option>
-                        ))}
-                    </select>
                     <select
                         value={status}
                         onChange={(e) => { setStatus(e.target.value); setPage(1) }}
@@ -334,8 +307,89 @@ export function ProductManagementPage() {
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="flex gap-3 mb-3">
+                                <div className="w-12 h-12 bg-muted rounded" />
+                                <div className="flex-1">
+                                    <div className="h-5 bg-muted rounded w-28 mb-2" />
+                                    <div className="h-4 bg-muted rounded w-16" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="h-8 bg-muted rounded" />
+                                <div className="h-8 bg-muted rounded" />
+                                <div className="h-8 bg-muted rounded" />
+                            </div>
+                        </div>
+                    ))
+                ) : products.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <Package className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
+                        <p className="text-sm text-muted-foreground">No products found</p>
+                    </div>
+                ) : (
+                    products.map((product) => (
+                        <div key={product._id} className="bg-card border border-border rounded-xl p-4">
+                            <div className="flex gap-3 mb-3">
+                                {product.image ? (
+                                    <img src={product.image} alt={product.name} className="w-12 h-12 rounded object-cover" />
+                                ) : (
+                                    <div className="w-12 h-12 rounded bg-muted flex items-center justify-center text-xl">
+                                        {product.icon}
+                                    </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-foreground truncate">{product.name}</p>
+                                    <p className="text-lg font-semibold text-foreground">₹{product.price}</p>
+                                </div>
+                                <span className={`h-fit px-2 py-0.5 rounded-full text-xs font-medium ${product.isActive
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                    }`}>
+                                    {product.isActive ? 'Active' : 'Inactive'}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                                <div className="bg-muted/50 rounded-lg p-2 text-center">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Unit</p>
+                                    <p className="font-medium text-foreground capitalize">{product.unit}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2 text-center">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Stock</p>
+                                    <p className="font-medium text-foreground">{product.stock}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-1 pt-2 border-t border-border">
+                                <button
+                                    onClick={() => { setSelectedProduct(product); setShowDetailModal(true) }}
+                                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                                >
+                                    <Eye className="w-4 h-4 text-muted-foreground" />
+                                </button>
+                                <button
+                                    onClick={() => handleToggleStatus(product._id)}
+                                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                                >
+                                    <Power className={`w-4 h-4 ${product.isActive ? 'text-green-500' : 'text-muted-foreground'}`} />
+                                </button>
+                                <button onClick={() => handleOpenEditModal(product)} className="p-2 hover:bg-muted rounded-lg transition-colors">
+                                    <Edit className="w-4 h-4 text-primary" />
+                                </button>
+                                <button onClick={() => handleDelete(product._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">
@@ -345,7 +399,6 @@ export function ProductManagementPage() {
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Price</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Unit</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Stock</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Owner</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Status</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Created</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Actions</th>
@@ -356,7 +409,7 @@ export function ProductManagementPage() {
                                 Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                             ) : products.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                                         <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
                                         No products found
                                     </td>
@@ -388,9 +441,6 @@ export function ProductManagementPage() {
                                         <td className="px-4 py-3 font-semibold">₹{product.price}</td>
                                         <td className="px-4 py-3 capitalize">{product.unit}</td>
                                         <td className="px-4 py-3">{product.stock}</td>
-                                        <td className="px-4 py-3 text-sm">
-                                            {typeof product.owner === 'object' ? product.owner.name : '-'}
-                                        </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${product.isActive
                                                 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'

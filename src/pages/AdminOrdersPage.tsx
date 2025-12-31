@@ -140,7 +140,7 @@ export function AdminOrdersPage() {
     }
 
     return (
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
@@ -162,7 +162,7 @@ export function AdminOrdersPage() {
                     <Filter className="w-4 h-4" />
                     <span className="font-medium">Filters</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input

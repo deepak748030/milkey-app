@@ -178,7 +178,7 @@ export function AdminPurchasePage() {
     }
 
     return (
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
@@ -195,18 +195,18 @@ export function AdminPurchasePage() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-card rounded-xl border border-border p-4">
-                    <p className="text-sm text-muted-foreground">Total Records</p>
-                    <p className="text-2xl font-bold">{pagination.total}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Total Records</p>
+                    <p className="text-xl sm:text-2xl font-bold">{pagination.total}</p>
                 </div>
-                <div className="bg-card rounded-xl border border-border p-4">
-                    <p className="text-sm text-muted-foreground">Total Quantity</p>
-                    <p className="text-2xl font-bold text-primary">{totals.quantity.toFixed(2)} L</p>
+                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Total Quantity</p>
+                    <p className="text-xl sm:text-2xl font-bold text-primary">{totals.quantity.toFixed(2)} L</p>
                 </div>
-                <div className="bg-card rounded-xl border border-border p-4">
-                    <p className="text-sm text-muted-foreground">Total Amount</p>
-                    <p className="text-2xl font-bold text-green-600">₹{totals.amount.toFixed(2)}</p>
+                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Total Amount</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-600">₹{totals.amount.toFixed(2)}</p>
                 </div>
             </div>
 
@@ -278,8 +278,78 @@ export function AdminPurchasePage() {
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="flex justify-between mb-2">
+                                <div className="h-4 bg-muted rounded w-24" />
+                                <div className="h-6 bg-muted rounded-full w-16" />
+                            </div>
+                            <div className="h-5 bg-muted rounded w-32 mb-3" />
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="h-10 bg-muted rounded" />
+                                <div className="h-10 bg-muted rounded" />
+                                <div className="h-10 bg-muted rounded" />
+                            </div>
+                        </div>
+                    ))
+                ) : collections.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <Milk className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
+                        <p className="text-sm text-muted-foreground">No collections found</p>
+                    </div>
+                ) : (
+                    collections.map((collection) => (
+                        <div key={collection._id} className="bg-card border border-border rounded-xl p-4">
+                            <div className="flex items-start justify-between mb-2">
+                                <span className="text-sm text-muted-foreground">{formatDate(collection.date)}</span>
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${collection.shift === 'morning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400'
+                                    }`}>
+                                    {collection.shift === 'morning' ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
+                                    {collection.shift}
+                                </span>
+                            </div>
+                            <p className="font-medium text-foreground">{collection.purchaseFarmer?.name || collection.farmerCode}</p>
+                            <p className="text-xs text-muted-foreground mb-3">{collection.owner?.name}</p>
+                            <div className="grid grid-cols-3 gap-2 mb-3 text-sm">
+                                <div className="bg-muted/50 rounded-lg p-2 text-center">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Qty</p>
+                                    <p className="font-medium text-foreground">{collection.quantity} L</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2 text-center">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Rate</p>
+                                    <p className="font-medium text-foreground">₹{collection.rate}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2 text-center">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Amount</p>
+                                    <p className="font-semibold text-green-600">₹{collection.amount?.toFixed(2)}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-border">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${collection.isPaid
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                    }`}>
+                                    {collection.isPaid ? 'Paid' : 'Unpaid'}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={() => handleEdit(collection)} className="p-2 hover:bg-muted rounded-lg transition-colors">
+                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                    </button>
+                                    <button onClick={() => handleDelete(collection._id)} disabled={actionLoading} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">
@@ -365,6 +435,7 @@ export function AdminPurchasePage() {
                     </table>
                 </div>
             </div>
+
             {/* Pagination */}
             <Pagination
                 page={page}

@@ -176,7 +176,7 @@ export function SellingMembersPage() {
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
-                                <option key={u._id} value={u._id}>{u.name}</option>
+                                <option key={u._id} value={u._id}>{u.name} - {u.phone}</option>
                             ))}
                         </select>
                     </div>
@@ -191,15 +191,75 @@ export function SellingMembersPage() {
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="h-5 bg-muted rounded w-32 mb-2" />
+                            <div className="h-4 bg-muted rounded w-28 mb-3" />
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="h-12 bg-muted rounded" />
+                                <div className="h-12 bg-muted rounded" />
+                            </div>
+                        </div>
+                    ))
+                ) : members.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <p className="text-sm text-muted-foreground">No members found</p>
+                    </div>
+                ) : (
+                    members.map(member => (
+                        <div key={member._id} className="bg-card border border-border rounded-xl p-4">
+                            <div className="flex items-start justify-between mb-2">
+                                <p className="font-medium text-foreground">{member.name}</p>
+                                <span className={cn(
+                                    'font-medium text-sm',
+                                    (member.sellingPaymentBalance || 0) > 0 ? 'text-destructive' :
+                                        (member.sellingPaymentBalance || 0) < 0 ? 'text-success' : 'text-foreground'
+                                )}>
+                                    {formatCurrency(member.sellingPaymentBalance || 0)}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3">
+                                <Phone className="w-3.5 h-3.5" />
+                                {member.mobile}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Rate/L</p>
+                                    <p className="font-medium text-foreground">₹{member.ratePerLiter || 0}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Total Liters</p>
+                                    <p className="font-medium text-foreground">{(member.totalLiters || 0).toFixed(2)} L</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-border">
+                                <span className="text-xs text-muted-foreground">{getOwnerName(member.owner)}</span>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={() => openEditModal(member)} className="p-2 hover:bg-muted rounded-lg transition-colors">
+                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                    </button>
+                                    <button onClick={() => handleDelete(member._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
             {loading ? (
-                <TableSkeleton rows={10} columns={8} />
+                <div className="hidden md:block"><TableSkeleton rows={10} columns={8} /></div>
             ) : members.length === 0 ? (
-                <div className="bg-card border border-border rounded-xl p-12 text-center">
+                <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
                     <p className="text-muted-foreground">No members found</p>
                 </div>
             ) : (
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">

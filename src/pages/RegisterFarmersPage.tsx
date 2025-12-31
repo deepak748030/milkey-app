@@ -126,7 +126,7 @@ export function RegisterFarmersPage() {
         setPage(1)
     }
 
-    const formatCurrency = (val: number) => `₹${(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+    // const formatCurrency = (val: number) => `₹${(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
 
     const getOwnerName = (owner: RegisterFarmerOwner | string | undefined | null): string => {
         if (!owner) return 'Unknown'
@@ -185,7 +185,7 @@ export function RegisterFarmersPage() {
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
-                                <option key={u._id} value={u._id}>{u.name}</option>
+                                <option key={u._id} value={u._id}>{u.name} - {u.phone}</option>
                             ))}
                         </select>
                     </div>
@@ -200,15 +200,65 @@ export function RegisterFarmersPage() {
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="flex justify-between mb-2">
+                                <div className="h-5 bg-muted rounded w-20" />
+                                <div className="h-5 bg-muted rounded w-24" />
+                            </div>
+                            <div className="h-4 bg-muted rounded w-32 mb-2" />
+                            <div className="h-4 bg-muted rounded w-28" />
+                        </div>
+                    ))
+                ) : farmers.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <p className="text-sm text-muted-foreground">No farmers found</p>
+                    </div>
+                ) : (
+                    farmers.map(farmer => (
+                        <div key={farmer._id} className="bg-card border border-border rounded-xl p-4">
+                            <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <Hash className="w-4 h-4 text-primary" />
+                                    <span className="font-mono font-medium text-foreground">{farmer.code}</span>
+                                </div>
+                                <span className={cn('font-medium text-sm', getBalanceColor(farmer.currentBalance || 0))}>
+                                    {formatBalance(farmer.currentBalance || 0)}
+                                </span>
+                            </div>
+                            <p className="font-medium text-foreground mb-1">{farmer.name}</p>
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
+                                <Phone className="w-3.5 h-3.5" />
+                                {farmer.mobile}
+                            </div>
+                            <div className="flex items-center justify-between pt-2 border-t border-border">
+                                <span className="text-xs text-muted-foreground">{getOwnerName(farmer.owner)}</span>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={() => openEditModal(farmer)} className="p-2 hover:bg-muted rounded-lg transition-colors">
+                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                    </button>
+                                    <button onClick={() => handleDelete(farmer._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
             {loading ? (
-                <TableSkeleton rows={10} columns={8} />
+                <div className="hidden md:block"><TableSkeleton rows={10} columns={8} /></div>
             ) : farmers.length === 0 ? (
-                <div className="bg-card border border-border rounded-xl p-12 text-center">
+                <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
                     <p className="text-muted-foreground">No farmers found</p>
                 </div>
             ) : (
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">
@@ -218,8 +268,6 @@ export function RegisterFarmersPage() {
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Mobile</th>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Owner</th>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Address</th>
-                                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Total Liters</th>
-                                    <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Total Purchase</th>
                                     <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Balance</th>
                                     <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Actions</th>
                                 </tr>
@@ -259,12 +307,6 @@ export function RegisterFarmersPage() {
                                             ) : (
                                                 <span className="text-muted-foreground/50">—</span>
                                             )}
-                                        </td>
-                                        <td className="px-4 py-3 text-right text-muted-foreground">
-                                            {(farmer.totalLiters || 0).toFixed(2)} L
-                                        </td>
-                                        <td className="px-4 py-3 text-right font-medium text-foreground">
-                                            {formatCurrency(farmer.totalPurchase || 0)}
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <span className={cn('font-medium', getBalanceColor(farmer.currentBalance || 0))}>

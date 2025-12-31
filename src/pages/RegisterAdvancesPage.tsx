@@ -164,7 +164,7 @@ export function RegisterAdvancesPage() {
                             >
                                 <option value="">All Owners</option>
                                 {owners.map((o) => (
-                                    <option key={o._id} value={o._id}>{o.name}</option>
+                                    <option key={o._id} value={o._id}>{o.name} - {o.phone}</option>
                                 ))}
                             </select>
                         </div>
@@ -224,15 +224,73 @@ export function RegisterAdvancesPage() {
                 </div>
             )}
 
-            {/* Table */}
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="flex justify-between mb-2">
+                                <div className="h-4 bg-muted rounded w-16" />
+                                <div className="h-5 bg-muted rounded w-24" />
+                            </div>
+                            <div className="h-5 bg-muted rounded w-32 mb-2" />
+                            <div className="h-4 bg-muted rounded w-full" />
+                        </div>
+                    ))
+                ) : advances.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <p className="text-sm text-muted-foreground">No advances found</p>
+                    </div>
+                ) : (
+                    advances.map((advance) => {
+                        const isPaid = advance.status === 'settled'
+                        return (
+                            <div key={advance._id} className="bg-card border border-border rounded-xl p-4">
+                                <div className="flex items-start justify-between mb-2">
+                                    <span className="font-mono text-sm text-foreground">
+                                        {advance.farmer?.code || '-'}
+                                    </span>
+                                    <span className={cn(
+                                        'font-semibold',
+                                        isPaid ? 'text-destructive line-through' : 'text-foreground'
+                                    )}>
+                                        {formatAmount(advance.amount)}
+                                    </span>
+                                </div>
+                                <p className="font-medium mb-1 text-foreground">
+                                    {advance.farmer?.name || '-'}
+                                </p>
+                                {advance.note && (
+                                    <p className="text-sm mb-2 line-clamp-2 text-muted-foreground">
+                                        {advance.note}
+                                    </p>
+                                )}
+                                <div className="flex items-center justify-between pt-2 border-t border-border">
+                                    <span className="text-xs text-muted-foreground">
+                                        {formatDate(advance.date)}
+                                    </span>
+                                    <span className={cn(
+                                        'text-xs px-2 py-0.5 rounded-full',
+                                        isPaid ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning'
+                                    )}>
+                                        {isPaid ? 'Settled' : 'Pending'}
+                                    </span>
+                                </div>
+                            </div>
+                        )
+                    })
+                )}
+            </div>
+
+            {/* Desktop Table */}
             {loading ? (
-                <TableSkeleton rows={10} columns={5} />
+                <div className="hidden md:block"><TableSkeleton rows={10} columns={5} /></div>
             ) : advances.length === 0 ? (
-                <div className="text-center py-16 bg-card border border-border rounded-xl">
+                <div className="hidden md:block text-center py-16 bg-card border border-border rounded-xl">
                     <p className="text-muted-foreground">No advances found</p>
                 </div>
             ) : (
-                <div className="overflow-hidden rounded-xl border border-border">
+                <div className="hidden md:block overflow-hidden rounded-xl border border-border">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50">
@@ -250,26 +308,17 @@ export function RegisterAdvancesPage() {
                                     return (
                                         <tr key={advance._id} className="bg-card hover:bg-muted/30 transition-colors">
                                             <td className="px-4 py-3">
-                                                <span className={cn(
-                                                    'font-mono text-sm',
-                                                    isPaid ? 'text-destructive line-through' : 'text-foreground'
-                                                )}>
+                                                <span className="font-mono text-sm text-foreground">
                                                     {advance.farmer?.code || '-'}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className={cn(
-                                                    'text-sm',
-                                                    isPaid ? 'text-destructive line-through' : 'text-foreground'
-                                                )}>
+                                                <span className="text-sm text-foreground">
                                                     {advance.farmer?.name || '-'}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className={cn(
-                                                    'text-sm max-w-[200px] truncate block',
-                                                    isPaid ? 'text-destructive line-through' : 'text-muted-foreground'
-                                                )}>
+                                                <span className="text-sm max-w-[200px] truncate block text-muted-foreground">
                                                     {advance.note || '-'}
                                                 </span>
                                             </td>
@@ -282,10 +331,7 @@ export function RegisterAdvancesPage() {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className={cn(
-                                                    'text-sm',
-                                                    isPaid ? 'text-destructive line-through' : 'text-muted-foreground'
-                                                )}>
+                                                <span className="text-sm text-muted-foreground">
                                                     {formatDate(advance.date)}
                                                 </span>
                                             </td>

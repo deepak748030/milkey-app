@@ -1,6 +1,6 @@
 // File: src/pages/SellingReportPage.tsx
 import { useState, useEffect } from 'react'
-import { Users, IndianRupee, Droplet } from 'lucide-react'
+import { Users, IndianRupee } from 'lucide-react'
 import {
     getBalanceReport,
     getAdminUsersList,
@@ -118,7 +118,7 @@ export function SellingReportPage() {
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
-                                <option key={u._id} value={u._id}>{u.name}</option>
+                                <option key={u._id} value={u._id}>{u.name} - {u.phone}</option>
                             ))}
                         </select>
                     </div>
@@ -135,16 +135,11 @@ export function SellingReportPage() {
 
             {/* Summary Cards - 3 cards matching app */}
             {summary && (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <StatCard
                         title="Total Members"
                         value={summary.totalMembers}
                         icon={<Users className="w-5 h-5" />}
-                    />
-                    <StatCard
-                        title="Unpaid Quantity"
-                        value={`${summary.totalUnpaidQuantity.toFixed(1)} L`}
-                        icon={<Droplet className="w-5 h-5" />}
                     />
                     <StatCard
                         title="Net Balance"
@@ -206,12 +201,6 @@ export function SellingReportPage() {
                             <div>
                                 <span className="text-muted-foreground">Total Members:</span>
                                 <span className="ml-2 font-semibold text-foreground">{data.length}</span>
-                            </div>
-                            <div>
-                                <span className="text-muted-foreground">Unpaid Quantity:</span>
-                                <span className="ml-2 font-semibold text-foreground">
-                                    {data.reduce((sum, m) => sum + m.unpaidQuantity, 0).toFixed(1)} L
-                                </span>
                             </div>
                             <div>
                                 <span className="text-muted-foreground">Net Balance:</span>

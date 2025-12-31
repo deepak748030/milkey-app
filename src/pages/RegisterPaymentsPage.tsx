@@ -168,7 +168,7 @@ export function RegisterPaymentsPage() {
                             >
                                 <option value="">All Owners</option>
                                 {owners.map((o) => (
-                                    <option key={o._id} value={o._id}>{o.name}</option>
+                                    <option key={o._id} value={o._id}>{o.name} - {o.phone}</option>
                                 ))}
                             </select>
                         </div>
@@ -214,15 +214,77 @@ export function RegisterPaymentsPage() {
                 </div>
             )}
 
-            {/* Table */}
+            {/* Mobile Cards */}
+            <div className="md:hidden space-y-3">
+                {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                            <div className="flex justify-between mb-2">
+                                <div className="h-4 bg-muted rounded w-16" />
+                                <div className="h-5 bg-muted rounded w-24" />
+                            </div>
+                            <div className="h-5 bg-muted rounded w-32 mb-3" />
+                            <div className="grid grid-cols-2 gap-2">
+                                <div className="h-12 bg-muted rounded" />
+                                <div className="h-12 bg-muted rounded" />
+                            </div>
+                        </div>
+                    ))
+                ) : payments.length === 0 ? (
+                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <p className="text-sm text-muted-foreground">No payments found</p>
+                    </div>
+                ) : (
+                    payments.map((payment) => (
+                        <div key={payment._id} className="bg-card border border-border rounded-xl p-4">
+                            <div className="flex items-start justify-between mb-2">
+                                <span className="font-mono text-sm text-foreground">{payment.farmer?.code || '-'}</span>
+                                <span className="font-semibold text-green-600">{formatAmount(payment.amount)}</span>
+                            </div>
+                            <p className="font-medium text-foreground mb-1">{payment.farmer?.name || '-'}</p>
+                            <p className="text-xs text-muted-foreground mb-3">
+                                {formatPeriod(payment.periodStart, payment.periodEnd)}
+                            </p>
+                            <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Milk Amount</p>
+                                    <p className="font-medium text-foreground">{formatAmount(payment.totalMilkAmount)}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Advance</p>
+                                    <p className="font-medium text-destructive">{formatAmount(payment.totalAdvanceDeduction)}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Payable</p>
+                                    <p className="font-medium text-foreground">{formatAmount(payment.netPayable)}</p>
+                                </div>
+                                <div className="bg-muted/50 rounded-lg p-2">
+                                    <p className="text-[10px] text-muted-foreground uppercase">Closing</p>
+                                    <p className={cn(
+                                        'font-medium',
+                                        (payment.closingBalance || 0) < 0 ? 'text-destructive' : 'text-foreground'
+                                    )}>
+                                        {formatAmount(payment.closingBalance)}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground pt-2 border-t border-border">
+                                Created: {formatDate(payment.createdAt)}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            {/* Desktop Table */}
             {loading ? (
-                <TableSkeleton rows={10} columns={9} />
+                <div className="hidden md:block"><TableSkeleton rows={10} columns={9} /></div>
             ) : payments.length === 0 ? (
-                <div className="text-center py-16 bg-card border border-border rounded-xl">
+                <div className="hidden md:block text-center py-16 bg-card border border-border rounded-xl">
                     <p className="text-muted-foreground">No payments found</p>
                 </div>
             ) : (
-                <div className="overflow-hidden rounded-xl border border-border">
+                <div className="hidden md:block overflow-hidden rounded-xl border border-border">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50">
