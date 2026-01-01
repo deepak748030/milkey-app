@@ -15,32 +15,13 @@ const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
 const CARD_WIDTH = (width - 18) / 2;
 
-// Default fallback banners
-const defaultBanners = [
-  {
-    _id: '1',
-    title: 'Fresh Dairy',
-    image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=800&h=300&fit=crop',
-  },
-  {
-    _id: '2',
-    title: 'Farm Fresh',
-    image: 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=800&h=300&fit=crop',
-  },
-  {
-    _id: '3',
-    title: 'Quality Milk',
-    image: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=800&h=300&fit=crop',
-  },
-];
-
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { isAuthenticated } = useAuth();
   const [currentBanner, setCurrentBanner] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [banners, setBanners] = useState<Banner[]>(defaultBanners);
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
@@ -120,9 +101,11 @@ export default function HomeScreen() {
         reportsApi.getHomeStats().catch(() => null),
       ]);
 
-      // Set banners from API or use defaults
+      // Set banners from API only
       if (bannersRes?.success && bannersRes.response && Array.isArray(bannersRes.response) && bannersRes.response.length > 0) {
         setBanners(bannersRes.response);
+      } else {
+        setBanners([]);
       }
 
       if (productsRes?.success && productsRes.response?.data) {

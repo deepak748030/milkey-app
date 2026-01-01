@@ -29,8 +29,8 @@ export default function BannerCarousel() {
       const response = await fetch(`${API_BASE_URL}/products/banners`);
       const data = await response.json();
 
-      if (data.success && data.response?.data) {
-        setBanners(data.response.data);
+      if (data.success && Array.isArray(data.response)) {
+        setBanners(data.response);
       }
     } catch (error) {
       // Silently fail

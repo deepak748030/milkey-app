@@ -1226,6 +1226,6 @@ export interface Banner {
 // Banners API
 export const bannersApi = {
     getAll: async () => {
-        return apiRequest<Banner[]>('/banners');
+        return apiRequest<Banner[]>('/products/banners');
     },
 };
