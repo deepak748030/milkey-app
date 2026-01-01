@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Referral = require('../models/Referral');
 const auth = require('../middleware/auth');
@@ -20,10 +21,159 @@ const generateToken = (userId) => {
     );
 };
 
+// Generate 6-digit OTP
+const generateOtp = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Store OTPs temporarily (in production, use Redis or DB)
+const otpStore = new Map();
+
+// Create nodemailer transporter
+const createTransporter = () => {
+    return nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        },
+    });
+};
+
+// Send OTP email
+const sendOtpEmail = async (email, otp) => {
+    const transporter = createTransporter();
+
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Milkey - Email Verification OTP',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h1 style="color: #22c55e;">🥛 Milkey</h1>
+                </div>
+                <div style="background: #f9fafb; border-radius: 8px; padding: 20px; text-align: center;">
+                    <h2 style="color: #1f2937; margin-bottom: 10px;">Email Verification</h2>
+                    <p style="color: #6b7280; margin-bottom: 20px;">Use the following OTP to verify your email address:</p>
+                    <div style="background: #22c55e; color: white; font-size: 32px; font-weight: bold; letter-spacing: 8px; padding: 15px 30px; border-radius: 8px; display: inline-block;">
+                        ${otp}
+                    </div>
+                    <p style="color: #9ca3af; margin-top: 20px; font-size: 14px;">This OTP will expire in 10 minutes.</p>
+                </div>
+                <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-top: 20px;">
+                    If you didn't request this, please ignore this email.
+                </p>
+            </div>
+        `,
+    };
+
+    await transporter.sendMail(mailOptions);
+};
+
+// POST /api/auth/send-otp
+router.post('/send-otp', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email is required'
+            });
+        }
+
+        // Check if email already registered
+        const existingUser = await User.findOne({ email: email.toLowerCase() });
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email already registered'
+            });
+        }
+
+        // Generate OTP
+        const otp = generateOtp();
+
+        // Store OTP with expiry (10 minutes)
+        otpStore.set(email.toLowerCase(), {
+            otp,
+            expiresAt: Date.now() + 10 * 60 * 1000
+        });
+
+        // Send OTP email
+        await sendOtpEmail(email, otp);
+
+        res.json({
+            success: true,
+            message: 'OTP sent successfully'
+        });
+    } catch (error) {
+        console.error('Send OTP error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send OTP. Please try again.'
+        });
+    }
+});
+
+// POST /api/auth/verify-otp
+router.post('/verify-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+
+        if (!email || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and OTP are required'
+            });
+        }
+
+        const storedData = otpStore.get(email.toLowerCase());
+
+        if (!storedData) {
+            return res.status(400).json({
+                success: false,
+                message: 'OTP expired or not found. Please request a new one.'
+            });
+        }
+
+        if (Date.now() > storedData.expiresAt) {
+            otpStore.delete(email.toLowerCase());
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please request a new one.'
+            });
+        }
+
+        if (storedData.otp !== otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid OTP. Please try again.'
+            });
+        }
+
+        // OTP verified, remove from store
+        otpStore.delete(email.toLowerCase());
+
+        res.json({
+            success: true,
+            message: 'OTP verified successfully',
+            response: { verified: true }
+        });
+    } catch (error) {
+        console.error('Verify OTP error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to verify OTP. Please try again.'
+        });
+    }
+});
+
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
     try {
-        const { name, email, phone, password, referralCode } = req.body;
+        const { name, email, phone, password, address, referralCode } = req.body;
 
         // Validation
         if (!name || !email || !phone || !password) {
@@ -72,6 +222,7 @@ router.post('/register', async (req, res) => {
             email: email.toLowerCase().trim(),
             phone: phone.trim(),
             password: hashPassword(password),
+            address: address ? address.trim() : '',
             referredBy: referrer?._id,
             isVerified: true
         });
