@@ -35,6 +35,7 @@ export default function RootLayout() {
           <Stack.Screen name="referral" />
           <Stack.Screen name="cart" />
           <Stack.Screen name="feedback" />
+          <Stack.Screen name="subscriptions" />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="auto" />
