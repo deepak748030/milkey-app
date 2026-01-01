@@ -89,7 +89,7 @@ router.get('/', adminAuth, async (req, res) => {
             ];
         }
 
-        const [total, subscriptions] = await Promise.all([
+        const [total, rawSubscriptions] = await Promise.all([
             Subscription.countDocuments(query),
             Subscription.find(query)
                 .sort({ createdAt: -1 })
@@ -97,6 +97,12 @@ router.get('/', adminAuth, async (req, res) => {
                 .limit(limit)
                 .lean()
         ]);
+
+        // Ensure subscriptionType is correctly set for all subscriptions
+        const subscriptions = rawSubscriptions.map(sub => ({
+            ...sub,
+            subscriptionType: sub.isFree ? 'free' : (sub.applicableTabs?.length > 1 ? 'combined' : 'single')
+        }));
 
         const pages = Math.ceil(total / limit);
 

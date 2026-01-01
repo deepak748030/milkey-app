@@ -28,9 +28,15 @@ router.get('/available', auth, async (req, res) => {
         // Get all active subscriptions
         let query = { isActive: true };
 
-        const subscriptions = await Subscription.find(query)
+        const rawSubscriptions = await Subscription.find(query)
             .sort({ isFree: -1, amount: 1 })
             .lean();
+
+        // Ensure subscriptionType is correctly set
+        const subscriptions = rawSubscriptions.map(sub => ({
+            ...sub,
+            subscriptionType: sub.isFree ? 'free' : (sub.applicableTabs?.length > 1 ? 'combined' : 'single')
+        }));
 
         // Get user's existing subscriptions
         const userSubscriptions = await UserSubscription.find({
@@ -140,10 +146,16 @@ router.get('/check/:tab', auth, async (req, res) => {
         let availableSubscriptions = [];
         if (!validSubscription) {
             // Get subscriptions that cover this tab (single or combined)
-            const subs = await Subscription.find({
+            const rawSubs = await Subscription.find({
                 isActive: true,
                 applicableTabs: tab
             }).sort({ isFree: -1, amount: 1 }).lean();
+
+            // Ensure subscriptionType is correctly set
+            const subs = rawSubs.map(sub => ({
+                ...sub,
+                subscriptionType: sub.isFree ? 'free' : (sub.applicableTabs?.length > 1 ? 'combined' : 'single')
+            }));
 
             // Check if user is new for free subscriptions
             const User = require('../models/User');

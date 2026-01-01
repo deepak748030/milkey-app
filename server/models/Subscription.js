@@ -8,7 +8,7 @@ const subscriptionSchema = new mongoose.Schema({
     },
     amount: {
         type: Number,
-        required: [true, 'Amount is required'],
+        default: 0,
         min: [0, 'Amount cannot be negative']
     },
     durationMonths: {
@@ -44,13 +44,29 @@ const subscriptionSchema = new mongoose.Schema({
         default: true
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+});
+
+// Pre-save hook to calculate subscriptionType
+subscriptionSchema.pre('save', function (next) {
+    if (this.isFree) {
+        this.subscriptionType = 'free';
+        this.amount = 0;
+    } else if (this.applicableTabs && this.applicableTabs.length > 1) {
+        this.subscriptionType = 'combined';
+    } else {
+        this.subscriptionType = 'single';
+    }
+    next();
 });
 
 // Indexes for faster queries
 subscriptionSchema.index({ isActive: 1 });
 subscriptionSchema.index({ subscriptionType: 1 });
 subscriptionSchema.index({ isFree: 1 });
+subscriptionSchema.index({ forNewUsers: 1 });
 subscriptionSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Subscription', subscriptionSchema);
