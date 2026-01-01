@@ -7,6 +7,7 @@ export interface CartItem {
     price: number;
     quantity: number;
     icon: string;
+    image?: string;
 }
 
 interface CartState {
@@ -80,7 +81,7 @@ export const useCartStore = create<CartState>((set, get) => ({
                 set({ items: JSON.parse(cartData) });
             }
         } catch (error) {
-            console.error('Error loading cart:', error);
+            // Silent error handling
         }
     },
 }));

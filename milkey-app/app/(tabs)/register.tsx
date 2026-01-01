@@ -37,6 +37,16 @@ interface DateRange {
 export default function RegisterScreen() {
     const { colors, isDark } = useTheme();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
+
+    // Subscription check
+    const {
+        hasAccess,
+        loading: subscriptionLoading,
+        showSubscriptionModal,
+        handleModalClose,
+        handleSubscriptionSuccess
+    } = useSubscriptionCheck('register');
+
     const [activeTab, setActiveTab] = useState<TabType>('Farmers');
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -1451,6 +1461,14 @@ export default function RegisterScreen() {
 
     return (
         <View style={styles.container}>
+            {/* Subscription Modal */}
+            <SubscriptionModal
+                visible={showSubscriptionModal}
+                onClose={handleModalClose}
+                onSubscribe={handleSubscriptionSuccess}
+                filterTab="register"
+                title="Register Tab Subscription"
+            />
             <TopBar />
 
             {/* Tabs */}

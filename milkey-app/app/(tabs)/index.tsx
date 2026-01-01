@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
-import { productsApi, reportsApi, userSubscriptionsApi, Product, HomeStats } from '@/lib/milkeyApi';
+import { productsApi, reportsApi, userSubscriptionsApi, bannersApi, Product, HomeStats, Banner } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
 import { Plus, Wallet } from 'lucide-react-native';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -15,22 +15,22 @@ const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
 const CARD_WIDTH = (width - 18) / 2;
 
-// Banner images - dairy farm themed
-const banners = [
+// Default fallback banners
+const defaultBanners = [
   {
-    id: '1',
+    _id: '1',
+    title: 'Fresh Dairy',
     image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=800&h=300&fit=crop',
-    gradient: '#22C55E',
   },
   {
-    id: '2',
+    _id: '2',
+    title: 'Farm Fresh',
     image: 'https://images.unsplash.com/photo-1628088062854-d1870b4553da?w=800&h=300&fit=crop',
-    gradient: '#3B82F6',
   },
   {
-    id: '3',
+    _id: '3',
+    title: 'Quality Milk',
     image: 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=800&h=300&fit=crop',
-    gradient: '#F59E0B',
   },
 ];
 
@@ -40,7 +40,8 @@ export default function HomeScreen() {
   const [currentBanner, setCurrentBanner] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [products, setProducts] = useState<{ id: string; name: string; price: number; icon: string }[]>([]);
+  const [banners, setBanners] = useState<Banner[]>(defaultBanners);
+  const [products, setProducts] = useState<Product[]>([]);
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const bannerScrollRef = useRef<ScrollView>(null);
@@ -83,7 +84,7 @@ export default function HomeScreen() {
           }
         }
       } catch (error) {
-        console.error('Error checking subscription modal:', error);
+        // Silent error handling
       }
       setSubscriptionModalChecked(true);
     };
@@ -105,31 +106,31 @@ export default function HomeScreen() {
         setHomeStats(homeStatsRes.response);
       }
     } catch (error) {
-      console.error('Error fetching home stats:', error);
+      // Silent error handling
     }
   };
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch products and home stats in parallel
-      const [productsRes, homeStatsRes] = await Promise.all([
+      // Fetch banners, products and home stats in parallel
+      const [bannersRes, productsRes, homeStatsRes] = await Promise.all([
+        bannersApi.getAll().catch(() => null),
         productsApi.getAll().catch(() => null),
         reportsApi.getHomeStats().catch(() => null),
       ]);
 
+      // Set banners from API or use defaults
+      if (bannersRes?.success && bannersRes.response && Array.isArray(bannersRes.response) && bannersRes.response.length > 0) {
+        setBanners(bannersRes.response);
+      }
+
       if (productsRes?.success && productsRes.response?.data) {
-        const apiProducts = productsRes.response.data.map(p => ({
-          id: p._id,
-          name: p.name,
-          price: p.price,
-          icon: p.icon,
-        }));
-        setProducts(apiProducts);
+        setProducts(productsRes.response.data);
 
         // Initialize quantities
         const initialQuantities: { [key: string]: number } = {};
-        apiProducts.forEach(p => { initialQuantities[p.id] = 1; });
+        productsRes.response.data.forEach(p => { initialQuantities[p._id] = 1; });
         setQuantities(initialQuantities);
       }
 
@@ -137,7 +138,7 @@ export default function HomeScreen() {
         setHomeStats(homeStatsRes.response);
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      // Silent error handling
     } finally {
       setLoading(false);
     }
@@ -151,13 +152,14 @@ export default function HomeScreen() {
 
   // Auto-scroll banner
   useEffect(() => {
+    if (banners.length === 0) return;
     const interval = setInterval(() => {
       const nextIndex = (currentBanner + 1) % banners.length;
       bannerScrollRef.current?.scrollTo({ x: nextIndex * BANNER_WIDTH, animated: true });
       setCurrentBanner(nextIndex);
     }, 3000);
     return () => clearInterval(interval);
-  }, [currentBanner]);
+  }, [currentBanner, banners.length]);
 
   const handleBannerScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -172,10 +174,10 @@ export default function HomeScreen() {
     }));
   };
 
-  const handleAddToCart = (product: typeof products[0]) => {
-    const quantity = quantities[product.id] || 1;
+  const handleAddToCart = (product: Product) => {
+    const quantity = quantities[product._id] || 1;
     addToCart(
-      { id: product.id, name: product.name, price: product.price, icon: product.icon },
+      { id: product._id, name: product.name, price: product.price, icon: product.icon, image: product.image },
       quantity
     );
   };
@@ -216,12 +218,17 @@ export default function HomeScreen() {
           contentContainerStyle={styles.bannerScrollContainer}
         >
           {banners.map((banner) => (
-            <View key={banner.id} style={styles.banner}>
+            <View key={banner._id} style={styles.banner}>
               <Image
                 source={{ uri: banner.image }}
                 style={styles.bannerImage}
                 resizeMode="cover"
               />
+              {banner.title && (
+                <View style={styles.bannerOverlay}>
+                  <Text style={styles.bannerTitle}>{banner.title}</Text>
+                </View>
+              )}
             </View>
           ))}
         </ScrollView>
@@ -297,24 +304,32 @@ export default function HomeScreen() {
         ) : (
           <View style={styles.productsGrid}>
             {products.map((product) => (
-              <View key={product.id} style={styles.productCard}>
-                <View style={styles.productIconContainer}>
-                  <Text style={styles.productIcon}>{product.icon}</Text>
-                </View>
+              <View key={product._id} style={styles.productCard}>
+                {product.image ? (
+                  <Image
+                    source={{ uri: product.image }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.productIconContainer}>
+                    <Text style={styles.productIcon}>{product.icon}</Text>
+                  </View>
+                )}
                 <Text style={styles.productName}>{product.name}</Text>
                 <Text style={styles.productPrice}>₹{product.price}</Text>
 
                 <View style={styles.quantityRow}>
                   <Pressable
                     style={styles.quantityBtn}
-                    onPress={() => updateQuantity(product.id, -1)}
+                    onPress={() => updateQuantity(product._id, -1)}
                   >
                     <Text style={styles.quantityBtnText}>-</Text>
                   </Pressable>
-                  <Text style={styles.quantityText}>{quantities[product.id] || 1}</Text>
+                  <Text style={styles.quantityText}>{quantities[product._id] || 1}</Text>
                   <Pressable
                     style={styles.quantityBtn}
-                    onPress={() => updateQuantity(product.id, 1)}
+                    onPress={() => updateQuantity(product._id, 1)}
                   >
                     <Text style={styles.quantityBtnText}>+</Text>
                   </Pressable>
@@ -357,10 +372,25 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderRadius: 10,
     marginRight: 6,
     overflow: 'hidden',
+    position: 'relative',
   },
   bannerImage: {
     width: '100%',
     height: '100%',
+  },
+  bannerOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  bannerTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   bannerDots: {
     flexDirection: 'row',
@@ -482,6 +512,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 6,
+  },
+  productImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
     marginBottom: 6,
   },
   productIcon: {

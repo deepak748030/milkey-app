@@ -22,11 +22,22 @@ interface CustomRange {
 
 export default function PurchaseScreen() {
     const { colors, isDark } = useTheme();
+
+    // Subscription check
+    const {
+        hasAccess,
+        loading: subscriptionLoading,
+        showSubscriptionModal,
+        handleModalClose,
+        handleSubscriptionSuccess
+    } = useSubscriptionCheck('purchase');
+
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [purchaseFarmers, setPurchaseFarmers] = useState<PurchaseFarmer[]>([]);
     const [farmerSearchQuery, setFarmerSearchQuery] = useState('');
+    // const [farmerSearchQuery, setFarmerSearchQuery] = useState('');
 
     const [entryDate, setEntryDate] = useState<Date | null>(new Date());
     const [entryShift, setEntryShift] = useState<'morning' | 'evening'>('morning');
@@ -333,6 +344,14 @@ export default function PurchaseScreen() {
 
     return (
         <View style={styles.container}>
+            {/* Subscription Modal */}
+            <SubscriptionModal
+                visible={showSubscriptionModal}
+                onClose={handleModalClose}
+                onSubscribe={handleSubscriptionSuccess}
+                filterTab="purchase"
+                title="Purchase Tab Subscription"
+            />
             <TopBar />
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}>
                 <View style={styles.card}>

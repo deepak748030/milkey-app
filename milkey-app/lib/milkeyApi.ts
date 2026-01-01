@@ -81,6 +81,7 @@ export interface Product {
     price: number;
     unit: string;
     icon: string;
+    image?: string;
     description: string;
     stock: number;
     isActive: boolean;
@@ -320,13 +321,6 @@ const apiRequest = async <T>(
                 };
             }
 
-            console.error('API error:', {
-                endpoint,
-                status: response.status,
-                message: serverMessage,
-                body: data,
-            });
-
             return {
                 success: false,
                 message,
@@ -335,7 +329,6 @@ const apiRequest = async <T>(
 
         return (data ?? { success: true, response: null }) as ApiResponse<T>;
     } catch (error) {
-        console.error('API Request error:', { endpoint, error });
         return {
             success: false,
             message: error instanceof Error ? error.message : 'Network error',
@@ -1216,5 +1209,23 @@ export const userSubscriptionsApi = {
 
     getStatus: async () => {
         return apiRequest<SubscriptionStatus>('/user-subscriptions/status');
+    },
+};
+
+// Banner types
+export interface Banner {
+    _id: string;
+    title: string;
+    image: string;
+    badge?: string;
+    type?: 'event' | 'category';
+    order?: number;
+    isActive?: boolean;
+}
+
+// Banners API
+export const bannersApi = {
+    getAll: async () => {
+        return apiRequest<Banner[]>('/banners');
     },
 };

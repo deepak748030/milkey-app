@@ -37,12 +37,13 @@ export function SubscriptionModal({
         setLoading(true);
         try {
             const res = await userSubscriptionsApi.getAvailable();
+
             if (res.success && res.response) {
-                let subs = res.response.subscriptions;
+                let subs = res.response.subscriptions || [];
 
                 // Filter by tab if specified
                 if (filterTab) {
-                    subs = subs.filter(s => s.applicableTabs.includes(filterTab));
+                    subs = subs.filter(s => s.applicableTabs?.includes(filterTab));
                 }
 
                 // Filter out already purchased
@@ -53,6 +54,7 @@ export function SubscriptionModal({
             }
         } catch (error) {
             console.error('Failed to fetch subscriptions:', error);
+            setSubscriptions([]);
         } finally {
             setLoading(false);
         }
@@ -92,10 +94,139 @@ export function SubscriptionModal({
     };
 
     const getTabNames = (tabs: string[]) => {
+        if (!tabs || tabs.length === 0) return '';
         return tabs.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' + ');
     };
 
     const styles = createStyles(colors, isDark);
+
+    const renderContent = () => {
+        if (loading) {
+            return (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={colors.primary} />
+                    <Text style={styles.loadingText}>Loading subscriptions...</Text>
+                </View>
+            );
+        }
+
+        if (subscriptions.length === 0) {
+            return (
+                <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>No subscriptions available</Text>
+                    <Pressable onPress={onClose} style={styles.closeButton}>
+                        <Text style={styles.closeButtonText}>Close</Text>
+                    </Pressable>
+                </View>
+            );
+        }
+
+        return (
+            <ScrollView
+                style={styles.scrollView}
+                showsVerticalScrollIndicator={true}
+                contentContainerStyle={styles.scrollContent}
+                nestedScrollEnabled={true}
+            >
+                {isNewUser && subscriptions.some(s => s.isFree && s.forNewUsers) && (
+                    <View style={styles.newUserBanner}>
+                        <Star size={18} color={colors.warning} fill={colors.warning} />
+                        <Text style={styles.newUserText}>
+                            🎉 Welcome! You're eligible for free subscriptions!
+                        </Text>
+                    </View>
+                )}
+
+                {subscriptions.map((sub) => (
+                    <View
+                        key={sub._id}
+                        style={[
+                            styles.subscriptionCard,
+                            sub.isFree && styles.freeCard
+                        ]}
+                    >
+                        {/* Type Badge */}
+                        <View style={[
+                            styles.typeBadge,
+                            sub.isFree ? styles.freeBadge :
+                                sub.subscriptionType === 'combined' ? styles.comboBadge :
+                                    styles.singleBadge
+                        ]}>
+                            {getTypeIcon(sub)}
+                            <Text style={[
+                                styles.typeBadgeText,
+                                sub.isFree && styles.freeBadgeText
+                            ]}>
+                                {getTypeLabel(sub)}
+                            </Text>
+                        </View>
+
+                        {/* Card Content */}
+                        <Text style={styles.subName}>{sub.name}</Text>
+
+                        <View style={styles.priceRow}>
+                            <Text style={[
+                                styles.price,
+                                sub.isFree && styles.freePrice
+                            ]}>
+                                {sub.isFree ? 'FREE' : `₹${sub.amount}`}
+                            </Text>
+                            <Text style={styles.duration}>
+                                / {sub.durationMonths} {sub.durationMonths === 1 ? 'month' : 'months'}
+                            </Text>
+                        </View>
+
+                        {sub.description ? (
+                            <Text style={styles.description}>{sub.description}</Text>
+                        ) : null}
+
+                        {/* Applicable Tabs */}
+                        <View style={styles.tabsRow}>
+                            <Text style={styles.tabsLabel}>Access to: </Text>
+                            <Text style={styles.tabsValue}>{getTabNames(sub.applicableTabs)}</Text>
+                        </View>
+
+                        {/* Features */}
+                        <View style={styles.features}>
+                            {sub.applicableTabs?.map((tab) => (
+                                <View key={tab} style={styles.featureItem}>
+                                    <Check size={14} color={colors.primary} />
+                                    <Text style={styles.featureText}>
+                                        {tab.charAt(0).toUpperCase() + tab.slice(1)} Tab Access
+                                    </Text>
+                                </View>
+                            ))}
+                            <View style={styles.featureItem}>
+                                <Check size={14} color={colors.primary} />
+                                <Text style={styles.featureText}>
+                                    {sub.durationMonths} Month{sub.durationMonths > 1 ? 's' : ''} Validity
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* Purchase Button */}
+                        <Pressable
+                            style={[
+                                styles.purchaseBtn,
+                                sub.isFree && styles.freePurchaseBtn,
+                                purchasing === sub._id && styles.purchasingBtn
+                            ]}
+                            onPress={() => handlePurchase(sub)}
+                            disabled={purchasing !== null}
+                        >
+                            {purchasing === sub._id ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.purchaseBtnText}>
+                                    {sub.isFree ? 'Activate Free' : 'Subscribe Now'}
+                                </Text>
+                            )}
+                        </Pressable>
+                    </View>
+                ))}
+            </ScrollView>
+        );
+    };
 
     return (
         <Modal
@@ -118,122 +249,7 @@ export function SubscriptionModal({
                     </View>
 
                     {/* Content */}
-                    {loading ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color={colors.primary} />
-                            <Text style={styles.loadingText}>Loading subscriptions...</Text>
-                        </View>
-                    ) : subscriptions.length === 0 ? (
-                        <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyText}>No subscriptions available</Text>
-                            <Pressable onPress={onClose} style={styles.closeButton}>
-                                <Text style={styles.closeButtonText}>Close</Text>
-                            </Pressable>
-                        </View>
-                    ) : (
-                        <ScrollView
-                            style={styles.scrollView}
-                            showsVerticalScrollIndicator={false}
-                            contentContainerStyle={styles.scrollContent}
-                        >
-                            {isNewUser && subscriptions.some(s => s.isFree && s.forNewUsers) && (
-                                <View style={styles.newUserBanner}>
-                                    <Star size={18} color={colors.warning} fill={colors.warning} />
-                                    <Text style={styles.newUserText}>
-                                        🎉 Welcome! You're eligible for free subscriptions!
-                                    </Text>
-                                </View>
-                            )}
-
-                            {subscriptions.map((sub) => (
-                                <View
-                                    key={sub._id}
-                                    style={[
-                                        styles.subscriptionCard,
-                                        sub.isFree && styles.freeCard
-                                    ]}
-                                >
-                                    {/* Type Badge */}
-                                    <View style={[
-                                        styles.typeBadge,
-                                        sub.isFree ? styles.freeBadge :
-                                            sub.subscriptionType === 'combined' ? styles.comboBadge :
-                                                styles.singleBadge
-                                    ]}>
-                                        {getTypeIcon(sub)}
-                                        <Text style={[
-                                            styles.typeBadgeText,
-                                            sub.isFree && styles.freeBadgeText
-                                        ]}>
-                                            {getTypeLabel(sub)}
-                                        </Text>
-                                    </View>
-
-                                    {/* Card Content */}
-                                    <Text style={styles.subName}>{sub.name}</Text>
-
-                                    <View style={styles.priceRow}>
-                                        <Text style={[
-                                            styles.price,
-                                            sub.isFree && styles.freePrice
-                                        ]}>
-                                            {sub.isFree ? 'FREE' : `₹${sub.amount}`}
-                                        </Text>
-                                        <Text style={styles.duration}>
-                                            / {sub.durationMonths} {sub.durationMonths === 1 ? 'month' : 'months'}
-                                        </Text>
-                                    </View>
-
-                                    {sub.description && (
-                                        <Text style={styles.description}>{sub.description}</Text>
-                                    )}
-
-                                    {/* Applicable Tabs */}
-                                    <View style={styles.tabsRow}>
-                                        <Text style={styles.tabsLabel}>Access to: </Text>
-                                        <Text style={styles.tabsValue}>{getTabNames(sub.applicableTabs)}</Text>
-                                    </View>
-
-                                    {/* Features */}
-                                    <View style={styles.features}>
-                                        {sub.applicableTabs.map((tab) => (
-                                            <View key={tab} style={styles.featureItem}>
-                                                <Check size={14} color={colors.primary} />
-                                                <Text style={styles.featureText}>
-                                                    {tab.charAt(0).toUpperCase() + tab.slice(1)} Tab Access
-                                                </Text>
-                                            </View>
-                                        ))}
-                                        <View style={styles.featureItem}>
-                                            <Check size={14} color={colors.primary} />
-                                            <Text style={styles.featureText}>
-                                                {sub.durationMonths} Month{sub.durationMonths > 1 ? 's' : ''} Validity
-                                            </Text>
-                                        </View>
-                                    </View>
-
-                                    {/* Purchase Button */}
-                                    <Pressable
-                                        style={[
-                                            styles.purchaseBtn,
-                                            sub.isFree && styles.freePurchaseBtn,
-                                            purchasing === sub._id && styles.purchasingBtn
-                                        ]}
-                                        onPress={() => handlePurchase(sub)}
-                                        disabled={purchasing !== null}
-                                    >
-                                        {purchasing === sub._id ? (
-                                            <ActivityIndicator size="small" color={colors.white} />
-                                        ) : (
-                                            <Text style={styles.purchaseBtnText}>
-                                                {sub.isFree ? 'Activate Free' : 'Subscribe Now'}
-                                            </Text>
-                                        )}
-                                    </Pressable>
-                                </View>
-                            ))}
-                        </ScrollView>
-                    )}
+                    {renderContent()}
                 </View>
             </View>
         </Modal>
@@ -306,11 +322,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.foreground,
     },
     scrollView: {
-        flex: 1,
+        flexGrow: 0,
+        maxHeight: height * 0.7,
     },
     scrollContent: {
         padding: 16,
-        gap: 16,
+        paddingBottom: 24,
     },
     newUserBanner: {
         flexDirection: 'row',
@@ -321,6 +338,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderRadius: 10,
         borderWidth: 1,
         borderColor: `${colors.warning}30`,
+        marginBottom: 16,
     },
     newUserText: {
         flex: 1,
@@ -334,6 +352,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         padding: 16,
         borderWidth: 1,
         borderColor: colors.border,
+        marginBottom: 16,
     },
     freeCard: {
         borderColor: colors.warning,
@@ -438,6 +457,6 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     purchaseBtnText: {
         fontSize: 15,
         fontWeight: '700',
-        color: colors.white,
+        color: '#FFFFFF',
     },
 });

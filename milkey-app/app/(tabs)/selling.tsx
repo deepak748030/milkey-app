@@ -33,6 +33,16 @@ interface GroupedEntry {
 export default function SellingScreen() {
     const { colors, isDark } = useTheme();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
+
+    // Subscription check
+    const {
+        hasAccess,
+        loading: subscriptionLoading,
+        showSubscriptionModal,
+        handleModalClose,
+        handleSubscriptionSuccess
+    } = useSubscriptionCheck('selling');
+
     const [activeTab, setActiveTab] = useState<TabType>('Entry');
     const [isLoading, setIsLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -1920,6 +1930,14 @@ export default function SellingScreen() {
 
     return (
         <View style={styles.container}>
+            {/* Subscription Modal */}
+            <SubscriptionModal
+                visible={showSubscriptionModal}
+                onClose={handleModalClose}
+                onSubscribe={handleSubscriptionSuccess}
+                filterTab="selling"
+                title="Selling Tab Subscription"
+            />
             <TopBar />
             <View style={styles.tabRow}>
                 {(['Entry', 'Payment', 'Reports', 'Member'] as TabType[]).map((tab) => (

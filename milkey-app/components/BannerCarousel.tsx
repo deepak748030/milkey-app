@@ -1,18 +1,24 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { View, Image, Text, StyleSheet, Pressable, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
 import { colors } from '@/lib/colors';
-import { bannersApi, ServerBanner, getImageUrl } from '@/lib/api';
-import { router } from 'expo-router';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
+
+interface Banner {
+  _id: string;
+  title: string;
+  image: string;
+  badge?: string;
+}
 
 export default function BannerCarousel() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [banners, setBanners] = useState<ServerBanner[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load banners from API
   useEffect(() => {
     loadBanners();
   }, []);
@@ -20,22 +26,14 @@ export default function BannerCarousel() {
   const loadBanners = async () => {
     try {
       setIsLoading(true);
-      const response = await bannersApi.getAll();
-      const data = (response as any).data || response.response;
+      const response = await fetch(`${API_BASE_URL}/products/banners`);
+      const data = await response.json();
 
-      if (response.success && data && Array.isArray(data)) {
-        setBanners(data);
-      } else {
-        // If no banners, try to seed them
-        await bannersApi.seed();
-        const retryResponse = await bannersApi.getAll();
-        const retryData = (retryResponse as any).data || retryResponse.response;
-        if (retryResponse.success && retryData && Array.isArray(retryData)) {
-          setBanners(retryData);
-        }
+      if (data.success && data.response?.data) {
+        setBanners(data.response.data);
       }
     } catch (error) {
-      console.error('Error loading banners:', error);
+      // Silently fail
     } finally {
       setIsLoading(false);
     }
@@ -62,19 +60,6 @@ export default function BannerCarousel() {
     setCurrentIndex(index);
   };
 
-  const handleBannerPress = (banner: ServerBanner) => {
-    if (banner.type === 'event' && banner.eventId) {
-      // Navigate to specific event
-      router.push(`/event/${banner.eventId}` as any);
-    } else if (banner.type === 'category' && banner.categorySlug) {
-      // Navigate to search screen with category filter
-      router.push({
-        pathname: '/search' as any,
-        params: { category: banner.categorySlug }
-      });
-    }
-  };
-
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -98,15 +83,11 @@ export default function BannerCarousel() {
         scrollEventThrottle={16}
       >
         {banners.map((banner) => (
-          <Pressable
-            key={banner._id}
-            style={styles.bannerContainer}
-            onPress={() => handleBannerPress(banner)}
-          >
-            <Image source={{ uri: getImageUrl(banner.image) }} style={styles.bannerImage} />
+          <Pressable key={banner._id} style={styles.bannerContainer}>
+            <Image source={{ uri: banner.image }} style={styles.bannerImage} />
             {banner.badge && (
               <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>{banner.badge} - BOOK NOW!</Text>
+                <Text style={styles.badgeText}>{banner.badge}</Text>
               </View>
             )}
           </Pressable>

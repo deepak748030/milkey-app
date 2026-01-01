@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { userSubscriptionsApi, TabSubscriptionCheck, Subscription } from '@/lib/milkeyApi';
 import { getStoredSubscriptionStatus, storeSubscriptionStatus } from '@/lib/subscriptionStore';
+import { router } from 'expo-router';
 
 export interface UseSubscriptionCheckResult {
     hasAccess: boolean;
@@ -11,10 +12,12 @@ export interface UseSubscriptionCheckResult {
     refresh: () => Promise<void>;
     showSubscriptionModal: boolean;
     setShowSubscriptionModal: (show: boolean) => void;
+    handleModalClose: () => void;
+    handleSubscriptionSuccess: () => void;
 }
 
 export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): UseSubscriptionCheckResult {
-    const [hasAccess, setHasAccess] = useState(true); // Default to true to avoid flicker
+    const [hasAccess, setHasAccess] = useState(false);
     const [loading, setLoading] = useState(true);
     const [subscription, setSubscription] = useState<TabSubscriptionCheck['subscription'] | null>(null);
     const [availableSubscriptions, setAvailableSubscriptions] = useState<Subscription[]>([]);
@@ -30,7 +33,9 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
                 const cachedAccess = tab === 'purchase' ? cached.hasPurchase :
                     tab === 'selling' ? cached.hasSelling :
                         cached.hasRegister;
-                setHasAccess(cachedAccess);
+                if (cachedAccess) {
+                    setHasAccess(true);
+                }
             }
 
             // Then fetch from API for accurate data
@@ -38,7 +43,7 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
             if (res.success && res.response) {
                 setHasAccess(res.response.hasValidSubscription);
                 setSubscription(res.response.subscription);
-                setAvailableSubscriptions(res.response.availableSubscriptions);
+                setAvailableSubscriptions(res.response.availableSubscriptions || []);
                 setExpiresAt(res.response.expiresAt);
 
                 // Update cached status
@@ -58,14 +63,32 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
             }
         } catch (error) {
             console.error('Error checking subscription:', error);
-            // On error, default to showing access (graceful degradation)
-            setHasAccess(true);
+            // On error, default to not showing access
+            setHasAccess(false);
+            setShowSubscriptionModal(true);
         } finally {
             setLoading(false);
         }
     }, [tab]);
 
     useEffect(() => {
+        checkSubscription();
+    }, [checkSubscription]);
+
+    // Handle modal close - redirect to home if no access
+    const handleModalClose = useCallback(() => {
+        setShowSubscriptionModal(false);
+        if (!hasAccess) {
+            // Redirect to home page
+            router.replace('/(tabs)');
+        }
+    }, [hasAccess]);
+
+    // Handle successful subscription purchase
+    const handleSubscriptionSuccess = useCallback(() => {
+        setShowSubscriptionModal(false);
+        setHasAccess(true);
+        // Refresh the subscription status
         checkSubscription();
     }, [checkSubscription]);
 
@@ -78,5 +101,7 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
         refresh: checkSubscription,
         showSubscriptionModal,
         setShowSubscriptionModal,
+        handleModalClose,
+        handleSubscriptionSuccess,
     };
 }

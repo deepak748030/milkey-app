@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
+const Banner = require('../models/Banner');
 const auth = require('../middleware/auth');
 
 // GET /api/products - Get all products (public - no auth required)
@@ -182,6 +183,31 @@ router.post('/seed', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to seed products'
+        });
+    }
+});
+
+// ==================== PUBLIC BANNERS ROUTE ====================
+
+// GET /api/products/banners - Get all active banners (public - no auth required)
+router.get('/banners', async (req, res) => {
+    try {
+        const banners = await Banner.find({ isActive: true })
+            .sort({ order: 1 })
+            .select('_id title subtitle image badge gradient linkType linkValue order')
+            .lean();
+
+        res.json({
+            success: true,
+            response: {
+                data: banners
+            }
+        });
+    } catch (error) {
+        console.error('Get banners error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get banners'
         });
     }
 });
