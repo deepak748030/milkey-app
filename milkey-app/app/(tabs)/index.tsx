@@ -5,9 +5,11 @@ import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
-import { productsApi, reportsApi, Product, HomeStats } from '@/lib/milkeyApi';
+import { productsApi, reportsApi, userSubscriptionsApi, Product, HomeStats } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
 import { Plus, Wallet } from 'lucide-react-native';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { shouldShowSubscriptionModal, markSubscriptionModalShown, storeSubscriptionStatus } from '@/lib/subscriptionStore';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
@@ -44,10 +46,50 @@ export default function HomeScreen() {
   const bannerScrollRef = useRef<ScrollView>(null);
   const { addToCart, loadCart } = useCartStore();
 
+  // Subscription modal state
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [subscriptionModalChecked, setSubscriptionModalChecked] = useState(false);
+
   useEffect(() => {
     loadCart();
     fetchData();
   }, []);
+
+  // Check if subscription modal should be shown
+  useEffect(() => {
+    const checkSubscriptionModal = async () => {
+      if (!isAuthenticated || subscriptionModalChecked) return;
+
+      try {
+        const shouldShow = await shouldShowSubscriptionModal();
+        if (shouldShow) {
+          // Check if user has any active subscription
+          const statusRes = await userSubscriptionsApi.getStatus();
+          if (statusRes.success && statusRes.response) {
+            const { hasPurchase, hasSelling, hasRegister, hasAnySubscription } = statusRes.response;
+
+            // Store status for quick access
+            await storeSubscriptionStatus({ hasPurchase, hasSelling, hasRegister });
+
+            // Show modal if user doesn't have all subscriptions
+            if (!hasAnySubscription || !hasPurchase || !hasSelling || !hasRegister) {
+              setShowSubscriptionModal(true);
+              await markSubscriptionModalShown();
+            }
+          } else {
+            // No subscription data, show modal
+            setShowSubscriptionModal(true);
+            await markSubscriptionModalShown();
+          }
+        }
+      } catch (error) {
+        console.error('Error checking subscription modal:', error);
+      }
+      setSubscriptionModalChecked(true);
+    };
+
+    checkSubscriptionModal();
+  }, [isAuthenticated, subscriptionModalChecked]);
 
   // Refresh data when tab comes into focus
   useFocusEffect(
@@ -142,6 +184,12 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Subscription Modal */}
+      <SubscriptionModal
+        visible={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        title="Choose Your Plan"
+      />
       <TopBar />
 
       <ScrollView

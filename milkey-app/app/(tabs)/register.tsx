@@ -11,6 +11,8 @@ import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
 import { PaymentRangeCalendar, BlockedPeriod } from '@/components/PaymentRangeCalendar';
 import { useLocalSearchParams } from 'expo-router';
+import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 
 // Helper function to format date as dd/mm/yyyy
 const formatDateDDMMYYYY = (dateStr: string) => {

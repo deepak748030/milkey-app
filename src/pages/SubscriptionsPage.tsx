@@ -35,7 +35,9 @@ export function SubscriptionsPage() {
         amount: '',
         durationMonths: '',
         applicableTabs: [] as string[],
-        description: ''
+        description: '',
+        isFree: false,
+        forNewUsers: false
     })
     const [submitting, setSubmitting] = useState(false)
 
@@ -71,7 +73,9 @@ export function SubscriptionsPage() {
             amount: '',
             durationMonths: '',
             applicableTabs: [],
-            description: ''
+            description: '',
+            isFree: false,
+            forNewUsers: false
         })
         setShowModal(true)
     }
@@ -83,7 +87,9 @@ export function SubscriptionsPage() {
             amount: String(subscription.amount),
             durationMonths: String(subscription.durationMonths),
             applicableTabs: subscription.applicableTabs || [],
-            description: subscription.description || ''
+            description: subscription.description || '',
+            isFree: subscription.isFree || false,
+            forNewUsers: subscription.forNewUsers || false
         })
         setShowModal(true)
     }
@@ -99,8 +105,19 @@ export function SubscriptionsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!formData.name.trim() || !formData.amount || !formData.durationMonths || formData.applicableTabs.length === 0) {
+        if (!formData.name.trim() || formData.applicableTabs.length === 0) {
             alert('Please fill all required fields')
+            return
+        }
+
+        // Amount is required only if not free
+        if (!formData.isFree && !formData.amount) {
+            alert('Please enter an amount or mark as free')
+            return
+        }
+
+        if (!formData.durationMonths) {
+            alert('Please enter duration')
             return
         }
 
@@ -108,10 +125,12 @@ export function SubscriptionsPage() {
             setSubmitting(true)
             const payload = {
                 name: formData.name.trim(),
-                amount: Number(formData.amount),
+                amount: formData.isFree ? 0 : Number(formData.amount),
                 durationMonths: Number(formData.durationMonths),
                 applicableTabs: formData.applicableTabs,
-                description: formData.description.trim()
+                description: formData.description.trim(),
+                isFree: formData.isFree,
+                forNewUsers: formData.forNewUsers
             }
 
             if (editingSubscription) {
@@ -150,7 +169,8 @@ export function SubscriptionsPage() {
         }
     }
 
-    const formatAmount = (amount: number) => {
+    const formatAmount = (amount: number, isFree?: boolean) => {
+        if (isFree || amount === 0) return 'FREE'
         return `₹${amount.toLocaleString('en-IN')}`
     }
 
@@ -163,11 +183,23 @@ export function SubscriptionsPage() {
 
     const getTabBadge = (tab: string) => {
         const colors: Record<string, string> = {
-            purchase: 'bg-blue-500/20 text-blue-400',
-            selling: 'bg-green-500/20 text-green-400',
-            register: 'bg-purple-500/20 text-purple-400'
+            purchase: 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
+            selling: 'bg-green-500/20 text-green-700 dark:text-green-300',
+            register: 'bg-purple-500/20 text-purple-700 dark:text-purple-300'
         }
         return colors[tab] || 'bg-muted text-muted-foreground'
+    }
+
+    const getTypeBadge = (sub: Subscription) => {
+        if (sub.isFree) return 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+        if (sub.applicableTabs?.length > 1) return 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300'
+        return 'bg-muted text-muted-foreground'
+    }
+
+    const getTypeLabel = (sub: Subscription) => {
+        if (sub.isFree) return 'Free'
+        if (sub.applicableTabs?.length > 1) return 'Combined'
+        return 'Single'
     }
 
     return (
@@ -266,12 +298,22 @@ export function SubscriptionsPage() {
                             <div className="grid grid-cols-2 gap-2 mb-3">
                                 <div className="bg-muted/50 rounded-lg p-2">
                                     <p className="text-[10px] text-muted-foreground uppercase">Amount</p>
-                                    <p className="text-sm font-semibold text-foreground">{formatAmount(sub.amount)}</p>
+                                    <p className={cn("text-sm font-semibold", sub.isFree ? "text-amber-600 dark:text-amber-400" : "text-foreground")}>{formatAmount(sub.amount, sub.isFree)}</p>
                                 </div>
                                 <div className="bg-muted/50 rounded-lg p-2">
                                     <p className="text-[10px] text-muted-foreground uppercase">Duration</p>
                                     <p className="text-sm font-medium text-foreground">{formatDuration(sub.durationMonths)}</p>
                                 </div>
+                            </div>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                <span className={cn('px-2 py-0.5 rounded text-xs font-medium', getTypeBadge(sub))}>
+                                    {getTypeLabel(sub)}
+                                </span>
+                                {sub.forNewUsers && (
+                                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-pink-500/20 text-pink-700 dark:text-pink-300">
+                                        New Users
+                                    </span>
+                                )}
                             </div>
                             <div className="flex flex-wrap gap-1 mb-3">
                                 {sub.applicableTabs?.map(tab => (
@@ -318,6 +360,7 @@ export function SubscriptionsPage() {
                             <thead className="bg-muted/50 border-b border-border">
                                 <tr>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Name</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Type</th>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Amount</th>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Duration</th>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Tabs</th>
@@ -334,10 +377,20 @@ export function SubscriptionsPage() {
                                                 {sub.description && (
                                                     <p className="text-sm text-muted-foreground truncate max-w-[200px]">{sub.description}</p>
                                                 )}
+                                                {sub.forNewUsers && (
+                                                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium bg-pink-500/20 text-pink-700 dark:text-pink-300">
+                                                        For New Users
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3 font-semibold text-foreground">
-                                            {formatAmount(sub.amount)}
+                                        <td className="px-4 py-3">
+                                            <span className={cn('px-2 py-1 rounded text-xs font-medium', getTypeBadge(sub))}>
+                                                {getTypeLabel(sub)}
+                                            </span>
+                                        </td>
+                                        <td className={cn("px-4 py-3 font-semibold", sub.isFree ? "text-amber-600 dark:text-amber-400" : "text-foreground")}>
+                                            {formatAmount(sub.amount, sub.isFree)}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
                                             {formatDuration(sub.durationMonths)}
@@ -425,17 +478,64 @@ export function SubscriptionsPage() {
                                     required
                                 />
                             </div>
+
+                            {/* Free subscription toggle */}
+                            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                <div>
+                                    <p className="text-sm font-medium text-foreground">Free Subscription</p>
+                                    <p className="text-xs text-muted-foreground">No payment required</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, isFree: !prev.isFree, amount: prev.isFree ? prev.amount : '0' }))}
+                                    className={cn(
+                                        'w-12 h-6 rounded-full transition-colors relative',
+                                        formData.isFree ? 'bg-primary' : 'bg-muted'
+                                    )}
+                                >
+                                    <span className={cn(
+                                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+                                        formData.isFree ? 'translate-x-7' : 'translate-x-1'
+                                    )} />
+                                </button>
+                            </div>
+
+                            {/* For new users toggle */}
+                            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                                <div>
+                                    <p className="text-sm font-medium text-foreground">For New Users</p>
+                                    <p className="text-xs text-muted-foreground">Available to new signups</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, forNewUsers: !prev.forNewUsers }))}
+                                    className={cn(
+                                        'w-12 h-6 rounded-full transition-colors relative',
+                                        formData.forNewUsers ? 'bg-primary' : 'bg-muted'
+                                    )}
+                                >
+                                    <span className={cn(
+                                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
+                                        formData.forNewUsers ? 'translate-x-7' : 'translate-x-1'
+                                    )} />
+                                </button>
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">Amount (₹) *</label>
+                                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">Amount (₹) {!formData.isFree && '*'}</label>
                                     <input
                                         type="number"
-                                        value={formData.amount}
+                                        value={formData.isFree ? '0' : formData.amount}
                                         onChange={e => setFormData(prev => ({ ...prev, amount: e.target.value }))}
                                         placeholder="0"
                                         min="0"
-                                        className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                                        required
+                                        disabled={formData.isFree}
+                                        className={cn(
+                                            "w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring",
+                                            formData.isFree && "opacity-50 cursor-not-allowed"
+                                        )}
+                                        required={!formData.isFree}
                                     />
                                 </div>
                                 <div>
@@ -452,7 +552,7 @@ export function SubscriptionsPage() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-muted-foreground mb-1.5">Applicable Tabs *</label>
+                                <label className="block text-sm font-medium text-muted-foreground mb-1.5">Applicable Tabs * <span className="text-xs text-primary">(Select multiple for combined subscription)</span></label>
                                 <div className="flex flex-wrap gap-2">
                                     {TAB_OPTIONS.map(opt => (
                                         <button
@@ -472,6 +572,9 @@ export function SubscriptionsPage() {
                                 </div>
                                 {formData.applicableTabs.length === 0 && (
                                     <p className="text-xs text-destructive mt-1">Select at least one tab</p>
+                                )}
+                                {formData.applicableTabs.length > 1 && (
+                                    <p className="text-xs text-primary mt-1">This will be a combined subscription</p>
                                 )}
                             </div>
                             <div>

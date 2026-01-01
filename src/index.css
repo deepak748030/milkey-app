@@ -2,8 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light Theme - White with teal accents */
 :root {
-    /* Dark purple background with green accents */
+    --background: 0 0% 100%;
+    --foreground: 220 20% 15%;
+
+    --card: 180 20% 98%;
+    --card-foreground: 220 20% 15%;
+
+    --primary: 174 72% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 174 40% 92%;
+    --secondary-foreground: 174 72% 35%;
+
+    --muted: 180 15% 95%;
+    --muted-foreground: 220 9% 46%;
+
+    --accent: 174 72% 35%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 0%;
+
+    --border: 180 20% 88%;
+    --input: 180 15% 95%;
+    --ring: 174 72% 40%;
+
+    --sidebar: 180 20% 98%;
+    --sidebar-foreground: 220 20% 25%;
+    --sidebar-hover: 174 30% 92%;
+    --sidebar-active: 174 72% 40%;
+
+    --radius: 0.5rem;
+}
+
+/* Dark Theme - Dark purple with green accents */
+.dark {
     --background: 270 30% 8%;
     --foreground: 0 0% 100%;
 
@@ -39,8 +80,6 @@
     --sidebar-foreground: 220 14% 90%;
     --sidebar-hover: 270 25% 18%;
     --sidebar-active: 142 76% 42%;
-
-    --radius: 0.5rem;
 }
 
 * {

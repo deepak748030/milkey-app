@@ -12,6 +12,8 @@ import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { useLocalSearchParams } from 'expo-router';
+import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
 

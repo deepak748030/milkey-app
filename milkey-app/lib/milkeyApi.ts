@@ -1134,3 +1134,87 @@ export const healthCheck = async (): Promise<boolean> => {
         return false;
     }
 };
+
+// Subscription types
+export interface Subscription {
+    _id: string;
+    name: string;
+    amount: number;
+    durationMonths: number;
+    applicableTabs: ('purchase' | 'selling' | 'register')[];
+    subscriptionType: 'single' | 'combined' | 'free';
+    isFree: boolean;
+    forNewUsers: boolean;
+    description: string;
+    isActive: boolean;
+    isPurchased?: boolean;
+}
+
+export interface UserSubscription {
+    _id: string;
+    user: string;
+    subscription: Subscription;
+    applicableTabs: ('purchase' | 'selling' | 'register')[];
+    startDate: string;
+    endDate: string;
+    amount: number;
+    isFree: boolean;
+    paymentStatus: 'pending' | 'completed' | 'failed';
+    paymentMethod: string;
+    isActive: boolean;
+}
+
+export interface SubscriptionStatus {
+    hasAnySubscription: boolean;
+    activeCount: number;
+    coveredTabs: string[];
+    hasPurchase: boolean;
+    hasSelling: boolean;
+    hasRegister: boolean;
+    subscriptions: UserSubscription[];
+}
+
+export interface TabSubscriptionCheck {
+    hasValidSubscription: boolean;
+    subscription: UserSubscription | null;
+    availableSubscriptions: Subscription[];
+    expiresAt: string | null;
+}
+
+// User Subscriptions API
+export const userSubscriptionsApi = {
+    getAvailable: async () => {
+        return apiRequest<{
+            subscriptions: Subscription[];
+            isNewUser: boolean;
+            hasActiveSubscription: boolean;
+        }>('/user-subscriptions/available');
+    },
+
+    getMy: async () => {
+        return apiRequest<{
+            active: UserSubscription[];
+            expired: UserSubscription[];
+            all: UserSubscription[];
+        }>('/user-subscriptions/my');
+    },
+
+    checkTab: async (tab: 'purchase' | 'selling' | 'register') => {
+        return apiRequest<TabSubscriptionCheck>(`/user-subscriptions/check/${tab}`);
+    },
+
+    purchase: async (data: {
+        subscriptionId: string;
+        paymentMethod?: string;
+        transactionId?: string;
+    }) => {
+        return apiRequest<UserSubscription>('/user-subscriptions/purchase', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    getStatus: async () => {
+        return apiRequest<SubscriptionStatus>('/user-subscriptions/status');
+    },
+};

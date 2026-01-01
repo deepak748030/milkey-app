@@ -149,7 +149,7 @@ router.get('/:id', adminAuth, async (req, res) => {
 // POST /api/subscriptions - Create subscription
 router.post('/', adminAuth, async (req, res) => {
     try {
-        const { name, amount, durationMonths, applicableTabs, description } = req.body;
+        const { name, amount, durationMonths, applicableTabs, description, subscriptionType, isFree, forNewUsers } = req.body;
 
         if (!name || name.trim() === '') {
             return res.status(400).json({
@@ -158,7 +158,9 @@ router.post('/', adminAuth, async (req, res) => {
             });
         }
 
-        if (amount === undefined || amount < 0) {
+        // For free subscriptions, amount should be 0
+        const actualAmount = isFree ? 0 : Number(amount);
+        if (!isFree && (amount === undefined || amount < 0)) {
             return res.status(400).json({
                 success: false,
                 message: 'Valid amount is required'
@@ -188,11 +190,22 @@ router.post('/', adminAuth, async (req, res) => {
             });
         }
 
+        // Determine subscription type
+        let actualType = subscriptionType || 'single';
+        if (isFree) {
+            actualType = 'free';
+        } else if (applicableTabs.length > 1) {
+            actualType = 'combined';
+        }
+
         const subscription = new Subscription({
             name: name.trim(),
-            amount: Number(amount),
+            amount: actualAmount,
             durationMonths: Number(durationMonths),
             applicableTabs,
+            subscriptionType: actualType,
+            isFree: Boolean(isFree),
+            forNewUsers: Boolean(forNewUsers),
             description: description?.trim() || ''
         });
 
@@ -215,7 +228,7 @@ router.post('/', adminAuth, async (req, res) => {
 // PUT /api/subscriptions/:id - Update subscription
 router.put('/:id', adminAuth, async (req, res) => {
     try {
-        const { name, amount, durationMonths, applicableTabs, description, isActive } = req.body;
+        const { name, amount, durationMonths, applicableTabs, description, isActive, subscriptionType, isFree, forNewUsers } = req.body;
         const updates = {};
 
         if (name !== undefined) {
@@ -228,7 +241,14 @@ router.put('/:id', adminAuth, async (req, res) => {
             updates.name = name.trim();
         }
 
-        if (amount !== undefined) {
+        if (isFree !== undefined) {
+            updates.isFree = Boolean(isFree);
+            if (isFree) {
+                updates.amount = 0;
+            }
+        }
+
+        if (amount !== undefined && !updates.isFree) {
             if (amount < 0) {
                 return res.status(400).json({
                     success: false,
@@ -272,6 +292,19 @@ router.put('/:id', adminAuth, async (req, res) => {
 
         if (isActive !== undefined) {
             updates.isActive = Boolean(isActive);
+        }
+
+        if (forNewUsers !== undefined) {
+            updates.forNewUsers = Boolean(forNewUsers);
+        }
+
+        // Update subscription type based on isFree and applicableTabs
+        if (updates.isFree) {
+            updates.subscriptionType = 'free';
+        } else if (updates.applicableTabs && updates.applicableTabs.length > 1) {
+            updates.subscriptionType = 'combined';
+        } else if (subscriptionType !== undefined) {
+            updates.subscriptionType = subscriptionType;
         }
 
         const subscription = await Subscription.findByIdAndUpdate(

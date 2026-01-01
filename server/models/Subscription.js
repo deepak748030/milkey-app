@@ -21,6 +21,19 @@ const subscriptionSchema = new mongoose.Schema({
         enum: ['purchase', 'selling', 'register'],
         required: true
     }],
+    subscriptionType: {
+        type: String,
+        enum: ['single', 'combined', 'free'],
+        default: 'single'
+    },
+    isFree: {
+        type: Boolean,
+        default: false
+    },
+    forNewUsers: {
+        type: Boolean,
+        default: false
+    },
     description: {
         type: String,
         trim: true,
@@ -36,6 +49,8 @@ const subscriptionSchema = new mongoose.Schema({
 
 // Indexes for faster queries
 subscriptionSchema.index({ isActive: 1 });
+subscriptionSchema.index({ subscriptionType: 1 });
+subscriptionSchema.index({ isFree: 1 });
 subscriptionSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Subscription', subscriptionSchema);

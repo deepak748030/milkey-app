@@ -1,5 +1,5 @@
 // File: src/components/DashboardLayout.tsx - Milkey Admin
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import {
     LayoutDashboard,
@@ -23,6 +23,8 @@ import {
     Banknote,
     Wallet,
     CreditCard as SubscriptionIcon,
+    Sun,
+    Moon,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -48,8 +50,24 @@ const navItems = [
 export function DashboardLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(true)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+    const [isDark, setIsDark] = useState(() => {
+        const saved = localStorage.getItem('theme')
+        return saved === 'dark'
+    })
     const { admin, logout } = useAuth()
     const location = useLocation()
+
+    useEffect(() => {
+        if (isDark) {
+            document.documentElement.classList.add('dark')
+            localStorage.setItem('theme', 'dark')
+        } else {
+            document.documentElement.classList.remove('dark')
+            localStorage.setItem('theme', 'light')
+        }
+    }, [isDark])
+
+    const toggleTheme = () => setIsDark(!isDark)
 
     return (
         <div className="min-h-screen flex bg-background">
@@ -184,6 +202,13 @@ export function DashboardLayout() {
                         <Menu className="w-5 h-5" />
                     </button>
                     <div className="flex-1" />
+                    <button
+                        onClick={toggleTheme}
+                        className="p-2 rounded-lg hover:bg-muted transition-colors"
+                        title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                    >
+                        {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                    </button>
                 </header>
 
                 {/* Page Content */}

@@ -1573,6 +1573,9 @@ export interface Subscription {
     amount: number
     durationMonths: number
     applicableTabs: string[]
+    subscriptionType: 'single' | 'combined' | 'free'
+    isFree: boolean
+    forNewUsers: boolean
     description?: string
     isActive: boolean
     createdAt: string
@@ -1600,6 +1603,9 @@ export const createSubscription = async (data: {
     amount: number
     durationMonths: number
     applicableTabs: string[]
+    subscriptionType?: 'single' | 'combined' | 'free'
+    isFree?: boolean
+    forNewUsers?: boolean
     description?: string
 }) => {
     const response = await api.post('/subscriptions', data)
@@ -1611,6 +1617,9 @@ export const updateSubscription = async (id: string, data: {
     amount?: number
     durationMonths?: number
     applicableTabs?: string[]
+    subscriptionType?: 'single' | 'combined' | 'free'
+    isFree?: boolean
+    forNewUsers?: boolean
     description?: string
     isActive?: boolean
 }) => {

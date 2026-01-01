@@ -10,6 +10,8 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 
 interface CustomRange {
     id: string;

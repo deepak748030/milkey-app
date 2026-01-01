@@ -305,7 +305,7 @@ export function AdminPurchasePage() {
                         <div key={collection._id} className="bg-card border border-border rounded-xl p-4">
                             <div className="flex items-start justify-between mb-2">
                                 <span className="text-sm text-muted-foreground">{formatDate(collection.date)}</span>
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${collection.shift === 'morning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400'
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${collection.shift === 'morning' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
                                     }`}>
                                     {collection.shift === 'morning' ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
                                     {collection.shift}
@@ -329,8 +329,8 @@ export function AdminPurchasePage() {
                             </div>
                             <div className="flex items-center justify-between pt-2 border-t border-border">
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${collection.isPaid
-                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                    : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                    ? 'bg-green-500/20 text-green-700 dark:text-green-300'
+                                    : 'bg-red-500/20 text-red-700 dark:text-red-300'
                                     }`}>
                                     {collection.isPaid ? 'Paid' : 'Unpaid'}
                                 </span>
@@ -390,7 +390,7 @@ export function AdminPurchasePage() {
                                             <div className="text-xs text-muted-foreground">{collection.owner?.phone}</div>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${collection.shift === 'morning' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400'
+                                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${collection.shift === 'morning' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
                                                 }`}>
                                                 {collection.shift === 'morning' ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
                                                 {collection.shift}
@@ -403,8 +403,8 @@ export function AdminPurchasePage() {
                                         <td className="px-4 py-3 text-sm font-semibold text-green-600">₹{collection.amount?.toFixed(2)}</td>
                                         <td className="px-4 py-3">
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${collection.isPaid
-                                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                                : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                                ? 'bg-green-500/20 text-green-700 dark:text-green-300'
+                                                : 'bg-red-500/20 text-red-700 dark:text-red-300'
                                                 }`}>
                                                 {collection.isPaid ? 'Paid' : 'Unpaid'}
                                             </span>
