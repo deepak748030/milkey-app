@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthToken } from './authStore';
 
 // API Base URL - Vercel deployed server
-const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
-// const API_BASE_URL = 'http://localhost:5000/api'
+// const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
+const API_BASE_URL = 'http://localhost:5000/api'
 
 export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
 
@@ -886,10 +886,24 @@ export const authApiNew = {
         });
     },
 
-    register: async (data: { name: string; email: string; phone: string; password: string; referralCode?: string }) => {
+    register: async (data: { name: string; email: string; phone: string; password: string; address?: string; referralCode?: string }) => {
         return apiRequest<{ token: string; user: any }>('/auth/register', {
             method: 'POST',
             body: JSON.stringify(data),
+        });
+    },
+
+    sendOtp: async (email: string) => {
+        return apiRequest<{ message: string }>('/auth/send-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    },
+
+    verifyOtp: async (email: string, otp: string) => {
+        return apiRequest<{ verified: boolean }>('/auth/verify-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email, otp }),
         });
     },
 
@@ -901,6 +915,27 @@ export const authApiNew = {
 
     getMe: async () => {
         return apiRequest<any>('/auth/me');
+    },
+
+    forgotPassword: async (email: string) => {
+        return apiRequest<{ message: string }>('/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    },
+
+    verifyForgotPasswordOtp: async (email: string, otp: string) => {
+        return apiRequest<{ verified: boolean; resetToken: string }>('/auth/verify-forgot-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email, otp }),
+        });
+    },
+
+    resetPassword: async (email: string, resetToken: string, newPassword: string) => {
+        return apiRequest<{ message: string }>('/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ email, resetToken, newPassword }),
+        });
     },
 };
 

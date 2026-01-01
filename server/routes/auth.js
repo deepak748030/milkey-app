@@ -35,7 +35,7 @@ const createTransporter = () => {
         service: 'gmail',
         auth: {
             user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
+            pass: "koba ukdl amtu skpm",
         },
     });
 };
@@ -439,6 +439,220 @@ router.post('/logout', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Logout failed'
+        });
+    }
+});
+
+// Store for forgot password OTPs and reset tokens
+const forgotPasswordOtpStore = new Map();
+const resetTokenStore = new Map();
+
+// Send forgot password OTP email
+const sendForgotPasswordOtpEmail = async (email, otp) => {
+    const transporter = createTransporter();
+
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Milkey - Password Reset OTP',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <h1 style="color: #22c55e;">🥛 Milkey</h1>
+                </div>
+                <div style="background: #f9fafb; border-radius: 8px; padding: 20px; text-align: center;">
+                    <h2 style="color: #1f2937; margin-bottom: 10px;">Password Reset</h2>
+                    <p style="color: #6b7280; margin-bottom: 20px;">Use the following OTP to reset your password:</p>
+                    <div style="background: #ef4444; color: white; font-size: 32px; font-weight: bold; letter-spacing: 8px; padding: 15px 30px; border-radius: 8px; display: inline-block;">
+                        ${otp}
+                    </div>
+                    <p style="color: #9ca3af; margin-top: 20px; font-size: 14px;">This OTP will expire in 10 minutes.</p>
+                </div>
+                <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-top: 20px;">
+                    If you didn't request this, please ignore this email.
+                </p>
+            </div>
+        `,
+    };
+
+    await transporter.sendMail(mailOptions);
+};
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email is required'
+            });
+        }
+
+        // Check if user exists
+        const user = await User.findOne({ email: email.toLowerCase() });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'No account found with this email'
+            });
+        }
+
+        // Generate OTP
+        const otp = generateOtp();
+
+        // Store OTP with expiry (10 minutes)
+        forgotPasswordOtpStore.set(email.toLowerCase(), {
+            otp,
+            expiresAt: Date.now() + 10 * 60 * 1000
+        });
+
+        // Send OTP email
+        await sendForgotPasswordOtpEmail(email, otp);
+
+        res.json({
+            success: true,
+            message: 'Password reset OTP sent to your email'
+        });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send OTP. Please try again.'
+        });
+    }
+});
+
+// POST /api/auth/verify-forgot-otp
+router.post('/verify-forgot-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+
+        if (!email || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and OTP are required'
+            });
+        }
+
+        const storedData = forgotPasswordOtpStore.get(email.toLowerCase());
+
+        if (!storedData) {
+            return res.status(400).json({
+                success: false,
+                message: 'OTP expired or not found. Please request a new one.'
+            });
+        }
+
+        if (Date.now() > storedData.expiresAt) {
+            forgotPasswordOtpStore.delete(email.toLowerCase());
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please request a new one.'
+            });
+        }
+
+        if (storedData.otp !== otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid OTP. Please try again.'
+            });
+        }
+
+        // OTP verified, generate reset token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+
+        // Store reset token with expiry (15 minutes)
+        resetTokenStore.set(email.toLowerCase(), {
+            token: resetToken,
+            expiresAt: Date.now() + 15 * 60 * 1000
+        });
+
+        // Remove OTP from store
+        forgotPasswordOtpStore.delete(email.toLowerCase());
+
+        res.json({
+            success: true,
+            message: 'OTP verified successfully',
+            response: { verified: true, resetToken }
+        });
+    } catch (error) {
+        console.error('Verify forgot OTP error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to verify OTP. Please try again.'
+        });
+    }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+    try {
+        const { email, resetToken, newPassword } = req.body;
+
+        if (!email || !resetToken || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email, reset token, and new password are required'
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password must be at least 6 characters'
+            });
+        }
+
+        const storedData = resetTokenStore.get(email.toLowerCase());
+
+        if (!storedData) {
+            return res.status(400).json({
+                success: false,
+                message: 'Reset token expired or not found. Please start again.'
+            });
+        }
+
+        if (Date.now() > storedData.expiresAt) {
+            resetTokenStore.delete(email.toLowerCase());
+            return res.status(400).json({
+                success: false,
+                message: 'Reset token has expired. Please start again.'
+            });
+        }
+
+        if (storedData.token !== resetToken) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid reset token. Please start again.'
+            });
+        }
+
+        // Update password
+        const user = await User.findOne({ email: email.toLowerCase() });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        user.password = hashPassword(newPassword);
+        await user.save();
+
+        // Remove reset token from store
+        resetTokenStore.delete(email.toLowerCase());
+
+        res.json({
+            success: true,
+            message: 'Password reset successfully. You can now login with your new password.'
+        });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to reset password. Please try again.'
         });
     }
 });
