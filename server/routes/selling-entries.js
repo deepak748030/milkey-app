@@ -3,6 +3,7 @@ const router = express.Router();
 const SellingEntry = require('../models/SellingEntry');
 const Member = require('../models/Member');
 const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 
 const normalizeToUtcStartOfDay = (value) => {
     const d = value ? new Date(value) : new Date();
@@ -68,8 +69,8 @@ router.get('/', auth, async (req, res) => {
     }
 });
 
-// POST /api/selling-entries
-router.post('/', auth, async (req, res) => {
+// POST /api/selling-entries (requires selling subscription)
+router.post('/', auth, requireSubscription('selling'), async (req, res) => {
     try {
         const {
             memberId,
@@ -214,8 +215,8 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
-// DELETE /api/selling-entries/:id
-router.delete('/:id', auth, async (req, res) => {
+// DELETE /api/selling-entries/:id (requires selling subscription)
+router.delete('/:id', auth, requireSubscription('selling'), async (req, res) => {
     try {
         const entry = await SellingEntry.findOne({
             _id: req.params.id,

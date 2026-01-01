@@ -707,38 +707,6 @@ export function BannersPage() {
                                 </div>
                             </div>
 
-                            {/* Link Type */}
-                            <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">
-                                    Link Type
-                                </label>
-                                <select
-                                    value={formData.linkType}
-                                    onChange={(e) => setFormData(prev => ({ ...prev, linkType: e.target.value as typeof formData.linkType, linkValue: '' }))}
-                                    className="w-full px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                >
-                                    <option value="none">No Link</option>
-                                    <option value="category">Category</option>
-                                    <option value="product">Product</option>
-                                    <option value="url">External URL</option>
-                                </select>
-                            </div>
-
-                            {/* Link Value */}
-                            {formData.linkType !== 'none' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-foreground mb-1">
-                                        {formData.linkType === 'url' ? 'URL' : `${formData.linkType.charAt(0).toUpperCase() + formData.linkType.slice(1)} ID`}
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.linkValue}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, linkValue: e.target.value }))}
-                                        placeholder={formData.linkType === 'url' ? 'https://example.com' : `Enter ${formData.linkType} ID`}
-                                        className="w-full px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                                    />
-                                </div>
-                            )}
 
                             {/* Display Position */}
                             <div>

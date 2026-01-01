@@ -1461,13 +1461,14 @@ export default function RegisterScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Subscription Modal */}
+            {/* Subscription Modal - Full screen */}
             <SubscriptionModal
                 visible={showSubscriptionModal}
                 onClose={handleModalClose}
                 onSubscribe={handleSubscriptionSuccess}
                 filterTab="register"
-                title="Register Tab Subscription"
+                title="Subscribe to Access Register"
+                fullScreen={true}
             />
             <TopBar />
 

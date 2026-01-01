@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, ScrollView, Pressable, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, Modal, ScrollView, Pressable, StyleSheet, ActivityIndicator, Dimensions, StatusBar } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { X, Crown, Check, Star, Zap } from 'lucide-react-native';
+import { Crown, Check, Star, Zap, X } from 'lucide-react-native';
 import { Subscription, userSubscriptionsApi } from '@/lib/milkeyApi';
+import { useSubscriptionStore } from '@/lib/subscriptionStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -12,6 +13,8 @@ interface SubscriptionModalProps {
     onSubscribe?: (subscription: Subscription) => void;
     filterTab?: 'purchase' | 'selling' | 'register';
     title?: string;
+    /** If true, modal covers full screen */
+    fullScreen?: boolean;
 }
 
 export function SubscriptionModal({
@@ -19,7 +22,8 @@ export function SubscriptionModal({
     onClose,
     onSubscribe,
     filterTab,
-    title = 'Choose a Subscription'
+    title = 'Choose a Subscription',
+    fullScreen = false,
 }: SubscriptionModalProps) {
     const { colors, isDark } = useTheme();
     const [loading, setLoading] = useState(true);
@@ -43,7 +47,10 @@ export function SubscriptionModal({
 
                 // Filter by tab if specified
                 if (filterTab) {
-                    subs = subs.filter(s => s.applicableTabs?.includes(filterTab));
+                    subs = subs.filter(s =>
+                        s.applicableTabs?.includes(filterTab) ||
+                        s.subscriptionType === 'combined'
+                    );
                 }
 
                 // Filter out already purchased
@@ -69,6 +76,9 @@ export function SubscriptionModal({
             });
 
             if (res.success) {
+                // Clear subscription cache to force refresh
+                useSubscriptionStore.getState().clearCache();
+
                 if (onSubscribe) {
                     onSubscribe(subscription);
                 }
@@ -98,7 +108,7 @@ export function SubscriptionModal({
         return tabs.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' + ');
     };
 
-    const styles = createStyles(colors, isDark);
+    const styles = createStyles(colors, isDark, fullScreen);
 
     const renderContent = () => {
         if (loading) {
@@ -113,10 +123,17 @@ export function SubscriptionModal({
         if (subscriptions.length === 0) {
             return (
                 <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No subscriptions available</Text>
-                    <Pressable onPress={onClose} style={styles.closeButton}>
-                        <Text style={styles.closeButtonText}>Close</Text>
-                    </Pressable>
+                    <Crown size={48} color={colors.mutedForeground} />
+                    <Text style={styles.emptyTitle}>Subscription Required</Text>
+                    <Text style={styles.emptyText}>
+                        {filterTab
+                            ? `You need an active subscription to access the ${filterTab.charAt(0).toUpperCase() + filterTab.slice(1)} section.`
+                            : 'No subscriptions available at the moment.'
+                        }
+                    </Text>
+                    <Text style={styles.emptySubtext}>
+                        Please contact support or try again later.
+                    </Text>
                 </View>
             );
         }
@@ -133,6 +150,19 @@ export function SubscriptionModal({
                         <Star size={18} color={colors.warning} fill={colors.warning} />
                         <Text style={styles.newUserText}>
                             🎉 Welcome! You're eligible for free subscriptions!
+                        </Text>
+                    </View>
+                )}
+
+                {/* Tab-specific info banner */}
+                {filterTab && (
+                    <View style={styles.infoBanner}>
+                        <Text style={styles.infoBannerText}>
+                            Subscribe to access{' '}
+                            <Text style={styles.infoBannerHighlight}>
+                                {filterTab.charAt(0).toUpperCase() + filterTab.slice(1)}
+                            </Text>{' '}
+                            features
                         </Text>
                     </View>
                 )}
@@ -231,10 +261,15 @@ export function SubscriptionModal({
     return (
         <Modal
             visible={visible}
-            transparent
+            transparent={!fullScreen}
             animationType="slide"
             onRequestClose={onClose}
+            statusBarTranslucent={fullScreen}
         >
+            <StatusBar
+                backgroundColor={fullScreen ? colors.background : 'rgba(0,0,0,0.6)'}
+                barStyle={isDark ? 'light-content' : 'dark-content'}
+            />
             <View style={styles.overlay}>
                 <View style={styles.container}>
                     {/* Header */}
@@ -243,8 +278,8 @@ export function SubscriptionModal({
                             <Crown size={24} color={colors.primary} />
                             <Text style={styles.title}>{title}</Text>
                         </View>
-                        <Pressable onPress={onClose} style={styles.closeBtn}>
-                            <X size={24} color={colors.mutedForeground} />
+                        <Pressable style={styles.closeBtn} onPress={onClose}>
+                            <X size={22} color={colors.foreground} />
                         </Pressable>
                     </View>
 
@@ -256,18 +291,20 @@ export function SubscriptionModal({
     );
 }
 
-const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+const createStyles = (colors: any, isDark: boolean, fullScreen: boolean) => StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'flex-end',
+        backgroundColor: fullScreen ? colors.background : 'rgba(0, 0, 0, 0.6)',
+        justifyContent: fullScreen ? 'flex-start' : 'flex-end',
     },
     container: {
         backgroundColor: colors.background,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        maxHeight: height * 0.85,
+        borderTopLeftRadius: fullScreen ? 0 : 24,
+        borderTopRightRadius: fullScreen ? 0 : 24,
+        height: fullScreen ? '100%' : undefined,
+        maxHeight: fullScreen ? '100%' : height * 0.85,
         paddingBottom: 20,
+        paddingTop: fullScreen ? (StatusBar.currentHeight || 44) : 0,
     },
     header: {
         flexDirection: 'row',
@@ -283,18 +320,23 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         alignItems: 'center',
         gap: 10,
     },
+    closeBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: colors.muted,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     title: {
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: '700',
         color: colors.foreground,
     },
-    closeBtn: {
-        padding: 4,
-    },
     loadingContainer: {
-        padding: 40,
+        padding: 60,
         alignItems: 'center',
-        gap: 12,
+        gap: 16,
     },
     loadingText: {
         fontSize: 14,
@@ -303,31 +345,49 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     emptyContainer: {
         padding: 40,
         alignItems: 'center',
-        gap: 16,
+        gap: 12,
+    },
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.foreground,
+        marginTop: 8,
     },
     emptyText: {
-        fontSize: 16,
+        fontSize: 14,
+        color: colors.mutedForeground,
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    emptySubtext: {
+        fontSize: 12,
         color: colors.mutedForeground,
         textAlign: 'center',
     },
-    closeButton: {
-        backgroundColor: colors.muted,
-        paddingHorizontal: 24,
-        paddingVertical: 10,
-        borderRadius: 8,
+    infoBanner: {
+        backgroundColor: `${colors.primary}15`,
+        padding: 12,
+        borderRadius: 10,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: `${colors.primary}30`,
     },
-    closeButtonText: {
+    infoBannerText: {
         fontSize: 14,
-        fontWeight: '600',
         color: colors.foreground,
+        textAlign: 'center',
+    },
+    infoBannerHighlight: {
+        fontWeight: '700',
+        color: colors.primary,
     },
     scrollView: {
         flexGrow: 0,
-        maxHeight: height * 0.7,
+        maxHeight: fullScreen ? height - 120 : height * 0.7,
     },
     scrollContent: {
         padding: 16,
-        paddingBottom: 24,
+        paddingBottom: 40,
     },
     newUserBanner: {
         flexDirection: 'row',

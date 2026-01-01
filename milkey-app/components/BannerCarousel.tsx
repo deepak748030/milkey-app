@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Image, Text, StyleSheet, Pressable, ScrollView, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Image, Text, StyleSheet, Pressable, ScrollView, Dimensions, Animated } from 'react-native';
 import { colors } from '@/lib/colors';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -18,6 +18,19 @@ export default function BannerCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const skeletonOpacity = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonOpacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(skeletonOpacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [skeletonOpacity]);
 
   useEffect(() => {
     loadBanners();
@@ -29,11 +42,17 @@ export default function BannerCarousel() {
       const response = await fetch(`${API_BASE_URL}/products/banners`);
       const data = await response.json();
 
-      if (data.success && Array.isArray(data.response)) {
-        setBanners(data.response);
-      }
+      const list: Banner[] = data?.success
+        ? Array.isArray(data?.response)
+          ? data.response
+          : Array.isArray(data?.response?.data)
+            ? data.response.data
+            : []
+        : [];
+
+      setBanners(list);
     } catch (error) {
-      // Silently fail
+      setBanners([]);
     } finally {
       setIsLoading(false);
     }
@@ -62,8 +81,8 @@ export default function BannerCarousel() {
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="small" color={colors.primary} />
+      <View style={styles.skeletonOuter}>
+        <Animated.View style={[styles.skeletonCard, { opacity: skeletonOpacity }]} />
       </View>
     );
   }
@@ -113,10 +132,15 @@ const styles = StyleSheet.create({
   container: {
     position: 'relative',
   },
-  loadingContainer: {
+  skeletonOuter: {
     height: 160,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: colors.muted,
+  },
+  skeletonCard: {
+    width: screenWidth,
+    height: 160,
     backgroundColor: colors.muted,
   },
   bannerContainer: {

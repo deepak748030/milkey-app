@@ -5,6 +5,7 @@ const MilkCollection = require('../models/MilkCollection');
 const Advance = require('../models/Advance');
 const Farmer = require('../models/Farmer');
 const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 
 // GET /api/payments - Get all payments
 router.get('/', auth, async (req, res) => {
@@ -165,8 +166,8 @@ const rangesOverlap = (start1, end1, start2, end2) => {
     return start1 <= end2 && end1 >= start2;
 };
 
-// POST /api/payments - Create payment (settle farmer dues)
-router.post('/', auth, async (req, res) => {
+// POST /api/payments - Create payment (settle farmer dues) (requires register subscription)
+router.post('/', auth, requireSubscription('register'), async (req, res) => {
     try {
         const { farmerCode, amount, paymentMethod, reference, notes, totalMilkAmount: providedMilkAmount, periodStart: clientPeriodStart, periodEnd: clientPeriodEnd } = req.body;
 
@@ -357,8 +358,8 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
-// PUT /api/payments/:id - Update payment
-router.put('/:id', auth, async (req, res) => {
+// PUT /api/payments/:id - Update payment (requires register subscription)
+router.put('/:id', auth, requireSubscription('register'), async (req, res) => {
     try {
         const { amount, paymentMethod, reference, notes, totalMilkAmount, periodStart, periodEnd } = req.body;
 

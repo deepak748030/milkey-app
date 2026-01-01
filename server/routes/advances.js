@@ -3,6 +3,7 @@ const router = express.Router();
 const Advance = require('../models/Advance');
 const Farmer = require('../models/Farmer');
 const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 
 // GET /api/advances - Get all advances
 router.get('/', auth, async (req, res) => {
@@ -43,8 +44,8 @@ router.get('/', auth, async (req, res) => {
     }
 });
 
-// POST /api/advances
-router.post('/', auth, async (req, res) => {
+// POST /api/advances (requires register subscription)
+router.post('/', auth, requireSubscription('register'), async (req, res) => {
     try {
         const { farmerCode, amount, date, note } = req.body;
 
@@ -99,8 +100,8 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
-// PUT /api/advances/:id/settle
-router.put('/:id/settle', auth, async (req, res) => {
+// PUT /api/advances/:id/settle (requires register subscription)
+router.put('/:id/settle', auth, requireSubscription('register'), async (req, res) => {
     try {
         const { settledAmount } = req.body;
 
@@ -149,8 +150,8 @@ router.put('/:id/settle', auth, async (req, res) => {
     }
 });
 
-// DELETE /api/advances/:id
-router.delete('/:id', auth, async (req, res) => {
+// DELETE /api/advances/:id (requires register subscription)
+router.delete('/:id', auth, requireSubscription('register'), async (req, res) => {
     try {
         const advance = await Advance.findOne({
             _id: req.params.id,

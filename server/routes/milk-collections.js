@@ -3,6 +3,7 @@ const router = express.Router();
 const MilkCollection = require('../models/MilkCollection');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
 const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 
 const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeCode = (code) => String(code || '').trim().toUpperCase();
@@ -153,8 +154,8 @@ router.get('/today', auth, async (req, res) => {
     }
 });
 
-// POST /api/milk-collections - Add new collection
-router.post('/', auth, async (req, res) => {
+// POST /api/milk-collections - Add new collection (requires purchase subscription)
+router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const { farmerCode, purchaseFarmerId, date, shift, quantity, fat, snf, rate, notes } = req.body;
 
@@ -238,8 +239,8 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
-// PUT /api/milk-collections/:id
-router.put('/:id', auth, async (req, res) => {
+// PUT /api/milk-collections/:id (requires purchase subscription)
+router.put('/:id', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const { quantity, fat, snf, rate, notes } = req.body;
 
@@ -294,8 +295,8 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
-// DELETE /api/milk-collections/:id
-router.delete('/:id', auth, async (req, res) => {
+// DELETE /api/milk-collections/:id (requires purchase subscription)
+router.delete('/:id', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const collection = await MilkCollection.findOne({
             _id: req.params.id,

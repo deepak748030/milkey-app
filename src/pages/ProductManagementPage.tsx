@@ -571,26 +571,14 @@ export function ProductManagementPage() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Stock</label>
-                                    <input
-                                        type="number"
-                                        value={formData.stock}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, stock: e.target.value }))}
-                                        className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Icon</label>
-                                    <input
-                                        type="text"
-                                        value={formData.icon}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, icon: e.target.value }))}
-                                        className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
-                                        placeholder="🥛"
-                                    />
-                                </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Stock</label>
+                                <input
+                                    type="number"
+                                    value={formData.stock}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, stock: e.target.value }))}
+                                    className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                                />
                             </div>
 
                             <div>

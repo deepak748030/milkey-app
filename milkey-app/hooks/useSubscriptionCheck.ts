@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { userSubscriptionsApi, TabSubscriptionCheck, Subscription } from '@/lib/milkeyApi';
-import { getStoredSubscriptionStatus, storeSubscriptionStatus } from '@/lib/subscriptionStore';
+import { Subscription } from '@/lib/milkeyApi';
+import { useSubscriptionStore, storeSubscriptionStatus } from '@/lib/subscriptionStore';
 import { router } from 'expo-router';
 
 export interface UseSubscriptionCheckResult {
     hasAccess: boolean;
     loading: boolean;
-    subscription: TabSubscriptionCheck['subscription'] | null;
+    subscription: any | null;
     availableSubscriptions: Subscription[];
     expiresAt: string | null;
     refresh: () => Promise<void>;
@@ -17,87 +17,97 @@ export interface UseSubscriptionCheckResult {
 }
 
 export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): UseSubscriptionCheckResult {
-    const [hasAccess, setHasAccess] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [subscription, setSubscription] = useState<TabSubscriptionCheck['subscription'] | null>(null);
-    const [availableSubscriptions, setAvailableSubscriptions] = useState<Subscription[]>([]);
-    const [expiresAt, setExpiresAt] = useState<string | null>(null);
     const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+    const [accessChecked, setAccessChecked] = useState(false);
+
+    const {
+        tabData,
+        status,
+        fetchTabData,
+        fetchStatus,
+        hasTabAccess,
+        initializeFromStorage,
+    } = useSubscriptionStore();
+
+    const cachedTabData = tabData[tab];
+    const hasAccess = hasTabAccess(tab);
 
     const checkSubscription = useCallback(async () => {
         setLoading(true);
+        setAccessChecked(false);
         try {
-            // First check cached status for quick response
-            const cached = await getStoredSubscriptionStatus();
-            if (cached) {
-                const cachedAccess = tab === 'purchase' ? cached.hasPurchase :
-                    tab === 'selling' ? cached.hasSelling :
-                        cached.hasRegister;
-                if (cachedAccess) {
-                    setHasAccess(true);
-                }
-            }
+            // Initialize from storage first for instant UI
+            await initializeFromStorage();
 
-            // Then fetch from API for accurate data
-            const res = await userSubscriptionsApi.checkTab(tab);
-            if (res.success && res.response) {
-                setHasAccess(res.response.hasValidSubscription);
-                setSubscription(res.response.subscription);
-                setAvailableSubscriptions(res.response.availableSubscriptions || []);
-                setExpiresAt(res.response.expiresAt);
+            // Always fetch fresh data to ensure accurate subscription status
+            const data = await fetchTabData(tab);
 
-                // Update cached status
-                const statusRes = await userSubscriptionsApi.getStatus();
-                if (statusRes.success && statusRes.response) {
-                    await storeSubscriptionStatus({
-                        hasPurchase: statusRes.response.hasPurchase,
-                        hasSelling: statusRes.response.hasSelling,
-                        hasRegister: statusRes.response.hasRegister,
-                    });
-                }
+            // Show modal if no access
+            if (data && !data.hasValidSubscription) {
+                setShowSubscriptionModal(true);
+            } else if (!data) {
+                // Fallback to status check
+                const statusData = await fetchStatus();
+                if (statusData) {
+                    const tabAccess =
+                        tab === 'purchase' ? statusData.hasPurchase :
+                            tab === 'selling' ? statusData.hasSelling :
+                                statusData.hasRegister;
 
-                // Show modal if no access
-                if (!res.response.hasValidSubscription) {
+                    if (!tabAccess) {
+                        setShowSubscriptionModal(true);
+                    }
+                } else {
+                    // No data available, show modal
                     setShowSubscriptionModal(true);
                 }
             }
         } catch (error) {
             console.error('Error checking subscription:', error);
-            // On error, default to not showing access
-            setHasAccess(false);
             setShowSubscriptionModal(true);
         } finally {
             setLoading(false);
+            setAccessChecked(true);
         }
-    }, [tab]);
+    }, [tab, fetchTabData, fetchStatus, initializeFromStorage]);
 
+    // Check subscription on mount
     useEffect(() => {
         checkSubscription();
     }, [checkSubscription]);
 
-    // Handle modal close - redirect to home if no access
+    // Always show modal if user doesn't have access after check is complete
+    useEffect(() => {
+        if (accessChecked && !loading && !hasAccess) {
+            setShowSubscriptionModal(true);
+        }
+    }, [accessChecked, loading, hasAccess]);
+
+    // Handle modal close - redirect to home since user has no access
     const handleModalClose = useCallback(() => {
-        setShowSubscriptionModal(false);
+        // Don't allow closing if user doesn't have access - redirect to home
         if (!hasAccess) {
-            // Redirect to home page
             router.replace('/(tabs)');
         }
+        setShowSubscriptionModal(false);
     }, [hasAccess]);
 
     // Handle successful subscription purchase
-    const handleSubscriptionSuccess = useCallback(() => {
+    const handleSubscriptionSuccess = useCallback(async () => {
         setShowSubscriptionModal(false);
-        setHasAccess(true);
-        // Refresh the subscription status
-        checkSubscription();
+
+        // Clear cache and refresh
+        useSubscriptionStore.getState().clearCache();
+        await checkSubscription();
     }, [checkSubscription]);
 
     return {
         hasAccess,
         loading,
-        subscription,
-        availableSubscriptions,
-        expiresAt,
+        subscription: cachedTabData?.subscription || null,
+        availableSubscriptions: cachedTabData?.availableSubscriptions || [],
+        expiresAt: cachedTabData?.expiresAt || null,
         refresh: checkSubscription,
         showSubscriptionModal,
         setShowSubscriptionModal,

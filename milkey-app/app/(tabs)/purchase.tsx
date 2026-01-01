@@ -344,13 +344,14 @@ export default function PurchaseScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Subscription Modal */}
+            {/* Subscription Modal - Full screen */}
             <SubscriptionModal
                 visible={showSubscriptionModal}
                 onClose={handleModalClose}
                 onSubscribe={handleSubscriptionSuccess}
                 filterTab="purchase"
-                title="Purchase Tab Subscription"
+                title="Subscribe to Access Purchase"
+                fullScreen={true}
             />
             <TopBar />
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}>

@@ -1930,13 +1930,14 @@ export default function SellingScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Subscription Modal */}
+            {/* Subscription Modal - Full screen */}
             <SubscriptionModal
                 visible={showSubscriptionModal}
                 onClose={handleModalClose}
                 onSubscribe={handleSubscriptionSuccess}
                 filterTab="selling"
-                title="Selling Tab Subscription"
+                title="Subscribe to Access Selling"
+                fullScreen={true}
             />
             <TopBar />
             <View style={styles.tabRow}>

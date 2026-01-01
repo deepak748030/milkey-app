@@ -4,6 +4,7 @@ const MemberPayment = require('../models/MemberPayment');
 const SellingEntry = require('../models/SellingEntry');
 const Member = require('../models/Member');
 const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 
 // GET /api/member-payments - Get all member payments
 router.get('/', auth, async (req, res) => {
@@ -192,8 +193,8 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
     }
 });
 
-// POST /api/member-payments - Create payment (settle member dues)
-router.post('/', auth, async (req, res) => {
+// POST /api/member-payments - Create payment (settle member dues) (requires selling subscription)
+router.post('/', auth, requireSubscription('selling'), async (req, res) => {
     try {
         const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds, totalQuantity: reqTotalQuantity, milkRate: reqMilkRate } = req.body;
 

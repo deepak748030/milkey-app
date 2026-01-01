@@ -4,6 +4,7 @@ const Member = require('../models/Member');
 const SellingEntry = require('../models/SellingEntry');
 const MemberPayment = require('../models/MemberPayment');
 const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 
 // GET /api/members/balance-report - Get all members with balance calculated from unpaid entries
 router.get('/balance-report', auth, async (req, res) => {
@@ -189,8 +190,8 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
-// POST /api/members
-router.post('/', auth, async (req, res) => {
+// POST /api/members (requires selling subscription)
+router.post('/', auth, requireSubscription('selling'), async (req, res) => {
     try {
         const { name, mobile, address, ratePerLiter = 50 } = req.body;
 
@@ -223,8 +224,8 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
-// PUT /api/members/:id
-router.put('/:id', auth, async (req, res) => {
+// PUT /api/members/:id (requires selling subscription)
+router.put('/:id', auth, requireSubscription('selling'), async (req, res) => {
     try {
         const { name, mobile, address, ratePerLiter } = req.body;
 
@@ -261,8 +262,8 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
-// DELETE /api/members/:id
-router.delete('/:id', auth, async (req, res) => {
+// DELETE /api/members/:id (requires selling subscription)
+router.delete('/:id', auth, requireSubscription('selling'), async (req, res) => {
     try {
         const member = await Member.findOneAndUpdate(
             { _id: req.params.id, owner: req.userId },

@@ -12,6 +12,8 @@ export interface ApiResponse<T> {
     success: boolean;
     message?: string;
     response?: T;
+    code?: string; // Error code like 'SUBSCRIPTION_REQUIRED'
+    requiredTab?: string; // Tab that requires subscription
 }
 
 export interface Farmer {
@@ -318,6 +320,16 @@ const apiRequest = async <T>(
                 return {
                     success: false,
                     message: `Session expired. Please login again. (HTTP 401)`,
+                };
+            }
+
+            // Handle subscription required error
+            if (response.status === 403 && data?.code === 'SUBSCRIPTION_REQUIRED') {
+                return {
+                    success: false,
+                    message: data?.message || 'Subscription required',
+                    code: 'SUBSCRIPTION_REQUIRED',
+                    requiredTab: data?.requiredTab,
                 };
             }
 
@@ -1226,6 +1238,19 @@ export interface Banner {
 // Banners API
 export const bannersApi = {
     getAll: async () => {
-        return apiRequest<Banner[]>('/products/banners');
+        const res = await apiRequest<any>('/products/banners');
+
+        if (!res.success) {
+            return res as ApiResponse<Banner[]>;
+        }
+
+        const raw = (res as any).response;
+        const banners: Banner[] = Array.isArray(raw)
+            ? raw
+            : Array.isArray(raw?.data)
+                ? raw.data
+                : [];
+
+        return { ...res, response: banners } as ApiResponse<Banner[]>;
     },
 };

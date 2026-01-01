@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Farmer = require('../models/Farmer');
 const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 
 const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeCode = (code) => String(code || '').trim().toUpperCase();
@@ -94,8 +95,8 @@ router.get('/code/:code', auth, async (req, res) => {
     }
 });
 
-// POST /api/farmers
-router.post('/', auth, async (req, res) => {
+// POST /api/farmers (requires register subscription)
+router.post('/', auth, requireSubscription('register'), async (req, res) => {
     try {
         const { code, name, mobile, address, type = 'farmer' } = req.body;
 
@@ -146,8 +147,8 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
-// PUT /api/farmers/:id
-router.put('/:id', auth, async (req, res) => {
+// PUT /api/farmers/:id (requires register subscription)
+router.put('/:id', auth, requireSubscription('register'), async (req, res) => {
     try {
         const { name, mobile, address } = req.body;
 
@@ -178,8 +179,8 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
-// DELETE /api/farmers/:id
-router.delete('/:id', auth, async (req, res) => {
+// DELETE /api/farmers/:id (requires register subscription)
+router.delete('/:id', auth, requireSubscription('register'), async (req, res) => {
     try {
         const farmer = await Farmer.findOneAndUpdate(
             { _id: req.params.id, owner: req.userId },

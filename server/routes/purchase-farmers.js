@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const PurchaseFarmer = require('../models/PurchaseFarmer');
 const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 
 const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeCode = (code) => String(code || '').trim().toUpperCase();
@@ -98,8 +99,8 @@ router.get('/code/:code', auth, async (req, res) => {
     }
 });
 
-// POST /api/purchase-farmers
-router.post('/', auth, async (req, res) => {
+// POST /api/purchase-farmers (requires purchase subscription)
+router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const { code, name, mobile, address } = req.body;
 
@@ -147,8 +148,8 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
-// PUT /api/purchase-farmers/:id
-router.put('/:id', auth, async (req, res) => {
+// PUT /api/purchase-farmers/:id (requires purchase subscription)
+router.put('/:id', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const { name, mobile, address } = req.body;
 
@@ -179,8 +180,8 @@ router.put('/:id', auth, async (req, res) => {
     }
 });
 
-// PUT /api/purchase-farmers/:id/stats - Update farmer stats after milk collection
-router.put('/:id/stats', auth, async (req, res) => {
+// PUT /api/purchase-farmers/:id/stats - Update farmer stats after milk collection (requires purchase subscription)
+router.put('/:id/stats', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const { quantity, amount } = req.body;
 
@@ -214,8 +215,8 @@ router.put('/:id/stats', auth, async (req, res) => {
     }
 });
 
-// DELETE /api/purchase-farmers/:id
-router.delete('/:id', auth, async (req, res) => {
+// DELETE /api/purchase-farmers/:id (requires purchase subscription)
+router.delete('/:id', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const farmer = await PurchaseFarmer.findOneAndUpdate(
             { _id: req.params.id, owner: req.userId },

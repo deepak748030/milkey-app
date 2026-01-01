@@ -1,15 +1,15 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, ActivityIndicator, RefreshControl, Animated } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
-import { productsApi, reportsApi, userSubscriptionsApi, bannersApi, Product, HomeStats, Banner } from '@/lib/milkeyApi';
+import { productsApi, reportsApi, bannersApi, Product, HomeStats, Banner } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
 import { Plus, Wallet } from 'lucide-react-native';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
-import { shouldShowSubscriptionModal, markSubscriptionModalShown, storeSubscriptionStatus } from '@/lib/subscriptionStore';
+import { useSubscriptionStore, shouldShowSubscriptionModal, markSubscriptionModalShown } from '@/lib/subscriptionStore';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
@@ -20,12 +20,14 @@ export default function HomeScreen() {
   const { isAuthenticated } = useAuth();
   const [currentBanner, setCurrentBanner] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [bannersLoading, setBannersLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const bannerScrollRef = useRef<ScrollView>(null);
+  const bannerSkeletonOpacity = useRef(new Animated.Value(0.4)).current;
   const { addToCart, loadCart } = useCartStore();
 
   // Subscription modal state
@@ -37,21 +39,40 @@ export default function HomeScreen() {
     fetchData();
   }, []);
 
-  // Check if subscription modal should be shown
   useEffect(() => {
-    const checkSubscriptionModal = async () => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bannerSkeletonOpacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(bannerSkeletonOpacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [bannerSkeletonOpacity]);
+
+  // Get subscription store
+  const { fetchStatus, preloadAllTabs, status, initializeFromStorage } = useSubscriptionStore();
+
+  // Check if subscription modal should be shown and preload subscription data
+  useEffect(() => {
+    const checkAndPreloadSubscriptions = async () => {
       if (!isAuthenticated || subscriptionModalChecked) return;
 
       try {
+        // Initialize from storage first
+        await initializeFromStorage();
+
         const shouldShow = await shouldShowSubscriptionModal();
         if (shouldShow) {
-          // Check if user has any active subscription
-          const statusRes = await userSubscriptionsApi.getStatus();
-          if (statusRes.success && statusRes.response) {
-            const { hasPurchase, hasSelling, hasRegister, hasAnySubscription } = statusRes.response;
+          // Fetch status and preload all tabs data
+          const statusData = await fetchStatus();
 
-            // Store status for quick access
-            await storeSubscriptionStatus({ hasPurchase, hasSelling, hasRegister });
+          if (statusData) {
+            const { hasPurchase, hasSelling, hasRegister, hasAnySubscription } = statusData;
+
+            // Preload all tab subscription data in background
+            preloadAllTabs();
 
             // Show modal if user doesn't have all subscriptions
             if (!hasAnySubscription || !hasPurchase || !hasSelling || !hasRegister) {
@@ -63,6 +84,9 @@ export default function HomeScreen() {
             setShowSubscriptionModal(true);
             await markSubscriptionModalShown();
           }
+        } else {
+          // Even if not showing modal, preload subscription data for faster navigation
+          preloadAllTabs();
         }
       } catch (error) {
         // Silent error handling
@@ -70,8 +94,8 @@ export default function HomeScreen() {
       setSubscriptionModalChecked(true);
     };
 
-    checkSubscriptionModal();
-  }, [isAuthenticated, subscriptionModalChecked]);
+    checkAndPreloadSubscriptions();
+  }, [isAuthenticated, subscriptionModalChecked, fetchStatus, preloadAllTabs, initializeFromStorage]);
 
   // Refresh data when tab comes into focus
   useFocusEffect(
@@ -93,6 +117,7 @@ export default function HomeScreen() {
 
   const fetchData = async () => {
     setLoading(true);
+    setBannersLoading(true);
     try {
       // Fetch banners, products and home stats in parallel
       const [bannersRes, productsRes, homeStatsRes] = await Promise.all([
@@ -102,8 +127,8 @@ export default function HomeScreen() {
       ]);
 
       // Set banners from API only
-      if (bannersRes?.success && bannersRes.response && Array.isArray(bannersRes.response) && bannersRes.response.length > 0) {
-        setBanners(bannersRes.response);
+      if (bannersRes?.success) {
+        setBanners(bannersRes.response || []);
       } else {
         setBanners([]);
       }
@@ -124,6 +149,7 @@ export default function HomeScreen() {
       // Silent error handling
     } finally {
       setLoading(false);
+      setBannersLoading(false);
     }
   };
 
@@ -191,43 +217,51 @@ export default function HomeScreen() {
         }
       >
         {/* Banner Carousel */}
-        <ScrollView
-          ref={bannerScrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={handleBannerScroll}
-          scrollEventThrottle={16}
-          contentContainerStyle={styles.bannerScrollContainer}
-        >
-          {banners.map((banner) => (
-            <View key={banner._id} style={styles.banner}>
-              <Image
-                source={{ uri: banner.image }}
-                style={styles.bannerImage}
-                resizeMode="cover"
-              />
-              {banner.title && (
-                <View style={styles.bannerOverlay}>
-                  <Text style={styles.bannerTitle}>{banner.title}</Text>
+        {bannersLoading ? (
+          <View style={styles.bannerSkeletonWrap}>
+            <Animated.View style={[styles.bannerSkeleton, { opacity: bannerSkeletonOpacity }]} />
+          </View>
+        ) : banners.length > 0 ? (
+          <>
+            <ScrollView
+              ref={bannerScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onScroll={handleBannerScroll}
+              scrollEventThrottle={16}
+              contentContainerStyle={styles.bannerScrollContainer}
+            >
+              {banners.map((banner) => (
+                <View key={banner._id} style={styles.banner}>
+                  <Image
+                    source={{ uri: banner.image }}
+                    style={styles.bannerImage}
+                    resizeMode="cover"
+                  />
+                  {banner.title && (
+                    <View style={styles.bannerOverlay}>
+                      <Text style={styles.bannerTitle}>{banner.title}</Text>
+                    </View>
+                  )}
                 </View>
-              )}
+              ))}
+            </ScrollView>
+
+            {/* Banner Dots */}
+            <View style={styles.bannerDots}>
+              {banners.map((_, index) => (
+                <Pressable key={index} onPress={() => {
+                  bannerScrollRef.current?.scrollTo({ x: index * BANNER_WIDTH, animated: true });
+                  setCurrentBanner(index);
+                }}>
+                  <View style={[styles.dot, currentBanner === index && styles.activeDot]} />
+                </Pressable>
+              ))}
             </View>
-          ))}
-        </ScrollView>
-
-        {/* Banner Dots */}
-        <View style={styles.bannerDots}>
-          {banners.map((_, index) => (
-            <Pressable key={index} onPress={() => {
-              bannerScrollRef.current?.scrollTo({ x: index * BANNER_WIDTH, animated: true });
-              setCurrentBanner(index);
-            }}>
-              <View style={[styles.dot, currentBanner === index && styles.activeDot]} />
-            </Pressable>
-          ))}
-        </View>
-
+          </>
+        ) : null
+        }
         {/* Quick Overview */}
         <Text style={styles.sectionTitle}>Quick Overview</Text>
         <View style={styles.overviewCard}>
@@ -299,28 +333,30 @@ export default function HomeScreen() {
                     <Text style={styles.productIcon}>{product.icon}</Text>
                   </View>
                 )}
-                <Text style={styles.productName}>{product.name}</Text>
-                <Text style={styles.productPrice}>₹{product.price}</Text>
+                <View style={styles.productContent}>
+                  <Text style={styles.productName}>{product.name}</Text>
+                  <Text style={styles.productPrice}>₹{product.price}</Text>
 
-                <View style={styles.quantityRow}>
-                  <Pressable
-                    style={styles.quantityBtn}
-                    onPress={() => updateQuantity(product._id, -1)}
-                  >
-                    <Text style={styles.quantityBtnText}>-</Text>
-                  </Pressable>
-                  <Text style={styles.quantityText}>{quantities[product._id] || 1}</Text>
-                  <Pressable
-                    style={styles.quantityBtn}
-                    onPress={() => updateQuantity(product._id, 1)}
-                  >
-                    <Text style={styles.quantityBtnText}>+</Text>
+                  <View style={styles.quantityRow}>
+                    <Pressable
+                      style={styles.quantityBtn}
+                      onPress={() => updateQuantity(product._id, -1)}
+                    >
+                      <Text style={styles.quantityBtnText}>-</Text>
+                    </Pressable>
+                    <Text style={styles.quantityText}>{quantities[product._id] || 1}</Text>
+                    <Pressable
+                      style={styles.quantityBtn}
+                      onPress={() => updateQuantity(product._id, 1)}
+                    >
+                      <Text style={styles.quantityBtnText}>+</Text>
+                    </Pressable>
+                  </View>
+
+                  <Pressable style={styles.addToCartBtn} onPress={() => handleAddToCart(product)}>
+                    <Text style={styles.addToCartText}>Add to Cart</Text>
                   </Pressable>
                 </View>
-
-                <Pressable style={styles.addToCartBtn} onPress={() => handleAddToCart(product)}>
-                  <Text style={styles.addToCartText}>Add to Cart</Text>
-                </Pressable>
               </View>
             ))}
           </View>
@@ -348,6 +384,17 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   bannerScrollContainer: {
     paddingTop: 6,
+  },
+  bannerSkeletonWrap: {
+    paddingTop: 6,
+  },
+  bannerSkeleton: {
+    width: BANNER_WIDTH,
+    height: 140,
+    borderRadius: 10,
+    backgroundColor: colors.muted,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   banner: {
     width: BANNER_WIDTH,
@@ -482,30 +529,32 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     width: CARD_WIDTH,
     backgroundColor: colors.card,
     borderRadius: 8,
-    padding: 10,
     borderWidth: 1,
     borderColor: colors.border,
-    alignItems: 'center',
     marginBottom: 6,
+    overflow: 'hidden',
   },
   productIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: '100%',
+    height: 100,
     backgroundColor: colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
   },
   productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginBottom: 6,
+    width: '100%',
+    height: 100,
   },
   productIcon: {
-    fontSize: 22,
+    fontSize: 32,
   },
+  productContent: {
+    padding: 10,
+    alignItems: 'center',
+  },
+  // productIcon: {
+  //   fontSize: 22,
+  // },
   productName: {
     fontSize: 12,
     fontWeight: '600',
