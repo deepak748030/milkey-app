@@ -17,7 +17,7 @@ const { uploadToCloudinary } = require('../lib/cloudinary');
 const Payment = require('../models/Payment');
 const Advance = require('../models/Advance');
 const MemberPayment = require('../models/MemberPayment');
-const { notifyWithdrawalSuccess, notifyCommissionEarned } = require('../lib/pushNotifications');
+const { notifyWithdrawalSuccess, notifyCommissionEarned, notifyOrderStatusUpdate, notifyPaymentReceived } = require('../lib/pushNotifications');
 
 // Simple password hashing MemberPayment
 const hashPassword = (password) => {
@@ -1024,6 +1024,16 @@ router.put('/orders/:id/status', adminAuth, async (req, res) => {
                 success: false,
                 message: 'Order not found'
             });
+        }
+
+        // Send push notification for status update
+        if (status && order.user && order.user._id) {
+            notifyOrderStatusUpdate(
+                order.user._id.toString(),
+                order._id.toString(),
+                status,
+                order.totalAmount
+            ).catch(err => console.error('Error sending order status notification:', err));
         }
 
         res.json({

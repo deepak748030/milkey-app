@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Feedback = require('../models/Feedback');
 const auth = require('../middleware/auth');
+const { notifyFeedbackResponse } = require('../lib/pushNotifications');
 
 // Get user's feedback submissions
 router.get('/my', auth, async (req, res) => {
@@ -135,6 +136,16 @@ router.put('/:id/status', auth, async (req, res) => {
 
         if (!feedback) {
             return res.status(404).json({ success: false, message: 'Feedback not found' });
+        }
+
+        // Send push notification to user about feedback update
+        if (feedback.user && feedback.user._id) {
+            notifyFeedbackResponse(
+                feedback.user._id.toString(),
+                feedback._id.toString(),
+                status,
+                adminResponse
+            ).catch(err => console.error('Error sending feedback notification:', err));
         }
 
         res.json({ success: true, response: feedback });

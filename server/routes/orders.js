@@ -3,6 +3,7 @@ const router = express.Router();
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const auth = require('../middleware/auth');
+const { notifyOrderStatusUpdate } = require('../lib/pushNotifications');
 
 // GET /api/orders - Get user's orders
 router.get('/', auth, async (req, res) => {
@@ -143,6 +144,14 @@ router.put('/:id/status', auth, async (req, res) => {
                 message: 'Order not found'
             });
         }
+
+        // Send push notification for status update
+        notifyOrderStatusUpdate(
+            order.user.toString(),
+            order._id.toString(),
+            status,
+            order.totalAmount
+        ).catch(err => console.error('Error sending order status notification:', err));
 
         res.json({
             success: true,

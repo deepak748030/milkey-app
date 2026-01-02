@@ -72,9 +72,11 @@ export default function NotificationsScreen() {
 
   const handleClearAll = async () => {
     try {
-      await notificationsApiNew.clearAll();
-      setNotifications([]);
-      setUnreadCount(0);
+      const result = await notificationsApiNew.clearAll();
+      if (result.success) {
+        setNotifications([]);
+        setUnreadCount(0);
+      }
     } catch (error) {
       console.error('Error clearing notifications:', error);
     }

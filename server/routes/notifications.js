@@ -20,29 +20,26 @@ router.get('/', auth, async (req, res) => {
             Notification.countDocuments({ user: req.userId, read: false })
         ]);
 
-        // Return notifications with MongoDB _id and createdAt for consistency
+        // Transform to match frontend expected format
         const formattedNotifications = notifications.map(n => ({
-            _id: n._id.toString(),
+            id: n._id.toString(),
             title: n.title,
             message: n.message,
             type: n.type,
             read: n.read,
             data: n.data,
-            pushSent: n.pushSent,
-            createdAt: n.createdAt.toISOString()
+            timestamp: n.createdAt.toISOString()
         }));
 
         res.json({
             success: true,
-            response: {
-                data: formattedNotifications,
-                unreadCount,
-                pagination: {
-                    page,
-                    limit,
-                    total,
-                    pages: Math.ceil(total / limit)
-                }
+            data: formattedNotifications,
+            unreadCount,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: Math.ceil(total / limit)
             }
         });
     } catch (error) {
@@ -125,24 +122,6 @@ router.put('/read-all', auth, async (req, res) => {
     }
 });
 
-// DELETE /api/notifications/clear-all - Clear all notifications (MUST be before /:id route)
-router.delete('/clear-all', auth, async (req, res) => {
-    try {
-        await Notification.deleteMany({ user: req.userId });
-
-        res.json({
-            success: true,
-            message: 'All notifications cleared'
-        });
-    } catch (error) {
-        console.error('Clear all error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to clear notifications'
-        });
-    }
-});
-
 // DELETE /api/notifications/:id - Delete single notification
 router.delete('/:id', auth, async (req, res) => {
     try {
@@ -167,6 +146,24 @@ router.delete('/:id', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to delete notification'
+        });
+    }
+});
+
+// DELETE /api/notifications/clear-all - Clear all notifications
+router.delete('/clear-all', auth, async (req, res) => {
+    try {
+        await Notification.deleteMany({ user: req.userId });
+
+        res.json({
+            success: true,
+            message: 'All notifications cleared'
+        });
+    } catch (error) {
+        console.error('Clear all error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to clear notifications'
         });
     }
 });

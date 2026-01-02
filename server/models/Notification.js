@@ -27,6 +27,10 @@ const notificationSchema = new mongoose.Schema({
             'subscription_purchased',
             'product_status',
             'referral_signup',
+            'order_status',
+            'feedback_response',
+            'payment_received',
+            'milk_collection',
             'general',
             'system'
         ],

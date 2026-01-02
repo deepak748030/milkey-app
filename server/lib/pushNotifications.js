@@ -225,6 +225,82 @@ async function notifyReferralSignup(userId, referredUserName) {
 }
 
 /**
+ * Send order status update notification
+ */
+async function notifyOrderStatusUpdate(userId, orderId, status, totalAmount) {
+    const statusMessages = {
+        pending: `Your order #${orderId.slice(-6)} is pending confirmation.`,
+        confirmed: `Your order #${orderId.slice(-6)} has been confirmed!`,
+        processing: `Your order #${orderId.slice(-6)} is being processed.`,
+        delivered: `Your order #${orderId.slice(-6)} has been delivered. Enjoy!`,
+        cancelled: `Your order #${orderId.slice(-6)} has been cancelled.`
+    };
+
+    const statusEmojis = {
+        pending: '⏳',
+        confirmed: '✅',
+        processing: '📦',
+        delivered: '🎉',
+        cancelled: '❌'
+    };
+
+    return sendPushNotification(
+        userId,
+        `${statusEmojis[status] || '📦'} Order ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        statusMessages[status] || `Your order status changed to ${status}.`,
+        'order_status',
+        { orderId, status, totalAmount }
+    );
+}
+
+/**
+ * Send feedback response notification
+ */
+async function notifyFeedbackResponse(userId, feedbackId, status, adminResponse) {
+    const statusMessages = {
+        in_review: 'Your feedback is now being reviewed by our team.',
+        resolved: adminResponse
+            ? `Your feedback has been resolved: "${adminResponse.substring(0, 100)}${adminResponse.length > 100 ? '...' : ''}"`
+            : 'Your feedback has been resolved. Thank you for your input!',
+        closed: 'Your feedback ticket has been closed.'
+    };
+
+    return sendPushNotification(
+        userId,
+        '💬 Feedback Update',
+        statusMessages[status] || `Your feedback status changed to ${status}.`,
+        'feedback_response',
+        { feedbackId, status, adminResponse }
+    );
+}
+
+/**
+ * Send payment received notification
+ */
+async function notifyPaymentReceived(userId, amount, paymentType) {
+    return sendPushNotification(
+        userId,
+        '💵 Payment Received',
+        `You received a payment of ₹${amount} for ${paymentType}.`,
+        'payment_received',
+        { amount, paymentType }
+    );
+}
+
+/**
+ * Send milk collection notification
+ */
+async function notifyMilkCollection(userId, quantity, amount, shift) {
+    return sendPushNotification(
+        userId,
+        '🥛 Milk Collection Recorded',
+        `${quantity}L collected in ${shift} shift. Amount: ₹${amount.toFixed(2)}`,
+        'milk_collection',
+        { quantity, amount, shift }
+    );
+}
+
+/**
  * Check and send expiring subscription notifications (run as cron job)
  */
 async function checkExpiringSubscriptions() {
@@ -288,6 +364,10 @@ module.exports = {
     notifySubscriptionPurchased,
     notifyProductStatusChange,
     notifyReferralSignup,
+    notifyOrderStatusUpdate,
+    notifyFeedbackResponse,
+    notifyPaymentReceived,
+    notifyMilkCollection,
     checkExpiringSubscriptions,
     expo
 };
