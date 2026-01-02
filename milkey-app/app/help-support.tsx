@@ -13,11 +13,7 @@ export default function HelpSupportScreen() {
   const styles = createStyles(colors, isDark, insets);
 
   const handleEmailPress = () => {
-    Linking.openURL('mailto:support@milkeyapp.com');
-  };
-
-  const handlePhonePress = () => {
-    Linking.openURL('tel:+911800123456');
+    Linking.openURL('mailto:fresh.milkley@gmail.com');
   };
 
   const contactOptions = [
@@ -25,19 +21,13 @@ export default function HelpSupportScreen() {
       icon: MessageCircle,
       title: 'Live Chat',
       subtitle: 'Chat with our support team',
-      onPress: () => router.push('/feedback'),
+      onPress: () => router.push('/submit-form'),
     },
     {
       icon: Mail,
       title: 'Email Us',
-      subtitle: 'support@milkeyapp.com',
+      subtitle: 'fresh.milkley@gmail.com',
       onPress: handleEmailPress,
-    },
-    {
-      icon: Phone,
-      title: 'Call Us',
-      subtitle: '+91 1800 123 456',
-      onPress: handlePhonePress,
     },
   ];
 
@@ -157,7 +147,7 @@ export default function HelpSupportScreen() {
             <Text style={styles.additionalText}>
               Our support team is available to assist you with any questions about dairy management.
             </Text>
-            <Pressable style={styles.contactButton} onPress={() => router.push('/feedback')}>
+            <Pressable style={styles.contactButton} onPress={() => router.push('/submit-form')}>
               <MessageCircle size={18} color={colors.white} />
               <Text style={styles.contactButtonText}>Send Feedback</Text>
             </Pressable>

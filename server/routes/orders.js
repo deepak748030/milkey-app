@@ -82,6 +82,16 @@ router.post('/', auth, async (req, res) => {
             });
         }
 
+        // Get user's address if delivery address not provided
+        let finalDeliveryAddress = deliveryAddress?.trim() || '';
+        if (!finalDeliveryAddress) {
+            const User = require('../models/User');
+            const user = await User.findById(req.userId).select('address').lean();
+            if (user?.address) {
+                finalDeliveryAddress = user.address.trim();
+            }
+        }
+
         // Calculate totals
         let totalAmount = 0;
         const orderItems = items.map(item => {
@@ -100,7 +110,7 @@ router.post('/', auth, async (req, res) => {
             user: req.userId,
             items: orderItems,
             totalAmount,
-            deliveryAddress: deliveryAddress?.trim() || '',
+            deliveryAddress: finalDeliveryAddress,
             notes: notes?.trim() || '',
             paymentMethod: paymentMethod || 'cash'
         });

@@ -16,18 +16,18 @@ import { Pagination } from '@/components/Pagination'
 import { getAdminOrders, updateAdminOrderStatus, deleteAdminOrder, type AdminOrder } from '@/lib/api'
 
 const statusColors: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-    confirmed: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-    processing: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
-    delivered: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+    pending: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-900/30 dark:text-yellow-400',
+    confirmed: 'bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-400',
+    processing: 'bg-purple-100 text-purple-900 dark:bg-purple-900/30 dark:text-purple-400',
+    delivered: 'bg-green-100 text-green-900 dark:bg-green-900/30 dark:text-green-400',
+    cancelled: 'bg-red-100 text-red-900 dark:bg-red-900/30 dark:text-red-400'
 }
 
 const paymentStatusColors: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-    paid: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-    failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-    refunded: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
+    pending: 'bg-yellow-100 text-yellow-900 dark:bg-yellow-900/30 dark:text-yellow-400',
+    paid: 'bg-green-100 text-green-900 dark:bg-green-900/30 dark:text-green-400',
+    failed: 'bg-red-100 text-red-900 dark:bg-red-900/30 dark:text-red-400',
+    refunded: 'bg-gray-100 text-gray-900 dark:bg-gray-900/30 dark:text-gray-400'
 }
 
 const statusIcons: Record<string, React.ReactNode> = {
@@ -260,6 +260,14 @@ export function AdminOrdersPage() {
                                     </span>
                                 </div>
                             </div>
+                            {order.deliveryAddress && (
+                                <div className="bg-muted/50 rounded-lg p-2 mb-3">
+                                    <p className="text-[10px] text-muted-foreground uppercase flex items-center gap-1">
+                                        <Truck className="w-3 h-3" /> Delivery Address
+                                    </p>
+                                    <p className="text-xs text-foreground">{order.deliveryAddress}</p>
+                                </div>
+                            )}
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => { setSelectedOrder(order); setShowDetailModal(true) }}
@@ -289,6 +297,7 @@ export function AdminOrdersPage() {
                             <tr>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Order #</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Customer</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Delivery Address</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Amount</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Status</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Payment</th>
@@ -301,7 +310,7 @@ export function AdminOrdersPage() {
                                 Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                             ) : orders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
                                         <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
                                         No orders found
                                     </td>
@@ -309,12 +318,17 @@ export function AdminOrdersPage() {
                             ) : (
                                 orders.map((order) => (
                                     <tr key={order._id} className="hover:bg-muted/30 transition-colors">
-                                        <td className="px-4 py-3 font-mono text-sm">{order.orderNumber}</td>
+                                        <td className="px-4 py-3 font-mono text-sm text-foreground">{order.orderNumber}</td>
                                         <td className="px-4 py-3">
-                                            <div className="text-sm font-medium">{order.user?.name || 'N/A'}</div>
+                                            <div className="text-sm font-medium text-foreground">{order.user?.name || 'N/A'}</div>
                                             <div className="text-xs text-muted-foreground">{order.user?.phone}</div>
                                         </td>
-                                        <td className="px-4 py-3 font-semibold">₹{order.totalAmount?.toFixed(2)}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="text-sm text-foreground max-w-[200px] truncate" title={order.deliveryAddress || 'N/A'}>
+                                                {order.deliveryAddress || 'N/A'}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-3 font-semibold text-foreground">₹{order.totalAmount?.toFixed(2)}</td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusColors[order.status]}`}>
                                                 {statusIcons[order.status]}

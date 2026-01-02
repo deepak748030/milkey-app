@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard } from 'lucide-react-native';
+import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
@@ -42,6 +42,7 @@ export default function ProfileScreen() {
     { id: '2', icon: FileEdit, label: 'Submit Form', action: () => router.push('/submit-form' as any) },
     { id: '3', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
     { id: '4', icon: Bell, label: 'Notifications', action: () => router.push('/notifications') },
+    { id: '5', icon: HelpCircle, label: 'Help & Support', action: () => router.push('/help-support' as any) },
   ];
 
   return (
