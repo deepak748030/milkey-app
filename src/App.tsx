@@ -20,8 +20,6 @@ import { SellingReportPage } from './pages/SellingReportPage'
 import { RegisterFarmersPage } from './pages/RegisterFarmersPage'
 import { RegisterAdvancesPage } from './pages/RegisterAdvancesPage'
 import { RegisterPaymentsPage } from './pages/RegisterPaymentsPage'
-
-
 import { ProductManagementPage } from './pages/ProductManagementPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
 
