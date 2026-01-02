@@ -1123,9 +1123,9 @@ export const getAdminUsersList = async () => {
     return response.data
 }
 
-// Update admin order (different endpoint than customer orders)
-export const updateAdminOrderStatus = async (id: string, data: { status?: string; paymentStatus?: string; notes?: string }) => {
-    const response = await api.put(`/admin/orders/${id}`, data)
+// Update admin order status (correct endpoint with /status suffix)
+export const updateAdminOrderStatus = async (id: string, data: { status?: string; paymentStatus?: string }) => {
+    const response = await api.put(`/admin/orders/${id}/status`, data)
     return response.data
 }
 
@@ -1634,6 +1634,27 @@ export const toggleSubscriptionStatus = async (id: string) => {
 
 export const deleteSubscription = async (id: string) => {
     const response = await api.delete(`/subscriptions/${id}`)
+    return response.data
+}
+
+// Active Subscriptions & Referrals APIs
+export const getAllActiveSubscriptions = async () => {
+    const response = await api.get('/user-subscriptions/all-active')
+    return response.data
+}
+
+export const getAllReferrals = async () => {
+    const response = await api.get('/referrals/admin/all')
+    return response.data
+}
+
+export const updateReferralCommission = async (id: string, commissionRate: number) => {
+    const response = await api.put(`/referrals/admin/${id}/commission`, { commissionRate })
+    return response.data
+}
+
+export const updateDefaultCommission = async (commissionRate: number) => {
+    const response = await api.put('/referrals/admin/default-commission', { commissionRate })
     return response.data
 }
 

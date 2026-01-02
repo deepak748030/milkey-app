@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Subscription = require('../models/Subscription');
 const UserSubscription = require('../models/UserSubscription');
+const User = require('../models/User');
+const Referral = require('../models/Referral');
 const auth = require('../middleware/auth');
 
 // GET /api/user-subscriptions/available - Get all available subscriptions for the user
@@ -202,7 +204,7 @@ router.get('/check/:tab', auth, async (req, res) => {
 // POST /api/user-subscriptions/purchase - Purchase a subscription
 router.post('/purchase', auth, async (req, res) => {
     try {
-        const { subscriptionId, paymentMethod, transactionId } = req.body;
+        const { subscriptionId, paymentMethod, transactionId, referralCode } = req.body;
 
         if (!subscriptionId) {
             return res.status(400).json({
@@ -285,6 +287,89 @@ router.post('/purchase', auth, async (req, res) => {
 
         await userSubscription.save();
 
+        // Process referral commission if applicable (paid subscriptions only)
+        if (!subscription.isFree && Number(subscription.amount) > 0) {
+            try {
+                const ReferralConfig = require('../models/ReferralConfig');
+                const cfg = await ReferralConfig.findOneAndUpdate(
+                    {},
+                    { $setOnInsert: { defaultCommissionRate: 5 } },
+                    { new: true, upsert: true }
+                );
+                const defaultCommissionRate = typeof cfg?.defaultCommissionRate === 'number' ? cfg.defaultCommissionRate : 5;
+
+                const buyer = await User.findById(req.userId);
+                if (!buyer) throw new Error('Buyer not found');
+
+                // Prefer stored referredBy (from registration), but also allow referralCode at purchase time
+                let referrerId = buyer.referredBy;
+
+                if (!referrerId && referralCode) {
+                    const referrer = await User.findOne({ referralCode: referralCode.toUpperCase() })
+                        .select('_id referralCode')
+                        .lean();
+
+                    if (referrer && referrer._id.toString() !== buyer._id.toString()) {
+                        buyer.referredBy = referrer._id;
+                        await buyer.save();
+                        referrerId = referrer._id;
+                    }
+                }
+
+                if (referrerId) {
+                    // Ensure referral record exists
+                    let referral = await Referral.findOne({
+                        referrer: referrerId,
+                        referred: req.userId
+                    });
+
+                    if (!referral) {
+                        const referrer = await User.findById(referrerId).select('referralCode').lean();
+                        if (!referrer) throw new Error('Referrer not found');
+
+                        referral = await Referral.create({
+                            referrer: referrerId,
+                            referred: req.userId,
+                            code: referrer.referralCode,
+                            status: 'active',
+                            commissionRate: defaultCommissionRate,
+                            totalEarnings: 0
+                        });
+                    }
+
+                    const commissionRate = Number.isFinite(referral.commissionRate)
+                        ? referral.commissionRate
+                        : defaultCommissionRate;
+
+                    const commissionAmount = Number(
+                        ((Number(subscription.amount) * commissionRate) / 100).toFixed(2)
+                    );
+
+                    if (commissionAmount > 0) {
+                        await Promise.all([
+                            Referral.findByIdAndUpdate(referral._id, {
+                                $inc: { totalEarnings: commissionAmount },
+                                $set: { status: 'active', commissionRate }
+                            }),
+                            User.findByIdAndUpdate(referrerId, {
+                                $inc: {
+                                    referralEarnings: commissionAmount,
+                                    totalReferralEarnings: commissionAmount
+                                }
+                            })
+                        ]);
+                    }
+
+                    console.log(
+                        `Referral commission credited: ₹${commissionAmount} (${commissionRate}% of ₹${subscription.amount}) to referrer ${referrerId}`
+                    );
+                }
+            } catch (refError) {
+                console.error('Error processing referral commission:', refError);
+                // Don't fail the subscription purchase due to referral error
+            }
+        }
+
         // Populate subscription details for response
         await userSubscription.populate('subscription');
 
@@ -337,6 +422,92 @@ router.get('/status', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to get subscription status'
+        });
+    }
+});
+
+// GET /api/user-subscriptions/all-active - Admin: Get all active subscriptions
+router.get('/all-active', async (req, res) => {
+    try {
+        // Verify admin token
+        const jwt = require('jsonwebtoken');
+        const Admin = require('../models/Admin');
+
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                success: false,
+                message: 'Access denied. No token provided.'
+            });
+        }
+
+        const token = authHeader.split(' ')[1];
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (err) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid token.'
+            });
+        }
+
+        // Check for admin token (has adminId) or owner role
+        const adminId = decoded.adminId || decoded.userId;
+        const admin = await Admin.findById(adminId).lean();
+
+        if (!admin) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. Admin only.'
+            });
+        }
+
+        const now = new Date();
+
+        const subscriptions = await UserSubscription.find({
+            isActive: true,
+            paymentStatus: 'completed',
+            endDate: { $gte: now }
+        })
+            .populate('subscription')
+            .populate({
+                path: 'user',
+                select: 'name email phone referralCode referredBy',
+                populate: {
+                    path: 'referredBy',
+                    select: 'name email'
+                }
+            })
+            .sort({ endDate: -1 })
+            .lean();
+
+        // Calculate stats
+        const uniqueUsers = new Set(subscriptions.map(s => s.user?._id?.toString()));
+        const totalRevenue = subscriptions
+            .filter(s => !s.isFree)
+            .reduce((sum, s) => sum + (s.amount || 0), 0);
+
+        // Get total commission paid
+        const referrals = await Referral.find({}).lean();
+        const totalCommissionPaid = referrals.reduce((sum, r) => sum + (r.totalEarnings || 0), 0);
+
+        res.json({
+            success: true,
+            response: {
+                subscriptions,
+                stats: {
+                    totalActiveUsers: uniqueUsers.size,
+                    totalRevenue,
+                    totalCommissionPaid
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get all active subscriptions error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get subscriptions'
         });
     }
 });

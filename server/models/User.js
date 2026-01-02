@@ -50,6 +50,14 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     },
+    referralEarnings: {
+        type: Number,
+        default: 0
+    },
+    totalReferralEarnings: {
+        type: Number,
+        default: 0
+    },
     isBlocked: {
         type: Boolean,
         default: false

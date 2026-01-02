@@ -12,7 +12,7 @@ import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
 import { ProductsPage } from './pages/ProductsPage'
 import DeleteAccountPage from './pages/DeleteAccountPage'
 import { AdminOrdersPage } from './pages/AdminOrdersPage'
-import { AdminPurchasePage } from './pages/adminPurchasePage'
+import { AdminPurchasePage } from './pages/AdminPurchasePage'
 import { SellingMembersPage } from './pages/SellingMembersPage'
 import { SellingEntriesPage } from './pages/SellingEntriesPage'
 import { SellingPaymentsPage } from './pages/SellingPaymentsPage'
@@ -22,6 +22,8 @@ import { RegisterAdvancesPage } from './pages/RegisterAdvancesPage'
 import { RegisterPaymentsPage } from './pages/RegisterPaymentsPage'
 import { ProductManagementPage } from './pages/ProductManagementPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
+import { CustomFormsPage } from './pages/CustomFormsPage'
+import { ActiveSubscriptionsPage } from './pages/ActiveSubscriptionsPage'
 
 function App() {
     return (
@@ -56,6 +58,8 @@ function App() {
                         <Route path="register-advances" element={<RegisterAdvancesPage />} />
                         <Route path="register-payments" element={<RegisterPaymentsPage />} />
                         <Route path="subscriptions" element={<SubscriptionsPage />} />
+                        <Route path="active-subscriptions" element={<ActiveSubscriptionsPage />} />
+                        <Route path="custom-forms" element={<CustomFormsPage />} />
                         <Route path="settings" element={<SettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />

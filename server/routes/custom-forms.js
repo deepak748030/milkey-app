@@ -2,6 +2,33 @@ const express = require('express');
 const router = express.Router();
 const CustomForm = require('../models/CustomForm');
 const auth = require('../middleware/auth');
+const jwt = require('jsonwebtoken');
+const Admin = require('../models/Admin');
+
+// Helper function to verify admin token
+const verifyAdminToken = async (req) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return { success: false, status: 401, message: 'Access denied. No token provided.' };
+    }
+
+    const token = authHeader.split(' ')[1];
+    let decoded;
+    try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+        return { success: false, status: 401, message: 'Invalid token.' };
+    }
+
+    const adminId = decoded.adminId || decoded.userId;
+    const admin = await Admin.findById(adminId).lean();
+
+    if (!admin) {
+        return { success: false, status: 403, message: 'Access denied. Admin only.' };
+    }
+
+    return { success: true, admin };
+};
 
 // Get all forms for current user
 router.get('/', auth, async (req, res) => {
@@ -36,13 +63,13 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get all forms for admin
-router.get('/admin', auth, async (req, res) => {
+router.get('/admin', async (req, res) => {
     try {
-        // Check if user is admin/owner
-        if (req.user.role !== 'owner') {
-            return res.status(403).json({
+        const authResult = await verifyAdminToken(req);
+        if (!authResult.success) {
+            return res.status(authResult.status).json({
                 success: false,
-                message: 'Admin access required'
+                message: authResult.message
             });
         }
 
@@ -118,12 +145,13 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Update form status (admin only)
-router.put('/:id/status', auth, async (req, res) => {
+router.put('/:id/status', async (req, res) => {
     try {
-        if (req.user.role !== 'owner') {
-            return res.status(403).json({
+        const authResult = await verifyAdminToken(req);
+        if (!authResult.success) {
+            return res.status(authResult.status).json({
                 success: false,
-                message: 'Admin access required'
+                message: authResult.message
             });
         }
 
@@ -156,7 +184,7 @@ router.put('/:id/status', auth, async (req, res) => {
     }
 });
 
-// Delete form
+// Delete form (user)
 router.delete('/:id', auth, async (req, res) => {
     try {
         const form = await CustomForm.findOne({
@@ -179,6 +207,41 @@ router.delete('/:id', auth, async (req, res) => {
         });
     } catch (error) {
         console.error('Delete form error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete form'
+        });
+    }
+});
+
+// Delete form (admin)
+router.delete('/admin/:id', async (req, res) => {
+    try {
+        const authResult = await verifyAdminToken(req);
+        if (!authResult.success) {
+            return res.status(authResult.status).json({
+                success: false,
+                message: authResult.message
+            });
+        }
+
+        const form = await CustomForm.findById(req.params.id);
+
+        if (!form) {
+            return res.status(404).json({
+                success: false,
+                message: 'Form not found'
+            });
+        }
+
+        await CustomForm.findByIdAndDelete(req.params.id);
+
+        res.json({
+            success: true,
+            message: 'Form deleted successfully'
+        });
+    } catch (error) {
+        console.error('Admin delete form error:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to delete form'

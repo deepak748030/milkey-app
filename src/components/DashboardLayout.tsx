@@ -44,6 +44,8 @@ const navItems = [
     { to: '/users', icon: Users, label: 'Users' },
     { to: '/banners', icon: Image, label: 'Banners' },
     { to: '/subscriptions', icon: SubscriptionIcon, label: 'Subscriptions' },
+    { to: '/active-subscriptions', icon: UserCheck, label: 'Active Users' },
+    { to: '/custom-forms', icon: FileText, label: 'Custom Forms' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
@@ -82,7 +84,7 @@ export function DashboardLayout() {
             {/* Sidebar */}
             <aside
                 className={cn(
-                    'fixed inset-y-0 left-0 z-50 bg-sidebar text-sidebar-foreground transition-all duration-200 ease-out lg:relative',
+                    'fixed inset-y-0 left-0 z-50 bg-sidebar text-sidebar-foreground transition-all duration-200 ease-out lg:relative flex flex-col',
                     sidebarOpen ? 'w-64' : 'w-20',
                     mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
                 )}
@@ -121,8 +123,8 @@ export function DashboardLayout() {
                     </button>
                 </div>
 
-                {/* Navigation */}
-                <nav className="p-3 space-y-1">
+                {/* Navigation - Scrollable */}
+                <nav className="flex-1 overflow-y-auto p-3 space-y-1 pb-20">
                     {navItems.map((item) => {
                         const isActive = location.pathname === item.to
                         return (

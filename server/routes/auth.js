@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
@@ -35,7 +36,7 @@ const createTransporter = () => {
         service: 'gmail',
         auth: {
             user: process.env.EMAIL_USER,
-            pass: "koba ukdl amtu skpm",
+            pass: 'koba ukdl amtu skpm',
         },
     });
 };
@@ -231,11 +232,20 @@ router.post('/register', async (req, res) => {
 
         // Create referral record if referred
         if (referrer) {
+            const ReferralConfig = require('../models/ReferralConfig');
+            const cfg = await ReferralConfig.findOneAndUpdate(
+                {},
+                { $setOnInsert: { defaultCommissionRate: 5 } },
+                { new: true, upsert: true }
+            );
+            const commissionRate = typeof cfg?.defaultCommissionRate === 'number' ? cfg.defaultCommissionRate : 5;
+
             await Referral.create({
                 referrer: referrer._id,
                 referred: user._id,
                 code: referralCode.toUpperCase(),
-                status: 'active'
+                status: 'active',
+                commissionRate
             });
         }
 
