@@ -20,11 +20,26 @@ export default function NotificationsScreen() {
       const result = await notificationsApiNew.getAll();
       console.log('Notifications API response:', JSON.stringify(result));
 
-      if (result.success && result.response?.data) {
-        setNotifications(result.response.data);
-        // Calculate unread count
-        const unread = result.response.data.filter((n: Notification) => !n.read).length;
-        setUnreadCount(unread);
+      // Handle both response formats: { success, response: { data } } and { success, data }
+      let notificationsData: Notification[] = [];
+
+      if (result.success) {
+        // Check for data in response.data or direct data property
+        if (result.response?.data) {
+          notificationsData = result.response.data;
+        } else if ((result as any).data) {
+          notificationsData = (result as any).data;
+        }
+
+        setNotifications(notificationsData);
+        // Calculate unread count from response or from data
+        const serverUnreadCount = result.response?.unreadCount ?? (result as any).unreadCount;
+        if (typeof serverUnreadCount === 'number') {
+          setUnreadCount(serverUnreadCount);
+        } else {
+          const unread = notificationsData.filter((n: Notification) => !n.read).length;
+          setUnreadCount(unread);
+        }
       } else {
         setNotifications([]);
       }
@@ -72,11 +87,10 @@ export default function NotificationsScreen() {
 
   const handleClearAll = async () => {
     try {
-      const result = await notificationsApiNew.clearAll();
-      if (result.success) {
-        setNotifications([]);
-        setUnreadCount(0);
-      }
+      await notificationsApiNew.clearAll();
+      // Clear notifications locally regardless of response
+      setNotifications([]);
+      setUnreadCount(0);
     } catch (error) {
       console.error('Error clearing notifications:', error);
     }
@@ -170,9 +184,9 @@ export default function NotificationsScreen() {
             </View>
           ) : (
             <View style={styles.notificationsList}>
-              {notifications.map((notification) => (
+              {notifications.map((notification, index) => (
                 <Pressable
-                  key={notification._id}
+                  key={notification._id || notification.id || `notification-${index}`}
                   style={[
                     styles.notificationCard,
                     { opacity: notification.read ? 0.6 : 1 }

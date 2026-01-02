@@ -122,6 +122,24 @@ router.put('/read-all', auth, async (req, res) => {
     }
 });
 
+// DELETE /api/notifications/clear-all - Clear all notifications
+router.delete('/clear-all', auth, async (req, res) => {
+    try {
+        await Notification.deleteMany({ user: req.userId });
+
+        res.json({
+            success: true,
+            message: 'All notifications cleared'
+        });
+    } catch (error) {
+        console.error('Clear all error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to clear notifications'
+        });
+    }
+});
+
 // DELETE /api/notifications/:id - Delete single notification
 router.delete('/:id', auth, async (req, res) => {
     try {
@@ -146,24 +164,6 @@ router.delete('/:id', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to delete notification'
-        });
-    }
-});
-
-// DELETE /api/notifications/clear-all - Clear all notifications
-router.delete('/clear-all', auth, async (req, res) => {
-    try {
-        await Notification.deleteMany({ user: req.userId });
-
-        res.json({
-            success: true,
-            message: 'All notifications cleared'
-        });
-    } catch (error) {
-        console.error('Clear all error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to clear notifications'
         });
     }
 });

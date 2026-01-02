@@ -1308,12 +1308,14 @@ export const bannersApi = {
 // Notification type
 export interface Notification {
     _id: string;
+    id?: string;
     title: string;
     message: string;
     type: string;
     read: boolean;
     data?: any;
     createdAt: string;
+    timestamp?: string;
 }
 
 // Notifications API
