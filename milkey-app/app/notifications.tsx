@@ -1,31 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bell, CheckCheck, Trash2, ChevronLeft } from 'lucide-react-native';
+import { Bell, CheckCheck, Trash2, ChevronLeft, Gift, CreditCard, AlertCircle, Package, Users } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { notificationsApi, ServerNotification } from '@/lib/api';
-import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { notificationsApiNew, Notification } from '@/lib/milkeyApi';
 import { router } from 'expo-router';
 
 export default function NotificationsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = createStyles(colors);
-  const { expoPushToken } = usePushNotifications();
-  const [notifications, setNotifications] = useState<ServerNotification[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const loadNotifications = useCallback(async () => {
     try {
-      const result = await notificationsApi.getNotifications({ limit: 50 });
+      const result = await notificationsApiNew.getAll();
       console.log('Notifications API response:', JSON.stringify(result));
 
-      if (result.success) {
-        const notificationsData = (result as any).data || [];
-        const unread = (result as any).unreadCount || 0;
-        setNotifications(notificationsData);
+      if (result.success && result.response?.data) {
+        setNotifications(result.response.data);
+        // Calculate unread count
+        const unread = result.response.data.filter((n: Notification) => !n.read).length;
         setUnreadCount(unread);
       } else {
         setNotifications([]);
@@ -48,12 +46,12 @@ export default function NotificationsScreen() {
     loadNotifications();
   }, [loadNotifications]);
 
-  const handleNotificationPress = async (notification: ServerNotification) => {
+  const handleNotificationPress = async (notification: Notification) => {
     if (!notification.read) {
       try {
-        await notificationsApi.markAsRead(notification.id);
+        await notificationsApiNew.markAsRead(notification._id);
         setNotifications(prev =>
-          prev.map(n => n.id === notification.id ? { ...n, read: true } : n)
+          prev.map(n => n._id === notification._id ? { ...n, read: true } : n)
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
       } catch (error) {
@@ -64,7 +62,7 @@ export default function NotificationsScreen() {
 
   const handleMarkAllRead = async () => {
     try {
-      await notificationsApi.markAllAsRead();
+      await notificationsApiNew.markAllAsRead();
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
       setUnreadCount(0);
     } catch (error) {
@@ -74,7 +72,7 @@ export default function NotificationsScreen() {
 
   const handleClearAll = async () => {
     try {
-      await notificationsApi.clearAll();
+      await notificationsApiNew.clearAll();
       setNotifications([]);
       setUnreadCount(0);
     } catch (error) {
@@ -83,7 +81,23 @@ export default function NotificationsScreen() {
   };
 
   const getNotificationIcon = (type: string) => {
-    return <Bell size={24} color={colors.primary} />;
+    switch (type) {
+      case 'commission':
+        return <Gift size={24} color={colors.primary} />;
+      case 'withdrawal':
+        return <CreditCard size={24} color="#10b981" />;
+      case 'subscription_expiring':
+      case 'subscription_expired':
+        return <AlertCircle size={24} color={colors.destructive} />;
+      case 'subscription_purchased':
+        return <Package size={24} color={colors.primary} />;
+      case 'referral_signup':
+        return <Users size={24} color="#8b5cf6" />;
+      case 'product_status':
+        return <Package size={24} color="#f59e0b" />;
+      default:
+        return <Bell size={24} color={colors.primary} />;
+    }
   };
 
   const formatTime = (timestamp: string) => {
@@ -156,7 +170,7 @@ export default function NotificationsScreen() {
             <View style={styles.notificationsList}>
               {notifications.map((notification) => (
                 <Pressable
-                  key={notification.id}
+                  key={notification._id}
                   style={[
                     styles.notificationCard,
                     { opacity: notification.read ? 0.6 : 1 }
@@ -176,7 +190,7 @@ export default function NotificationsScreen() {
                         {notification.message}
                       </Text>
                       <Text style={styles.notificationTime}>
-                        {formatTime(notification.timestamp)}
+                        {formatTime(notification.createdAt)}
                       </Text>
                     </View>
                   </View>

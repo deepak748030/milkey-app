@@ -1307,13 +1307,13 @@ export const bannersApi = {
 
 // Notification type
 export interface Notification {
-    id: string;
+    _id: string;
     title: string;
     message: string;
     type: string;
     read: boolean;
     data?: any;
-    timestamp: string;
+    createdAt: string;
 }
 
 // Notifications API
@@ -1323,7 +1323,7 @@ export const notificationsApiNew = {
         if (params?.page) queryParams.append('page', params.page.toString());
         if (params?.limit) queryParams.append('limit', params.limit.toString());
         const query = queryParams.toString();
-        return apiRequest<{ data: Notification[]; unreadCount: number }>(
+        return apiRequest<{ data: Notification[]; unreadCount: number; pagination: { page: number; limit: number; total: number; pages: number } }>(
             `/notifications${query ? `?${query}` : ''}`
         );
     },

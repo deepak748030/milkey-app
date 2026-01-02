@@ -20,26 +20,29 @@ router.get('/', auth, async (req, res) => {
             Notification.countDocuments({ user: req.userId, read: false })
         ]);
 
-        // Transform to match frontend expected format
+        // Return notifications with MongoDB _id and createdAt for consistency
         const formattedNotifications = notifications.map(n => ({
-            id: n._id.toString(),
+            _id: n._id.toString(),
             title: n.title,
             message: n.message,
             type: n.type,
             read: n.read,
             data: n.data,
-            timestamp: n.createdAt.toISOString()
+            pushSent: n.pushSent,
+            createdAt: n.createdAt.toISOString()
         }));
 
         res.json({
             success: true,
-            data: formattedNotifications,
-            unreadCount,
-            pagination: {
-                page,
-                limit,
-                total,
-                pages: Math.ceil(total / limit)
+            response: {
+                data: formattedNotifications,
+                unreadCount,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages: Math.ceil(total / limit)
+                }
             }
         });
     } catch (error) {
