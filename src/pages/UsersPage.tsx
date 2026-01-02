@@ -14,8 +14,23 @@ import {
     TrendingUp,
     Edit3,
     Save,
+    Gift,
+    Bell,
+    Send,
+    CreditCard,
 } from 'lucide-react'
-import { getUsers, toggleUserBlock, updateUser, updateUserCommission, User, Pagination } from '../lib/api'
+import {
+    getUsers,
+    toggleUserBlock,
+    updateUser,
+    updateUserCommission,
+    User,
+    Pagination,
+    getSubscriptionsList,
+    assignSubscriptionToUser,
+    sendNotificationToUser,
+    SubscriptionListItem
+} from '../lib/api'
 import { cn } from '../lib/utils'
 
 // Skeleton component for loading state
@@ -86,6 +101,20 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
         role: ''
     })
 
+    // Subscription assignment state
+    const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
+    const [subscriptions, setSubscriptions] = useState<SubscriptionListItem[]>([])
+    const [loadingSubscriptions, setLoadingSubscriptions] = useState(false)
+    const [selectedSubscription, setSelectedSubscription] = useState('')
+    const [assigningSubscription, setAssigningSubscription] = useState(false)
+    const [paymentMethod, setPaymentMethod] = useState('cash')
+
+    // Notification state
+    const [showNotificationModal, setShowNotificationModal] = useState(false)
+    const [notificationTitle, setNotificationTitle] = useState('')
+    const [notificationMessage, setNotificationMessage] = useState('')
+    const [sendingNotification, setSendingNotification] = useState(false)
+
     useEffect(() => {
         if (user) {
             setEditData({
@@ -98,8 +127,30 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
             setIsEditing(false)
             setIsCommissionAction(false)
             setCommissionAmount('')
+            setShowSubscriptionModal(false)
+            setShowNotificationModal(false)
         }
     }, [user])
+
+    useEffect(() => {
+        if (showSubscriptionModal && subscriptions.length === 0) {
+            loadSubscriptions()
+        }
+    }, [showSubscriptionModal])
+
+    const loadSubscriptions = async () => {
+        setLoadingSubscriptions(true)
+        try {
+            const response = await getSubscriptionsList()
+            if (response.success) {
+                setSubscriptions(response.response)
+            }
+        } catch (error) {
+            console.error('Failed to load subscriptions:', error)
+        } finally {
+            setLoadingSubscriptions(false)
+        }
+    }
 
     if (!user) return null
 
@@ -146,6 +197,57 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
             alert(error.response?.data?.message || 'Failed to update commission')
         } finally {
             setIsSaving(false)
+        }
+    }
+
+    const handleAssignSubscription = async () => {
+        if (!selectedSubscription) {
+            alert('Please select a subscription')
+            return
+        }
+
+        setAssigningSubscription(true)
+        try {
+            const response = await assignSubscriptionToUser(user._id, {
+                subscriptionId: selectedSubscription,
+                paymentMethod
+            })
+            if (response.success) {
+                alert(response.message)
+                setShowSubscriptionModal(false)
+                setSelectedSubscription('')
+            }
+        } catch (error: any) {
+            console.error('Failed to assign subscription:', error)
+            alert(error.response?.data?.message || 'Failed to assign subscription')
+        } finally {
+            setAssigningSubscription(false)
+        }
+    }
+
+    const handleSendNotification = async () => {
+        if (!notificationTitle.trim() || !notificationMessage.trim()) {
+            alert('Please enter title and message')
+            return
+        }
+
+        setSendingNotification(true)
+        try {
+            const response = await sendNotificationToUser(user._id, {
+                title: notificationTitle,
+                message: notificationMessage
+            })
+            if (response.success) {
+                alert(`Notification sent successfully! Push delivered: ${response.response.pushSent ? 'Yes' : 'No (no push token)'}`)
+                setShowNotificationModal(false)
+                setNotificationTitle('')
+                setNotificationMessage('')
+            }
+        } catch (error: any) {
+            console.error('Failed to send notification:', error)
+            alert(error.response?.data?.message || 'Failed to send notification')
+        } finally {
+            setSendingNotification(false)
         }
     }
 
@@ -207,6 +309,149 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
                         {user.isBlocked ? 'Blocked' : 'Active'}
                     </span>
                 </div>
+
+                {/* Quick Actions */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                    <button
+                        onClick={() => setShowSubscriptionModal(true)}
+                        className="flex items-center justify-center gap-2 py-2.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors text-sm font-medium"
+                    >
+                        <Gift className="w-4 h-4" />
+                        Assign Subscription
+                    </button>
+                    <button
+                        onClick={() => setShowNotificationModal(true)}
+                        className="flex items-center justify-center gap-2 py-2.5 bg-accent/10 text-accent-foreground rounded-lg hover:bg-accent/20 transition-colors text-sm font-medium border border-accent/20"
+                    >
+                        <Bell className="w-4 h-4" />
+                        Send Notification
+                    </button>
+                </div>
+
+                {/* Subscription Assignment Modal */}
+                {showSubscriptionModal && (
+                    <div className="mb-4 p-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                <Gift className="w-4 h-4 text-primary" />
+                                Assign Subscription
+                            </h4>
+                            <button
+                                onClick={() => setShowSubscriptionModal(false)}
+                                className="p-1 hover:bg-muted rounded"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {loadingSubscriptions ? (
+                            <div className="flex items-center justify-center py-4">
+                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <label className="text-xs text-muted-foreground mb-1 block">Select Subscription</label>
+                                    <select
+                                        value={selectedSubscription}
+                                        onChange={(e) => setSelectedSubscription(e.target.value)}
+                                        className="w-full px-3 py-2 bg-card border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    >
+                                        <option value="">Choose subscription...</option>
+                                        {subscriptions.map(sub => (
+                                            <option key={sub._id} value={sub._id}>
+                                                {sub.name} - {sub.isFree ? 'FREE' : `₹${sub.amount}`} ({sub.durationMonths} months)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-muted-foreground mb-1 block">Payment Method</label>
+                                    <select
+                                        value={paymentMethod}
+                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                        className="w-full px-3 py-2 bg-card border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    >
+                                        <option value="cash">Cash</option>
+                                        <option value="upi">UPI</option>
+                                        <option value="bank">Bank Transfer</option>
+                                        <option value="free">Free (Promo)</option>
+                                    </select>
+                                </div>
+
+                                <button
+                                    onClick={handleAssignSubscription}
+                                    disabled={assigningSubscription || !selectedSubscription}
+                                    className="w-full py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {assigningSubscription ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <CreditCard className="w-4 h-4" />
+                                    )}
+                                    Assign Subscription
+                                </button>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* Notification Modal */}
+                {showNotificationModal && (
+                    <div className="mb-4 p-4 bg-accent/5 border border-accent/20 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                <Bell className="w-4 h-4 text-accent-foreground" />
+                                Send Notification
+                            </h4>
+                            <button
+                                onClick={() => setShowNotificationModal(false)}
+                                className="p-1 hover:bg-muted rounded"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">Title</label>
+                            <input
+                                type="text"
+                                value={notificationTitle}
+                                onChange={(e) => setNotificationTitle(e.target.value)}
+                                placeholder="Notification title..."
+                                className="w-full px-3 py-2 bg-card border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">Message</label>
+                            <textarea
+                                value={notificationMessage}
+                                onChange={(e) => setNotificationMessage(e.target.value)}
+                                placeholder="Notification message..."
+                                rows={3}
+                                className="w-full px-3 py-2 bg-card border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                            />
+                        </div>
+
+                        <button
+                            onClick={handleSendNotification}
+                            disabled={sendingNotification || !notificationTitle.trim() || !notificationMessage.trim()}
+                            className="w-full py-2 bg-foreground text-background rounded-lg text-sm font-medium hover:bg-foreground/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                        >
+                            {sendingNotification ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Send className="w-4 h-4" />
+                            )}
+                            Send Notification & Push
+                        </button>
+                        <p className="text-xs text-muted-foreground text-center">
+                            This will send both in-app notification and push notification (if user has enabled)
+                        </p>
+                    </div>
+                )}
 
                 {/* Commission Section */}
                 <div className="mb-4 sm:mb-6">

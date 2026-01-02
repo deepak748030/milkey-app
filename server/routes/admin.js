@@ -2824,5 +2824,260 @@ router.put('/banners/reorder', adminAuth, async (req, res) => {
         });
     }
 });
+// ==================== SUBSCRIPTION ASSIGNMENT ====================
+
+const UserSubscription = require('../models/UserSubscription');
+const { sendPushNotification } = require('../lib/pushNotifications');
+const Notification = require('../models/Notification');
+
+// GET /api/admin/subscriptions/list - Get all subscriptions for dropdown
+router.get('/subscriptions/list', adminAuth, async (req, res) => {
+    try {
+        const subscriptions = await Subscription.find({ isActive: true })
+            .select('_id name amount durationMonths applicableTabs isFree description')
+            .sort({ name: 1 })
+            .lean();
+
+        res.json({
+            success: true,
+            response: subscriptions
+        });
+    } catch (error) {
+        console.error('Get subscriptions list error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch subscriptions list'
+        });
+    }
+});
+
+// POST /api/admin/users/:id/assign-subscription - Assign subscription to user
+router.post('/users/:id/assign-subscription', adminAuth, async (req, res) => {
+    try {
+        const { subscriptionId, durationMonths, paymentMethod, transactionId, notes } = req.body;
+        const userId = req.params.id;
+
+        if (!subscriptionId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Subscription ID is required'
+            });
+        }
+
+        // Check user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Get subscription details
+        const subscription = await Subscription.findById(subscriptionId);
+        if (!subscription) {
+            return res.status(404).json({
+                success: false,
+                message: 'Subscription not found'
+            });
+        }
+
+        // Calculate dates
+        const startDate = new Date();
+        const endDate = new Date();
+        const duration = durationMonths || subscription.durationMonths;
+        endDate.setMonth(endDate.getMonth() + duration);
+
+        // Create user subscription
+        const userSubscription = new UserSubscription({
+            user: userId,
+            subscription: subscriptionId,
+            applicableTabs: subscription.applicableTabs,
+            startDate,
+            endDate,
+            amount: subscription.amount,
+            isFree: subscription.isFree,
+            paymentStatus: 'completed',
+            paymentMethod: paymentMethod || 'cash',
+            transactionId: transactionId || `ADMIN-${Date.now()}`
+        });
+
+        await userSubscription.save();
+        await userSubscription.populate('subscription');
+
+        // Send notification to user
+        await sendPushNotification(
+            userId,
+            '🎉 Subscription Assigned!',
+            `You've been assigned ${subscription.name} subscription valid until ${endDate.toLocaleDateString()}.`,
+            'subscription_assigned',
+            { subscriptionId, subscriptionName: subscription.name, endDate }
+        );
+
+        console.log(`Admin ${req.admin.name} assigned subscription ${subscription.name} to user ${user.name || user.phone}`);
+
+        res.status(201).json({
+            success: true,
+            message: `Subscription "${subscription.name}" assigned successfully`,
+            response: userSubscription
+        });
+    } catch (error) {
+        console.error('Assign subscription error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to assign subscription'
+        });
+    }
+});
+
+// GET /api/admin/users/:id/subscriptions - Get user's subscriptions
+router.get('/users/:id/subscriptions', adminAuth, async (req, res) => {
+    try {
+        const userId = req.params.id;
+
+        const subscriptions = await UserSubscription.find({ user: userId })
+            .populate('subscription')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const now = new Date();
+        const active = subscriptions.filter(s =>
+            s.isActive && s.paymentStatus === 'completed' && new Date(s.endDate) >= now
+        );
+        const expired = subscriptions.filter(s =>
+            new Date(s.endDate) < now || !s.isActive
+        );
+
+        res.json({
+            success: true,
+            response: {
+                active,
+                expired,
+                all: subscriptions
+            }
+        });
+    } catch (error) {
+        console.error('Get user subscriptions error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch user subscriptions'
+        });
+    }
+});
+
+// ==================== SEND NOTIFICATIONS ====================
+
+// POST /api/admin/users/:id/send-notification - Send notification to single user
+router.post('/users/:id/send-notification', adminAuth, async (req, res) => {
+    try {
+        const { title, message, type } = req.body;
+        const userId = req.params.id;
+
+        if (!title || !message) {
+            return res.status(400).json({
+                success: false,
+                message: 'Title and message are required'
+            });
+        }
+
+        // Check user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Send push notification (also saves to DB)
+        const result = await sendPushNotification(
+            userId,
+            title,
+            message,
+            type || 'admin_message',
+            { sentBy: req.admin.name, sentAt: new Date() }
+        );
+
+        console.log(`Admin ${req.admin.name} sent notification to user ${user.name || user.phone}: ${title}`);
+
+        res.json({
+            success: true,
+            message: 'Notification sent successfully',
+            response: {
+                pushSent: result.pushSent,
+                notificationId: result.notification?._id
+            }
+        });
+    } catch (error) {
+        console.error('Send notification error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send notification'
+        });
+    }
+});
+
+// POST /api/admin/send-bulk-notification - Send notification to multiple/all users
+router.post('/send-bulk-notification', adminAuth, async (req, res) => {
+    try {
+        const { title, message, type, userIds } = req.body;
+
+        if (!title || !message) {
+            return res.status(400).json({
+                success: false,
+                message: 'Title and message are required'
+            });
+        }
+
+        let targetUserIds = userIds;
+
+        // If no userIds provided, send to all users
+        if (!userIds || userIds.length === 0) {
+            const users = await User.find({ isBlocked: false }).select('_id').lean();
+            targetUserIds = users.map(u => u._id.toString());
+        }
+
+        // Send notifications in parallel with batching
+        const batchSize = 50;
+        let successful = 0;
+        let failed = 0;
+
+        for (let i = 0; i < targetUserIds.length; i += batchSize) {
+            const batch = targetUserIds.slice(i, i + batchSize);
+            const results = await Promise.allSettled(
+                batch.map(userId =>
+                    sendPushNotification(
+                        userId,
+                        title,
+                        message,
+                        type || 'admin_broadcast',
+                        { sentBy: req.admin.name, sentAt: new Date(), isBulk: true }
+                    )
+                )
+            );
+
+            successful += results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+            failed += results.filter(r => r.status === 'rejected' || !r.value?.success).length;
+        }
+
+        console.log(`Admin ${req.admin.name} sent bulk notification: ${title} (${successful} sent, ${failed} failed)`);
+
+        res.json({
+            success: true,
+            message: `Notification sent to ${successful} users`,
+            response: {
+                successful,
+                failed,
+                total: targetUserIds.length
+            }
+        });
+    } catch (error) {
+        console.error('Send bulk notification error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send notifications'
+        });
+    }
+});
 
 module.exports = router;

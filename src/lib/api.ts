@@ -1708,4 +1708,56 @@ export const updateReferralWithdrawalStatus = async (id: string, data: { status:
     return response.data
 }
 
+// Admin User Subscription Assignment APIs
+export interface SubscriptionListItem {
+    _id: string
+    name: string
+    amount: number
+    durationMonths: number
+    applicableTabs: string[]
+    isFree: boolean
+    description?: string
+}
+
+export const getSubscriptionsList = async () => {
+    const response = await api.get('/admin/subscriptions/list')
+    return response.data
+}
+
+export const assignSubscriptionToUser = async (userId: string, data: {
+    subscriptionId: string
+    durationMonths?: number
+    paymentMethod?: string
+    transactionId?: string
+    notes?: string
+}) => {
+    const response = await api.post(`/admin/users/${userId}/assign-subscription`, data)
+    return response.data
+}
+
+export const getUserSubscriptions = async (userId: string) => {
+    const response = await api.get(`/admin/users/${userId}/subscriptions`)
+    return response.data
+}
+
+// Admin Notification APIs
+export const sendNotificationToUser = async (userId: string, data: {
+    title: string
+    message: string
+    type?: string
+}) => {
+    const response = await api.post(`/admin/users/${userId}/send-notification`, data)
+    return response.data
+}
+
+export const sendBulkNotification = async (data: {
+    title: string
+    message: string
+    type?: string
+    userIds?: string[]
+}) => {
+    const response = await api.post('/admin/send-bulk-notification', data)
+    return response.data
+}
+
 export default api
