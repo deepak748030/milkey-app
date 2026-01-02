@@ -1502,7 +1502,7 @@ export interface AdminProduct {
         phone: string
     } | string
     isActive: boolean
-    subscriptionOnly: boolean
+    subscriptionOnly?: boolean
     createdAt: string
     updatedAt: string
 }

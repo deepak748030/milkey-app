@@ -212,6 +212,111 @@ router.get('/me', adminAuth, async (req, res) => {
     }
 });
 
+// PUT /api/admin/profile - Update admin profile (name, email, avatar)
+router.put('/profile', adminAuth, async (req, res) => {
+    try {
+        const { name, email, avatar } = req.body;
+        const updates = {};
+
+        if (name) updates.name = name.trim();
+        if (avatar !== undefined) updates.avatar = avatar;
+
+        // Handle email change
+        if (email && email !== req.admin.email) {
+            // Check if email is already taken
+            const existingAdmin = await Admin.findOne({
+                email: email.toLowerCase(),
+                _id: { $ne: req.adminId }
+            });
+            if (existingAdmin) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Email is already in use by another admin'
+                });
+            }
+            updates.email = email.toLowerCase().trim();
+        }
+
+        const admin = await Admin.findByIdAndUpdate(
+            req.adminId,
+            updates,
+            { new: true }
+        ).select('-password');
+
+        res.json({
+            success: true,
+            message: 'Profile updated successfully',
+            response: {
+                _id: admin._id,
+                name: admin.name,
+                email: admin.email,
+                avatar: admin.avatar,
+                role: admin.role
+            }
+        });
+    } catch (error) {
+        console.error('Update admin profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update profile'
+        });
+    }
+});
+
+// PUT /api/admin/password - Update admin password
+router.put('/password', adminAuth, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password and new password are required'
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'New password must be at least 6 characters'
+            });
+        }
+
+        // Get admin with password
+        const admin = await Admin.findById(req.adminId);
+        if (!admin) {
+            return res.status(404).json({
+                success: false,
+                message: 'Admin not found'
+            });
+        }
+
+        // Verify current password
+        const hashedCurrentPassword = hashPassword(currentPassword);
+        if (admin.password !== hashedCurrentPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password is incorrect'
+            });
+        }
+
+        // Update password
+        admin.password = hashPassword(newPassword);
+        await admin.save();
+
+        res.json({
+            success: true,
+            message: 'Password updated successfully'
+        });
+    } catch (error) {
+        console.error('Update admin password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update password'
+        });
+    }
+});
+
 // ==================== IMAGE UPLOAD ROUTE ====================
 
 // POST /api/admin/upload - Upload image to Cloudinary

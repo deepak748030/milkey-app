@@ -2,29 +2,18 @@ import { useState, useEffect } from 'react'
 import {
     User,
     Lock,
-    Activity,
     Save,
     Eye,
     EyeOff,
-    ShoppingBag,
-    Users,
-    Ticket,
-    FolderOpen,
-    Image,
-    Truck,
-    Calendar,
-    Clock,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
 import {
     updateAdminProfile,
     updateAdminPassword,
-    getAdminActivity,
-    AdminActivity,
 } from '../lib/api'
 
-type TabType = 'profile' | 'password' | 'activity'
+type TabType = 'profile' | 'password'
 
 export function SettingsPage() {
     const { admin } = useAuth()
@@ -46,9 +35,6 @@ export function SettingsPage() {
     const [passwordLoading, setPasswordLoading] = useState(false)
     const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-    // Activity state
-    const [activity, setActivity] = useState<AdminActivity | null>(null)
-    const [activityLoading, setActivityLoading] = useState(false)
 
     useEffect(() => {
         if (admin) {
@@ -57,26 +43,6 @@ export function SettingsPage() {
             setAvatar(admin.avatar || '')
         }
     }, [admin])
-
-    useEffect(() => {
-        if (activeTab === 'activity') {
-            fetchActivity()
-        }
-    }, [activeTab])
-
-    const fetchActivity = async () => {
-        setActivityLoading(true)
-        try {
-            const response = await getAdminActivity()
-            if (response.success) {
-                setActivity(response.response)
-            }
-        } catch (error) {
-            console.error('Failed to fetch activity:', error)
-        } finally {
-            setActivityLoading(false)
-        }
-    }
 
     const handleProfileUpdate = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -133,29 +99,10 @@ export function SettingsPage() {
         }
     }
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('en-IN', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        })
-    }
 
     const tabs = [
         { id: 'profile' as TabType, label: 'Profile', icon: User },
         { id: 'password' as TabType, label: 'Password', icon: Lock },
-        { id: 'activity' as TabType, label: 'Activity', icon: Activity },
-    ]
-
-    const activityStats = [
-        { label: 'Total Orders', value: activity?.activity.stats.totalOrders || 0, icon: ShoppingBag, color: 'text-blue-500' },
-        { label: 'Total Users', value: activity?.activity.stats.totalUsers || 0, icon: Users, color: 'text-green-500' },
-        { label: 'Total Coupons', value: activity?.activity.stats.totalCoupons || 0, icon: Ticket, color: 'text-purple-500' },
-        { label: 'Categories', value: activity?.activity.stats.totalCategories || 0, icon: FolderOpen, color: 'text-orange-500' },
-        { label: 'Banners', value: activity?.activity.stats.totalBanners || 0, icon: Image, color: 'text-pink-500' },
-        { label: 'Delivery Partners', value: activity?.activity.stats.totalDeliveryPartners || 0, icon: Truck, color: 'text-cyan-500' },
     ]
 
     return (
@@ -350,74 +297,6 @@ export function SettingsPage() {
                             {passwordLoading ? 'Updating...' : 'Update Password'}
                         </button>
                     </form>
-                </div>
-            )}
-
-            {/* Activity Tab */}
-            {activeTab === 'activity' && (
-                <div className="space-y-4 sm:space-y-6">
-                    {activityLoading ? (
-                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
-                            {[...Array(6)].map((_, i) => (
-                                <div key={i} className="bg-card border border-border rounded-xl p-4 sm:p-6 animate-pulse">
-                                    <div className="h-3 sm:h-4 bg-muted rounded w-1/2 mb-2 sm:mb-3" />
-                                    <div className="h-6 sm:h-8 bg-muted rounded w-1/3" />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <>
-                            {/* Account Info */}
-                            <div className="bg-card border border-border rounded-xl p-4 sm:p-6">
-                                <h2 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Account Information</h2>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                    <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-muted/50 rounded-lg">
-                                        <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0" />
-                                        <div className="min-w-0">
-                                            <p className="text-xs sm:text-sm text-muted-foreground">Account Created</p>
-                                            <p className="font-medium text-foreground text-xs sm:text-base truncate">
-                                                {activity?.activity.accountCreated
-                                                    ? formatDate(activity.activity.accountCreated)
-                                                    : '-'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-muted/50 rounded-lg">
-                                        <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0" />
-                                        <div className="min-w-0">
-                                            <p className="text-xs sm:text-sm text-muted-foreground">Last Activity</p>
-                                            <p className="font-medium text-foreground text-xs sm:text-base truncate">
-                                                {activity?.activity.lastLogin
-                                                    ? formatDate(activity.activity.lastLogin)
-                                                    : '-'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Stats Grid */}
-                            <div>
-                                <h2 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">Platform Overview</h2>
-                                <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
-                                    {activityStats.map((stat) => (
-                                        <div
-                                            key={stat.label}
-                                            className="bg-card border border-border rounded-xl p-3 sm:p-6 flex items-center gap-2 sm:gap-4"
-                                        >
-                                            <div className={cn('p-2 sm:p-3 rounded-lg bg-muted flex-shrink-0', stat.color)}>
-                                                <stat.icon className="w-4 h-4 sm:w-6 sm:h-6" />
-                                            </div>
-                                            <div className="min-w-0">
-                                                <p className="text-[10px] sm:text-sm text-muted-foreground truncate">{stat.label}</p>
-                                                <p className="text-lg sm:text-2xl font-bold text-foreground">{stat.value.toLocaleString()}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </>
-                    )}
                 </div>
             )}
         </div>

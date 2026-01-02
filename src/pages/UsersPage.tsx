@@ -18,6 +18,7 @@ import {
     Bell,
     Send,
     CreditCard,
+    Megaphone,
 } from 'lucide-react'
 import {
     getUsers,
@@ -29,6 +30,7 @@ import {
     getSubscriptionsList,
     assignSubscriptionToUser,
     sendNotificationToUser,
+    sendBulkNotification,
     SubscriptionListItem
 } from '../lib/api'
 import { cn } from '../lib/utils'
@@ -650,6 +652,12 @@ export function UsersPage() {
     const [selectedUser, setSelectedUser] = useState<User | null>(null)
     const [blockingUserId, setBlockingUserId] = useState<string | null>(null)
 
+    // Broadcast notification state
+    const [showBroadcastModal, setShowBroadcastModal] = useState(false)
+    const [broadcastTitle, setBroadcastTitle] = useState('')
+    const [broadcastMessage, setBroadcastMessage] = useState('')
+    const [sendingBroadcast, setSendingBroadcast] = useState(false)
+
     // Debounce search for better performance
     useEffect(() => {
         const timer = setTimeout(() => setDebouncedSearch(search), 400)
@@ -705,6 +713,33 @@ export function UsersPage() {
         setSelectedUser(updatedUser)
     }
 
+    const handleBroadcastNotification = async () => {
+        if (!broadcastTitle.trim() || !broadcastMessage.trim()) {
+            alert('Please enter title and message')
+            return
+        }
+
+        setSendingBroadcast(true)
+        try {
+            const response = await sendBulkNotification({
+                title: broadcastTitle,
+                message: broadcastMessage,
+                type: 'admin_broadcast'
+            })
+            if (response.success) {
+                alert(`Notification sent to ${response.response.successful} users! (${response.response.failed} failed)`)
+                setShowBroadcastModal(false)
+                setBroadcastTitle('')
+                setBroadcastMessage('')
+            }
+        } catch (error: any) {
+            console.error('Failed to send broadcast:', error)
+            alert(error.response?.data?.message || 'Failed to send notification')
+        } finally {
+            setSendingBroadcast(false)
+        }
+    }
+
     return (
         <div className="animate-fade-in space-y-4 sm:space-y-6">
             {/* Header */}
@@ -718,14 +753,23 @@ export function UsersPage() {
                         <p className="text-xs sm:text-base text-muted-foreground mt-0.5">Manage all registered users</p>
                     </div>
                 </div>
-                <button
-                    onClick={() => fetchUsers(pagination?.page || 1)}
-                    disabled={isLoading}
-                    className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-card border border-border rounded-xl hover:bg-muted transition-colors"
-                >
-                    <RefreshCw className={cn('w-4 h-4 sm:w-5 sm:h-5', isLoading && 'animate-spin')} />
-                    <span className="font-medium text-sm sm:text-base">Refresh</span>
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setShowBroadcastModal(true)}
+                        className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors"
+                    >
+                        <Megaphone className="w-4 h-4 sm:w-5 sm:h-5" />
+                        <span className="font-medium text-sm sm:text-base hidden sm:inline">Broadcast</span>
+                    </button>
+                    <button
+                        onClick={() => fetchUsers(pagination?.page || 1)}
+                        disabled={isLoading}
+                        className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-card border border-border rounded-xl hover:bg-muted transition-colors"
+                    >
+                        <RefreshCw className={cn('w-4 h-4 sm:w-5 sm:h-5', isLoading && 'animate-spin')} />
+                        <span className="font-medium text-sm sm:text-base">Refresh</span>
+                    </button>
+                </div>
             </div>
 
             {/* Filters */}
@@ -992,6 +1036,79 @@ export function UsersPage() {
                 onClose={() => setSelectedUser(null)}
                 onUpdate={handleUserUpdate}
             />
+
+            {/* Broadcast Notification Modal */}
+            {showBroadcastModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70" onClick={() => setShowBroadcastModal(false)}>
+                    <div
+                        className="bg-card border border-border rounded-2xl p-4 sm:p-6 w-full max-w-md animate-fade-in"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between mb-4 sm:mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-primary/10 rounded-lg">
+                                    <Megaphone className="w-5 h-5 text-primary" />
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-bold text-foreground">Broadcast Notification</h2>
+                                    <p className="text-sm text-muted-foreground">Send to all users</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowBroadcastModal(false)}
+                                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-sm font-medium text-foreground mb-1.5 block">Title</label>
+                                <input
+                                    type="text"
+                                    value={broadcastTitle}
+                                    onChange={(e) => setBroadcastTitle(e.target.value)}
+                                    placeholder="Notification title..."
+                                    className="w-full px-3 py-2.5 bg-muted border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-foreground mb-1.5 block">Message</label>
+                                <textarea
+                                    value={broadcastMessage}
+                                    onChange={(e) => setBroadcastMessage(e.target.value)}
+                                    placeholder="Enter your message..."
+                                    rows={4}
+                                    className="w-full px-3 py-2.5 bg-muted border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                                />
+                            </div>
+
+                            <div className="flex gap-2 pt-2">
+                                <button
+                                    onClick={() => setShowBroadcastModal(false)}
+                                    className="flex-1 py-2.5 bg-muted text-foreground rounded-lg font-medium hover:bg-muted/80 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleBroadcastNotification}
+                                    disabled={sendingBroadcast || !broadcastTitle.trim() || !broadcastMessage.trim()}
+                                    className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {sendingBroadcast ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Send className="w-4 h-4" />
+                                    )}
+                                    Send to All
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

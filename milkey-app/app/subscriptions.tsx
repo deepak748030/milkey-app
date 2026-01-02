@@ -392,6 +392,13 @@ export default function SubscriptionsScreen() {
 
         return (
             <View key={item._id} style={[styles.availableCard, item.isFree && styles.freeCard]}>
+                {/* New User Banner */}
+                {item.isFree && isNewUser && item.forNewUsers && (
+                    <View style={styles.newUserBanner}>
+                        <Gift size={12} color="#FFFFFF" />
+                        <Text style={styles.newUserText}>Free for New Users!</Text>
+                    </View>
+                )}
                 {/* Type Badge */}
                 <View style={[
                     styles.typeBadge,
@@ -404,14 +411,6 @@ export default function SubscriptionsScreen() {
                         {typeLabel}
                     </Text>
                 </View>
-
-                {/* New User Banner */}
-                {item.isFree && isNewUser && item.forNewUsers && (
-                    <View style={styles.newUserBanner}>
-                        <Gift size={12} color="#FFFFFF" />
-                        <Text style={styles.newUserText}>Free for New Users!</Text>
-                    </View>
-                )}
 
                 {/* Name */}
                 <Text style={styles.availableName}>{item.name}</Text>
