@@ -22,6 +22,7 @@ const notificationSchema = new mongoose.Schema({
         enum: [
             'commission_earned',
             'withdrawal_success',
+            'withdrawal_status',
             'subscription_expiring',
             'subscription_expired',
             'subscription_purchased',
@@ -32,7 +33,9 @@ const notificationSchema = new mongoose.Schema({
             'payment_received',
             'milk_collection',
             'general',
-            'system'
+            'system',
+            'admin_message',
+            'broadcast'
         ],
         default: 'general'
     },
