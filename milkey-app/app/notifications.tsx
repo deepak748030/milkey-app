@@ -214,7 +214,7 @@ const createStyles = (colors: any) =>
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 24,
-      paddingVertical: 16,
+      paddingVertical: 8,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
@@ -236,7 +236,7 @@ const createStyles = (colors: any) =>
       flex: 1,
     },
     content: {
-      paddingHorizontal: 24,
+      paddingHorizontal: 6,
       paddingVertical: 16,
       paddingBottom: 90,
     },
