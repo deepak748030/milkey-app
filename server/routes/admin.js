@@ -1028,12 +1028,17 @@ router.put('/orders/:id/status', adminAuth, async (req, res) => {
 
         // Send push notification for status update
         if (status && order.user && order.user._id) {
+            console.log(`[Admin] Sending order status notification to user: ${order.user._id.toString()}, status: ${status}`);
             notifyOrderStatusUpdate(
                 order.user._id.toString(),
                 order._id.toString(),
                 status,
                 order.totalAmount
-            ).catch(err => console.error('Error sending order status notification:', err));
+            ).then(result => {
+                console.log(`[Admin] Order notification result:`, JSON.stringify(result));
+            }).catch(err => console.error('[Admin] Error sending order status notification:', err));
+        } else {
+            console.log(`[Admin] Skipping notification - missing data: status=${status}, user=${order.user?._id}`);
         }
 
         res.json({

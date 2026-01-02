@@ -16,26 +16,33 @@ const expo = new Expo();
  */
 async function sendPushNotification(userId, title, message, type = 'general', data = {}, saveToDB = true) {
     try {
+        console.log(`[Push] Starting notification for user ${userId}, title: ${title}, saveToDB: ${saveToDB}`);
+
         // Get user's push token
         const user = await User.findById(userId).select('expoPushToken name').lean();
 
         if (!user) {
-            console.log(`User ${userId} not found for push notification`);
+            console.log(`[Push] User ${userId} not found for push notification`);
             return { success: false, error: 'User not found' };
         }
 
-        // Save notification to database
+        // Save notification to database FIRST
         let notification = null;
         if (saveToDB) {
-            notification = await Notification.create({
-                user: userId,
-                title,
-                message,
-                type,
-                data,
-                read: false,
-                pushSent: false
-            });
+            try {
+                notification = await Notification.create({
+                    user: userId,
+                    title,
+                    message,
+                    type,
+                    data,
+                    read: false,
+                    pushSent: false
+                });
+                console.log(`[Push] Notification saved to DB with ID: ${notification._id}`);
+            } catch (dbError) {
+                console.error(`[Push] Failed to save notification to DB:`, dbError);
+            }
         }
 
         // Check if user has a valid Expo push token
