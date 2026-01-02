@@ -140,16 +140,48 @@ async function notifyCommissionEarned(userId, amount, referredUserName) {
 }
 
 /**
- * Send withdrawal success notification
+ * Send withdrawal status notification
  */
-async function notifyWithdrawalSuccess(userId, amount) {
+async function notifyWithdrawalStatus(userId, amount, status, adminNote = '') {
+    const statusConfig = {
+        pending: {
+            emoji: '⏳',
+            title: 'Withdrawal Request Submitted',
+            message: `Your withdrawal request for ₹${amount} has been submitted and is pending approval.`
+        },
+        approved: {
+            emoji: '✅',
+            title: 'Withdrawal Approved',
+            message: `Your withdrawal of ₹${amount} has been approved and will be processed shortly.`
+        },
+        rejected: {
+            emoji: '❌',
+            title: 'Withdrawal Rejected',
+            message: `Your withdrawal request for ₹${amount} was rejected.${adminNote ? ' Reason: ' + adminNote : ''} The amount has been refunded to your balance.`
+        },
+        cancelled: {
+            emoji: '🚫',
+            title: 'Withdrawal Cancelled',
+            message: `Your withdrawal request for ₹${amount} was cancelled. The amount has been refunded to your balance.`
+        }
+    };
+
+    const config = statusConfig[status] || statusConfig.pending;
+
     return sendPushNotification(
         userId,
-        '✅ Withdrawal Successful',
-        `₹${amount} has been withdrawn from your commission balance.`,
-        'withdrawal_success',
-        { amount }
+        `${config.emoji} ${config.title}`,
+        config.message,
+        'withdrawal_status',
+        { amount, status, adminNote }
     );
+}
+
+/**
+ * Send withdrawal success notification (legacy - kept for compatibility)
+ */
+async function notifyWithdrawalSuccess(userId, amount) {
+    return notifyWithdrawalStatus(userId, amount, 'approved');
 }
 
 /**
@@ -365,6 +397,7 @@ module.exports = {
     sendPushNotification,
     sendBulkPushNotifications,
     notifyCommissionEarned,
+    notifyWithdrawalStatus,
     notifyWithdrawalSuccess,
     notifySubscriptionExpiring,
     notifySubscriptionExpired,

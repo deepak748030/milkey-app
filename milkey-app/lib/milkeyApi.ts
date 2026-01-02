@@ -1356,3 +1356,53 @@ export const notificationsApiNew = {
         });
     },
 };
+
+// Withdrawal types
+export interface Withdrawal {
+    _id: string;
+    user: string;
+    amount: number;
+    paymentMethod: 'upi' | 'bank';
+    upiId?: string;
+    bankDetails?: {
+        accountNumber: string;
+        ifscCode: string;
+        accountHolderName: string;
+        bankName?: string;
+    };
+    status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+    adminNote?: string;
+    processedAt?: string;
+    createdAt: string;
+}
+
+export interface WithdrawalData {
+    balance: number;
+    totalWithdrawn: number;
+    pendingWithdrawals: number;
+    withdrawals: Withdrawal[];
+}
+
+// Withdrawals API
+export const withdrawalsApi = {
+    getData: async () => {
+        return apiRequest<WithdrawalData>('/withdrawals');
+    },
+
+    create: async (data: {
+        amount: number;
+        paymentMethod: 'upi' | 'bank';
+        upiId?: string;
+        bankDetails?: {
+            accountNumber: string;
+            ifscCode: string;
+            accountHolderName: string;
+            bankName?: string;
+        };
+    }) => {
+        return apiRequest<Withdrawal>('/withdrawals', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+};

@@ -1,4 +1,4 @@
-// File: src/App.tsx
+/// File: src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
@@ -6,13 +6,13 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardLayout } from './components/DashboardLayout'
 import { DashboardPage } from './pages/DashboardPage'
 import { UsersPage } from './pages/UsersPage'
+import { Purchase } from './pages/Purchase'
 import { BannersPage } from './pages/BannersPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
 import { ProductsPage } from './pages/ProductsPage'
 import DeleteAccountPage from './pages/DeleteAccountPage'
 import { AdminOrdersPage } from './pages/AdminOrdersPage'
-import { Purchase } from './pages/Purchase'
 import { SellingMembersPage } from './pages/SellingMembersPage'
 import { SellingEntriesPage } from './pages/SellingEntriesPage'
 import { SellingPaymentsPage } from './pages/SellingPaymentsPage'
@@ -22,10 +22,9 @@ import { RegisterAdvancesPage } from './pages/RegisterAdvancesPage'
 import { RegisterPaymentsPage } from './pages/RegisterPaymentsPage'
 import { ProductManagementPage } from './pages/ProductManagementPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
-
 import { CustomFormsPage } from './pages/CustomFormsPage'
-
 import { ActiveSubscriptionsPage } from './pages/ActiveSubscriptionsPage'
+import { WithdrawalsPage } from './pages/WithdrawalsPage'
 
 function App() {
     return (
@@ -61,6 +60,7 @@ function App() {
                         <Route path="register-payments" element={<RegisterPaymentsPage />} />
                         <Route path="subscriptions" element={<SubscriptionsPage />} />
                         <Route path="active-subscriptions" element={<ActiveSubscriptionsPage />} />
+                        <Route path="withdrawals" element={<WithdrawalsPage />} />
                         <Route path="custom-forms" element={<CustomFormsPage />} />
                         <Route path="settings" element={<SettingsPage />} />
                     </Route>

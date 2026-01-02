@@ -1,27 +1,14 @@
-import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
-// import { usePushNotifications } from '@/hooks/usePushNotifications';
-import * as Notifications from 'expo-notifications';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 export default function RootLayout() {
   useFrameworkReady();
 
   // Initialize push notifications with deep linking support
-  // usePushNotifications();
-
-  // Listen for incoming notifications
-  useEffect(() => {
-    const notificationSubscription = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification.request.content.title);
-    });
-
-    return () => {
-      notificationSubscription.remove();
-    };
-  }, []);
+  usePushNotifications();
 
   return (
     <SafeAreaProvider>
@@ -33,6 +20,7 @@ export default function RootLayout() {
           <Stack.Screen name="notifications" />
           <Stack.Screen name="help-support" />
           <Stack.Screen name="referral" />
+          <Stack.Screen name="withdraw" />
           <Stack.Screen name="cart" />
           <Stack.Screen name="feedback" />
           <Stack.Screen name="subscriptions" />

@@ -45,6 +45,7 @@ const navItems = [
     { to: '/banners', icon: Image, label: 'Banners' },
     { to: '/subscriptions', icon: SubscriptionIcon, label: 'Subscriptions' },
     { to: '/active-subscriptions', icon: UserCheck, label: 'Active Users' },
+    { to: '/withdrawals', icon: Wallet, label: 'Withdrawals' },
     { to: '/custom-forms', icon: FileText, label: 'Custom Forms' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]

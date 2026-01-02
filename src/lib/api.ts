@@ -1666,4 +1666,46 @@ export const updateDefaultCommission = async (commissionRate: number) => {
     return response.data
 }
 
+// Admin Withdrawals APIs (for referral withdrawals)
+export interface AdminReferralWithdrawal {
+    _id: string
+    user: {
+        _id: string
+        name: string
+        email: string
+        phone: string
+        avatar?: string
+    }
+    amount: number
+    paymentMethod: 'upi' | 'bank'
+    upiId?: string
+    bankDetails?: {
+        accountNumber: string
+        ifscCode: string
+        accountHolderName: string
+        bankName?: string
+    }
+    status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+    adminNote?: string
+    processedAt?: string
+    processedBy?: { name: string }
+    createdAt: string
+}
+
+export interface ReferralWithdrawalStats {
+    pending: { count: number; total: number }
+    approved: { count: number; total: number }
+    rejected: { count: number; total: number }
+}
+
+export const getAllReferralWithdrawals = async (params?: { status?: string; page?: number; limit?: number }) => {
+    const response = await api.get('/withdrawals/admin/all', { params })
+    return response.data
+}
+
+export const updateReferralWithdrawalStatus = async (id: string, data: { status: string; adminNote?: string }) => {
+    const response = await api.put(`/withdrawals/admin/${id}`, data)
+    return response.data
+}
+
 export default api

@@ -29,6 +29,7 @@ const memberPaymentRoutes = require('./routes/member-payments');
 const subscriptionRoutes = require('./routes/subscriptions');
 const userSubscriptionRoutes = require('./routes/user-subscriptions');
 const notificationRoutes = require('./routes/notifications');
+const withdrawalRoutes = require('./routes/withdrawals');
 
 const app = express();
 
@@ -97,6 +98,7 @@ app.use('/api/member-payments', memberPaymentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/user-subscriptions', userSubscriptionRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/withdrawals', withdrawalRoutes);
 
 // 404 handler
 app.use((req, res) => {
