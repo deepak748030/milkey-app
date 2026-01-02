@@ -1,10 +1,162 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal, Dimensions } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { ArrowLeft, CreditCard, Clock, CheckCircle, XCircle, Crown, Sparkles, Gift, Calendar, Zap } from 'lucide-react-native';
+import { ArrowLeft, CreditCard, Clock, CheckCircle, XCircle, Crown, Sparkles, Gift, Calendar, Zap, Check, Star, AlertCircle, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { userSubscriptionsApi, UserSubscription, Subscription as AvailableSubscription } from '@/lib/milkeyApi';
+import { userSubscriptionsApi, UserSubscription, Subscription as AvailableSubscription, formatSubscriptionDuration } from '@/lib/milkeyApi';
+
+const { height } = Dimensions.get('window');
+
+interface ErrorModalProps {
+    visible: boolean;
+    title: string;
+    message: string;
+    onClose: () => void;
+}
+
+function ErrorModal({ visible, title, message, onClose }: ErrorModalProps) {
+    const { colors, isDark } = useTheme();
+
+    return (
+        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            <View style={{
+                flex: 1,
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: 24,
+            }}>
+                <View style={{
+                    backgroundColor: colors.card,
+                    borderRadius: 20,
+                    padding: 24,
+                    width: '100%',
+                    maxWidth: 340,
+                    alignItems: 'center',
+                }}>
+                    <View style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 28,
+                        backgroundColor: `${colors.destructive}15`,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: 16,
+                    }}>
+                        <AlertCircle size={32} color={colors.destructive} />
+                    </View>
+                    <Text style={{
+                        fontSize: 18,
+                        fontWeight: '700',
+                        color: colors.foreground,
+                        marginBottom: 8,
+                        textAlign: 'center',
+                    }}>{title}</Text>
+                    <Text style={{
+                        fontSize: 14,
+                        color: colors.mutedForeground,
+                        textAlign: 'center',
+                        lineHeight: 20,
+                        marginBottom: 24,
+                    }}>{message}</Text>
+                    <Pressable
+                        style={{
+                            backgroundColor: colors.primary,
+                            paddingVertical: 12,
+                            paddingHorizontal: 32,
+                            borderRadius: 10,
+                            width: '100%',
+                        }}
+                        onPress={onClose}
+                    >
+                        <Text style={{
+                            fontSize: 14,
+                            fontWeight: '700',
+                            color: '#FFFFFF',
+                            textAlign: 'center',
+                        }}>Got it</Text>
+                    </Pressable>
+                </View>
+            </View>
+        </Modal>
+    );
+}
+
+interface SuccessModalProps {
+    visible: boolean;
+    title: string;
+    message: string;
+    onClose: () => void;
+}
+
+function SuccessModal({ visible, title, message, onClose }: SuccessModalProps) {
+    const { colors } = useTheme();
+
+    return (
+        <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            <View style={{
+                flex: 1,
+                backgroundColor: 'rgba(0,0,0,0.6)',
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: 24,
+            }}>
+                <View style={{
+                    backgroundColor: colors.card,
+                    borderRadius: 20,
+                    padding: 24,
+                    width: '100%',
+                    maxWidth: 340,
+                    alignItems: 'center',
+                }}>
+                    <View style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 28,
+                        backgroundColor: `${colors.success}15`,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: 16,
+                    }}>
+                        <CheckCircle size={32} color={colors.success} />
+                    </View>
+                    <Text style={{
+                        fontSize: 18,
+                        fontWeight: '700',
+                        color: colors.foreground,
+                        marginBottom: 8,
+                        textAlign: 'center',
+                    }}>{title}</Text>
+                    <Text style={{
+                        fontSize: 14,
+                        color: colors.mutedForeground,
+                        textAlign: 'center',
+                        lineHeight: 20,
+                        marginBottom: 24,
+                    }}>{message}</Text>
+                    <Pressable
+                        style={{
+                            backgroundColor: colors.primary,
+                            paddingVertical: 12,
+                            paddingHorizontal: 32,
+                            borderRadius: 10,
+                            width: '100%',
+                        }}
+                        onPress={onClose}
+                    >
+                        <Text style={{
+                            fontSize: 14,
+                            fontWeight: '700',
+                            color: '#FFFFFF',
+                            textAlign: 'center',
+                        }}>Continue</Text>
+                    </Pressable>
+                </View>
+            </View>
+        </Modal>
+    );
+}
 
 export default function SubscriptionsScreen() {
     const { colors, isDark } = useTheme();
@@ -16,6 +168,8 @@ export default function SubscriptionsScreen() {
     const [availableSubscriptions, setAvailableSubscriptions] = useState<AvailableSubscription[]>([]);
     const [isNewUser, setIsNewUser] = useState(false);
     const [purchasing, setPurchasing] = useState<string | null>(null);
+    const [errorModal, setErrorModal] = useState({ visible: false, title: '', message: '' });
+    const [successModal, setSuccessModal] = useState({ visible: false, title: '', message: '' });
 
     const styles = createStyles(colors, isDark);
 
@@ -58,9 +212,41 @@ export default function SubscriptionsScreen() {
             if (response.success) {
                 await fetchData();
                 setActiveTab('active');
+
+                // Show success message
+                const isQueued = response.isQueued;
+                if (isQueued) {
+                    setSuccessModal({
+                        visible: true,
+                        title: 'Subscription Queued!',
+                        message: response.message || 'Your subscription has been queued and will start after your current subscription ends.'
+                    });
+                } else {
+                    setSuccessModal({
+                        visible: true,
+                        title: 'Subscription Activated!',
+                        message: response.message || 'Your subscription is now active.'
+                    });
+                }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error purchasing subscription:', error);
+            const errorMessage = error?.response?.data?.message || error?.message || 'Failed to purchase subscription';
+            const errorCode = error?.response?.data?.errorCode;
+
+            if (errorCode === 'ALREADY_SUBSCRIBED') {
+                setErrorModal({
+                    visible: true,
+                    title: 'Already Subscribed',
+                    message: 'You already have this subscription active. Please wait for it to expire or choose a different plan.'
+                });
+            } else {
+                setErrorModal({
+                    visible: true,
+                    title: 'Purchase Failed',
+                    message: errorMessage
+                });
+            }
         } finally {
             setPurchasing(null);
         }
@@ -68,14 +254,21 @@ export default function SubscriptionsScreen() {
 
     const getTypeIcon = (type?: string) => {
         switch (type) {
-            case 'free': return Gift;
-            case 'combo': return Crown;
-            default: return Sparkles;
+            case 'free': return Star;
+            case 'combined': return Crown;
+            default: return Zap;
         }
     };
 
+    const getTypeLabel = (sub: AvailableSubscription) => {
+        if (sub.isFree) return 'FREE';
+        if (sub.subscriptionType === 'combined') return 'COMBO';
+        return 'SINGLE';
+    };
+
     const getTabNames = (tabs: string[]) => {
-        return tabs.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ');
+        if (!tabs || tabs.length === 0) return '';
+        return tabs.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' + ');
     };
 
     const formatDate = (dateString: string) => {
@@ -95,46 +288,70 @@ export default function SubscriptionsScreen() {
     };
 
     const renderActiveSubscription = (item: UserSubscription) => {
+        if (!item.subscription) return null;
+
         const daysRemaining = getDaysRemaining(item.endDate);
         const TypeIcon = getTypeIcon(item.subscription.subscriptionType);
+        const isQueued = new Date(item.startDate) > new Date();
 
         return (
-            <View key={item._id} style={styles.subscriptionCard}>
+            <View key={item._id} style={[styles.subscriptionCard, isQueued && styles.queuedCard]}>
                 <View style={styles.cardHeader}>
-                    <View style={styles.iconContainer}>
-                        <TypeIcon size={24} color={colors.primary} />
+                    <View style={[styles.iconContainer, isQueued && styles.queuedIconContainer]}>
+                        <TypeIcon size={24} color={isQueued ? colors.warning : colors.primary} />
                     </View>
                     <View style={styles.cardHeaderInfo}>
                         <Text style={styles.subscriptionName}>{item.subscription.name}</Text>
-                        <View style={styles.statusBadge}>
-                            <CheckCircle size={12} color={colors.success} />
-                            <Text style={styles.statusText}>Active</Text>
+                        <View style={[styles.statusBadge, isQueued && styles.queuedBadge]}>
+                            {isQueued ? (
+                                <>
+                                    <Clock size={12} color={colors.warning} />
+                                    <Text style={[styles.statusText, { color: colors.warning }]}>Queued</Text>
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle size={12} color={colors.success} />
+                                    <Text style={styles.statusText}>Active</Text>
+                                </>
+                            )}
                         </View>
                     </View>
                 </View>
 
                 <View style={styles.cardDetails}>
+                    {isQueued && (
+                        <View style={styles.detailRow}>
+                            <Calendar size={14} color={colors.warning} />
+                            <Text style={[styles.detailText, { color: colors.warning }]}>
+                                Starts: {formatDate(item.startDate)}
+                            </Text>
+                        </View>
+                    )}
                     <View style={styles.detailRow}>
                         <Calendar size={14} color={colors.mutedForeground} />
                         <Text style={styles.detailText}>Valid till: {formatDate(item.endDate)}</Text>
                     </View>
-                    <View style={styles.detailRow}>
-                        <Clock size={14} color={daysRemaining <= 7 ? colors.warning : colors.mutedForeground} />
-                        <Text style={[styles.detailText, daysRemaining <= 7 && { color: colors.warning }]}>
-                            {daysRemaining} days remaining
-                        </Text>
-                    </View>
+                    {!isQueued && (
+                        <View style={styles.detailRow}>
+                            <Clock size={14} color={daysRemaining <= 7 ? colors.warning : colors.mutedForeground} />
+                            <Text style={[styles.detailText, daysRemaining <= 7 && { color: colors.warning }]}>
+                                {daysRemaining} days remaining
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 <View style={styles.tabsContainer}>
                     <Text style={styles.tabsLabel}>Covers: </Text>
-                    <Text style={styles.tabsValue}>{getTabNames(item.subscription.applicableTabs)}</Text>
+                    <Text style={styles.tabsValue}>{getTabNames(item.subscription.applicableTabs || [])}</Text>
                 </View>
             </View>
         );
     };
 
     const renderExpiredSubscription = (item: UserSubscription) => {
+        if (!item.subscription) return null;
+
         const TypeIcon = getTypeIcon(item.subscription.subscriptionType);
 
         return (
@@ -161,7 +378,7 @@ export default function SubscriptionsScreen() {
 
                 <View style={styles.tabsContainer}>
                     <Text style={styles.tabsLabel}>Covered: </Text>
-                    <Text style={styles.tabsValue}>{getTabNames(item.subscription.applicableTabs)}</Text>
+                    <Text style={styles.tabsValue}>{getTabNames(item.subscription.applicableTabs || [])}</Text>
                 </View>
             </View>
         );
@@ -171,49 +388,83 @@ export default function SubscriptionsScreen() {
         const TypeIcon = getTypeIcon(item.subscriptionType);
         const isPurchasing = purchasing === item._id;
         const isPurchased = item.isPurchased || false;
+        const typeLabel = getTypeLabel(item);
 
         return (
-            <View key={item._id} style={styles.subscriptionCard}>
-                {item.isFree && isNewUser && (
+            <View key={item._id} style={[styles.availableCard, item.isFree && styles.freeCard]}>
+                {/* Type Badge */}
+                <View style={[
+                    styles.typeBadge,
+                    item.isFree ? styles.freeBadge :
+                        item.subscriptionType === 'combined' ? styles.comboBadge :
+                            styles.singleBadge
+                ]}>
+                    <TypeIcon size={14} color={item.isFree ? colors.warning : colors.primary} fill={item.isFree ? colors.warning : undefined} />
+                    <Text style={[styles.typeBadgeText, item.isFree && styles.freeBadgeText]}>
+                        {typeLabel}
+                    </Text>
+                </View>
+
+                {/* New User Banner */}
+                {item.isFree && isNewUser && item.forNewUsers && (
                     <View style={styles.newUserBanner}>
-                        <Gift size={14} color={colors.white} />
+                        <Gift size={12} color="#FFFFFF" />
                         <Text style={styles.newUserText}>Free for New Users!</Text>
                     </View>
                 )}
 
-                <View style={styles.cardHeader}>
-                    <View style={styles.iconContainer}>
-                        <TypeIcon size={24} color={colors.primary} />
-                    </View>
-                    <View style={styles.cardHeaderInfo}>
-                        <Text style={styles.subscriptionName}>{item.name}</Text>
-                        <View style={styles.priceContainer}>
-                            {item.isFree ? (
-                                <Text style={styles.freeText}>FREE</Text>
-                            ) : (
-                                <Text style={styles.priceText}>₹{item.amount}</Text>
-                            )}
-                            <Text style={styles.durationText}>/ {item.durationMonths} month{item.durationMonths > 1 ? 's' : ''}</Text>
-                        </View>
-                    </View>
+                {/* Name */}
+                <Text style={styles.availableName}>{item.name}</Text>
+
+                {/* Price Row */}
+                <View style={styles.priceRow}>
+                    <Text style={[styles.priceText, item.isFree && styles.freePriceText]}>
+                        {item.isFree ? 'FREE' : `₹${item.amount}`}
+                    </Text>
+                    <Text style={styles.durationText}>/ {formatSubscriptionDuration(item)}</Text>
                 </View>
 
-                {item.description && (
+                {/* Description */}
+                {item.description ? (
                     <Text style={styles.descriptionText}>{item.description}</Text>
-                )}
+                ) : null}
 
-                <View style={styles.tabsContainer}>
-                    <Text style={styles.tabsLabel}>Covers: </Text>
-                    <Text style={styles.tabsValue}>{getTabNames(item.applicableTabs)}</Text>
+                {/* Tabs Row */}
+                <View style={styles.tabsRow}>
+                    <Text style={styles.tabsRowLabel}>Access to: </Text>
+                    <Text style={styles.tabsRowValue}>{getTabNames(item.applicableTabs || [])}</Text>
                 </View>
 
+                {/* Features */}
+                <View style={styles.featuresContainer}>
+                    {item.applicableTabs?.map((tab) => (
+                        <View key={tab} style={styles.featureRow}>
+                            <Check size={14} color={colors.primary} />
+                            <Text style={styles.featureText}>
+                                {tab.charAt(0).toUpperCase() + tab.slice(1)} Tab Access
+                            </Text>
+                        </View>
+                    ))}
+                    <View style={styles.featureRow}>
+                        <Check size={14} color={colors.primary} />
+                        <Text style={styles.featureText}>
+                            {formatSubscriptionDuration(item)} Validity
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Purchase Button */}
                 <Pressable
-                    style={[styles.purchaseButton, isPurchased && styles.purchasedButton]}
+                    style={[
+                        styles.purchaseButton,
+                        isPurchased && styles.purchasedButton,
+                        item.isFree && !isPurchased && styles.freePurchaseButton
+                    ]}
                     onPress={() => !isPurchased && handlePurchase(item._id)}
                     disabled={isPurchased || isPurchasing}
                 >
                     {isPurchasing ? (
-                        <ActivityIndicator size="small" color={colors.white} />
+                        <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                         <Text style={styles.purchaseButtonText}>
                             {isPurchased ? 'Already Subscribed' : item.isFree ? 'Activate Free' : 'Subscribe Now'}
@@ -239,15 +490,15 @@ export default function SubscriptionsScreen() {
 
         switch (activeTab) {
             case 'active':
-                items = activeSubscriptions.map(renderActiveSubscription);
+                items = activeSubscriptions.map(renderActiveSubscription).filter(Boolean);
                 emptyMessage = 'No active subscriptions';
                 break;
             case 'available':
-                items = availableSubscriptions.map(renderAvailableSubscription);
+                items = availableSubscriptions.map(renderAvailableSubscription).filter(Boolean);
                 emptyMessage = 'No subscriptions available';
                 break;
             case 'expired':
-                items = expiredSubscriptions.map(renderExpiredSubscription);
+                items = expiredSubscriptions.map(renderExpiredSubscription).filter(Boolean);
                 emptyMessage = 'No expired subscriptions';
                 break;
         }
@@ -316,6 +567,20 @@ export default function SubscriptionsScreen() {
             >
                 {renderContent()}
             </ScrollView>
+
+            <ErrorModal
+                visible={errorModal.visible}
+                title={errorModal.title}
+                message={errorModal.message}
+                onClose={() => setErrorModal({ visible: false, title: '', message: '' })}
+            />
+
+            <SuccessModal
+                visible={successModal.visible}
+                title={successModal.title}
+                message={successModal.message}
+                onClose={() => setSuccessModal({ visible: false, title: '', message: '' })}
+            />
         </SafeAreaView>
     );
 }
@@ -372,7 +637,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.mutedForeground,
     },
     activeTabText: {
-        color: colors.white,
+        color: '#FFFFFF',
     },
     scrollView: {
         flex: 1,
@@ -412,11 +677,13 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     browseButtonText: {
         fontSize: 14,
         fontWeight: '600',
-        color: colors.white,
+        color: '#FFFFFF',
     },
     listContainer: {
         gap: 16,
     },
+
+    // Active subscription card styles
     subscriptionCard: {
         backgroundColor: colors.card,
         borderRadius: 16,
@@ -424,26 +691,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
     },
+    queuedCard: {
+        borderColor: colors.warning,
+        borderWidth: 2,
+    },
     expiredCard: {
         opacity: 0.7,
-    },
-    newUserBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.success,
-        paddingVertical: 8,
-        marginTop: -16,
-        marginHorizontal: -16,
-        marginBottom: 16,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        gap: 6,
-    },
-    newUserText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: colors.white,
     },
     cardHeader: {
         flexDirection: 'row',
@@ -454,10 +707,13 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         width: 48,
         height: 48,
         borderRadius: 12,
-        backgroundColor: colors.primary + '15',
+        backgroundColor: `${colors.primary}15`,
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 12,
+    },
+    queuedIconContainer: {
+        backgroundColor: `${colors.warning}15`,
     },
     expiredIcon: {
         backgroundColor: colors.muted,
@@ -479,36 +735,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         alignItems: 'center',
         gap: 4,
     },
+    queuedBadge: {},
     expiredBadge: {},
     statusText: {
         fontSize: 12,
         fontWeight: '600',
         color: colors.success,
-    },
-    priceContainer: {
-        flexDirection: 'row',
-        alignItems: 'baseline',
-    },
-    priceText: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: colors.primary,
-    },
-    freeText: {
-        fontSize: 18,
-        fontWeight: '800',
-        color: colors.success,
-    },
-    durationText: {
-        fontSize: 12,
-        color: colors.mutedForeground,
-        marginLeft: 4,
-    },
-    descriptionText: {
-        fontSize: 13,
-        color: colors.mutedForeground,
-        marginBottom: 12,
-        lineHeight: 18,
     },
     cardDetails: {
         gap: 6,
@@ -530,7 +762,6 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         paddingHorizontal: 12,
         backgroundColor: colors.secondary,
         borderRadius: 8,
-        marginBottom: 12,
     },
     tabsLabel: {
         fontSize: 12,
@@ -541,9 +772,111 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontWeight: '600',
         color: colors.foreground,
     },
+
+    // Available subscription card styles (matching modal UI)
+    availableCard: {
+        backgroundColor: colors.card,
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    freeCard: {
+        borderColor: colors.warning,
+        borderWidth: 2,
+    },
+    typeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 20,
+        marginBottom: 10,
+    },
+    freeBadge: {
+        backgroundColor: `${colors.warning}20`,
+    },
+    comboBadge: {
+        backgroundColor: `${colors.primary}15`,
+    },
+    singleBadge: {
+        backgroundColor: colors.muted,
+    },
+    typeBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: colors.primary,
+    },
+    freeBadgeText: {
+        color: colors.warning,
+    },
+    newUserBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.success,
+        paddingVertical: 6,
+        marginTop: -16,
+        marginHorizontal: -16,
+        marginBottom: 12,
+        borderTopLeftRadius: 14,
+        borderTopRightRadius: 14,
+        gap: 6,
+    },
+    newUserText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#FFFFFF',
+    },
+    availableName: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.foreground,
+        marginBottom: 6,
+    },
+    priceRow: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+        gap: 4,
+        marginBottom: 10,
+    },
+    priceText: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: colors.primary,
+    },
+    freePriceText: {
+        color: colors.warning,
+    },
+    durationText: {
+        fontSize: 14,
+        color: colors.mutedForeground,
+    },
+    descriptionText: {
+        fontSize: 13,
+        color: colors.mutedForeground,
+        marginBottom: 12,
+        lineHeight: 18,
+    },
+    tabsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    tabsRowLabel: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+    },
+    tabsRowValue: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
     featuresContainer: {
         gap: 6,
-        marginBottom: 12,
+        marginBottom: 14,
     },
     featureRow: {
         flexDirection: 'row',
@@ -564,9 +897,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     purchasedButton: {
         backgroundColor: colors.muted,
     },
+    freePurchaseButton: {
+        backgroundColor: colors.success,
+    },
     purchaseButtonText: {
         fontSize: 14,
         fontWeight: '700',
-        color: colors.white,
+        color: '#FFFFFF',
     },
 });

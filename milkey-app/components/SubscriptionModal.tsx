@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, ScrollView, Pressable, StyleSheet, ActivityIndicator, Dimensions, StatusBar } from 'react-native';
+import { View, Text, Modal, ScrollView, Pressable, StyleSheet, ActivityIndicator, Dimensions, StatusBar, Alert } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Crown, Check, Star, Zap, X } from 'lucide-react-native';
-import { Subscription, userSubscriptionsApi } from '@/lib/milkeyApi';
+import { Crown, Check, Star, Zap, X, AlertCircle, CheckCircle } from 'lucide-react-native';
+import { Subscription, userSubscriptionsApi, formatSubscriptionDuration } from '@/lib/milkeyApi';
 import { useSubscriptionStore } from '@/lib/subscriptionStore';
 
 const { width, height } = Dimensions.get('window');
@@ -82,10 +82,32 @@ export function SubscriptionModal({
                 if (onSubscribe) {
                     onSubscribe(subscription);
                 }
-                onClose();
+
+                // Show success message for queued subscriptions
+                if (res.isQueued) {
+                    Alert.alert(
+                        'Subscription Queued!',
+                        res.message || 'Your subscription has been queued and will start after your current subscription ends.',
+                        [{ text: 'OK', onPress: onClose }]
+                    );
+                } else {
+                    onClose();
+                }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to purchase subscription:', error);
+            const errorMessage = error?.response?.data?.message || error?.message || 'Failed to purchase subscription';
+            const errorCode = error?.response?.data?.errorCode;
+
+            if (errorCode === 'ALREADY_SUBSCRIBED') {
+                Alert.alert(
+                    'Already Subscribed',
+                    'You already have this subscription active. Please wait for it to expire or choose a different plan.',
+                    [{ text: 'OK' }]
+                );
+            } else {
+                Alert.alert('Purchase Failed', errorMessage, [{ text: 'OK' }]);
+            }
         } finally {
             setPurchasing(null);
         }
@@ -202,7 +224,7 @@ export function SubscriptionModal({
                                 {sub.isFree ? 'FREE' : `₹${sub.amount}`}
                             </Text>
                             <Text style={styles.duration}>
-                                / {sub.durationMonths} {sub.durationMonths === 1 ? 'month' : 'months'}
+                                / {formatSubscriptionDuration(sub)}
                             </Text>
                         </View>
 
@@ -229,7 +251,7 @@ export function SubscriptionModal({
                             <View style={styles.featureItem}>
                                 <Check size={14} color={colors.primary} />
                                 <Text style={styles.featureText}>
-                                    {sub.durationMonths} Month{sub.durationMonths > 1 ? 's' : ''} Validity
+                                    {formatSubscriptionDuration(sub)} Validity
                                 </Text>
                             </View>
                         </View>

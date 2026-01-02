@@ -14,6 +14,8 @@ export interface ApiResponse<T> {
     response?: T;
     code?: string; // Error code like 'SUBSCRIPTION_REQUIRED'
     requiredTab?: string; // Tab that requires subscription
+    isQueued?: boolean; // For subscription purchases - if queued after existing one
+    startsAt?: string; // When queued subscription will start
 }
 
 export interface Farmer {
@@ -1195,6 +1197,9 @@ export interface Subscription {
     name: string;
     amount: number;
     durationMonths: number;
+    durationDays?: number;
+    durationType?: 'days' | 'months' | 'years';
+    durationValue?: number;
     applicableTabs: ('purchase' | 'selling' | 'register')[];
     subscriptionType: 'single' | 'combined' | 'free';
     isFree: boolean;
@@ -1203,6 +1208,34 @@ export interface Subscription {
     isActive: boolean;
     isPurchased?: boolean;
 }
+
+// Helper function to format subscription duration
+export const formatSubscriptionDuration = (sub: Subscription): string => {
+    // Use stored durationType and durationValue if available
+    if (sub.durationType && sub.durationValue) {
+        const value = sub.durationValue;
+        switch (sub.durationType) {
+            case 'days':
+                return value === 1 ? '1 Day' : `${value} Days`;
+            case 'months':
+                return value === 1 ? '1 Month' : `${value} Months`;
+            case 'years':
+                return value === 1 ? '1 Year' : `${value} Years`;
+        }
+    }
+
+    // Fallback to calculating from durationDays
+    const days = sub.durationDays || (sub.durationMonths ? sub.durationMonths * 30 : 30);
+    if (days >= 365 && days % 365 === 0) {
+        const years = days / 365;
+        return years === 1 ? '1 Year' : `${years} Years`;
+    }
+    if (days >= 30 && days % 30 === 0) {
+        const months = days / 30;
+        return months === 1 ? '1 Month' : `${months} Months`;
+    }
+    return days === 1 ? '1 Day' : `${days} Days`;
+};
 
 export interface UserSubscription {
     _id: string;

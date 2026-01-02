@@ -226,8 +226,8 @@ router.post('/purchase', auth, async (req, res) => {
             });
         }
 
-        // Check if user already has this subscription active
-        const existingActive = await UserSubscription.findOne({
+        // Check if user already has this exact subscription active or queued
+        const existingSubscription = await UserSubscription.findOne({
             user: req.userId,
             subscription: subscriptionId,
             isActive: true,
@@ -235,10 +235,11 @@ router.post('/purchase', auth, async (req, res) => {
             endDate: { $gte: new Date() }
         });
 
-        if (existingActive) {
+        if (existingSubscription) {
             return res.status(400).json({
                 success: false,
-                message: 'You already have this subscription active'
+                message: 'You already have this subscription active',
+                errorCode: 'ALREADY_SUBSCRIBED'
             });
         }
 
@@ -271,10 +272,42 @@ router.post('/purchase', auth, async (req, res) => {
             }
         }
 
-        // Calculate end date
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + subscription.durationMonths);
+        // Check for any active subscription covering same tabs - queue it after
+        const now = new Date();
+        const overlappingTabs = subscription.applicableTabs || [];
+
+        // Find the latest ending subscription that covers any of the same tabs
+        const latestActiveSubscription = await UserSubscription.findOne({
+            user: req.userId,
+            isActive: true,
+            paymentStatus: 'completed',
+            endDate: { $gte: now },
+            applicableTabs: { $in: overlappingTabs }
+        }).sort({ endDate: -1 }).lean();
+
+        // Calculate start and end dates
+        let startDate;
+        let isQueued = false;
+
+        if (latestActiveSubscription) {
+            // Queue this subscription to start after the current one ends
+            startDate = new Date(latestActiveSubscription.endDate);
+            isQueued = true;
+        } else {
+            startDate = new Date();
+        }
+
+        // Calculate end date based on duration
+        const endDate = new Date(startDate);
+        if (subscription.durationType === 'days') {
+            endDate.setDate(endDate.getDate() + (subscription.durationValue || subscription.durationDays || 30));
+        } else if (subscription.durationType === 'years') {
+            endDate.setFullYear(endDate.getFullYear() + (subscription.durationValue || 1));
+        } else {
+            // Default to months
+            const months = subscription.durationValue || subscription.durationMonths || 1;
+            endDate.setMonth(endDate.getMonth() + months);
+        }
 
         // Create user subscription
         const userSubscription = new UserSubscription({
@@ -389,10 +422,18 @@ router.post('/purchase', auth, async (req, res) => {
             userSubscription.endDate
         ).catch(err => console.error('Error sending subscription notification:', err));
 
+        // Build response message
+        let message = subscription.isFree ? 'Free subscription activated!' : 'Subscription purchased successfully!';
+        if (isQueued) {
+            message = `Subscription queued! It will start on ${startDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} after your current subscription ends.`;
+        }
+
         res.status(201).json({
             success: true,
-            message: subscription.isFree ? 'Free subscription activated!' : 'Subscription purchased successfully!',
-            response: userSubscription
+            message,
+            response: userSubscription,
+            isQueued,
+            startsAt: startDate
         });
     } catch (error) {
         console.error('Purchase subscription error:', error);
