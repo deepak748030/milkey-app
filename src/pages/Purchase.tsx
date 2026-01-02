@@ -36,7 +36,7 @@ function SkeletonRow() {
     )
 }
 
-export function AdminPurchasePage() {
+export function Purchase() {
     const [collections, setCollections] = useState<AdminMilkCollection[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')

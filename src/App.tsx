@@ -12,7 +12,7 @@ import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage'
 import { ProductsPage } from './pages/ProductsPage'
 import DeleteAccountPage from './pages/DeleteAccountPage'
 import { AdminOrdersPage } from './pages/AdminOrdersPage'
-import { AdminPurchasePage } from './pages/AdminPurchasePage'
+import { Purchase } from './pages/Purchase'
 import { SellingMembersPage } from './pages/SellingMembersPage'
 
 import { SellingEntriesPage } from './pages/SellingEntriesPage'
@@ -52,7 +52,7 @@ function App() {
                         <Route path="users" element={<UsersPage />} />
                         <Route path="banners" element={<BannersPage />} />
                         <Route path="admin-orders" element={<AdminOrdersPage />} />
-                        <Route path="purchase" element={<AdminPurchasePage />} />
+                        <Route path="purchase" element={<Purchase />} />
                         <Route path="selling-members" element={<SellingMembersPage />} />
                         <Route path="selling-entries" element={<SellingEntriesPage />} />
                         <Route path="selling-payments" element={<SellingPaymentsPage />} />
