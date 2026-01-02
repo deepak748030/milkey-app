@@ -22,7 +22,9 @@ import { RegisterAdvancesPage } from './pages/RegisterAdvancesPage'
 import { RegisterPaymentsPage } from './pages/RegisterPaymentsPage'
 import { ProductManagementPage } from './pages/ProductManagementPage'
 import { SubscriptionsPage } from './pages/SubscriptionsPage'
+
 import { CustomFormsPage } from './pages/CustomFormsPage'
+
 import { ActiveSubscriptionsPage } from './pages/ActiveSubscriptionsPage'
 
 function App() {
