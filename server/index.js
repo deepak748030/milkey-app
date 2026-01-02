@@ -28,6 +28,7 @@ const customFormRoutes = require('./routes/custom-forms');
 const memberPaymentRoutes = require('./routes/member-payments');
 const subscriptionRoutes = require('./routes/subscriptions');
 const userSubscriptionRoutes = require('./routes/user-subscriptions');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 
@@ -95,6 +96,7 @@ app.use('/api/selling-entries', sellingEntryRoutes);
 app.use('/api/member-payments', memberPaymentRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/user-subscriptions', userSubscriptionRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // 404 handler
 app.use((req, res) => {

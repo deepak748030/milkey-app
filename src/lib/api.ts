@@ -68,6 +68,9 @@ export interface User {
     wallet?: UserWallet
     role?: string
     address?: string
+    referralCode?: string
+    referralEarnings?: number
+    totalReferralEarnings?: number
 }
 
 export interface VendorKYC {
@@ -360,6 +363,11 @@ export const updateUser = async (id: string, data: {
 
 export const toggleUserBlock = async (id: string, reason?: string) => {
     const response = await api.put(`/admin/users/${id}/block`, { reason })
+    return response.data
+}
+
+export const updateUserCommission = async (id: string, action: 'withdraw' | 'add' | 'set', amount: number) => {
+    const response = await api.put(`/admin/users/${id}/commission`, { action, amount })
     return response.data
 }
 

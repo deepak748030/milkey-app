@@ -12,12 +12,10 @@ import {
     Users,
     Wallet,
     TrendingUp,
-    Clock,
-    ArrowDownCircle,
     Edit3,
     Save,
 } from 'lucide-react'
-import { getUsers, toggleUserBlock, updateUser, User, Pagination } from '../lib/api'
+import { getUsers, toggleUserBlock, updateUser, updateUserCommission, User, Pagination } from '../lib/api'
 import { cn } from '../lib/utils'
 
 // Skeleton component for loading state
@@ -77,6 +75,9 @@ interface UserDetailModalProps {
 function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
     const [isEditing, setIsEditing] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
+    const [isCommissionAction, setIsCommissionAction] = useState(false)
+    const [commissionAmount, setCommissionAmount] = useState('')
+    const [commissionAction, setCommissionAction] = useState<'withdraw' | 'add' | 'set'>('withdraw')
     const [editData, setEditData] = useState({
         name: '',
         email: '',
@@ -95,12 +96,15 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
                 role: user.role || 'owner'
             })
             setIsEditing(false)
+            setIsCommissionAction(false)
+            setCommissionAmount('')
         }
     }, [user])
 
     if (!user) return null
 
-    const wallet = user.wallet || { balance: 0, pendingBalance: 0, totalEarnings: 0, totalWithdrawn: 0 }
+    const referralEarnings = user.referralEarnings || 0
+    const totalReferralEarnings = user.totalReferralEarnings || 0
 
     const handleSave = async () => {
         setIsSaving(true)
@@ -112,6 +116,34 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
             }
         } catch (error) {
             console.error('Failed to update user:', error)
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const handleCommissionAction = async () => {
+        const amount = parseFloat(commissionAmount)
+        if (isNaN(amount) || amount <= 0) {
+            alert('Please enter a valid amount')
+            return
+        }
+
+        setIsSaving(true)
+        try {
+            const response = await updateUserCommission(user._id, commissionAction, amount)
+            if (response.success) {
+                onUpdate({
+                    ...user,
+                    referralEarnings: response.response.referralEarnings,
+                    totalReferralEarnings: response.response.totalReferralEarnings
+                })
+                setIsCommissionAction(false)
+                setCommissionAmount('')
+                alert(response.message)
+            }
+        } catch (error: any) {
+            console.error('Failed to update commission:', error)
+            alert(error.response?.data?.message || 'Failed to update commission')
         } finally {
             setIsSaving(false)
         }
@@ -176,43 +208,108 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
                     </span>
                 </div>
 
-                {/* Wallet Section */}
+                {/* Commission Section */}
                 <div className="mb-4 sm:mb-6">
-                    <h4 className="text-sm font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-                        <Wallet className="w-4 h-4" />
-                        Wallet Balance
-                    </h4>
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4" />
+                            Referral Commission
+                        </h4>
+                        <button
+                            onClick={() => setIsCommissionAction(!isCommissionAction)}
+                            className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors"
+                        >
+                            {isCommissionAction ? 'Cancel' : 'Manage'}
+                        </button>
+                    </div>
                     <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                        <div className="bg-primary/10 border border-primary/20 rounded-xl p-3 sm:p-4">
-                            <div className="flex items-center gap-2 text-primary mb-1">
+                        <div className="bg-success/10 border border-success/20 rounded-xl p-3 sm:p-4">
+                            <div className="flex items-center gap-2 text-success mb-1">
                                 <Wallet className="w-3 h-3 sm:w-4 sm:h-4" />
                                 <span className="text-xs font-medium">Available</span>
                             </div>
-                            <p className="text-lg sm:text-xl font-bold text-foreground">₹{wallet.balance.toLocaleString()}</p>
+                            <p className="text-lg sm:text-xl font-bold text-foreground">₹{referralEarnings.toLocaleString()}</p>
                         </div>
-                        <div className="bg-warning/10 border border-warning/20 rounded-xl p-3 sm:p-4">
-                            <div className="flex items-center gap-2 text-warning mb-1">
-                                <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
-                                <span className="text-xs font-medium">Pending</span>
-                            </div>
-                            <p className="text-lg sm:text-xl font-bold text-foreground">₹{wallet.pendingBalance.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-success/10 border border-success/20 rounded-xl p-3 sm:p-4">
-                            <div className="flex items-center gap-2 text-success mb-1">
+                        <div className="bg-primary/10 border border-primary/20 rounded-xl p-3 sm:p-4">
+                            <div className="flex items-center gap-2 text-primary mb-1">
                                 <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
-                                <span className="text-xs font-medium">Total Earnings</span>
+                                <span className="text-xs font-medium">Total Earned</span>
                             </div>
-                            <p className="text-lg sm:text-xl font-bold text-foreground">₹{wallet.totalEarnings.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-muted border border-border rounded-xl p-3 sm:p-4">
-                            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                                <ArrowDownCircle className="w-3 h-3 sm:w-4 sm:h-4" />
-                                <span className="text-xs font-medium">Withdrawn</span>
-                            </div>
-                            <p className="text-lg sm:text-xl font-bold text-foreground">₹{wallet.totalWithdrawn.toLocaleString()}</p>
+                            <p className="text-lg sm:text-xl font-bold text-foreground">₹{totalReferralEarnings.toLocaleString()}</p>
                         </div>
                     </div>
+
+                    {/* Commission Actions */}
+                    {isCommissionAction && (
+                        <div className="mt-3 p-3 bg-muted/50 rounded-xl space-y-3">
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setCommissionAction('withdraw')}
+                                    className={cn(
+                                        'flex-1 py-2 text-xs font-medium rounded-lg transition-colors',
+                                        commissionAction === 'withdraw'
+                                            ? 'bg-destructive text-destructive-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    )}
+                                >
+                                    Withdraw
+                                </button>
+                                <button
+                                    onClick={() => setCommissionAction('add')}
+                                    className={cn(
+                                        'flex-1 py-2 text-xs font-medium rounded-lg transition-colors',
+                                        commissionAction === 'add'
+                                            ? 'bg-success text-success-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    )}
+                                >
+                                    Add
+                                </button>
+                                <button
+                                    onClick={() => setCommissionAction('set')}
+                                    className={cn(
+                                        'flex-1 py-2 text-xs font-medium rounded-lg transition-colors',
+                                        commissionAction === 'set'
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                    )}
+                                >
+                                    Set
+                                </button>
+                            </div>
+                            <div className="flex gap-2">
+                                <input
+                                    type="number"
+                                    value={commissionAmount}
+                                    onChange={(e) => setCommissionAmount(e.target.value)}
+                                    placeholder="Enter amount"
+                                    className="flex-1 px-3 py-2 bg-card border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
+                                <button
+                                    onClick={handleCommissionAction}
+                                    disabled={isSaving || !commissionAmount}
+                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                >
+                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                                </button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                {commissionAction === 'withdraw' && 'Withdraw amount from available commission balance'}
+                                {commissionAction === 'add' && 'Add amount to commission balance (manual credit)'}
+                                {commissionAction === 'set' && 'Set commission balance to specific amount'}
+                            </p>
+                        </div>
+                    )}
                 </div>
+
+                {/* Referral Code */}
+                {user.referralCode && (
+                    <div className="mb-4 p-3 bg-muted/50 rounded-xl">
+                        <p className="text-xs text-muted-foreground mb-1">Referral Code</p>
+                        <p className="font-mono font-bold text-foreground">{user.referralCode}</p>
+                    </div>
+                )}
+
 
                 <div className="space-y-2 sm:space-y-3">
                     <div className="flex justify-between py-2 sm:py-3 border-b border-border">

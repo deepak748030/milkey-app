@@ -5,6 +5,11 @@ const UserSubscription = require('../models/UserSubscription');
 const User = require('../models/User');
 const Referral = require('../models/Referral');
 const auth = require('../middleware/auth');
+const {
+    notifyCommissionEarned,
+    notifySubscriptionPurchased,
+    notifyReferralSignup
+} = require('../lib/pushNotifications');
 
 // GET /api/user-subscriptions/available - Get all available subscriptions for the user
 router.get('/available', auth, async (req, res) => {
@@ -358,11 +363,15 @@ router.post('/purchase', auth, async (req, res) => {
                                 }
                             })
                         ]);
-                    }
 
-                    console.log(
-                        `Referral commission credited: ₹${commissionAmount} (${commissionRate}% of ₹${subscription.amount}) to referrer ${referrerId}`
-                    );
+                        // Send push notification to referrer about commission earned
+                        const buyer = await User.findById(req.userId).select('name').lean();
+                        notifyCommissionEarned(
+                            referrerId.toString(),
+                            commissionAmount,
+                            buyer?.name || 'A user'
+                        ).catch(err => console.error('Error sending commission notification:', err));
+                    }
                 }
             } catch (refError) {
                 console.error('Error processing referral commission:', refError);
@@ -372,6 +381,13 @@ router.post('/purchase', auth, async (req, res) => {
 
         // Populate subscription details for response
         await userSubscription.populate('subscription');
+
+        // Send push notification about subscription purchase
+        notifySubscriptionPurchased(
+            req.userId,
+            subscription.name || 'Subscription',
+            userSubscription.endDate
+        ).catch(err => console.error('Error sending subscription notification:', err));
 
         res.status(201).json({
             success: true,

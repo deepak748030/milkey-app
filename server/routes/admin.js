@@ -17,6 +17,7 @@ const { uploadToCloudinary } = require('../lib/cloudinary');
 const Payment = require('../models/Payment');
 const Advance = require('../models/Advance');
 const MemberPayment = require('../models/MemberPayment');
+const { notifyWithdrawalSuccess, notifyCommissionEarned } = require('../lib/pushNotifications');
 
 // Simple password hashing MemberPayment
 const hashPassword = (password) => {
@@ -296,7 +297,7 @@ router.get('/users', adminAuth, async (req, res) => {
         const [total, users] = await Promise.all([
             User.countDocuments(query),
             User.find(query)
-                .select('_id name email phone avatar isBlocked createdAt role address')
+                .select('_id name email phone avatar isBlocked createdAt role address referralCode referralEarnings totalReferralEarnings')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -431,6 +432,113 @@ router.put('/users/:id', adminAuth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to update user'
+        });
+    }
+});
+
+// PUT /api/admin/users/:id/commission - Update user commission (withdraw)
+router.put('/users/:id/commission', adminAuth, async (req, res) => {
+    try {
+        const { action, amount } = req.body;
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        if (action === 'withdraw') {
+            // Withdraw from referral earnings
+            if (!amount || amount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid amount'
+                });
+            }
+
+            if (amount > user.referralEarnings) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Insufficient balance'
+                });
+            }
+
+            user.referralEarnings -= amount;
+            await user.save();
+
+            // Send push notification about successful withdrawal
+            notifyWithdrawalSuccess(user._id.toString(), amount)
+                .catch(err => console.error('Error sending withdrawal notification:', err));
+
+            return res.json({
+                success: true,
+                message: `₹${amount} withdrawn successfully`,
+                response: {
+                    _id: user._id,
+                    referralEarnings: user.referralEarnings,
+                    totalReferralEarnings: user.totalReferralEarnings
+                }
+            });
+        } else if (action === 'add') {
+            // Add to referral earnings (manual credit)
+            if (!amount || amount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid amount'
+                });
+            }
+
+            user.referralEarnings += amount;
+            user.totalReferralEarnings += amount;
+            await user.save();
+
+            // Send push notification about commission added
+            notifyCommissionEarned(user._id.toString(), amount, 'Admin')
+                .catch(err => console.error('Error sending commission notification:', err));
+
+            return res.json({
+                success: true,
+                message: `₹${amount} added successfully`,
+                response: {
+                    _id: user._id,
+                    referralEarnings: user.referralEarnings,
+                    totalReferralEarnings: user.totalReferralEarnings
+                }
+            });
+        } else if (action === 'set') {
+            // Set specific balance
+            if (amount === undefined || amount < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid amount'
+                });
+            }
+
+            user.referralEarnings = amount;
+            await user.save();
+
+            return res.json({
+                success: true,
+                message: `Balance set to ₹${amount}`,
+                response: {
+                    _id: user._id,
+                    referralEarnings: user.referralEarnings,
+                    totalReferralEarnings: user.totalReferralEarnings
+                }
+            });
+        }
+
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid action. Use: withdraw, add, or set'
+        });
+    } catch (error) {
+        console.error('Update commission error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update commission'
         });
     }
 });

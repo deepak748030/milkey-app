@@ -937,6 +937,20 @@ export const authApiNew = {
             body: JSON.stringify({ email, resetToken, newPassword }),
         });
     },
+
+    updatePushToken: async (expoPushToken: string) => {
+        return apiRequest<{ message: string }>('/auth/push-token', {
+            method: 'PUT',
+            body: JSON.stringify({ expoPushToken }),
+        });
+    },
+
+    updateProfile: async (data: { name?: string; avatar?: string; address?: string }) => {
+        return apiRequest<any>('/auth/profile', {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
 };
 
 // Custom Forms API
@@ -1288,5 +1302,57 @@ export const bannersApi = {
                 : [];
 
         return { ...res, response: banners } as ApiResponse<Banner[]>;
+    },
+};
+
+// Notification type
+export interface Notification {
+    id: string;
+    title: string;
+    message: string;
+    type: string;
+    read: boolean;
+    data?: any;
+    timestamp: string;
+}
+
+// Notifications API
+export const notificationsApiNew = {
+    getAll: async (params?: { page?: number; limit?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        const query = queryParams.toString();
+        return apiRequest<{ data: Notification[]; unreadCount: number }>(
+            `/notifications${query ? `?${query}` : ''}`
+        );
+    },
+
+    getUnreadCount: async () => {
+        return apiRequest<{ count: number }>('/notifications/unread-count');
+    },
+
+    markAsRead: async (id: string) => {
+        return apiRequest<{ message: string }>(`/notifications/${id}/read`, {
+            method: 'PUT',
+        });
+    },
+
+    markAllAsRead: async () => {
+        return apiRequest<{ message: string }>('/notifications/read-all', {
+            method: 'PUT',
+        });
+    },
+
+    delete: async (id: string) => {
+        return apiRequest<void>(`/notifications/${id}`, {
+            method: 'DELETE',
+        });
+    },
+
+    clearAll: async () => {
+        return apiRequest<void>('/notifications/clear-all', {
+            method: 'DELETE',
+        });
     },
 };

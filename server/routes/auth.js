@@ -7,6 +7,7 @@ const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const Referral = require('../models/Referral');
 const auth = require('../middleware/auth');
+const { notifyReferralSignup } = require('../lib/pushNotifications');
 
 // Simple password hashing (use bcrypt in production)
 const hashPassword = (password) => {
@@ -247,6 +248,12 @@ router.post('/register', async (req, res) => {
                 status: 'active',
                 commissionRate
             });
+
+            // Send push notification to referrer about new signup
+            notifyReferralSignup(
+                referrer._id.toString(),
+                user.name
+            ).catch(err => console.error('Error sending referral signup notification:', err));
         }
 
         // Generate token

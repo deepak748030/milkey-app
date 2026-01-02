@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
@@ -8,10 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApiNew } from '@/lib/milkeyApi';
 import { setAuthUser } from '@/lib/authStore';
 import { SuccessModal } from '@/components/SuccessModal';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 export default function AuthScreen() {
     const { colors, isDark } = useTheme();
     const insets = useSafeAreaInsets();
+    const { expoPushToken } = usePushNotifications();
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -78,6 +80,10 @@ export default function AuthScreen() {
                 const result = await authApiNew.login(email, password);
                 if (result.success && result.response) {
                     await setAuthUser(result.response.token, result.response.user);
+                    // Send push token after login
+                    if (expoPushToken) {
+                        authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                    }
                     router.replace('/(tabs)');
                 } else {
                     showModal('Error', result.message || 'Invalid email or password');
@@ -122,6 +128,10 @@ export default function AuthScreen() {
 
                 if (result.success && result.response) {
                     await setAuthUser(result.response.token, result.response.user);
+                    // Send push token after registration
+                    if (expoPushToken) {
+                        authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                    }
                     router.replace('/(tabs)');
                 } else {
                     showModal('Error', result.message || 'Registration failed');
