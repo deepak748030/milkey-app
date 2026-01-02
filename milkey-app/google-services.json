@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "95043026756",
+    "project_id": "milkey-72381",
+    "storage_bucket": "milkey-72381.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:95043026756:android:6383a95e8ad4ce2b412111",
+        "android_client_info": {
+          "package_name": "com.milkey.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyALlGiMy-qMIvLUT5rB1PKQbG2Cm03B0Ts"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

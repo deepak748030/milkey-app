@@ -155,7 +155,7 @@ router.get('/:id', adminAuth, async (req, res) => {
 // POST /api/subscriptions - Create subscription
 router.post('/', adminAuth, async (req, res) => {
     try {
-        const { name, amount, durationMonths, applicableTabs, description, subscriptionType, isFree, forNewUsers } = req.body;
+        const { name, amount, durationMonths, durationDays, durationType, durationValue, applicableTabs, description, subscriptionType, isFree, forNewUsers } = req.body;
 
         if (!name || name.trim() === '') {
             return res.status(400).json({
@@ -173,10 +173,16 @@ router.post('/', adminAuth, async (req, res) => {
             });
         }
 
-        if (!durationMonths || durationMonths < 1) {
+        // Handle duration - prefer durationDays, fallback to durationMonths for backward compatibility
+        let actualDurationDays = durationDays;
+        if (!actualDurationDays && durationMonths) {
+            actualDurationDays = durationMonths * 30;
+        }
+
+        if (!actualDurationDays || actualDurationDays < 1) {
             return res.status(400).json({
                 success: false,
-                message: 'Duration must be at least 1 month'
+                message: 'Duration must be at least 1 day'
             });
         }
 
@@ -207,7 +213,10 @@ router.post('/', adminAuth, async (req, res) => {
         const subscription = new Subscription({
             name: name.trim(),
             amount: actualAmount,
-            durationMonths: Number(durationMonths),
+            durationDays: actualDurationDays,
+            durationType: durationType || 'months',
+            durationValue: durationValue || Math.ceil(actualDurationDays / 30),
+            durationMonths: Math.ceil(actualDurationDays / 30), // For backward compatibility
             applicableTabs,
             subscriptionType: actualType,
             isFree: Boolean(isFree),
@@ -234,7 +243,7 @@ router.post('/', adminAuth, async (req, res) => {
 // PUT /api/subscriptions/:id - Update subscription
 router.put('/:id', adminAuth, async (req, res) => {
     try {
-        const { name, amount, durationMonths, applicableTabs, description, isActive, subscriptionType, isFree, forNewUsers } = req.body;
+        const { name, amount, durationMonths, durationDays, durationType, durationValue, applicableTabs, description, isActive, subscriptionType, isFree, forNewUsers } = req.body;
         const updates = {};
 
         if (name !== undefined) {
@@ -264,7 +273,17 @@ router.put('/:id', adminAuth, async (req, res) => {
             updates.amount = Number(amount);
         }
 
-        if (durationMonths !== undefined) {
+        // Handle duration updates
+        if (durationDays !== undefined) {
+            if (durationDays < 1) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Duration must be at least 1 day'
+                });
+            }
+            updates.durationDays = Number(durationDays);
+            updates.durationMonths = Math.ceil(durationDays / 30);
+        } else if (durationMonths !== undefined) {
             if (durationMonths < 1) {
                 return res.status(400).json({
                     success: false,
@@ -272,6 +291,15 @@ router.put('/:id', adminAuth, async (req, res) => {
                 });
             }
             updates.durationMonths = Number(durationMonths);
+            updates.durationDays = durationMonths * 30;
+        }
+
+        if (durationType !== undefined) {
+            updates.durationType = durationType;
+        }
+
+        if (durationValue !== undefined) {
+            updates.durationValue = Number(durationValue);
         }
 
         if (applicableTabs !== undefined) {

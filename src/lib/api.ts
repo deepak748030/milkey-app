@@ -1580,6 +1580,9 @@ export interface Subscription {
     name: string
     amount: number
     durationMonths: number
+    durationDays?: number
+    durationType?: 'days' | 'months' | 'years'
+    durationValue?: number
     applicableTabs: string[]
     subscriptionType: 'single' | 'combined' | 'free'
     isFree: boolean
@@ -1609,7 +1612,10 @@ export const getSubscriptionById = async (id: string) => {
 export const createSubscription = async (data: {
     name: string
     amount: number
-    durationMonths: number
+    durationMonths?: number
+    durationDays?: number
+    durationType?: 'days' | 'months' | 'years'
+    durationValue?: number
     applicableTabs: string[]
     subscriptionType?: 'single' | 'combined' | 'free'
     isFree?: boolean
@@ -1624,6 +1630,9 @@ export const updateSubscription = async (id: string, data: {
     name?: string
     amount?: number
     durationMonths?: number
+    durationDays?: number
+    durationType?: 'days' | 'months' | 'years'
+    durationValue?: number
     applicableTabs?: string[]
     subscriptionType?: 'single' | 'combined' | 'free'
     isFree?: boolean
@@ -1714,6 +1723,9 @@ export interface SubscriptionListItem {
     name: string
     amount: number
     durationMonths: number
+    durationDays?: number
+    durationType?: 'days' | 'months' | 'years'
+    durationValue?: number
     applicableTabs: string[]
     isFree: boolean
     description?: string

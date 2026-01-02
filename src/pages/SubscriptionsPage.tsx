@@ -33,7 +33,8 @@ export function SubscriptionsPage() {
     const [formData, setFormData] = useState({
         name: '',
         amount: '',
-        durationMonths: '',
+        durationValue: '',
+        durationType: 'months' as 'days' | 'months' | 'years',
         applicableTabs: [] as string[],
         description: '',
         isFree: false,
@@ -66,12 +67,22 @@ export function SubscriptionsPage() {
         fetchSubscriptions()
     }, [page, search, statusFilter, tabFilter])
 
+    const parseDuration = (durationDays: number): { value: number; type: 'days' | 'months' | 'years' } => {
+        if (durationDays >= 365 && durationDays % 365 === 0) {
+            return { value: durationDays / 365, type: 'years' }
+        } else if (durationDays >= 30 && durationDays % 30 === 0) {
+            return { value: durationDays / 30, type: 'months' }
+        }
+        return { value: durationDays, type: 'days' }
+    }
+
     const openCreateModal = () => {
         setEditingSubscription(null)
         setFormData({
             name: '',
             amount: '',
-            durationMonths: '',
+            durationValue: '',
+            durationType: 'months',
             applicableTabs: [],
             description: '',
             isFree: false,
@@ -82,10 +93,13 @@ export function SubscriptionsPage() {
 
     const openEditModal = (subscription: Subscription) => {
         setEditingSubscription(subscription)
+        const durationDays = subscription.durationDays || subscription.durationMonths * 30
+        const parsed = parseDuration(durationDays)
         setFormData({
             name: subscription.name,
             amount: String(subscription.amount),
-            durationMonths: String(subscription.durationMonths),
+            durationValue: String(parsed.value),
+            durationType: parsed.type,
             applicableTabs: subscription.applicableTabs || [],
             description: subscription.description || '',
             isFree: subscription.isFree || false,
@@ -116,9 +130,23 @@ export function SubscriptionsPage() {
             return
         }
 
-        if (!formData.durationMonths) {
-            alert('Please enter duration')
+        if (!formData.durationValue || Number(formData.durationValue) < 1) {
+            alert('Please enter a valid duration')
             return
+        }
+
+        // Calculate duration in days
+        const durationValue = Number(formData.durationValue)
+        let durationDays: number
+        switch (formData.durationType) {
+            case 'years':
+                durationDays = durationValue * 365
+                break
+            case 'months':
+                durationDays = durationValue * 30
+                break
+            default:
+                durationDays = durationValue
         }
 
         try {
@@ -126,7 +154,9 @@ export function SubscriptionsPage() {
             const payload = {
                 name: formData.name.trim(),
                 amount: formData.isFree ? 0 : Number(formData.amount),
-                durationMonths: Number(formData.durationMonths),
+                durationDays,
+                durationType: formData.durationType,
+                durationValue,
                 applicableTabs: formData.applicableTabs,
                 description: formData.description.trim(),
                 isFree: formData.isFree,
@@ -174,11 +204,17 @@ export function SubscriptionsPage() {
         return `₹${amount.toLocaleString('en-IN')}`
     }
 
-    const formatDuration = (months: number) => {
-        if (months === 1) return '1 Month'
-        if (months === 12) return '1 Year'
-        if (months > 12 && months % 12 === 0) return `${months / 12} Years`
-        return `${months} Months`
+    const formatDuration = (sub: Subscription) => {
+        const days = sub.durationDays || sub.durationMonths * 30
+        if (days >= 365 && days % 365 === 0) {
+            const years = days / 365
+            return years === 1 ? '1 Year' : `${years} Years`
+        }
+        if (days >= 30 && days % 30 === 0) {
+            const months = days / 30
+            return months === 1 ? '1 Month' : `${months} Months`
+        }
+        return days === 1 ? '1 Day' : `${days} Days`
     }
 
     const getTabBadge = (tab: string) => {
@@ -302,7 +338,7 @@ export function SubscriptionsPage() {
                                 </div>
                                 <div className="bg-muted/50 rounded-lg p-2">
                                     <p className="text-[10px] text-muted-foreground uppercase">Duration</p>
-                                    <p className="text-sm font-medium text-foreground">{formatDuration(sub.durationMonths)}</p>
+                                    <p className="text-sm font-medium text-foreground">{formatDuration(sub)}</p>
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-1 mb-2">
@@ -393,7 +429,7 @@ export function SubscriptionsPage() {
                                             {formatAmount(sub.amount, sub.isFree)}
                                         </td>
                                         <td className="px-4 py-3 text-muted-foreground">
-                                            {formatDuration(sub.durationMonths)}
+                                            {formatDuration(sub)}
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex flex-wrap gap-1">
@@ -489,13 +525,13 @@ export function SubscriptionsPage() {
                                     type="button"
                                     onClick={() => setFormData(prev => ({ ...prev, isFree: !prev.isFree, amount: prev.isFree ? prev.amount : '0' }))}
                                     className={cn(
-                                        'w-12 h-6 rounded-full transition-colors relative',
-                                        formData.isFree ? 'bg-primary' : 'bg-muted'
+                                        'relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+                                        formData.isFree ? 'bg-green-500' : 'bg-muted-foreground/30'
                                     )}
                                 >
                                     <span className={cn(
-                                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
-                                        formData.isFree ? 'translate-x-7' : 'translate-x-1'
+                                        'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200',
+                                        formData.isFree && 'translate-x-5'
                                     )} />
                                 </button>
                             </div>
@@ -510,13 +546,13 @@ export function SubscriptionsPage() {
                                     type="button"
                                     onClick={() => setFormData(prev => ({ ...prev, forNewUsers: !prev.forNewUsers }))}
                                     className={cn(
-                                        'w-12 h-6 rounded-full transition-colors relative',
-                                        formData.forNewUsers ? 'bg-primary' : 'bg-muted'
+                                        'relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+                                        formData.forNewUsers ? 'bg-green-500' : 'bg-muted-foreground/30'
                                     )}
                                 >
                                     <span className={cn(
-                                        'absolute top-1 w-4 h-4 rounded-full bg-white transition-transform',
-                                        formData.forNewUsers ? 'translate-x-7' : 'translate-x-1'
+                                        'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200',
+                                        formData.forNewUsers && 'translate-x-5'
                                     )} />
                                 </button>
                             </div>
@@ -539,16 +575,27 @@ export function SubscriptionsPage() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">Duration (Months) *</label>
-                                    <input
-                                        type="number"
-                                        value={formData.durationMonths}
-                                        onChange={e => setFormData(prev => ({ ...prev, durationMonths: e.target.value }))}
-                                        placeholder="1"
-                                        min="1"
-                                        className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                                        required
-                                    />
+                                    <label className="block text-sm font-medium text-muted-foreground mb-1.5">Duration *</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="number"
+                                            value={formData.durationValue}
+                                            onChange={e => setFormData(prev => ({ ...prev, durationValue: e.target.value }))}
+                                            placeholder="1"
+                                            min="1"
+                                            className="w-20 px-3 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                            required
+                                        />
+                                        <select
+                                            value={formData.durationType}
+                                            onChange={e => setFormData(prev => ({ ...prev, durationType: e.target.value as 'days' | 'months' | 'years' }))}
+                                            className="flex-1 px-3 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                        >
+                                            <option value="days">Days</option>
+                                            <option value="months">Months</option>
+                                            <option value="years">Years</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div>

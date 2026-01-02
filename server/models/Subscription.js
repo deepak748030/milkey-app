@@ -11,9 +11,23 @@ const subscriptionSchema = new mongoose.Schema({
         default: 0,
         min: [0, 'Amount cannot be negative']
     },
+    durationDays: {
+        type: Number,
+        required: [true, 'Duration in days is required'],
+        min: [1, 'Duration must be at least 1 day']
+    },
+    durationType: {
+        type: String,
+        enum: ['days', 'months', 'years'],
+        default: 'months'
+    },
+    durationValue: {
+        type: Number,
+        default: 1
+    },
+    // Keep for backward compatibility
     durationMonths: {
         type: Number,
-        required: [true, 'Duration in months is required'],
         min: [1, 'Duration must be at least 1 month']
     },
     applicableTabs: [{
