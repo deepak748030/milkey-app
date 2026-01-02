@@ -34,10 +34,17 @@ export default function HomeScreen() {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [subscriptionModalChecked, setSubscriptionModalChecked] = useState(false);
 
+  // Get subscription store - must be before useEffects that use status
+  const { fetchStatus, preloadAllTabs, status, initializeFromStorage } = useSubscriptionStore();
+
   useEffect(() => {
     loadCart();
-    fetchData();
   }, []);
+
+  // Refetch products when subscription status changes
+  useEffect(() => {
+    fetchData();
+  }, [status?.hasAnySubscription]);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -50,9 +57,6 @@ export default function HomeScreen() {
     loop.start();
     return () => loop.stop();
   }, [bannerSkeletonOpacity]);
-
-  // Get subscription store
-  const { fetchStatus, preloadAllTabs, status, initializeFromStorage } = useSubscriptionStore();
 
   // Check if subscription modal should be shown and preload subscription data
   useEffect(() => {
@@ -119,10 +123,13 @@ export default function HomeScreen() {
     setLoading(true);
     setBannersLoading(true);
     try {
+      // Check if user has any active subscription
+      const hasSubscription = status?.hasAnySubscription || false;
+
       // Fetch banners, products and home stats in parallel
       const [bannersRes, productsRes, homeStatsRes] = await Promise.all([
         bannersApi.getAll().catch(() => null),
-        productsApi.getAll().catch(() => null),
+        productsApi.getAll({ subscribed: hasSubscription }).catch(() => null),
         reportsApi.getHomeStats().catch(() => null),
       ]);
 

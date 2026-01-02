@@ -2429,7 +2429,7 @@ router.get('/products/:id', adminAuth, async (req, res) => {
 // POST /api/admin/products - Create new product (admin creates for themselves)
 router.post('/products', adminAuth, async (req, res) => {
     try {
-        const { name, price, unit, icon, description, stock, isActive, image } = req.body;
+        const { name, price, unit, icon, description, stock, isActive, image, subscriptionOnly } = req.body;
 
         if (!name || price === undefined) {
             return res.status(400).json({
@@ -2448,7 +2448,8 @@ router.post('/products', adminAuth, async (req, res) => {
             stock: parseInt(stock) || 0,
             isActive: isActive !== false,
             owner: req.adminId,
-            image: image || ''
+            image: image || '',
+            subscriptionOnly: subscriptionOnly || false
         });
 
         const populatedProduct = await Product.findById(product._id)
@@ -2472,7 +2473,7 @@ router.post('/products', adminAuth, async (req, res) => {
 // PUT /api/admin/products/:id - Update product
 router.put('/products/:id', adminAuth, async (req, res) => {
     try {
-        const { name, price, unit, icon, description, stock, isActive, image } = req.body;
+        const { name, price, unit, icon, description, stock, isActive, image, subscriptionOnly } = req.body;
         const updates = {};
 
         if (name) updates.name = name.trim();
@@ -2483,6 +2484,7 @@ router.put('/products/:id', adminAuth, async (req, res) => {
         if (stock !== undefined) updates.stock = parseInt(stock);
         if (isActive !== undefined) updates.isActive = isActive;
         if (image !== undefined) updates.image = image;
+        if (subscriptionOnly !== undefined) updates.subscriptionOnly = subscriptionOnly;
 
         const product = await Product.findByIdAndUpdate(
             req.params.id,
@@ -2561,6 +2563,39 @@ router.put('/products/:id/toggle', adminAuth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to toggle product status'
+        });
+    }
+});
+
+// PUT /api/admin/products/:id/subscription - Toggle product subscription only
+router.put('/products/:id/subscription', adminAuth, async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        product.subscriptionOnly = !product.subscriptionOnly;
+        await product.save();
+
+        const populatedProduct = await Product.findById(product._id)
+            .populate('owner', 'name email phone')
+            .lean();
+
+        res.json({
+            success: true,
+            message: product.subscriptionOnly ? 'Product marked as subscription only' : 'Product available to all',
+            response: populatedProduct
+        });
+    } catch (error) {
+        console.error('Toggle product subscription error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to toggle subscription status'
         });
     }
 });

@@ -5,9 +5,20 @@ const Banner = require('../models/Banner');
 const auth = require('../middleware/auth');
 
 // GET /api/products - Get all products (public - no auth required)
+// Query params: subscribed=true to include subscription-only products
 router.get('/', async (req, res) => {
     try {
-        const products = await Product.find({ isActive: true })
+        const isSubscribed = req.query.subscribed === 'true';
+
+        // Build query: always show active products
+        // If user is subscribed, show all products
+        // If not subscribed, only show products that are not subscription-only
+        const query = { isActive: true };
+        if (!isSubscribed) {
+            query.subscriptionOnly = { $ne: true };
+        }
+
+        const products = await Product.find(query)
             .sort({ name: 1 })
             .lean();
 

@@ -1502,6 +1502,7 @@ export interface AdminProduct {
         phone: string
     } | string
     isActive: boolean
+    subscriptionOnly: boolean
     createdAt: string
     updatedAt: string
 }
@@ -1531,6 +1532,7 @@ export const createAdminProduct = async (data: {
     description?: string
     stock?: number
     image?: string
+    subscriptionOnly?: boolean
 }) => {
     const response = await api.post('/admin/products', data)
     return response.data
@@ -1545,6 +1547,7 @@ export const updateAdminProduct = async (id: string, data: {
     stock?: number
     image?: string
     isActive?: boolean
+    subscriptionOnly?: boolean
 }) => {
     const response = await api.put(`/admin/products/${id}`, data)
     return response.data
@@ -1557,6 +1560,11 @@ export const deleteAdminProduct = async (id: string) => {
 
 export const toggleAdminProductStatus = async (id: string) => {
     const response = await api.put(`/admin/products/${id}/toggle`)
+    return response.data
+}
+
+export const toggleAdminProductSubscription = async (id: string) => {
+    const response = await api.put(`/admin/products/${id}/subscription`)
     return response.data
 }
 

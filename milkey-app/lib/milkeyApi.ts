@@ -89,6 +89,7 @@ export interface Product {
     description: string;
     stock: number;
     isActive: boolean;
+    subscriptionOnly?: boolean;
 }
 
 export interface Order {
@@ -459,8 +460,11 @@ export const advancesApi = {
 
 // Products API
 export const productsApi = {
-    getAll: async () => {
-        return apiRequest<{ data: Product[]; count: number }>('/products');
+    getAll: async (params?: { subscribed?: boolean }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.subscribed) queryParams.append('subscribed', 'true');
+        const query = queryParams.toString();
+        return apiRequest<{ data: Product[]; count: number }>(`/products${query ? `?${query}` : ''}`);
     },
 
     getDefault: async () => {
