@@ -72,7 +72,7 @@ export function DashboardLayout() {
     const toggleTheme = () => setIsDark(!isDark)
 
     return (
-        <div className="min-h-screen flex bg-background">
+        <div className="h-screen flex bg-background overflow-hidden">
             {/* Mobile Menu Overlay */}
             {mobileMenuOpen && (
                 <div
@@ -84,14 +84,14 @@ export function DashboardLayout() {
             {/* Sidebar */}
             <aside
                 className={cn(
-                    'fixed inset-y-0 left-0 z-50 bg-sidebar text-sidebar-foreground transition-all duration-200 ease-out lg:relative flex flex-col',
+                    'fixed inset-y-0 left-0 z-50 bg-sidebar text-sidebar-foreground transition-all duration-200 ease-out lg:relative flex flex-col h-screen',
                     sidebarOpen ? 'w-64' : 'w-20',
                     mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
                 )}
             >
                 {/* Logo Area */}
                 <div className={cn(
-                    'h-16 flex items-center border-b border-border/30 px-4',
+                    'h-16 flex items-center border-b border-border/30 px-4 flex-shrink-0',
                     sidebarOpen ? 'justify-between' : 'justify-center'
                 )}>
                     {sidebarOpen ? (
@@ -124,7 +124,7 @@ export function DashboardLayout() {
                 </div>
 
                 {/* Navigation - Scrollable */}
-                <nav className="flex-1 overflow-y-auto p-3 space-y-1 pb-20">
+                <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
                     {navItems.map((item) => {
                         const isActive = location.pathname === item.to
                         return (
@@ -149,7 +149,7 @@ export function DashboardLayout() {
                 </nav>
 
                 {/* User Section */}
-                <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-border/30">
+                <div className="p-3 border-t border-border/30 flex-shrink-0 bg-sidebar">
                     {sidebarOpen ? (
                         <div className="flex items-center gap-3 px-3 py-2">
                             <div className="w-10 h-10 rounded-full bg-sidebar-hover flex items-center justify-center overflow-hidden">
@@ -194,9 +194,9 @@ export function DashboardLayout() {
             </aside>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-h-screen">
+            <div className="flex-1 flex flex-col h-screen overflow-hidden">
                 {/* Top Bar */}
-                <header className="h-16 bg-card border-b border-border flex items-center px-4 lg:px-6 sticky top-0 z-30">
+                <header className="h-16 bg-card border-b border-border flex items-center px-4 lg:px-6 flex-shrink-0">
                     <button
                         onClick={() => setMobileMenuOpen(true)}
                         className="p-2 rounded-lg hover:bg-muted transition-colors lg:hidden"
@@ -213,8 +213,8 @@ export function DashboardLayout() {
                     </button>
                 </header>
 
-                {/* Page Content */}
-                <main className="flex-1 p-4 lg:p-6 overflow-auto">
+                {/* Page Content - Separate scroll */}
+                <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
                     <Outlet />
                 </main>
             </div>
