@@ -209,7 +209,10 @@ router.get('/check/:tab', auth, async (req, res) => {
 // POST /api/user-subscriptions/purchase - Purchase a subscription
 router.post('/purchase', auth, async (req, res) => {
     try {
-        const { subscriptionId, paymentMethod, transactionId, referralCode } = req.body;
+        const { subscriptionId, paymentMethod, transactionId, referralCode, multiplier = 1 } = req.body;
+
+        // Validate multiplier
+        const validMultiplier = Math.max(1, Math.min(12, parseInt(multiplier) || 1));
 
         if (!subscriptionId) {
             return res.status(400).json({
@@ -223,6 +226,14 @@ router.post('/purchase', auth, async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: 'Subscription not found or inactive'
+            });
+        }
+
+        // Free subscriptions cannot have multiplier > 1
+        if (subscription.isFree && validMultiplier > 1) {
+            return res.status(400).json({
+                success: false,
+                message: 'Free subscriptions cannot be extended with multiplier'
             });
         }
 
@@ -272,11 +283,38 @@ router.post('/purchase', auth, async (req, res) => {
             }
         }
 
-        // Check for any active subscription covering same tabs - queue it after
+        // Check for any active subscription covering same tabs
+        // User cannot buy another plan for tabs they already have active
         const now = new Date();
         const overlappingTabs = subscription.applicableTabs || [];
 
-        // Find the latest ending subscription that covers any of the same tabs
+        // Find active subscriptions covering any of the same tabs
+        const activeOverlappingSubscriptions = await UserSubscription.find({
+            user: req.userId,
+            isActive: true,
+            paymentStatus: 'completed',
+            endDate: { $gte: now },
+            startDate: { $lte: now }, // Currently active, not queued
+            applicableTabs: { $in: overlappingTabs }
+        }).populate('subscription').lean();
+
+        // Check if any of these are different subscriptions (not renewals of the same plan)
+        const differentActivePlans = activeOverlappingSubscriptions.filter(
+            sub => sub.subscription._id.toString() !== subscriptionId
+        );
+
+        if (differentActivePlans.length > 0) {
+            const activeTabs = [...new Set(differentActivePlans.flatMap(s => s.applicableTabs || []))];
+            const conflictingTabs = overlappingTabs.filter(tab => activeTabs.includes(tab));
+            return res.status(400).json({
+                success: false,
+                message: `You already have an active subscription for: ${conflictingTabs.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(', ')}. Please wait for it to expire before buying a different plan for these tabs.`,
+                errorCode: 'TABS_ALREADY_COVERED',
+                conflictingTabs
+            });
+        }
+
+        // Find the latest ending subscription that covers any of the same tabs (for queueing renewals)
         const latestActiveSubscription = await UserSubscription.findOne({
             user: req.userId,
             isActive: true,
@@ -297,26 +335,42 @@ router.post('/purchase', auth, async (req, res) => {
             startDate = new Date();
         }
 
-        // Calculate end date based on duration
+        // Calculate end date based on duration with multiplier
         const endDate = new Date(startDate);
+        const baseDurationValue = subscription.durationValue || 1;
+        const effectiveDuration = baseDurationValue * validMultiplier;
+
         if (subscription.durationType === 'days') {
-            endDate.setDate(endDate.getDate() + (subscription.durationValue || subscription.durationDays || 30));
+            const baseDays = subscription.durationDays || 30;
+            endDate.setDate(endDate.getDate() + (baseDays * validMultiplier));
         } else if (subscription.durationType === 'years') {
-            endDate.setFullYear(endDate.getFullYear() + (subscription.durationValue || 1));
+            endDate.setFullYear(endDate.getFullYear() + effectiveDuration);
         } else {
             // Default to months
-            const months = subscription.durationValue || subscription.durationMonths || 1;
+            const months = (subscription.durationValue || subscription.durationMonths || 1) * validMultiplier;
             endDate.setMonth(endDate.getMonth() + months);
         }
 
-        // Create user subscription
+        // Calculate locked-in amount (base price * multiplier)
+        const baseAmount = subscription.amount || 0;
+        const totalAmount = baseAmount * validMultiplier;
+
+        // Create user subscription with locked-in values
         const userSubscription = new UserSubscription({
             user: req.userId,
             subscription: subscriptionId,
             applicableTabs: subscription.applicableTabs,
             startDate,
             endDate,
-            amount: subscription.amount,
+            // Locked-in pricing at time of purchase
+            amount: totalAmount,
+            baseAmount: baseAmount,
+            multiplier: validMultiplier,
+            // Locked-in duration info
+            lockedDurationDays: subscription.durationDays,
+            lockedDurationType: subscription.durationType || 'months',
+            lockedDurationValue: subscription.durationValue || 1,
+            lockedSubscriptionName: subscription.name,
             isFree: subscription.isFree,
             paymentStatus: subscription.isFree ? 'completed' : 'completed', // For now, mark as completed
             paymentMethod: subscription.isFree ? 'free' : (paymentMethod || 'cash'),
@@ -326,7 +380,8 @@ router.post('/purchase', auth, async (req, res) => {
         await userSubscription.save();
 
         // Process referral commission if applicable (paid subscriptions only)
-        if (!subscription.isFree && Number(subscription.amount) > 0) {
+        // Use totalAmount (with multiplier) for commission calculation
+        if (!subscription.isFree && totalAmount > 0) {
             try {
                 const ReferralConfig = require('../models/ReferralConfig');
                 const cfg = await ReferralConfig.findOneAndUpdate(
@@ -379,8 +434,9 @@ router.post('/purchase', auth, async (req, res) => {
                         ? referral.commissionRate
                         : defaultCommissionRate;
 
+                    // Use totalAmount (includes multiplier) for commission
                     const commissionAmount = Number(
-                        ((Number(subscription.amount) * commissionRate) / 100).toFixed(2)
+                        ((totalAmount * commissionRate) / 100).toFixed(2)
                     );
 
                     if (commissionAmount > 0) {
