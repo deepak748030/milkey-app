@@ -11,7 +11,9 @@ const {
     notifyReferralSignup
 } = require('../lib/pushNotifications');
 
-// GET /api/user-subscriptions/available - Get all available subscriptions for the user
+const axios = require('axios');
+
+// GET /api/user-subscriptions/available - Get all available subscriptions for the user axios
 router.get('/available', auth, async (req, res) => {
     try {
         const userId = req.userId;
@@ -494,7 +496,7 @@ router.get('/check-pending', auth, async (req, res) => {
         for (const pending of pendingSubscriptions) {
             try {
                 // Call ZapUPI to verify payment status
-                const axios = require('axios');
+
                 const verifyUrl = `https://api.zapupi.com/order/status?merchantId=MILKEY_DAIRY&orderId=${pending.transactionId}`;
 
                 const verifyResponse = await axios.get(verifyUrl);
