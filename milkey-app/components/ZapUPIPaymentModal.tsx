@@ -7,17 +7,18 @@ import {
     Modal,
     Dimensions,
     ActivityIndicator,
-    Image,
     Linking,
     Alert,
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, Check, RefreshCw, ExternalLink, QrCode, Copy, AlertCircle } from 'lucide-react-native';
+import { X, Check, RefreshCw, AlertCircle, Clock } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { zapupiApi } from '@/lib/milkeyApi';
+import QRCode from 'react-native-qrcode-svg';
 
 const { height } = Dimensions.get('window');
+const PAYMENT_TIMEOUT = 5 * 60; // 5 minutes in seconds
 
 interface ZapUPIPaymentModalProps {
     visible: boolean;
@@ -48,28 +49,67 @@ export default function ZapUPIPaymentModal({
     const [error, setError] = useState<string | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
     const [transactionData, setTransactionData] = useState<any>(null);
+    const [timeRemaining, setTimeRemaining] = useState(PAYMENT_TIMEOUT);
     const checkIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const checkCountRef = useRef(0);
+    const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const styles = createStyles(colors, isDark, insets);
 
     useEffect(() => {
         if (visible && amount > 0 && orderId) {
+            setTimeRemaining(PAYMENT_TIMEOUT);
             createPaymentOrder();
+            startCountdownTimer();
         }
 
         return () => {
-            if (checkIntervalRef.current) {
-                clearInterval(checkIntervalRef.current);
-            }
+            clearAllIntervals();
         };
     }, [visible, amount, orderId]);
+
+    const clearAllIntervals = () => {
+        if (checkIntervalRef.current) {
+            clearInterval(checkIntervalRef.current);
+            checkIntervalRef.current = null;
+        }
+        if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+        }
+    };
+
+    const startCountdownTimer = () => {
+        if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+        }
+
+        timerIntervalRef.current = setInterval(() => {
+            setTimeRemaining((prev) => {
+                if (prev <= 1) {
+                    // Time's up - auto close
+                    clearAllIntervals();
+                    Alert.alert(
+                        'Payment Timeout',
+                        'Payment time expired. Please try again.',
+                        [{ text: 'OK', onPress: handleClose }]
+                    );
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    };
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
 
     const createPaymentOrder = async () => {
         setIsCreating(true);
         setError(null);
         setPaymentData(null);
-        checkCountRef.current = 0;
 
         try {
             const response = await zapupiApi.createOrder({
@@ -81,8 +121,10 @@ export default function ZapUPIPaymentModal({
 
             if (response.success && response.response) {
                 setPaymentData(response.response);
-                // Start auto-checking payment status
-                startPaymentStatusCheck(response.response.orderId);
+                // Start auto-checking using autoCheckUrl
+                if (response.response.autoCheckUrl) {
+                    startAutoCheckPolling(response.response.autoCheckUrl, response.response.orderId);
+                }
             } else {
                 setError(response.message || 'Failed to create payment order');
             }
@@ -93,40 +135,44 @@ export default function ZapUPIPaymentModal({
         }
     };
 
-    const startPaymentStatusCheck = (orderIdToCheck: string) => {
+    const startAutoCheckPolling = (autoCheckUrl: string, orderIdToCheck: string) => {
         if (checkIntervalRef.current) {
             clearInterval(checkIntervalRef.current);
         }
 
         checkIntervalRef.current = setInterval(async () => {
-            checkCountRef.current += 1;
-
-            // Stop checking after 5 minutes (150 checks at 2 second intervals)
-            if (checkCountRef.current > 150) {
-                if (checkIntervalRef.current) {
-                    clearInterval(checkIntervalRef.current);
-                }
-                return;
-            }
-
             try {
-                const response = await zapupiApi.checkStatus(orderIdToCheck);
+                // Use autoCheckUrl for polling
+                const response = await fetch(autoCheckUrl);
+                const data = await response.json();
 
-                if (response.success && response.response) {
-                    const status = response.response.status;
+                // Check for success status
+                if (data.status &&
+                    (data.status.toLowerCase().includes('success') ||
+                        data.status === 'Success' ||
+                        data.status === 'Completed')) {
 
-                    if (status === 'Success' || status === 'success') {
-                        if (checkIntervalRef.current) {
-                            clearInterval(checkIntervalRef.current);
-                        }
-                        setTransactionData(response.response);
-                        setShowSuccess(true);
+                    clearAllIntervals();
+
+                    // Verify payment with main API
+                    const verifyResponse = await zapupiApi.checkStatus(orderIdToCheck);
+                    if (verifyResponse.success && verifyResponse.response) {
+                        setTransactionData(verifyResponse.response);
+                    } else {
+                        setTransactionData({ status: 'Success', orderId: orderIdToCheck });
                     }
+                    setShowSuccess(true);
+                } else if (data.status &&
+                    (data.status.toLowerCase().includes('failed') ||
+                        data.status === 'Failed')) {
+                    clearAllIntervals();
+                    Alert.alert('Payment Failed', 'The payment was not successful. Please try again.');
                 }
+                // Continue polling if pending
             } catch (err) {
                 // Silently continue checking
             }
-        }, 2000);
+        }, 3000); // Check every 3 seconds
     };
 
     const checkPaymentStatus = async () => {
@@ -134,21 +180,43 @@ export default function ZapUPIPaymentModal({
 
         setIsChecking(true);
         try {
+            // First check autoCheckUrl
+            if (paymentData.autoCheckUrl) {
+                const autoResponse = await fetch(paymentData.autoCheckUrl);
+                const autoData = await autoResponse.json();
+
+                if (autoData.status &&
+                    (autoData.status.toLowerCase().includes('success') ||
+                        autoData.status === 'Success' ||
+                        autoData.status === 'Completed')) {
+
+                    clearAllIntervals();
+                    const verifyResponse = await zapupiApi.checkStatus(paymentData.orderId);
+                    if (verifyResponse.success && verifyResponse.response) {
+                        setTransactionData(verifyResponse.response);
+                    } else {
+                        setTransactionData({ status: 'Success', orderId: paymentData.orderId });
+                    }
+                    setShowSuccess(true);
+                    setIsChecking(false);
+                    return;
+                }
+            }
+
+            // Fallback to main API check
             const response = await zapupiApi.checkStatus(paymentData.orderId);
 
             if (response.success && response.response) {
                 const status = response.response.status;
 
                 if (status === 'Success' || status === 'success') {
-                    if (checkIntervalRef.current) {
-                        clearInterval(checkIntervalRef.current);
-                    }
+                    clearAllIntervals();
                     setTransactionData(response.response);
                     setShowSuccess(true);
                 } else if (status === 'Failed' || status === 'failed') {
                     Alert.alert('Payment Failed', 'The payment was not successful. Please try again.');
                 } else {
-                    Alert.alert('Payment Pending', 'Payment is still being processed. Please wait or complete the payment.');
+                    Alert.alert('Payment Pending', 'Payment is still being processed. Please complete the payment.');
                 }
             }
         } catch (err) {
@@ -168,6 +236,15 @@ export default function ZapUPIPaymentModal({
         }
     };
 
+    const getDecodedUpiUrl = () => {
+        if (!paymentData?.paymentData) return null;
+        try {
+            return decodeURIComponent(paymentData.paymentData);
+        } catch {
+            return paymentData.paymentData;
+        }
+    };
+
     const copyUpiData = async () => {
         if (paymentData?.paymentData) {
             await Clipboard.setStringAsync(paymentData.paymentData);
@@ -177,21 +254,24 @@ export default function ZapUPIPaymentModal({
 
     const handleSuccessClose = () => {
         setShowSuccess(false);
-        if (checkIntervalRef.current) {
-            clearInterval(checkIntervalRef.current);
-        }
+        clearAllIntervals();
         onSuccess(transactionData);
     };
 
     const handleClose = () => {
-        if (checkIntervalRef.current) {
-            clearInterval(checkIntervalRef.current);
-        }
+        clearAllIntervals();
         setPaymentData(null);
         setError(null);
         setShowSuccess(false);
         setTransactionData(null);
+        setTimeRemaining(PAYMENT_TIMEOUT);
         onClose();
+    };
+
+    const getTimerColor = () => {
+        if (timeRemaining <= 60) return '#EF4444'; // Red when < 1 min
+        if (timeRemaining <= 120) return '#F59E0B'; // Orange when < 2 min
+        return colors.primary;
     };
 
     return (
@@ -208,9 +288,19 @@ export default function ZapUPIPaymentModal({
 
                     <View style={styles.header}>
                         <Text style={styles.title}>UPI Payment</Text>
-                        <Pressable onPress={handleClose} style={styles.closeBtn}>
-                            <X size={20} color={colors.foreground} />
-                        </Pressable>
+                        <View style={styles.headerRight}>
+                            {paymentData && !showSuccess && (
+                                <View style={[styles.timerBadge, { backgroundColor: getTimerColor() + '20' }]}>
+                                    <Clock size={14} color={getTimerColor()} />
+                                    <Text style={[styles.timerText, { color: getTimerColor() }]}>
+                                        {formatTime(timeRemaining)}
+                                    </Text>
+                                </View>
+                            )}
+                            <Pressable onPress={handleClose} style={styles.closeBtn}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
                     </View>
 
                     {showSuccess ? (
@@ -220,7 +310,7 @@ export default function ZapUPIPaymentModal({
                             </View>
                             <Text style={styles.successTitle}>Payment Successful!</Text>
                             <Text style={styles.successSubtitle}>
-                                Transaction ID: {transactionData?.txnId || 'N/A'}
+                                Transaction ID: {transactionData?.txnId || transactionData?.orderId || 'N/A'}
                             </Text>
                             <Text style={styles.successAmount}>₹{amount}</Text>
                             <Pressable style={styles.doneBtn} onPress={handleSuccessClose}>
@@ -250,44 +340,34 @@ export default function ZapUPIPaymentModal({
                             </View>
 
                             <View style={styles.qrSection}>
-                                <View style={styles.qrPlaceholder}>
-                                    <QrCode size={100} color={colors.primary} />
-                                    <Text style={styles.qrHint}>Scan QR or use link below</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.actionsContainer}>
-                                <Pressable style={styles.actionBtn} onPress={openPaymentUrl}>
-                                    <ExternalLink size={20} color={colors.primary} />
-                                    <Text style={styles.actionBtnText}>Open Payment Page</Text>
-                                </Pressable>
-
-                                {paymentData.paymentData && (
-                                    <Pressable style={styles.actionBtnSecondary} onPress={copyUpiData}>
-                                        <Copy size={18} color={colors.mutedForeground} />
-                                        <Text style={styles.actionBtnSecondaryText}>Copy UPI Intent</Text>
-                                    </Pressable>
+                                {paymentData.paymentData ? (
+                                    <View style={styles.qrContainer}>
+                                        <QRCode
+                                            value={getDecodedUpiUrl() || paymentData.paymentData}
+                                            size={220}
+                                            color={isDark ? '#FFFFFF' : '#000000'}
+                                            backgroundColor={isDark ? colors.card : '#FFFFFF'}
+                                        />
+                                        <Text style={styles.qrHint}>Scan with any UPI app to pay</Text>
+                                    </View>
+                                ) : (
+                                    <View style={styles.qrPlaceholder}>
+                                        <ActivityIndicator size="large" color={colors.primary} />
+                                        <Text style={styles.qrHint}>Loading QR Code...</Text>
+                                    </View>
                                 )}
                             </View>
 
-                            <View style={styles.statusSection}>
-                                <Text style={styles.statusText}>
-                                    Waiting for payment confirmation...
+                            <View style={styles.pollingIndicator}>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                                <Text style={styles.pollingText}>Auto-detecting payment...</Text>
+                            </View>
+
+                            <View style={styles.warningBox}>
+                                <AlertCircle size={16} color="#F59E0B" />
+                                <Text style={styles.warningText}>
+                                    Do not close this screen until payment is complete, otherwise subscription will not be activated
                                 </Text>
-                                <Pressable
-                                    style={[styles.checkBtn, isChecking && styles.checkBtnDisabled]}
-                                    onPress={checkPaymentStatus}
-                                    disabled={isChecking}
-                                >
-                                    {isChecking ? (
-                                        <ActivityIndicator size="small" color={colors.white} />
-                                    ) : (
-                                        <>
-                                            <RefreshCw size={16} color={colors.white} />
-                                            <Text style={styles.checkBtnText}>Check Status</Text>
-                                        </>
-                                    )}
-                                </Pressable>
                             </View>
 
                             <Text style={styles.orderIdText}>Order ID: {paymentData.orderId}</Text>
@@ -315,7 +395,7 @@ const createStyles = (colors: any, isDark: boolean, insets: any) =>
             borderTopRightRadius: 20,
             paddingHorizontal: 16,
             paddingBottom: insets.bottom + 16,
-            minHeight: height * 0.6,
+            minHeight: height * 0.55,
         },
         handle: {
             width: 40,
@@ -332,10 +412,27 @@ const createStyles = (colors: any, isDark: boolean, insets: any) =>
             alignItems: 'center',
             marginBottom: 16,
         },
+        headerRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+        },
         title: {
             fontSize: 18,
             fontWeight: '700',
             color: colors.foreground,
+        },
+        timerBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 20,
+        },
+        timerText: {
+            fontSize: 14,
+            fontWeight: '700',
         },
         closeBtn: {
             width: 32,
@@ -410,9 +507,23 @@ const createStyles = (colors: any, isDark: boolean, insets: any) =>
             alignItems: 'center',
             marginBottom: 20,
         },
+        qrContainer: {
+            padding: 20,
+            backgroundColor: isDark ? colors.card : '#FFFFFF',
+            borderRadius: 16,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: colors.border,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+            elevation: 4,
+        },
         qrPlaceholder: {
-            width: 180,
-            height: 180,
+            width: 200,
+            height: 200,
             backgroundColor: colors.background,
             borderRadius: 16,
             alignItems: 'center',
@@ -424,77 +535,46 @@ const createStyles = (colors: any, isDark: boolean, insets: any) =>
         qrHint: {
             fontSize: 12,
             color: colors.mutedForeground,
-            marginTop: 8,
+            marginTop: 12,
             textAlign: 'center',
         },
-        actionsContainer: {
-            gap: 10,
-            marginBottom: 20,
-        },
-        actionBtn: {
+        pollingIndicator: {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
             gap: 10,
-            backgroundColor: isDark ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.1)',
-            paddingVertical: 14,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.primary,
-        },
-        actionBtnText: {
-            fontSize: 15,
-            fontWeight: '600',
-            color: colors.primary,
-        },
-        actionBtnSecondary: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            backgroundColor: colors.secondary,
-            paddingVertical: 12,
-            borderRadius: 10,
-        },
-        actionBtnSecondaryText: {
-            fontSize: 13,
-            color: colors.mutedForeground,
-        },
-        statusSection: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
             backgroundColor: colors.background,
-            padding: 12,
-            borderRadius: 10,
-            marginBottom: 12,
+            padding: 14,
+            borderRadius: 12,
+            marginBottom: 16,
         },
-        statusText: {
-            fontSize: 12,
+        pollingText: {
+            fontSize: 14,
             color: colors.mutedForeground,
-            flex: 1,
-        },
-        checkBtn: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-            backgroundColor: colors.primary,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 8,
-        },
-        checkBtnDisabled: {
-            opacity: 0.6,
-        },
-        checkBtnText: {
-            fontSize: 12,
-            fontWeight: '600',
-            color: colors.white,
+            fontWeight: '500',
         },
         orderIdText: {
             fontSize: 11,
             color: colors.mutedForeground,
             textAlign: 'center',
+        },
+        warningBox: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            backgroundColor: '#F59E0B20',
+            padding: 12,
+            borderRadius: 10,
+            marginBottom: 12,
+            borderWidth: 1,
+            borderColor: '#F59E0B40',
+        },
+        warningText: {
+            flex: 1,
+            fontSize: 12,
+            color: '#F59E0B',
+            fontWeight: '500',
+            lineHeight: 16,
         },
         successContainer: {
             alignItems: 'center',
