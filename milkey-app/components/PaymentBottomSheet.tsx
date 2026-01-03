@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, CreditCard, Banknote, Wallet, Check } from 'lucide-react-native';
 import { ordersApi } from '@/lib/milkeyApi';
 import { useCartStore } from '@/lib/cartStore';
+import ZapUPIPaymentModal from './ZapUPIPaymentModal';
 
 const { height } = Dimensions.get('window');
 
@@ -18,23 +19,39 @@ interface PaymentBottomSheetProps {
 export default function PaymentBottomSheet({ visible, onClose, total, onSuccess }: PaymentBottomSheetProps) {
     const { colors, isDark } = useTheme();
     const insets = useSafeAreaInsets();
-    const { items } = useCartStore();
+    const { items, clearCart } = useCartStore();
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showZapUPI, setShowZapUPI] = useState(false);
+    const [pendingOrderId, setPendingOrderId] = useState<string>('');
 
     const paymentMethods = [
+        { id: 'upi', label: 'UPI Payment', icon: Wallet, description: 'Pay with UPI - GPay, PhonePe, Paytm' },
         { id: 'cash', label: 'Cash on Delivery', icon: Banknote, description: 'Pay when you receive' },
-        { id: 'upi', label: 'UPI Payment', icon: Wallet, description: 'GPay, PhonePe, Paytm' },
-        { id: 'card', label: 'Credit/Debit Card', icon: CreditCard, description: 'Visa, Mastercard, RuPay' },
     ];
 
     const styles = createStyles(colors, isDark, insets);
 
+    const generateOrderId = () => {
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+        return `ORD${timestamp}${random}`;
+    };
+
     const handlePayment = async () => {
         if (!selectedMethod || items.length === 0) return;
 
+        if (selectedMethod === 'upi') {
+            // Generate order ID and show ZapUPI modal
+            const orderId = generateOrderId();
+            setPendingOrderId(orderId);
+            setShowZapUPI(true);
+            return;
+        }
+
+        // For cash payment, proceed directly
         setIsProcessing(true);
         setError(null);
 
@@ -56,6 +73,44 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
                 setTimeout(() => {
                     setShowSuccess(false);
                     setSelectedMethod(null);
+                    clearCart();
+                    onSuccess();
+                }, 1500);
+            } else {
+                setError(response.message || 'Failed to place order');
+            }
+        } catch (err) {
+            setError('Network error. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleZapUPISuccess = async (transactionData: any) => {
+        setShowZapUPI(false);
+        setIsProcessing(true);
+        setError(null);
+
+        try {
+            const orderData = {
+                items: items.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                })),
+                paymentMethod: 'upi',
+                transactionId: transactionData?.txnId || pendingOrderId,
+            };
+
+            const response = await ordersApi.create(orderData);
+
+            if (response.success) {
+                setShowSuccess(true);
+                setTimeout(() => {
+                    setShowSuccess(false);
+                    setSelectedMethod(null);
+                    clearCart();
                     onSuccess();
                 }, 1500);
             } else {
@@ -73,108 +128,123 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
         setShowSuccess(false);
         setIsProcessing(false);
         setError(null);
+        setShowZapUPI(false);
+        setPendingOrderId('');
         onClose();
     };
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="slide"
-            onRequestClose={handleClose}
-        >
-            <View style={styles.overlay}>
-                <Pressable style={styles.backdrop} onPress={handleClose} />
-                <View style={styles.sheet}>
-                    <View style={styles.handle} />
+        <>
+            <Modal
+                visible={visible && !showZapUPI}
+                transparent
+                animationType="slide"
+                onRequestClose={handleClose}
+            >
+                <View style={styles.overlay}>
+                    <Pressable style={styles.backdrop} onPress={handleClose} />
+                    <View style={styles.sheet}>
+                        <View style={styles.handle} />
 
-                    <View style={styles.header}>
-                        <Text style={styles.title}>Payment Method</Text>
-                        <Pressable onPress={handleClose} style={styles.closeBtn}>
-                            <X size={20} color={colors.foreground} />
-                        </Pressable>
-                    </View>
-
-                    {showSuccess ? (
-                        <View style={styles.successContainer}>
-                            <View style={styles.successIcon}>
-                                <Check size={40} color={colors.white} />
-                            </View>
-                            <Text style={styles.successTitle}>Order Placed!</Text>
-                            <Text style={styles.successSubtitle}>Your order has been placed successfully</Text>
-                        </View>
-                    ) : (
-                        <>
-                            <View style={styles.totalSection}>
-                                <Text style={styles.totalLabel}>Total Amount</Text>
-                                <Text style={styles.totalValue}>₹{total}</Text>
-                            </View>
-
-                            <View style={styles.methodsContainer}>
-                                {paymentMethods.map((method) => {
-                                    const Icon = method.icon;
-                                    const isSelected = selectedMethod === method.id;
-
-                                    return (
-                                        <Pressable
-                                            key={method.id}
-                                            style={[
-                                                styles.methodCard,
-                                                isSelected && styles.methodCardSelected,
-                                            ]}
-                                            onPress={() => setSelectedMethod(method.id)}
-                                        >
-                                            <View style={[
-                                                styles.methodIcon,
-                                                isSelected && styles.methodIconSelected,
-                                            ]}>
-                                                <Icon size={22} color={isSelected ? colors.white : colors.primary} />
-                                            </View>
-                                            <View style={styles.methodInfo}>
-                                                <Text style={[
-                                                    styles.methodLabel,
-                                                    isSelected && styles.methodLabelSelected,
-                                                ]}>
-                                                    {method.label}
-                                                </Text>
-                                                <Text style={styles.methodDesc}>{method.description}</Text>
-                                            </View>
-                                            <View style={[
-                                                styles.radioOuter,
-                                                isSelected && styles.radioOuterSelected,
-                                            ]}>
-                                                {isSelected && <View style={styles.radioInner} />}
-                                            </View>
-                                        </Pressable>
-                                    );
-                                })}
-                            </View>
-
-                            {error && (
-                                <View style={styles.errorContainer}>
-                                    <Text style={styles.errorText}>{error}</Text>
-                                </View>
-                            )}
-
-                            <Pressable
-                                style={[
-                                    styles.payBtn,
-                                    (!selectedMethod || isProcessing) && styles.payBtnDisabled,
-                                ]}
-                                onPress={handlePayment}
-                                disabled={!selectedMethod || isProcessing}
-                            >
-                                {isProcessing ? (
-                                    <ActivityIndicator color={colors.white} />
-                                ) : (
-                                    <Text style={styles.payBtnText}>{`Pay ₹${total}`}</Text>
-                                )}
+                        <View style={styles.header}>
+                            <Text style={styles.title}>Payment Method</Text>
+                            <Pressable onPress={handleClose} style={styles.closeBtn}>
+                                <X size={20} color={colors.foreground} />
                             </Pressable>
-                        </>
-                    )}
+                        </View>
+
+                        {showSuccess ? (
+                            <View style={styles.successContainer}>
+                                <View style={styles.successIcon}>
+                                    <Check size={40} color={colors.white} />
+                                </View>
+                                <Text style={styles.successTitle}>Order Placed!</Text>
+                                <Text style={styles.successSubtitle}>Your order has been placed successfully</Text>
+                            </View>
+                        ) : (
+                            <>
+                                <View style={styles.totalSection}>
+                                    <Text style={styles.totalLabel}>Total Amount</Text>
+                                    <Text style={styles.totalValue}>₹{total}</Text>
+                                </View>
+
+                                <View style={styles.methodsContainer}>
+                                    {paymentMethods.map((method) => {
+                                        const Icon = method.icon;
+                                        const isSelected = selectedMethod === method.id;
+
+                                        return (
+                                            <Pressable
+                                                key={method.id}
+                                                style={[
+                                                    styles.methodCard,
+                                                    isSelected && styles.methodCardSelected,
+                                                ]}
+                                                onPress={() => setSelectedMethod(method.id)}
+                                            >
+                                                <View style={[
+                                                    styles.methodIcon,
+                                                    isSelected && styles.methodIconSelected,
+                                                ]}>
+                                                    <Icon size={22} color={isSelected ? colors.white : colors.primary} />
+                                                </View>
+                                                <View style={styles.methodInfo}>
+                                                    <Text style={[
+                                                        styles.methodLabel,
+                                                        isSelected && styles.methodLabelSelected,
+                                                    ]}>
+                                                        {method.label}
+                                                    </Text>
+                                                    <Text style={styles.methodDesc}>{method.description}</Text>
+                                                </View>
+                                                <View style={[
+                                                    styles.radioOuter,
+                                                    isSelected && styles.radioOuterSelected,
+                                                ]}>
+                                                    {isSelected && <View style={styles.radioInner} />}
+                                                </View>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+
+                                {error && (
+                                    <View style={styles.errorContainer}>
+                                        <Text style={styles.errorText}>{error}</Text>
+                                    </View>
+                                )}
+
+                                <Pressable
+                                    style={[
+                                        styles.payBtn,
+                                        (!selectedMethod || isProcessing) && styles.payBtnDisabled,
+                                    ]}
+                                    onPress={handlePayment}
+                                    disabled={!selectedMethod || isProcessing}
+                                >
+                                    {isProcessing ? (
+                                        <ActivityIndicator color={colors.white} />
+                                    ) : (
+                                        <Text style={styles.payBtnText}>
+                                            {selectedMethod === 'upi' ? `Pay ₹${total} via UPI` : `Pay ₹${total}`}
+                                        </Text>
+                                    )}
+                                </Pressable>
+                            </>
+                        )}
+                    </View>
                 </View>
-            </View>
-        </Modal>
+            </Modal>
+
+            <ZapUPIPaymentModal
+                visible={showZapUPI}
+                onClose={() => setShowZapUPI(false)}
+                amount={total}
+                orderId={pendingOrderId}
+                remark="Product Order"
+                onSuccess={handleZapUPISuccess}
+            />
+        </>
     );
 }
 

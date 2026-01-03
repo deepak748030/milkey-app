@@ -1249,6 +1249,12 @@ export interface UserSubscription {
     startDate: string;
     endDate: string;
     amount: number;
+    baseAmount?: number;
+    multiplier?: number;
+    lockedDurationDays?: number;
+    lockedDurationType?: 'days' | 'months' | 'years';
+    lockedDurationValue?: number;
+    lockedSubscriptionName?: string;
     isFree: boolean;
     paymentStatus: 'pending' | 'completed' | 'failed';
     paymentMethod: string;
@@ -1299,6 +1305,7 @@ export const userSubscriptionsApi = {
         paymentMethod?: string;
         transactionId?: string;
         referralCode?: string;
+        multiplier?: number;
     }) => {
         return apiRequest<UserSubscription>('/user-subscriptions/purchase', {
             method: 'POST',
@@ -1442,6 +1449,44 @@ export const withdrawalsApi = {
         return apiRequest<Withdrawal>('/withdrawals', {
             method: 'POST',
             body: JSON.stringify(data),
+        });
+    },
+};
+
+// ZapUPI Payment API
+export const zapupiApi = {
+    createOrder: async (data: {
+        amount: number;
+        orderId: string;
+        customerMobile?: string;
+        redirectUrl?: string;
+        remark?: string;
+    }) => {
+        return apiRequest<{
+            paymentUrl: string;
+            orderId: string;
+            paymentData: string;
+            autoCheckUrl: string;
+            utrCheckUrl: string;
+        }>('/zapupi/create-order', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    checkStatus: async (orderId: string) => {
+        return apiRequest<{
+            orderId: string;
+            status: string;
+            amount: string;
+            utr: string;
+            txnId: string;
+            customerMobile: string;
+            remark: string;
+            createdAt: string;
+        }>('/zapupi/order-status', {
+            method: 'POST',
+            body: JSON.stringify({ orderId }),
         });
     },
 };

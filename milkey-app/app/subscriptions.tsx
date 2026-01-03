@@ -5,6 +5,8 @@ import { ArrowLeft, CreditCard, Clock, CheckCircle, XCircle, Crown, Sparkles, Gi
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { userSubscriptionsApi, UserSubscription, Subscription as AvailableSubscription, formatSubscriptionDuration } from '@/lib/milkeyApi';
+import ZapUPIPaymentModal from '@/components/ZapUPIPaymentModal';
+import { useSubscriptionStore } from '@/lib/subscriptionStore';
 
 const { height } = Dimensions.get('window');
 
@@ -170,8 +172,40 @@ export default function SubscriptionsScreen() {
     const [purchasing, setPurchasing] = useState<string | null>(null);
     const [errorModal, setErrorModal] = useState({ visible: false, title: '', message: '' });
     const [successModal, setSuccessModal] = useState({ visible: false, title: '', message: '' });
+    // Track multiplier per subscription (for extending duration)
+    const [multipliers, setMultipliers] = useState<Record<string, number>>({});
+    // ZapUPI Payment states
+    const [showZapUPI, setShowZapUPI] = useState(false);
+    const [pendingSubscription, setPendingSubscription] = useState<AvailableSubscription | null>(null);
+    const [pendingOrderId, setPendingOrderId] = useState<string>('');
 
     const styles = createStyles(colors, isDark);
+
+    // Get multiplier for a subscription (default 1)
+    const getMultiplier = (subId: string) => multipliers[subId] || 1;
+
+    // Set multiplier for a subscription
+    const setMultiplier = (subId: string, value: number) => {
+        setMultipliers(prev => ({ ...prev, [subId]: value }));
+    };
+
+    // Format duration with multiplier
+    const formatDurationWithMultiplier = (sub: AvailableSubscription, mult: number) => {
+        const baseType = sub.durationType || 'months';
+        const baseValue = sub.durationValue || 1;
+        const totalValue = baseValue * mult;
+
+        switch (baseType) {
+            case 'days':
+                return totalValue === 1 ? '1 Day' : `${totalValue} Days`;
+            case 'months':
+                return totalValue === 1 ? '1 Month' : `${totalValue} Months`;
+            case 'years':
+                return totalValue === 1 ? '1 Year' : `${totalValue} Years`;
+            default:
+                return `${totalValue} Months`;
+        }
+    };
 
     const fetchData = useCallback(async () => {
         try {
@@ -205,11 +239,61 @@ export default function SubscriptionsScreen() {
         fetchData();
     }, [fetchData]);
 
+    const generateOrderId = () => {
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+        return `SUB${timestamp}${random}`;
+    };
+
     const handlePurchase = async (subscriptionId: string) => {
+        const subscription = availableSubscriptions.find(s => s._id === subscriptionId);
+        if (!subscription) return;
+
+        const multiplier = getMultiplier(subscriptionId);
+        const totalPrice = subscription.amount * multiplier;
+
+        // For paid subscriptions, show ZapUPI payment first
+        if (!subscription.isFree && totalPrice > 0) {
+            const orderId = generateOrderId();
+            setPendingOrderId(orderId);
+            setPendingSubscription(subscription);
+            setShowZapUPI(true);
+            return;
+        }
+
+        // For free subscriptions, proceed directly
+        await completePurchase(subscriptionId, multiplier);
+    };
+
+    const handleZapUPISuccess = async (transactionData: any) => {
+        setShowZapUPI(false);
+        if (pendingSubscription) {
+            const multiplier = getMultiplier(pendingSubscription._id);
+            await completePurchase(pendingSubscription._id, multiplier, transactionData?.txnId || pendingOrderId);
+        }
+        setPendingSubscription(null);
+        setPendingOrderId('');
+    };
+
+    const completePurchase = async (subscriptionId: string, multiplier: number, transactionId?: string) => {
         setPurchasing(subscriptionId);
         try {
-            const response = await userSubscriptionsApi.purchase({ subscriptionId });
+            const response = await userSubscriptionsApi.purchase({
+                subscriptionId,
+                multiplier,
+                paymentMethod: transactionId ? 'upi' : 'free',
+                transactionId
+            });
             if (response.success) {
+                // Clear subscription cache to force refresh
+                useSubscriptionStore.getState().clearCache();
+
+                // Clear multiplier after successful purchase
+                setMultipliers(prev => {
+                    const newState = { ...prev };
+                    delete newState[subscriptionId];
+                    return newState;
+                });
                 await fetchData();
                 setActiveTab('active');
 
@@ -239,6 +323,12 @@ export default function SubscriptionsScreen() {
                     visible: true,
                     title: 'Already Subscribed',
                     message: 'You already have this subscription active. Please wait for it to expire or choose a different plan.'
+                });
+            } else if (errorCode === 'TABS_ALREADY_COVERED') {
+                setErrorModal({
+                    visible: true,
+                    title: 'Tabs Already Covered',
+                    message: errorMessage
                 });
             } else {
                 setErrorModal({
@@ -301,7 +391,9 @@ export default function SubscriptionsScreen() {
                         <TypeIcon size={24} color={isQueued ? colors.warning : colors.primary} />
                     </View>
                     <View style={styles.cardHeaderInfo}>
-                        <Text style={styles.subscriptionName}>{item.subscription.name}</Text>
+                        <Text style={styles.subscriptionName}>
+                            {item.lockedSubscriptionName || item.subscription.name}
+                        </Text>
                         <View style={[styles.statusBadge, isQueued && styles.queuedBadge]}>
                             {isQueued ? (
                                 <>
@@ -317,6 +409,16 @@ export default function SubscriptionsScreen() {
                         </View>
                     </View>
                 </View>
+
+                {/* Locked-in price and duration info */}
+                {(item.multiplier && item.multiplier > 1) || item.baseAmount ? (
+                    <View style={styles.lockedInfoContainer}>
+                        <Text style={styles.lockedInfoText}>
+                            Paid: ₹{item.amount}
+                            {item.multiplier && item.multiplier > 1 && ` (${item.multiplier}× plan)`}
+                        </Text>
+                    </View>
+                ) : null}
 
                 <View style={styles.cardDetails}>
                     {isQueued && (
@@ -343,7 +445,7 @@ export default function SubscriptionsScreen() {
 
                 <View style={styles.tabsContainer}>
                     <Text style={styles.tabsLabel}>Covers: </Text>
-                    <Text style={styles.tabsValue}>{getTabNames(item.subscription.applicableTabs || [])}</Text>
+                    <Text style={styles.tabsValue}>{getTabNames(item.applicableTabs || item.subscription.applicableTabs || [])}</Text>
                 </View>
             </View>
         );
@@ -389,6 +491,9 @@ export default function SubscriptionsScreen() {
         const isPurchasing = purchasing === item._id;
         const isPurchased = item.isPurchased || false;
         const typeLabel = getTypeLabel(item);
+        const multiplier = getMultiplier(item._id);
+        const totalPrice = item.amount * multiplier;
+        const multiplierOptions = [1, 2, 3, 6, 12];
 
         return (
             <View key={item._id} style={[styles.availableCard, item.isFree && styles.freeCard]}>
@@ -415,13 +520,48 @@ export default function SubscriptionsScreen() {
                 {/* Name */}
                 <Text style={styles.availableName}>{item.name}</Text>
 
-                {/* Price Row */}
+                {/* Price Row - Shows calculated price with multiplier */}
                 <View style={styles.priceRow}>
                     <Text style={[styles.priceText, item.isFree && styles.freePriceText]}>
-                        {item.isFree ? 'FREE' : `₹${item.amount}`}
+                        {item.isFree ? 'FREE' : `₹${totalPrice}`}
                     </Text>
-                    <Text style={styles.durationText}>/ {formatSubscriptionDuration(item)}</Text>
+                    <Text style={styles.durationText}>/ {formatDurationWithMultiplier(item, multiplier)}</Text>
                 </View>
+
+                {/* Base price info when multiplier > 1 */}
+                {!item.isFree && multiplier > 1 && (
+                    <Text style={styles.basePriceText}>
+                        Base: ₹{item.amount} × {multiplier} = ₹{totalPrice}
+                    </Text>
+                )}
+
+                {/* Quantity Selector - Only for paid subscriptions */}
+                {!item.isFree && !isPurchased && (
+                    <View style={styles.multiplierContainer}>
+                        <Text style={styles.multiplierLabel}>Select Quantity:</Text>
+                        <View style={styles.quantitySelector}>
+                            <Pressable
+                                style={[styles.quantityButton, multiplier <= 1 && styles.quantityButtonDisabled]}
+                                onPress={() => multiplier > 1 && setMultiplier(item._id, multiplier - 1)}
+                                disabled={multiplier <= 1}
+                            >
+                                <Text style={[styles.quantityButtonText, multiplier <= 1 && styles.quantityButtonTextDisabled]}>−</Text>
+                            </Pressable>
+                            <View style={styles.quantityInputContainer}>
+                                <Text style={styles.quantityInputText}>{multiplier}</Text>
+                            </View>
+                            <Pressable
+                                style={styles.quantityButton}
+                                onPress={() => setMultiplier(item._id, multiplier + 1)}
+                            >
+                                <Text style={styles.quantityButtonText}>+</Text>
+                            </Pressable>
+                        </View>
+                        <Text style={styles.multiplierHint}>
+                            {formatDurationWithMultiplier(item, multiplier)} for ₹{totalPrice}
+                        </Text>
+                    </View>
+                )}
 
                 {/* Description */}
                 {item.description ? (
@@ -447,7 +587,7 @@ export default function SubscriptionsScreen() {
                     <View style={styles.featureRow}>
                         <Check size={14} color={colors.primary} />
                         <Text style={styles.featureText}>
-                            {formatSubscriptionDuration(item)} Validity
+                            {formatDurationWithMultiplier(item, multiplier)} Validity
                         </Text>
                     </View>
                 </View>
@@ -466,7 +606,7 @@ export default function SubscriptionsScreen() {
                         <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                         <Text style={styles.purchaseButtonText}>
-                            {isPurchased ? 'Already Subscribed' : item.isFree ? 'Activate Free' : 'Subscribe Now'}
+                            {isPurchased ? 'Already Subscribed' : item.isFree ? 'Activate Free' : `Subscribe for ₹${totalPrice}`}
                         </Text>
                     )}
                 </Pressable>
@@ -580,6 +720,21 @@ export default function SubscriptionsScreen() {
                 message={successModal.message}
                 onClose={() => setSuccessModal({ visible: false, title: '', message: '' })}
             />
+
+            {pendingSubscription && (
+                <ZapUPIPaymentModal
+                    visible={showZapUPI}
+                    onClose={() => {
+                        setShowZapUPI(false);
+                        setPendingSubscription(null);
+                        setPendingOrderId('');
+                    }}
+                    amount={pendingSubscription.amount * getMultiplier(pendingSubscription._id)}
+                    orderId={pendingOrderId}
+                    remark={`Subscription: ${pendingSubscription.name}`}
+                    onSuccess={handleZapUPISuccess}
+                />
+            )}
         </SafeAreaView>
     );
 }
@@ -858,6 +1013,84 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.mutedForeground,
         marginBottom: 12,
         lineHeight: 18,
+    },
+    basePriceText: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+        marginBottom: 8,
+    },
+    // Quantity selector styles
+    multiplierContainer: {
+        marginBottom: 12,
+        padding: 12,
+        backgroundColor: colors.secondary,
+        borderRadius: 10,
+    },
+    multiplierLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.foreground,
+        marginBottom: 8,
+    },
+    quantitySelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        marginBottom: 8,
+    },
+    quantityButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    quantityButtonDisabled: {
+        backgroundColor: colors.muted,
+    },
+    quantityButtonText: {
+        fontSize: 24,
+        fontWeight: '600',
+        color: '#FFFFFF',
+    },
+    quantityButtonTextDisabled: {
+        color: colors.mutedForeground,
+    },
+    quantityInputContainer: {
+        minWidth: 60,
+        height: 44,
+        paddingHorizontal: 16,
+        backgroundColor: colors.background,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    quantityInputText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    multiplierHint: {
+        fontSize: 12,
+        color: colors.primary,
+        fontWeight: '500',
+        textAlign: 'center',
+    },
+    lockedInfoContainer: {
+        backgroundColor: `${colors.primary}10`,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 6,
+        marginBottom: 10,
+    },
+    lockedInfoText: {
+        fontSize: 12,
+        color: colors.primary,
+        fontWeight: '500',
     },
     tabsRow: {
         flexDirection: 'row',

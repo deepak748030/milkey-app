@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, ScrollView, Pressable, StyleSheet, ActivityIndicator, Dimensions, StatusBar, Alert } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { Crown, Check, Star, Zap, X, AlertCircle, CheckCircle } from 'lucide-react-native';
+import { Crown, Check, Star, Zap, X, AlertCircle, CheckCircle, Wallet } from 'lucide-react-native';
 import { Subscription, userSubscriptionsApi, formatSubscriptionDuration } from '@/lib/milkeyApi';
 import { useSubscriptionStore } from '@/lib/subscriptionStore';
+import ZapUPIPaymentModal from './ZapUPIPaymentModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,6 +31,32 @@ export function SubscriptionModal({
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
     const [isNewUser, setIsNewUser] = useState(false);
     const [purchasing, setPurchasing] = useState<string | null>(null);
+    const [multipliers, setMultipliers] = useState<Record<string, number>>({});
+    const [showZapUPI, setShowZapUPI] = useState(false);
+    const [pendingSubscription, setPendingSubscription] = useState<Subscription | null>(null);
+    const [pendingOrderId, setPendingOrderId] = useState<string>('');
+
+    const getMultiplier = (subId: string) => multipliers[subId] || 1;
+    const setMultiplier = (subId: string, value: number) => {
+        setMultipliers(prev => ({ ...prev, [subId]: value }));
+    };
+
+    const formatDurationWithMultiplier = (sub: Subscription, mult: number) => {
+        const baseType = sub.durationType || 'months';
+        const baseValue = sub.durationValue || 1;
+        const totalValue = baseValue * mult;
+
+        switch (baseType) {
+            case 'days':
+                return totalValue === 1 ? '1 Day' : `${totalValue} Days`;
+            case 'months':
+                return totalValue === 1 ? '1 Month' : `${totalValue} Months`;
+            case 'years':
+                return totalValue === 1 ? '1 Year' : `${totalValue} Years`;
+            default:
+                return `${totalValue} Months`;
+        }
+    };
 
     useEffect(() => {
         if (visible) {
@@ -67,17 +94,59 @@ export function SubscriptionModal({
         }
     };
 
+    const generateOrderId = () => {
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+        return `SUB${timestamp}${random}`;
+    };
+
     const handlePurchase = async (subscription: Subscription) => {
+        const multiplier = getMultiplier(subscription._id);
+        const totalPrice = subscription.amount * multiplier;
+
+        // For paid subscriptions, show ZapUPI payment first
+        if (!subscription.isFree && totalPrice > 0) {
+            const orderId = generateOrderId();
+            setPendingOrderId(orderId);
+            setPendingSubscription(subscription);
+            setShowZapUPI(true);
+            return;
+        }
+
+        // For free subscriptions, proceed directly
+        await completePurchase(subscription, multiplier);
+    };
+
+    const handleZapUPISuccess = async (transactionData: any) => {
+        setShowZapUPI(false);
+        if (pendingSubscription) {
+            const multiplier = getMultiplier(pendingSubscription._id);
+            await completePurchase(pendingSubscription, multiplier, transactionData?.txnId || pendingOrderId);
+        }
+        setPendingSubscription(null);
+        setPendingOrderId('');
+    };
+
+    const completePurchase = async (subscription: Subscription, multiplier: number, transactionId?: string) => {
         setPurchasing(subscription._id);
         try {
             const res = await userSubscriptionsApi.purchase({
                 subscriptionId: subscription._id,
-                paymentMethod: subscription.isFree ? 'free' : 'cash'
+                paymentMethod: subscription.isFree ? 'free' : 'upi',
+                multiplier,
+                transactionId
             });
 
             if (res.success) {
                 // Clear subscription cache to force refresh
                 useSubscriptionStore.getState().clearCache();
+
+                // Clear multiplier
+                setMultipliers(prev => {
+                    const newState = { ...prev };
+                    delete newState[subscription._id];
+                    return newState;
+                });
 
                 if (onSubscribe) {
                     onSubscribe(subscription);
@@ -91,7 +160,11 @@ export function SubscriptionModal({
                         [{ text: 'OK', onPress: onClose }]
                     );
                 } else {
-                    onClose();
+                    Alert.alert(
+                        'Subscription Activated!',
+                        'Your subscription has been activated successfully.',
+                        [{ text: 'OK', onPress: onClose }]
+                    );
                 }
             }
         } catch (error: any) {
@@ -103,6 +176,12 @@ export function SubscriptionModal({
                 Alert.alert(
                     'Already Subscribed',
                     'You already have this subscription active. Please wait for it to expire or choose a different plan.',
+                    [{ text: 'OK' }]
+                );
+            } else if (errorCode === 'TABS_ALREADY_COVERED') {
+                Alert.alert(
+                    'Tabs Already Covered',
+                    errorMessage,
                     [{ text: 'OK' }]
                 );
             } else {
@@ -189,127 +268,185 @@ export function SubscriptionModal({
                     </View>
                 )}
 
-                {subscriptions.map((sub) => (
-                    <View
-                        key={sub._id}
-                        style={[
-                            styles.subscriptionCard,
-                            sub.isFree && styles.freeCard
-                        ]}
-                    >
-                        {/* Type Badge */}
-                        <View style={[
-                            styles.typeBadge,
-                            sub.isFree ? styles.freeBadge :
-                                sub.subscriptionType === 'combined' ? styles.comboBadge :
-                                    styles.singleBadge
-                        ]}>
-                            {getTypeIcon(sub)}
-                            <Text style={[
-                                styles.typeBadgeText,
-                                sub.isFree && styles.freeBadgeText
+                {subscriptions.map((sub) => {
+                    const multiplier = getMultiplier(sub._id);
+                    const totalPrice = sub.amount * multiplier;
+                    const multiplierOptions = [1, 2, 3, 6, 12];
+
+                    return (
+                        <View
+                            key={sub._id}
+                            style={[
+                                styles.subscriptionCard,
+                                sub.isFree && styles.freeCard
+                            ]}
+                        >
+                            {/* Type Badge */}
+                            <View style={[
+                                styles.typeBadge,
+                                sub.isFree ? styles.freeBadge :
+                                    sub.subscriptionType === 'combined' ? styles.comboBadge :
+                                        styles.singleBadge
                             ]}>
-                                {getTypeLabel(sub)}
-                            </Text>
-                        </View>
-
-                        {/* Card Content */}
-                        <Text style={styles.subName}>{sub.name}</Text>
-
-                        <View style={styles.priceRow}>
-                            <Text style={[
-                                styles.price,
-                                sub.isFree && styles.freePrice
-                            ]}>
-                                {sub.isFree ? 'FREE' : `₹${sub.amount}`}
-                            </Text>
-                            <Text style={styles.duration}>
-                                / {formatSubscriptionDuration(sub)}
-                            </Text>
-                        </View>
-
-                        {sub.description ? (
-                            <Text style={styles.description}>{sub.description}</Text>
-                        ) : null}
-
-                        {/* Applicable Tabs */}
-                        <View style={styles.tabsRow}>
-                            <Text style={styles.tabsLabel}>Access to: </Text>
-                            <Text style={styles.tabsValue}>{getTabNames(sub.applicableTabs)}</Text>
-                        </View>
-
-                        {/* Features */}
-                        <View style={styles.features}>
-                            {sub.applicableTabs?.map((tab) => (
-                                <View key={tab} style={styles.featureItem}>
-                                    <Check size={14} color={colors.primary} />
-                                    <Text style={styles.featureText}>
-                                        {tab.charAt(0).toUpperCase() + tab.slice(1)} Tab Access
-                                    </Text>
-                                </View>
-                            ))}
-                            <View style={styles.featureItem}>
-                                <Check size={14} color={colors.primary} />
-                                <Text style={styles.featureText}>
-                                    {formatSubscriptionDuration(sub)} Validity
+                                {getTypeIcon(sub)}
+                                <Text style={[
+                                    styles.typeBadgeText,
+                                    sub.isFree && styles.freeBadgeText
+                                ]}>
+                                    {getTypeLabel(sub)}
                                 </Text>
                             </View>
-                        </View>
 
-                        {/* Purchase Button */}
-                        <Pressable
-                            style={[
-                                styles.purchaseBtn,
-                                sub.isFree && styles.freePurchaseBtn,
-                                purchasing === sub._id && styles.purchasingBtn
-                            ]}
-                            onPress={() => handlePurchase(sub)}
-                            disabled={purchasing !== null}
-                        >
-                            {purchasing === sub._id ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                                <Text style={styles.purchaseBtnText}>
-                                    {sub.isFree ? 'Activate Free' : 'Subscribe Now'}
+                            {/* Card Content */}
+                            <Text style={styles.subName}>{sub.name}</Text>
+
+                            <View style={styles.priceRow}>
+                                <Text style={[
+                                    styles.price,
+                                    sub.isFree && styles.freePrice
+                                ]}>
+                                    {sub.isFree ? 'FREE' : `₹${totalPrice}`}
+                                </Text>
+                                <Text style={styles.duration}>
+                                    / {formatDurationWithMultiplier(sub, multiplier)}
+                                </Text>
+                            </View>
+
+                            {/* Base price info when multiplier > 1 */}
+                            {!sub.isFree && multiplier > 1 && (
+                                <Text style={styles.basePriceText}>
+                                    Base: ₹{sub.amount} × {multiplier} = ₹{totalPrice}
                                 </Text>
                             )}
-                        </Pressable>
-                    </View>
-                ))}
+
+                            {/* Quantity Selector - Only for paid subscriptions */}
+                            {!sub.isFree && (
+                                <View style={styles.multiplierContainer}>
+                                    <Text style={styles.multiplierLabel}>Select Quantity:</Text>
+                                    <View style={styles.quantitySelector}>
+                                        <Pressable
+                                            style={[styles.quantityButton, multiplier <= 1 && styles.quantityButtonDisabled]}
+                                            onPress={() => multiplier > 1 && setMultiplier(sub._id, multiplier - 1)}
+                                            disabled={multiplier <= 1}
+                                        >
+                                            <Text style={[styles.quantityButtonText, multiplier <= 1 && styles.quantityButtonTextDisabled]}>−</Text>
+                                        </Pressable>
+                                        <View style={styles.quantityInputContainer}>
+                                            <Text style={styles.quantityInputText}>{multiplier}</Text>
+                                        </View>
+                                        <Pressable
+                                            style={styles.quantityButton}
+                                            onPress={() => setMultiplier(sub._id, multiplier + 1)}
+                                        >
+                                            <Text style={styles.quantityButtonText}>+</Text>
+                                        </Pressable>
+                                    </View>
+                                    <Text style={styles.multiplierHint}>
+                                        {formatDurationWithMultiplier(sub, multiplier)} for ₹{totalPrice}
+                                    </Text>
+                                </View>
+                            )}
+
+                            {sub.description ? (
+                                <Text style={styles.description}>{sub.description}</Text>
+                            ) : null}
+
+                            {/* Applicable Tabs */}
+                            <View style={styles.tabsRow}>
+                                <Text style={styles.tabsLabel}>Access to: </Text>
+                                <Text style={styles.tabsValue}>{getTabNames(sub.applicableTabs)}</Text>
+                            </View>
+
+                            {/* Features */}
+                            <View style={styles.features}>
+                                {sub.applicableTabs?.map((tab) => (
+                                    <View key={tab} style={styles.featureItem}>
+                                        <Check size={14} color={colors.primary} />
+                                        <Text style={styles.featureText}>
+                                            {tab.charAt(0).toUpperCase() + tab.slice(1)} Tab Access
+                                        </Text>
+                                    </View>
+                                ))}
+                                <View style={styles.featureItem}>
+                                    <Check size={14} color={colors.primary} />
+                                    <Text style={styles.featureText}>
+                                        {formatDurationWithMultiplier(sub, multiplier)} Validity
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {/* Purchase Button */}
+                            <Pressable
+                                style={[
+                                    styles.purchaseBtn,
+                                    sub.isFree && styles.freePurchaseBtn,
+                                    purchasing === sub._id && styles.purchasingBtn
+                                ]}
+                                onPress={() => handlePurchase(sub)}
+                                disabled={purchasing !== null}
+                            >
+                                {purchasing === sub._id ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.purchaseBtnText}>
+                                        {sub.isFree ? 'Activate Free' : `Subscribe for ₹${totalPrice}`}
+                                    </Text>
+                                )}
+                            </Pressable>
+                        </View>
+                    );
+                })}
             </ScrollView>
         );
     };
 
     return (
-        <Modal
-            visible={visible}
-            transparent={!fullScreen}
-            animationType="slide"
-            onRequestClose={onClose}
-            statusBarTranslucent={fullScreen}
-        >
-            <StatusBar
-                backgroundColor={fullScreen ? colors.background : 'rgba(0,0,0,0.6)'}
-                barStyle={isDark ? 'light-content' : 'dark-content'}
-            />
-            <View style={styles.overlay}>
-                <View style={styles.container}>
-                    {/* Header */}
-                    <View style={styles.header}>
-                        <View style={styles.headerContent}>
-                            <Crown size={24} color={colors.primary} />
-                            <Text style={styles.title}>{title}</Text>
+        <>
+            <Modal
+                visible={visible && !showZapUPI}
+                transparent={!fullScreen}
+                animationType="slide"
+                onRequestClose={onClose}
+                statusBarTranslucent={fullScreen}
+            >
+                <StatusBar
+                    backgroundColor={fullScreen ? colors.background : 'rgba(0,0,0,0.6)'}
+                    barStyle={isDark ? 'light-content' : 'dark-content'}
+                />
+                <View style={styles.overlay}>
+                    <View style={styles.container}>
+                        {/* Header */}
+                        <View style={styles.header}>
+                            <View style={styles.headerContent}>
+                                <Crown size={24} color={colors.primary} />
+                                <Text style={styles.title}>{title}</Text>
+                            </View>
+                            <Pressable style={styles.closeBtn} onPress={onClose}>
+                                <X size={22} color={colors.foreground} />
+                            </Pressable>
                         </View>
-                        <Pressable style={styles.closeBtn} onPress={onClose}>
-                            <X size={22} color={colors.foreground} />
-                        </Pressable>
-                    </View>
 
-                    {/* Content */}
-                    {renderContent()}
+                        {/* Content */}
+                        {renderContent()}
+                    </View>
                 </View>
-            </View>
-        </Modal>
+            </Modal>
+
+            {pendingSubscription && (
+                <ZapUPIPaymentModal
+                    visible={showZapUPI}
+                    onClose={() => {
+                        setShowZapUPI(false);
+                        setPendingSubscription(null);
+                        setPendingOrderId('');
+                    }}
+                    amount={pendingSubscription.amount * getMultiplier(pendingSubscription._id)}
+                    orderId={pendingOrderId}
+                    remark={`Subscription: ${pendingSubscription.name}`}
+                    onSuccess={handleZapUPISuccess}
+                />
+            )}
+        </>
     );
 }
 
@@ -496,6 +633,73 @@ const createStyles = (colors: any, isDark: boolean, fullScreen: boolean) => Styl
         color: colors.mutedForeground,
         marginBottom: 10,
         lineHeight: 18,
+    },
+    basePriceText: {
+        fontSize: 12,
+        color: colors.mutedForeground,
+        marginBottom: 8,
+    },
+    multiplierContainer: {
+        marginBottom: 12,
+        padding: 12,
+        backgroundColor: colors.muted,
+        borderRadius: 10,
+    },
+    multiplierLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.foreground,
+        marginBottom: 8,
+    },
+    quantitySelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        marginBottom: 8,
+    },
+    quantityButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: colors.primary,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    quantityButtonDisabled: {
+        backgroundColor: colors.muted,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    quantityButtonText: {
+        fontSize: 24,
+        fontWeight: '600',
+        color: '#FFFFFF',
+    },
+    quantityButtonTextDisabled: {
+        color: colors.mutedForeground,
+    },
+    quantityInputContainer: {
+        minWidth: 60,
+        height: 44,
+        paddingHorizontal: 16,
+        backgroundColor: colors.background,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    quantityInputText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    multiplierHint: {
+        fontSize: 12,
+        color: colors.primary,
+        fontWeight: '500',
+        textAlign: 'center',
     },
     tabsRow: {
         flexDirection: 'row',

@@ -99,8 +99,11 @@ export default function NotificationsScreen() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'commission':
+      case 'commission_earned':
         return <Gift size={24} color={colors.primary} />;
       case 'withdrawal':
+      case 'withdrawal_success':
+      case 'withdrawal_status':
         return <CreditCard size={24} color="#10b981" />;
       case 'subscription_expiring':
       case 'subscription_expired':
@@ -110,7 +113,16 @@ export default function NotificationsScreen() {
       case 'referral_signup':
         return <Users size={24} color="#8b5cf6" />;
       case 'product_status':
+      case 'order_status':
         return <Package size={24} color="#f59e0b" />;
+      case 'admin_broadcast':
+      case 'admin_message':
+      case 'broadcast':
+        return <Bell size={24} color="#ef4444" />;
+      case 'payment_received':
+        return <CreditCard size={24} color={colors.primary} />;
+      case 'milk_collection':
+        return <Package size={24} color="#22c55e" />;
       default:
         return <Bell size={24} color={colors.primary} />;
     }
