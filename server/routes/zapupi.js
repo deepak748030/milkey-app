@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const UserSubscription = require('../models/UserSubscription');
+const Subscription = require('../models/Subscription');
+const User = require('../models/User');
 
 // ZapUPI API configuration
 const ZAPUPI_API_URL = 'https://api.zapupi.com/api';
 const ZAPUPI_TOKEN_KEY = process.env.ZAPUPI_TOKEN_KEY;
 const ZAPUPI_SECRET_KEY = process.env.ZAPUPI_SECRET_KEY;
+
 // POST /api/zapupi/create-order - Create ZapUPI payment order
 router.post('/create-order', auth, async (req, res) => {
     try {
@@ -148,6 +152,18 @@ router.post('/order-status', auth, async (req, res) => {
     }
 });
 
+// Helper function to parse order ID and extract subscription info
+// Order ID format: SUB{userId}_{subscriptionId}_{timestamp} or similar
+const parseOrderId = (orderId) => {
+    try {
+        // Expected format: SUB{shortUserId}{randomChars}
+        // We need to store user and subscription info in a separate table or include in remark
+        return { orderId };
+    } catch (error) {
+        return null;
+    }
+};
+
 // POST /api/zapupi/webhook - Webhook for ZapUPI payment notifications
 // This endpoint is called by ZapUPI when payment status changes
 // NO AUTH REQUIRED - ZapUPI will call this directly
@@ -180,17 +196,38 @@ router.post('/webhook', async (req, res) => {
         if (status === 'Success' || status === 'success') {
             console.log(`Payment successful for order: ${order_id}`);
 
-            // TODO: Update your database here
-            // - Mark order as paid
-            // - Activate subscription
-            // - Send notification to user
+            // Find pending subscription by order ID (stored in transactionId field)
+            const pendingSubscription = await UserSubscription.findOne({
+                transactionId: order_id,
+                paymentStatus: 'pending'
+            });
 
-            // You can add your business logic here, for example:
-            // await Order.findOneAndUpdate({ orderId: order_id }, { status: 'paid', transactionId: txn_id });
-            // await UserSubscription.findOneAndUpdate({ orderId: order_id }, { status: 'active' });
+            if (pendingSubscription) {
+                // Activate the subscription
+                pendingSubscription.paymentStatus = 'completed';
+                pendingSubscription.isActive = true;
+                await pendingSubscription.save();
+
+                console.log(`Subscription activated via webhook for order: ${order_id}, user: ${pendingSubscription.user}`);
+            } else {
+                console.log(`No pending subscription found for order: ${order_id}`);
+            }
         } else if (status === 'Failed' || status === 'failed') {
             console.log(`Payment failed for order: ${order_id}`);
-            // Handle failed payment
+
+            // Mark subscription as failed
+            const pendingSubscription = await UserSubscription.findOne({
+                transactionId: order_id,
+                paymentStatus: 'pending'
+            });
+
+            if (pendingSubscription) {
+                pendingSubscription.paymentStatus = 'failed';
+                pendingSubscription.isActive = false;
+                await pendingSubscription.save();
+
+                console.log(`Subscription marked as failed for order: ${order_id}`);
+            }
         } else {
             console.log(`Payment pending for order: ${order_id} - Status: ${status}`);
         }
@@ -206,6 +243,78 @@ router.post('/webhook', async (req, res) => {
         res.json({
             success: true,
             message: 'Webhook processed'
+        });
+    }
+});
+
+// POST /api/zapupi/verify-and-activate - Verify payment and activate subscription
+// Called by app after payment to ensure subscription is activated
+router.post('/verify-and-activate', auth, async (req, res) => {
+    try {
+        const { orderId } = req.body;
+        const userId = req.user._id;
+
+        if (!orderId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Order ID is required'
+            });
+        }
+
+        // Check payment status with ZapUPI
+        const formData = new URLSearchParams();
+        formData.append('token_key', ZAPUPI_TOKEN_KEY);
+        formData.append('secret_key', ZAPUPI_SECRET_KEY);
+        formData.append('order_id', orderId);
+
+        const response = await fetch(`${ZAPUPI_API_URL}/order-status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData.toString()
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success' && (data.data.status === 'Success' || data.data.status === 'success')) {
+            // Payment is successful, activate subscription
+            const subscription = await UserSubscription.findOne({
+                transactionId: orderId,
+                user: userId
+            });
+
+            if (subscription) {
+                if (subscription.paymentStatus !== 'completed') {
+                    subscription.paymentStatus = 'completed';
+                    subscription.isActive = true;
+                    await subscription.save();
+                    console.log(`Subscription activated via verify-and-activate for order: ${orderId}`);
+                }
+
+                return res.json({
+                    success: true,
+                    message: 'Subscription activated successfully',
+                    subscription: subscription
+                });
+            } else {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Subscription not found for this order'
+                });
+            }
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment not completed yet',
+                status: data.data?.status || 'unknown'
+            });
+        }
+    } catch (error) {
+        console.error('Verify and activate error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to verify payment'
         });
     }
 });
