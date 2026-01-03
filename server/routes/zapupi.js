@@ -142,4 +142,66 @@ router.post('/order-status', auth, async (req, res) => {
     }
 });
 
+// POST /api/zapupi/webhook - Webhook for ZapUPI payment notifications
+// This endpoint is called by ZapUPI when payment status changes
+// NO AUTH REQUIRED - ZapUPI will call this directly
+router.post('/webhook', async (req, res) => {
+    try {
+        console.log('ZapUPI Webhook received:', JSON.stringify(req.body));
+
+        const {
+            order_id,
+            status,
+            amount,
+            utr,
+            txn_id,
+            custumer_mobile,
+            remark
+        } = req.body;
+
+        if (!order_id) {
+            console.log('Webhook: Missing order_id');
+            return res.status(400).json({
+                success: false,
+                message: 'Order ID is required'
+            });
+        }
+
+        // Log the payment status
+        console.log(`Payment webhook: Order ${order_id} - Status: ${status} - Amount: ${amount} - UTR: ${utr}`);
+
+        // Handle successful payment
+        if (status === 'Success' || status === 'success') {
+            console.log(`Payment successful for order: ${order_id}`);
+
+            // TODO: Update your database here
+            // - Mark order as paid
+            // - Activate subscription
+            // - Send notification to user
+
+            // You can add your business logic here, for example:
+            // await Order.findOneAndUpdate({ orderId: order_id }, { status: 'paid', transactionId: txn_id });
+            // await UserSubscription.findOneAndUpdate({ orderId: order_id }, { status: 'active' });
+        } else if (status === 'Failed' || status === 'failed') {
+            console.log(`Payment failed for order: ${order_id}`);
+            // Handle failed payment
+        } else {
+            console.log(`Payment pending for order: ${order_id} - Status: ${status}`);
+        }
+
+        // Always respond with success to acknowledge receipt
+        res.json({
+            success: true,
+            message: 'Webhook received successfully'
+        });
+    } catch (error) {
+        console.error('ZapUPI webhook error:', error);
+        // Still return 200 to prevent retries
+        res.json({
+            success: true,
+            message: 'Webhook processed'
+        });
+    }
+});
+
 module.exports = router;
