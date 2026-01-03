@@ -35,6 +35,7 @@ const notificationSchema = new mongoose.Schema({
             'general',
             'system',
             'admin_message',
+            'admin_broadcast',
             'broadcast'
         ],
         default: 'general'
