@@ -6,7 +6,6 @@ const auth = require('../middleware/auth');
 const ZAPUPI_API_URL = 'https://api.zapupi.com/api';
 const ZAPUPI_TOKEN_KEY = process.env.ZAPUPI_TOKEN_KEY;
 const ZAPUPI_SECRET_KEY = process.env.ZAPUPI_SECRET_KEY;
-
 // POST /api/zapupi/create-order - Create ZapUPI payment order
 router.post('/create-order', auth, async (req, res) => {
     try {
@@ -40,7 +39,14 @@ router.post('/create-order', auth, async (req, res) => {
             formData.append('redirect_url', redirectUrl);
         }
         if (remark) {
-            formData.append('remark', remark);
+            // Sanitize remark: remove special characters, keep only alphanumeric, spaces, and basic punctuation
+            const sanitizedRemark = remark
+                .replace(/[^a-zA-Z0-9\s\-_.]/g, '') // Remove special chars like colons
+                .substring(0, 50) // Limit length
+                .trim();
+            if (sanitizedRemark) {
+                formData.append('remark', sanitizedRemark);
+            }
         }
 
         const response = await fetch(`${ZAPUPI_API_URL}/create-order`, {
