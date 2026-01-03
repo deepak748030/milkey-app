@@ -1316,6 +1316,38 @@ export const userSubscriptionsApi = {
     getStatus: async () => {
         return apiRequest<SubscriptionStatus>('/user-subscriptions/status');
     },
+
+    // Create a pending subscription before payment (for webhook support)
+    createPending: async (data: {
+        subscriptionId: string;
+        transactionId: string;
+        multiplier?: number;
+    }) => {
+        return apiRequest<{ pendingSubscriptionId: string; transactionId: string }>('/user-subscriptions/create-pending', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    // Activate a pending subscription after payment confirmation
+    activatePending: async (data: {
+        transactionId: string;
+        referralCode?: string;
+    }) => {
+        return apiRequest<UserSubscription>('/user-subscriptions/activate-pending', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    // Check and sync pending subscriptions on app startup
+    checkPending: async () => {
+        return apiRequest<{
+            hasPending: boolean;
+            pendingCount: number;
+            synced: Array<{ id: string; name: string; status: string }>;
+        }>('/user-subscriptions/check-pending');
+    },
 };
 
 // Banner types

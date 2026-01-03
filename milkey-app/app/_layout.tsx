@@ -3,12 +3,16 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { usePendingSubscriptionSync } from '@/hooks/usePendingSubscriptionSync';
 
 export default function RootLayout() {
   useFrameworkReady();
 
   // Initialize push notifications with deep linking support
   usePushNotifications();
+
+  // Sync any pending subscriptions on app startup (handles webhook failures)
+  usePendingSubscriptionSync();
 
   return (
     <SafeAreaProvider>
@@ -31,3 +35,4 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
+

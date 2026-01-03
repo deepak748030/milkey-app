@@ -252,12 +252,39 @@ export default function SubscriptionsScreen() {
         const multiplier = getMultiplier(subscriptionId);
         const totalPrice = subscription.amount * multiplier;
 
-        // For paid subscriptions, show ZapUPI payment first
+        // For paid subscriptions, create pending record first, then show ZapUPI
         if (!subscription.isFree && totalPrice > 0) {
             const orderId = generateOrderId();
-            setPendingOrderId(orderId);
-            setPendingSubscription(subscription);
-            setShowZapUPI(true);
+
+            try {
+                // Create pending subscription BEFORE showing payment modal
+                const pendingResult = await userSubscriptionsApi.createPending({
+                    subscriptionId,
+                    transactionId: orderId,
+                    multiplier
+                });
+
+                if (!pendingResult.success) {
+                    setErrorModal({
+                        visible: true,
+                        title: 'Error',
+                        message: pendingResult.message || 'Failed to initialize payment'
+                    });
+                    return;
+                }
+
+                // Pending subscription created, now show payment modal
+                setPendingOrderId(orderId);
+                setPendingSubscription(subscription);
+                setShowZapUPI(true);
+            } catch (error: any) {
+                console.error('Error creating pending subscription:', error);
+                setErrorModal({
+                    visible: true,
+                    title: 'Error',
+                    message: 'Failed to initialize payment. Please try again.'
+                });
+            }
             return;
         }
 
@@ -268,11 +295,42 @@ export default function SubscriptionsScreen() {
     const handleZapUPISuccess = async (transactionData: any) => {
         setShowZapUPI(false);
         if (pendingSubscription) {
-            const multiplier = getMultiplier(pendingSubscription._id);
-            await completePurchase(pendingSubscription._id, multiplier, transactionData?.txnId || pendingOrderId);
+            // Activate the pending subscription instead of creating a new one
+            await activatePendingSubscription(transactionData?.txnId || pendingOrderId);
         }
         setPendingSubscription(null);
         setPendingOrderId('');
+    };
+
+    const activatePendingSubscription = async (transactionId: string) => {
+        setPurchasing(pendingSubscription?._id || null);
+        try {
+            const response = await userSubscriptionsApi.activatePending({
+                transactionId
+            });
+            if (response.success) {
+                // Clear subscription cache to force refresh
+                useSubscriptionStore.getState().clearCache();
+
+                await fetchData();
+                setActiveTab('active');
+
+                setSuccessModal({
+                    visible: true,
+                    title: 'Subscription Activated!',
+                    message: response.message || 'Your subscription is now active.'
+                });
+            }
+        } catch (error: any) {
+            console.error('Error activating subscription:', error);
+            setErrorModal({
+                visible: true,
+                title: 'Activation Failed',
+                message: 'Payment received but activation failed. Please contact support or try reopening the app.'
+            });
+        } finally {
+            setPurchasing(null);
+        }
     };
 
     const completePurchase = async (subscriptionId: string, multiplier: number, transactionId?: string) => {
