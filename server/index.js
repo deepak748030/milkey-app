@@ -30,6 +30,7 @@ const subscriptionRoutes = require('./routes/subscriptions');
 const userSubscriptionRoutes = require('./routes/user-subscriptions');
 const notificationRoutes = require('./routes/notifications');
 const withdrawalRoutes = require('./routes/withdrawals');
+const zapupiRoutes = require('./routes/zapupi');
 
 const app = express();
 
@@ -99,6 +100,7 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/user-subscriptions', userSubscriptionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
+app.use('/api/zapupi', zapupiRoutes);
 
 // 404 handler
 app.use((req, res) => {
