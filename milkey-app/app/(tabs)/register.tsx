@@ -273,7 +273,13 @@ export default function RegisterScreen() {
             ]);
 
             if (farmersRes.success && farmersRes.response?.data) {
-                setFarmers(farmersRes.response.data);
+                // Sort farmers by code as numeric values in ascending order
+                const sortedFarmers = [...farmersRes.response.data].sort((a, b) => {
+                    const codeA = parseInt(a.code, 10) || 0;
+                    const codeB = parseInt(b.code, 10) || 0;
+                    return codeA - codeB;
+                });
+                setFarmers(sortedFarmers);
             }
             if (advancesRes.success && advancesRes.response?.data) {
                 setAdvances(advancesRes.response.data);
