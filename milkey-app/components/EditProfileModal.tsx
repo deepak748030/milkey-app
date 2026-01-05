@@ -56,18 +56,17 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !email.trim()) {
-      Alert.alert('Validation Error', 'Name and email are required.');
+    if (!name.trim()) {
+      Alert.alert('Validation Error', 'Name is required.');
       return;
     }
 
     setLoading(true);
 
     try {
-      const updateData: { name?: string; email?: string; address?: string } = {};
+      const updateData: { name?: string; address?: string } = {};
 
       if (name.trim()) updateData.name = name.trim();
-      if (email.trim()) updateData.email = email.trim();
       updateData.address = address.trim();
 
       const result = await authApi.updateProfile(updateData);
@@ -249,14 +248,15 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
               <View style={styles.fieldContainer}>
                 <Text style={styles.label}>Email Address</Text>
                 <TextInput
-                  style={styles.input}
-                  placeholder="Enter your email"
+                  style={[styles.input, styles.disabledInput]}
+                  placeholder="Email address"
                   placeholderTextColor={colors.mutedForeground}
                   value={email}
-                  onChangeText={setEmail}
+                  editable={false}
                   keyboardType="email-address"
                   autoCapitalize="none"
                 />
+                <Text style={styles.helperText}>Email cannot be changed</Text>
               </View>
 
               <View style={styles.fieldContainer}>
@@ -296,10 +296,10 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
               <Pressable
                 style={[
                   styles.saveButton,
-                  (!name.trim() || !email.trim() || loading) && styles.disabledButton
+                  (!name.trim() || loading) && styles.disabledButton
                 ]}
                 onPress={handleSave}
-                disabled={!name.trim() || !email.trim() || loading}
+                disabled={!name.trim() || loading}
               >
                 <Text style={styles.saveButtonText}>
                   {loading ? 'Saving...' : 'Save Changes'}

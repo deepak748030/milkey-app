@@ -353,9 +353,10 @@ const apiRequest = async <T>(
 
 // Farmers API
 export const farmersApi = {
-    getAll: async (params?: { type?: 'farmer' | 'member' }) => {
+    getAll: async (params?: { type?: 'farmer' | 'member'; search?: string }) => {
         const queryParams = new URLSearchParams();
         if (params?.type) queryParams.append('type', params.type);
+        if (params?.search) queryParams.append('search', params.search);
         const query = queryParams.toString();
         return apiRequest<{ data: Farmer[]; count: number }>(`/farmers${query ? `?${query}` : ''}`);
     },

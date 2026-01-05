@@ -136,6 +136,8 @@ export default function SellingScreen() {
     const [memberRatePerLiter, setMemberRatePerLiter] = useState('50');
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [showMemberModal, setShowMemberModal] = useState(false);
+    const [memberTabSearch, setMemberTabSearch] = useState('');
+    const [memberSearchLoading, setMemberSearchLoading] = useState(false);
 
     // Modal state
     const [alertVisible, setAlertVisible] = useState(false);
@@ -1771,10 +1773,38 @@ export default function SellingScreen() {
         );
     };
 
+    // Search members with server-side search
+    const handleMemberTabSearch = useCallback(async (searchText: string) => {
+        setMemberTabSearch(searchText);
+        setMemberSearchLoading(true);
+        try {
+            const res = await membersApi.getAll({ search: searchText.trim() || undefined });
+            if (res.success) {
+                setMembers(res.response?.data || []);
+            }
+        } catch (error) {
+            console.error('Member search error:', error);
+        } finally {
+            setMemberSearchLoading(false);
+        }
+    }, []);
+
     const renderMemberTab = () => (
         <View>
             <View style={styles.memberHeader}>
-                <Text style={styles.sectionTitle}>Member Management</Text>
+                <View style={styles.memberSearchContainer}>
+                    <Search size={16} color={colors.mutedForeground} />
+                    <TextInput
+                        style={styles.memberTabSearchInput}
+                        placeholder="Search members..."
+                        placeholderTextColor={colors.mutedForeground}
+                        value={memberTabSearch}
+                        onChangeText={handleMemberTabSearch}
+                    />
+                    {memberSearchLoading && (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                    )}
+                </View>
                 <View style={styles.memberHeaderBtns}>
                     <Pressable style={styles.printMemberBtn} onPress={handlePrintMembers}>
                         <Printer size={14} color={colors.primary} />
@@ -1793,7 +1823,8 @@ export default function SellingScreen() {
                 </View>
             </View>
 
-            <Text style={[styles.sectionTitle, { marginTop: 8, fontSize: 13 }]}>Members List ({members.length})</Text>
+            <Text style={styles.memberManagementTitle}>Member Management</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 4, fontSize: 13 }]}>Members List ({members.length})</Text>
 
             {members.length === 0 ? (
                 <Text style={styles.emptyText}>No members yet. Add your first member.</Text>
@@ -2718,7 +2749,32 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 10,
+        marginBottom: 8,
+        gap: 10,
+    },
+    memberSearchContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: isDark ? colors.muted : colors.background,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+    },
+    memberTabSearchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: colors.foreground,
+        padding: 0,
+    },
+    memberManagementTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.foreground,
+        marginBottom: 4,
     },
     memberHeaderBtns: {
         flexDirection: 'row',
@@ -3179,15 +3235,15 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 4,
     },
-    memberSearchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
+    // memberSearchContainer: {
+    //     flexDirection: 'row',
+    //     alignItems: 'center',
+    //     gap: 8,
+    //     paddingHorizontal: 10,
+    //     paddingVertical: 8,
+    //     borderBottomWidth: 1,
+    //     borderBottomColor: colors.border,
+    // },
     memberSearchInput: {
         flex: 1,
         fontSize: 13,

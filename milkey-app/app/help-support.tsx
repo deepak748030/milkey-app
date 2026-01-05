@@ -17,12 +17,12 @@ export default function HelpSupportScreen() {
   };
 
   const contactOptions = [
-    {
-      icon: MessageCircle,
-      title: 'Live Chat',
-      subtitle: 'Chat with our support team',
-      onPress: () => router.push('/submit-form'),
-    },
+    // {
+    //   icon: MessageCircle,
+    //   title: 'Live Chat',
+    //   subtitle: 'Chat with our support team',
+    //   onPress: () => router.push('/submit-form'),
+    // },
     {
       icon: Mail,
       title: 'Email Us',
