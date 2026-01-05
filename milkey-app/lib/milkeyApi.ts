@@ -315,14 +315,14 @@ const apiRequest = async <T>(
         }
 
         if (!response.ok) {
+            // Extract clean error message without HTTP codes
             const serverMessage = data?.message || data?.error || 'Something went wrong';
-            const message = `${serverMessage} (HTTP ${response.status})`;
 
             // Helpful auth hint
             if (response.status === 401) {
                 return {
                     success: false,
-                    message: `Session expired. Please login again. (HTTP 401)`,
+                    message: 'Session expired. Please login again.',
                 };
             }
 
@@ -338,7 +338,7 @@ const apiRequest = async <T>(
 
             return {
                 success: false,
-                message,
+                message: serverMessage,
             };
         }
 
