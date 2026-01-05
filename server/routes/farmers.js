@@ -8,14 +8,24 @@ const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const normalizeCode = (code) => String(code || '').trim().toUpperCase();
 const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`, 'i');
 
-// GET /api/farmers - Get all farmers for current user (optionally filter by type)
+// GET /api/farmers - Get all farmers for current user (optionally filter by type and search)
 router.get('/', auth, async (req, res) => {
     try {
-        const { type } = req.query;
+        const { type, search } = req.query;
         const query = { owner: req.userId, isActive: true };
 
         if (type && ['farmer', 'member'].includes(type)) {
             query.type = type;
+        }
+
+        // Search by code, name, mobile, or address
+        if (search) {
+            query.$or = [
+                { code: { $regex: search, $options: 'i' } },
+                { name: { $regex: search, $options: 'i' } },
+                { mobile: { $regex: search, $options: 'i' } },
+                { address: { $regex: search, $options: 'i' } }
+            ];
         }
 
         const farmers = await Farmer.find(query)
