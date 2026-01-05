@@ -178,7 +178,7 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
         <Modal
             visible={isVisible}
             transparent
-            animationType="slide"
+            animationType="fade"
             onRequestClose={onClose}
         >
             <View style={styles.overlay}>
@@ -346,7 +346,7 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
             <Modal
                 visible={showDatePicker}
                 transparent
-                animationType="fade"
+                animationType="slide"
                 onRequestClose={() => setShowDatePicker(false)}
             >
                 <View style={styles.datePickerOverlay}>
@@ -388,12 +388,14 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
     },
     modal: {
         backgroundColor: colors.card,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
+        borderRadius: 20,
+        width: '100%',
         maxHeight: '85%',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -10 },
@@ -585,15 +587,14 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     datePickerOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
+        justifyContent: 'flex-end',
     },
     datePickerModal: {
         backgroundColor: colors.card,
-        borderRadius: 16,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: 20,
         width: '100%',
-        maxWidth: 360,
         overflow: 'hidden',
     },
     datePickerHeader: {
