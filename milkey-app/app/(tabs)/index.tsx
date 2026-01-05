@@ -9,6 +9,8 @@ import { productsApi, reportsApi, bannersApi, Product, HomeStats, Banner } from 
 import { useAuth } from '@/hooks/useAuth';
 import { Plus, Wallet } from 'lucide-react-native';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { QuickEntryModal } from '@/components/QuickEntryModal';
+import { QuickAdvanceModal } from '@/components/QuickAdvanceModal';
 import { useSubscriptionStore, shouldShowSubscriptionModal, markSubscriptionModalShown } from '@/lib/subscriptionStore';
 
 const { width } = Dimensions.get('window');
@@ -33,6 +35,12 @@ export default function HomeScreen() {
   // Subscription modal state
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [subscriptionModalChecked, setSubscriptionModalChecked] = useState(false);
+
+  // Quick Entry modal state
+  const [showQuickEntryModal, setShowQuickEntryModal] = useState(false);
+
+  // Quick Advance modal state
+  const [showQuickAdvanceModal, setShowQuickAdvanceModal] = useState(false);
 
   // Get subscription store - must be before useEffects that use status
   const { fetchStatus, preloadAllTabs, status, initializeFromStorage } = useSubscriptionStore();
@@ -301,7 +309,7 @@ export default function HomeScreen() {
         <View style={styles.quickActionsRow}>
           <Pressable
             style={styles.quickActionCard}
-            onPress={() => router.push('/(tabs)/selling?tab=Entry')}
+            onPress={() => setShowQuickEntryModal(true)}
           >
             <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
               <Plus size={20} color={colors.primary} />
@@ -310,7 +318,7 @@ export default function HomeScreen() {
           </Pressable>
           <Pressable
             style={styles.quickActionCard}
-            onPress={() => router.push('/(tabs)/register?tab=Advances')}
+            onPress={() => setShowQuickAdvanceModal(true)}
           >
             <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
               <Wallet size={20} color={colors.primary} />
@@ -318,6 +326,20 @@ export default function HomeScreen() {
             <Text style={styles.quickActionText}>Advance</Text>
           </Pressable>
         </View>
+
+        {/* Quick Entry Modal */}
+        <QuickEntryModal
+          isVisible={showQuickEntryModal}
+          onClose={() => setShowQuickEntryModal(false)}
+          onSuccess={() => fetchHomeStats()}
+        />
+
+        {/* Quick Advance Modal */}
+        <QuickAdvanceModal
+          isVisible={showQuickAdvanceModal}
+          onClose={() => setShowQuickAdvanceModal(false)}
+          onSuccess={() => fetchHomeStats()}
+        />
 
         {/* Products */}
         <Text style={styles.sectionTitle}>Products</Text>
