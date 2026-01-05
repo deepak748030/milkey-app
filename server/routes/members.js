@@ -139,7 +139,11 @@ router.get('/', auth, async (req, res) => {
         const query = { owner: req.userId, isActive: true };
 
         if (search) {
-            query.name = { $regex: search, $options: 'i' };
+            // Search by both name and mobile number
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { mobile: { $regex: search, $options: 'i' } }
+            ];
         }
 
         const members = await Member.find(query)
