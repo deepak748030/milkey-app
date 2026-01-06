@@ -1,10 +1,12 @@
 // File: src/pages/SellingMembersPage.tsx
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Edit2, Trash2, Phone, MapPin, X, User } from 'lucide-react'
+import { Search, Edit2, Trash2, Phone, MapPin, X, User, AlertTriangle, RotateCcw } from 'lucide-react'
 import {
     getSellingMembers,
     updateSellingMember,
     deleteSellingMember,
+    permanentDeleteSellingMember,
+    restoreSellingMember,
     getAdminUsersList,
     SellingMember,
     SellingMemberOwner
@@ -32,6 +34,7 @@ export function SellingMembersPage() {
     const [search, setSearch] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
     const [userId, setUserId] = useState('')
+    const [includeDeleted, setIncludeDeleted] = useState(false)
 
     // Modal
     const [modalOpen, setModalOpen] = useState(false)
@@ -66,7 +69,8 @@ export function SellingMembersPage() {
                 search: debouncedSearch || undefined,
                 userId: userId || undefined,
                 page,
-                limit: 20
+                limit: 20,
+                includeDeleted
             })
             if (res.success) {
                 setMembers(res.response?.data || [])
@@ -79,7 +83,7 @@ export function SellingMembersPage() {
         } finally {
             setLoading(false)
         }
-    }, [debouncedSearch, userId, page])
+    }, [debouncedSearch, userId, page, includeDeleted])
 
     useEffect(() => {
         fetchMembers()
@@ -122,9 +126,30 @@ export function SellingMembersPage() {
         }
     }
 
+    const handlePermanentDelete = async (id: string) => {
+        if (!confirm('⚠️ PERMANENT DELETE\n\nThis will permanently delete this member and ALL related data (entries, payments).\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?')) return
+        try {
+            await permanentDeleteSellingMember(id)
+            fetchMembers()
+        } catch (err) {
+            console.error('Failed to permanently delete member:', err)
+        }
+    }
+
+    const handleRestore = async (id: string) => {
+        if (!confirm('Are you sure you want to restore this member?')) return
+        try {
+            await restoreSellingMember(id)
+            fetchMembers()
+        } catch (err) {
+            console.error('Failed to restore member:', err)
+        }
+    }
+
     const clearFilters = () => {
         setSearch('')
         setUserId('')
+        setIncludeDeleted(false)
         setPage(1)
     }
 
@@ -136,7 +161,7 @@ export function SellingMembersPage() {
         return owner.name || 'Unknown'
     }
 
-    const hasFilters = search || userId
+    const hasFilters = search || userId || includeDeleted
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -180,6 +205,15 @@ export function SellingMembersPage() {
                             ))}
                         </select>
                     </div>
+                    <label className="flex items-center gap-2 cursor-pointer px-3 py-2.5">
+                        <input
+                            type="checkbox"
+                            checked={includeDeleted}
+                            onChange={e => { setIncludeDeleted(e.target.checked); setPage(1) }}
+                            className="w-4 h-4 rounded border-border text-primary focus:ring-ring"
+                        />
+                        <span className="text-sm text-muted-foreground">Show Deleted</span>
+                    </label>
                     {hasFilters && (
                         <button
                             onClick={clearFilters}
@@ -210,9 +244,17 @@ export function SellingMembersPage() {
                     </div>
                 ) : (
                     members.map(member => (
-                        <div key={member._id} className="bg-card border border-border rounded-xl p-4">
+                        <div key={member._id} className={cn(
+                            "bg-card border rounded-xl p-4",
+                            !member.isActive ? "border-destructive/50 bg-destructive/5" : "border-border"
+                        )}>
                             <div className="flex items-start justify-between mb-2">
-                                <p className="font-medium text-foreground">{member.name}</p>
+                                <div className="flex items-center gap-2">
+                                    <p className="font-medium text-foreground">{member.name}</p>
+                                    {!member.isActive && (
+                                        <span className="text-[10px] px-1.5 py-0.5 bg-destructive/20 text-destructive rounded">DELETED</span>
+                                    )}
+                                </div>
                                 <span className={cn(
                                     'font-medium text-sm',
                                     (member.sellingPaymentBalance || 0) > 0 ? 'text-destructive' :
@@ -238,12 +280,25 @@ export function SellingMembersPage() {
                             <div className="flex items-center justify-between pt-2 border-t border-border">
                                 <span className="text-xs text-muted-foreground">{getOwnerName(member.owner)}</span>
                                 <div className="flex items-center gap-1">
-                                    <button onClick={() => openEditModal(member)} className="p-2 hover:bg-muted rounded-lg transition-colors">
-                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
-                                    </button>
-                                    <button onClick={() => handleDelete(member._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
-                                        <Trash2 className="w-4 h-4 text-destructive" />
-                                    </button>
+                                    {member.isActive ? (
+                                        <>
+                                            <button onClick={() => openEditModal(member)} className="p-2 hover:bg-muted rounded-lg transition-colors">
+                                                <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                            </button>
+                                            <button onClick={() => handleDelete(member._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
+                                                <Trash2 className="w-4 h-4 text-destructive" />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button onClick={() => handleRestore(member._id)} className="p-2 hover:bg-success/10 rounded-lg transition-colors" title="Restore">
+                                                <RotateCcw className="w-4 h-4 text-success" />
+                                            </button>
+                                            <button onClick={() => handlePermanentDelete(member._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors" title="Permanent Delete">
+                                                <AlertTriangle className="w-4 h-4 text-destructive" />
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -253,7 +308,7 @@ export function SellingMembersPage() {
 
             {/* Desktop Table */}
             {loading ? (
-                <div className="hidden md:block"><TableSkeleton rows={10} columns={8} /></div>
+                <div className="hidden md:block"><TableSkeleton rows={10} columns={9} /></div>
             ) : members.length === 0 ? (
                 <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
                     <p className="text-muted-foreground">No members found</p>
@@ -271,12 +326,16 @@ export function SellingMembersPage() {
                                     <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Rate/L</th>
                                     <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Total Liters</th>
                                     <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Balance</th>
+                                    <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Status</th>
                                     <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
                                 {members.map(member => (
-                                    <tr key={member._id} className="hover:bg-muted/30 transition-colors">
+                                    <tr key={member._id} className={cn(
+                                        "hover:bg-muted/30 transition-colors",
+                                        !member.isActive && "bg-destructive/5"
+                                    )}>
                                         <td className="px-4 py-3">
                                             <span className="font-medium text-foreground">{member.name}</span>
                                         </td>
@@ -319,22 +378,50 @@ export function SellingMembersPage() {
                                                 {formatCurrency(member.sellingPaymentBalance || 0)}
                                             </span>
                                         </td>
+                                        <td className="px-4 py-3 text-center">
+                                            {member.isActive ? (
+                                                <span className="text-xs px-2 py-1 bg-success/20 text-success rounded-full">Active</span>
+                                            ) : (
+                                                <span className="text-xs px-2 py-1 bg-destructive/20 text-destructive rounded-full">Deleted</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center justify-center gap-1">
-                                                <button
-                                                    onClick={() => openEditModal(member)}
-                                                    className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
-                                                    title="Edit"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(member._id)}
-                                                    className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-muted-foreground hover:text-destructive"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                {member.isActive ? (
+                                                    <>
+                                                        <button
+                                                            onClick={() => openEditModal(member)}
+                                                            className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+                                                            title="Edit"
+                                                        >
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDelete(member._id)}
+                                                            className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-muted-foreground hover:text-destructive"
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleRestore(member._id)}
+                                                            className="p-2 hover:bg-success/10 rounded-lg transition-colors text-success"
+                                                            title="Restore"
+                                                        >
+                                                            <RotateCcw className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handlePermanentDelete(member._id)}
+                                                            className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive"
+                                                            title="Permanent Delete"
+                                                        >
+                                                            <AlertTriangle className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

@@ -1240,6 +1240,7 @@ export const getSellingMembers = async (params: {
     page?: number
     limit?: number
     userId?: string
+    includeDeleted?: boolean
 }) => {
     const response = await api.get('/admin/selling-members', { params })
     return response.data
@@ -1277,6 +1278,16 @@ export const updateSellingMember = async (id: string, data: {
 
 export const deleteSellingMember = async (id: string) => {
     const response = await api.delete(`/admin/selling-members/${id}`)
+    return response.data
+}
+
+export const permanentDeleteSellingMember = async (id: string) => {
+    const response = await api.delete(`/admin/selling-members/${id}/permanent`)
+    return response.data
+}
+
+export const restoreSellingMember = async (id: string) => {
+    const response = await api.put(`/admin/selling-members/${id}/restore`)
     return response.data
 }
 
@@ -1378,6 +1389,7 @@ export const getRegisterFarmers = async (params: {
     page?: number
     limit?: number
     userId?: string
+    includeDeleted?: boolean
 }) => {
     const response = await api.get('/admin/register-farmers', { params })
     return response.data
@@ -1399,6 +1411,16 @@ export const updateRegisterFarmer = async (id: string, data: {
 
 export const deleteRegisterFarmer = async (id: string) => {
     const response = await api.delete(`/admin/register-farmers/${id}`)
+    return response.data
+}
+
+export const permanentDeleteRegisterFarmer = async (id: string) => {
+    const response = await api.delete(`/admin/register-farmers/${id}/permanent`)
+    return response.data
+}
+
+export const restoreRegisterFarmer = async (id: string) => {
+    const response = await api.put(`/admin/register-farmers/${id}/restore`)
     return response.data
 }
 

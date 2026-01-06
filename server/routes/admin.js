@@ -1438,7 +1438,14 @@ router.get('/selling-members', adminAuth, async (req, res) => {
         const search = req.query.search?.trim() || '';
         const userId = req.query.userId || '';
 
-        const query = { isActive: true };
+        const includeDeleted = req.query.includeDeleted === 'true';
+
+        const query = {};
+
+        // Include deleted filter
+        if (!includeDeleted) {
+            query.isActive = true;
+        }
 
         if (userId) {
             query.owner = userId;
@@ -1605,7 +1612,77 @@ router.delete('/selling-members/:id', adminAuth, async (req, res) => {
     }
 });
 
-// ==================== SELLING ENTRIES ====================
+// PUT /api/admin/selling-members/:id/restore - Restore deleted member
+router.put('/selling-members/:id/restore', adminAuth, async (req, res) => {
+    try {
+        const member = await Member.findByIdAndUpdate(
+            req.params.id,
+            { isActive: true },
+            { new: true }
+        ).populate('owner', 'name email phone');
+
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Member restored successfully',
+            response: member
+        });
+    } catch (error) {
+        console.error('Restore member error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to restore member'
+        });
+    }
+});
+
+// DELETE /api/admin/selling-members/:id/permanent - Permanently delete member and all related data
+router.delete('/selling-members/:id/permanent', adminAuth, async (req, res) => {
+    try {
+        const memberId = req.params.id;
+
+        // Find the member first
+        const member = await Member.findById(memberId);
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        // Delete all related data
+        const [entriesDeleted, paymentsDeleted] = await Promise.all([
+            SellingEntry.deleteMany({ member: memberId }),
+            MemberPayment.deleteMany({ member: memberId })
+        ]);
+
+        // Delete the member
+        await Member.findByIdAndDelete(memberId);
+
+        res.json({
+            success: true,
+            message: 'Member and all related data permanently deleted',
+            response: {
+                entriesDeleted: entriesDeleted.deletedCount,
+                paymentsDeleted: paymentsDeleted.deletedCount
+            }
+        });
+    } catch (error) {
+        console.error('Permanent delete member error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to permanently delete member'
+        });
+    }
+});
+
+// ====================  SELLING ENTRIES ====================
 
 // GET /api/admin/selling-entries - Get all selling entries with filters
 router.get('/selling-entries', adminAuth, async (req, res) => {
@@ -2112,9 +2189,15 @@ router.get('/register-farmers', adminAuth, async (req, res) => {
         const skip = (page - 1) * limit;
         const search = req.query.search?.trim() || '';
         const userId = req.query.userId || '';
+        const includeDeleted = req.query.includeDeleted === 'true';
 
         // Build query
-        const query = { isActive: true, type: 'farmer' };
+        const query = { type: 'farmer' };
+
+        // Include deleted filter
+        if (!includeDeleted) {
+            query.isActive = true;
+        }
 
         // Owner filter
         if (userId) {
@@ -2255,6 +2338,78 @@ router.delete('/register-farmers/:id', adminAuth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to delete farmer'
+        });
+    }
+});
+
+// PUT /api/admin/register-farmers/:id/restore - Restore deleted farmer
+router.put('/register-farmers/:id/restore', adminAuth, async (req, res) => {
+    try {
+        const farmer = await Farmer.findOneAndUpdate(
+            { _id: req.params.id, type: 'farmer' },
+            { isActive: true },
+            { new: true }
+        ).populate('owner', 'name email phone');
+
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Farmer restored successfully',
+            response: farmer
+        });
+    } catch (error) {
+        console.error('Restore farmer error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to restore farmer'
+        });
+    }
+});
+
+// DELETE /api/admin/register-farmers/:id/permanent - Permanently delete farmer and all related data
+router.delete('/register-farmers/:id/permanent', adminAuth, async (req, res) => {
+    try {
+        const farmerId = req.params.id;
+
+        // Find the farmer first
+        const farmer = await Farmer.findOne({ _id: farmerId, type: 'farmer' });
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        // Delete all related data
+        const [collectionsDeleted, advancesDeleted, paymentsDeleted] = await Promise.all([
+            MilkCollection.deleteMany({ farmer: farmerId }),
+            Advance.deleteMany({ farmer: farmerId }),
+            Payment.deleteMany({ farmer: farmerId })
+        ]);
+
+        // Delete the farmer
+        await Farmer.findByIdAndDelete(farmerId);
+
+        res.json({
+            success: true,
+            message: 'Farmer and all related data permanently deleted',
+            response: {
+                collectionsDeleted: collectionsDeleted.deletedCount,
+                advancesDeleted: advancesDeleted.deletedCount,
+                paymentsDeleted: paymentsDeleted.deletedCount
+            }
+        });
+    } catch (error) {
+        console.error('Permanent delete farmer error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to permanently delete farmer'
         });
     }
 });

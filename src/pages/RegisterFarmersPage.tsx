@@ -1,10 +1,12 @@
 // File: src/pages/RegisterFarmersPage.tsx
 import { useState, useEffect, useCallback } from 'react'
-import { Search, Edit2, Trash2, Phone, MapPin, X, User, Hash } from 'lucide-react'
+import { Search, Edit2, Trash2, Phone, MapPin, X, User, Hash, AlertTriangle, RotateCcw } from 'lucide-react'
 import {
     getRegisterFarmers,
     updateRegisterFarmer,
     deleteRegisterFarmer,
+    permanentDeleteRegisterFarmer,
+    restoreRegisterFarmer,
     getAdminUsersList,
     RegisterFarmer,
     RegisterFarmerOwner
@@ -32,6 +34,7 @@ export function RegisterFarmersPage() {
     const [search, setSearch] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
     const [userId, setUserId] = useState('')
+    const [includeDeleted, setIncludeDeleted] = useState(false)
 
     // Modal
     const [modalOpen, setModalOpen] = useState(false)
@@ -65,10 +68,17 @@ export function RegisterFarmersPage() {
                 search: debouncedSearch || undefined,
                 userId: userId || undefined,
                 page,
-                limit: 20
+                limit: 20,
+                includeDeleted
             })
             if (res.success) {
-                setFarmers(res.response?.data || [])
+                // Sort farmers by code as numeric values in ascending order
+                const sortedFarmers = (res.response?.data || []).sort((a: RegisterFarmer, b: RegisterFarmer) => {
+                    const codeA = parseInt(a.code, 10) || 0
+                    const codeB = parseInt(b.code, 10) || 0
+                    return codeA - codeB
+                })
+                setFarmers(sortedFarmers)
                 setTotalPages(res.response?.pagination?.pages || 1)
                 setTotal(res.response?.pagination?.total || 0)
             }
@@ -78,7 +88,7 @@ export function RegisterFarmersPage() {
         } finally {
             setLoading(false)
         }
-    }, [debouncedSearch, userId, page])
+    }, [debouncedSearch, userId, page, includeDeleted])
 
     useEffect(() => {
         fetchFarmers()
@@ -120,13 +130,32 @@ export function RegisterFarmersPage() {
         }
     }
 
+    const handlePermanentDelete = async (id: string) => {
+        if (!confirm('⚠️ PERMANENT DELETE\n\nThis will permanently delete this farmer and ALL related data (milk collections, advances, payments).\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?')) return
+        try {
+            await permanentDeleteRegisterFarmer(id)
+            fetchFarmers()
+        } catch (err) {
+            console.error('Failed to permanently delete farmer:', err)
+        }
+    }
+
+    const handleRestore = async (id: string) => {
+        if (!confirm('Are you sure you want to restore this farmer?')) return
+        try {
+            await restoreRegisterFarmer(id)
+            fetchFarmers()
+        } catch (err) {
+            console.error('Failed to restore farmer:', err)
+        }
+    }
+
     const clearFilters = () => {
         setSearch('')
         setUserId('')
+        setIncludeDeleted(false)
         setPage(1)
     }
-
-    // const formatCurrency = (val: number) => `₹${(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
 
     const getOwnerName = (owner: RegisterFarmerOwner | string | undefined | null): string => {
         if (!owner) return 'Unknown'
@@ -145,7 +174,7 @@ export function RegisterFarmersPage() {
         return 'text-foreground'
     }
 
-    const hasFilters = search || userId
+    const hasFilters = search || userId || includeDeleted
 
     return (
         <div className="space-y-6 animate-fade-in">
@@ -189,6 +218,15 @@ export function RegisterFarmersPage() {
                             ))}
                         </select>
                     </div>
+                    <label className="flex items-center gap-2 cursor-pointer px-3 py-2.5">
+                        <input
+                            type="checkbox"
+                            checked={includeDeleted}
+                            onChange={e => { setIncludeDeleted(e.target.checked); setPage(1) }}
+                            className="w-4 h-4 rounded border-border text-primary focus:ring-ring"
+                        />
+                        <span className="text-sm text-muted-foreground">Show Deleted</span>
+                    </label>
                     {hasFilters && (
                         <button
                             onClick={clearFilters}
@@ -219,11 +257,17 @@ export function RegisterFarmersPage() {
                     </div>
                 ) : (
                     farmers.map(farmer => (
-                        <div key={farmer._id} className="bg-card border border-border rounded-xl p-4">
+                        <div key={farmer._id} className={cn(
+                            "bg-card border rounded-xl p-4",
+                            !farmer.isActive ? "border-destructive/50 bg-destructive/5" : "border-border"
+                        )}>
                             <div className="flex items-start justify-between mb-2">
                                 <div className="flex items-center gap-2">
                                     <Hash className="w-4 h-4 text-primary" />
                                     <span className="font-mono font-medium text-foreground">{farmer.code}</span>
+                                    {!farmer.isActive && (
+                                        <span className="text-[10px] px-1.5 py-0.5 bg-destructive/20 text-destructive rounded">DELETED</span>
+                                    )}
                                 </div>
                                 <span className={cn('font-medium text-sm', getBalanceColor(farmer.currentBalance || 0))}>
                                     {formatBalance(farmer.currentBalance || 0)}
@@ -237,12 +281,25 @@ export function RegisterFarmersPage() {
                             <div className="flex items-center justify-between pt-2 border-t border-border">
                                 <span className="text-xs text-muted-foreground">{getOwnerName(farmer.owner)}</span>
                                 <div className="flex items-center gap-1">
-                                    <button onClick={() => openEditModal(farmer)} className="p-2 hover:bg-muted rounded-lg transition-colors">
-                                        <Edit2 className="w-4 h-4 text-muted-foreground" />
-                                    </button>
-                                    <button onClick={() => handleDelete(farmer._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
-                                        <Trash2 className="w-4 h-4 text-destructive" />
-                                    </button>
+                                    {farmer.isActive ? (
+                                        <>
+                                            <button onClick={() => openEditModal(farmer)} className="p-2 hover:bg-muted rounded-lg transition-colors">
+                                                <Edit2 className="w-4 h-4 text-muted-foreground" />
+                                            </button>
+                                            <button onClick={() => handleDelete(farmer._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors">
+                                                <Trash2 className="w-4 h-4 text-destructive" />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <button onClick={() => handleRestore(farmer._id)} className="p-2 hover:bg-success/10 rounded-lg transition-colors" title="Restore">
+                                                <RotateCcw className="w-4 h-4 text-success" />
+                                            </button>
+                                            <button onClick={() => handlePermanentDelete(farmer._id)} className="p-2 hover:bg-destructive/10 rounded-lg transition-colors" title="Permanent Delete">
+                                                <AlertTriangle className="w-4 h-4 text-destructive" />
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -269,12 +326,16 @@ export function RegisterFarmersPage() {
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Owner</th>
                                     <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Address</th>
                                     <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Balance</th>
+                                    <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Status</th>
                                     <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
                                 {farmers.map(farmer => (
-                                    <tr key={farmer._id} className="hover:bg-muted/30 transition-colors">
+                                    <tr key={farmer._id} className={cn(
+                                        "hover:bg-muted/30 transition-colors",
+                                        !farmer.isActive && "bg-destructive/5"
+                                    )}>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-1.5">
                                                 <Hash className="w-3.5 h-3.5 text-muted-foreground" />
@@ -313,22 +374,50 @@ export function RegisterFarmersPage() {
                                                 {formatBalance(farmer.currentBalance || 0)}
                                             </span>
                                         </td>
+                                        <td className="px-4 py-3 text-center">
+                                            {farmer.isActive ? (
+                                                <span className="text-xs px-2 py-1 bg-success/20 text-success rounded-full">Active</span>
+                                            ) : (
+                                                <span className="text-xs px-2 py-1 bg-destructive/20 text-destructive rounded-full">Deleted</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center justify-center gap-1">
-                                                <button
-                                                    onClick={() => openEditModal(farmer)}
-                                                    className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
-                                                    title="Edit"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(farmer._id)}
-                                                    className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-muted-foreground hover:text-destructive"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                {farmer.isActive ? (
+                                                    <>
+                                                        <button
+                                                            onClick={() => openEditModal(farmer)}
+                                                            className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+                                                            title="Edit"
+                                                        >
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDelete(farmer._id)}
+                                                            className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-muted-foreground hover:text-destructive"
+                                                            title="Delete"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button
+                                                            onClick={() => handleRestore(farmer._id)}
+                                                            className="p-2 hover:bg-success/10 rounded-lg transition-colors text-success"
+                                                            title="Restore"
+                                                        >
+                                                            <RotateCcw className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handlePermanentDelete(farmer._id)}
+                                                            className="p-2 hover:bg-destructive/10 rounded-lg transition-colors text-destructive"
+                                                            title="Permanent Delete"
+                                                        >
+                                                            <AlertTriangle className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
