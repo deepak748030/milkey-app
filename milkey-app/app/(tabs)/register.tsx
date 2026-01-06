@@ -638,14 +638,15 @@ export default function RegisterScreen() {
 
     // Update farmer
     const handleUpdateFarmer = async () => {
-        if (!editingFarmer || !newName || !newMobile) {
-            showAlert('Error', 'Please fill name and mobile');
+        if (!editingFarmer || !newCode || !newName || !newMobile) {
+            showAlert('Error', 'Please fill code, name and mobile');
             return;
         }
 
         setLoading(true);
         try {
             const res = await farmersApi.update(editingFarmer._id, {
+                code: newCode,
                 name: newName,
                 mobile: newMobile,
                 address: newAddress,
@@ -663,6 +664,20 @@ export default function RegisterScreen() {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Delete advance
+    const handleDeleteAdvance = async (id: string, farmerName: string) => {
+        showConfirm('Delete Advance', `Are you sure you want to delete this advance for ${farmerName}?`, async () => {
+            setConfirmVisible(false);
+            const res = await advancesApi.delete(id);
+            if (res.success) {
+                showAlert('Success', 'Advance deleted successfully');
+                fetchData();
+            } else {
+                showAlert('Error', res.message || 'Failed to delete advance');
+            }
+        });
     };
 
     // Delete farmer
@@ -1357,10 +1372,11 @@ export default function RegisterScreen() {
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Note</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Amt</Text>
-                        <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Date</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 1.3 }]}>Name</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.9 }]}>Note</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.7 }]}>Amt</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.9 }]}>Date</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Del</Text>
                     </View>
                     {filteredAdvances.map((item) => {
                         // Only show cross-line for advances that are settled or partial (used in payments)
@@ -1368,12 +1384,20 @@ export default function RegisterScreen() {
                         return (
                             <View key={item._id} style={[styles.tableRow, isUsedInPayment && styles.settledRow]}>
                                 <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.farmer?.code}</Text>
-                                <Text style={[styles.tableCell, { flex: 1.5, textAlign: 'center' }]}>{item.farmer?.name || '-'}</Text>
-                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{item.note || '-'}</Text>
-                                <Text style={[styles.tableCell, { flex: 0.8, textAlign: 'center' }, isUsedInPayment ? styles.settledAmountText : { color: colors.warning }]}>₹{item.amount}</Text>
-                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>
+                                <Text style={[styles.tableCell, { flex: 1.3, textAlign: 'center' }]}>{item.farmer?.name || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 0.9, textAlign: 'center' }]}>{item.note || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 0.7, textAlign: 'center' }, isUsedInPayment ? styles.settledAmountText : { color: colors.warning }]}>₹{item.amount}</Text>
+                                <Text style={[styles.tableCell, { flex: 0.9, textAlign: 'center' }]}>
                                     {new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' })}
                                 </Text>
+                                <View style={{ flex: 0.5, alignItems: 'center', justifyContent: 'center' }}>
+                                    <Pressable
+                                        style={styles.deleteBtn}
+                                        onPress={() => handleDeleteAdvance(item._id, item.farmer?.name || 'Unknown')}
+                                    >
+                                        <Trash2 size={14} color={colors.destructive} />
+                                    </Pressable>
+                                </View>
                             </View>
                         );
                     })}
@@ -1498,13 +1522,12 @@ export default function RegisterScreen() {
                                 <View style={styles.farmerModalInputGroup}>
                                     <Text style={styles.label}>Code <Text style={{ color: colors.destructive }}>*</Text></Text>
                                     <TextInput
-                                        style={[styles.farmerModalInput, editingFarmer && { backgroundColor: colors.muted }]}
+                                        style={styles.farmerModalInput}
                                         placeholder="Enter code (numbers only)"
                                         placeholderTextColor={colors.mutedForeground}
                                         value={newCode}
                                         onChangeText={setNewCode}
                                         keyboardType="numeric"
-                                        editable={!editingFarmer}
                                     />
                                 </View>
 

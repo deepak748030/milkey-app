@@ -160,20 +160,48 @@ router.post('/', auth, requireSubscription('register'), async (req, res) => {
 // PUT /api/farmers/:id (requires register subscription)
 router.put('/:id', auth, requireSubscription('register'), async (req, res) => {
     try {
-        const { name, mobile, address } = req.body;
+        const { code, name, mobile, address } = req.body;
 
-        const farmer = await Farmer.findOneAndUpdate(
-            { _id: req.params.id, owner: req.userId },
-            { name, mobile, address },
-            { new: true }
-        );
+        // Find the farmer first
+        const existingFarmer = await Farmer.findOne({
+            _id: req.params.id,
+            owner: req.userId
+        });
 
-        if (!farmer) {
+        if (!existingFarmer) {
             return res.status(404).json({
                 success: false,
                 message: 'Farmer not found'
             });
         }
+
+        // If code is being changed, check for duplicates
+        if (code && normalizeCode(code) !== normalizeCode(existingFarmer.code)) {
+            const duplicateCode = await Farmer.findOne({
+                code: codeRegex(code),
+                owner: req.userId,
+                type: existingFarmer.type,
+                _id: { $ne: req.params.id }
+            });
+
+            if (duplicateCode) {
+                return res.status(400).json({
+                    success: false,
+                    message: `${existingFarmer.type === 'member' ? 'Member' : 'Farmer'} with this code already exists`
+                });
+            }
+        }
+
+        const updateData = { name, mobile, address };
+        if (code) {
+            updateData.code = normalizeCode(code);
+        }
+
+        const farmer = await Farmer.findOneAndUpdate(
+            { _id: req.params.id, owner: req.userId },
+            updateData,
+            { new: true }
+        );
 
         res.json({
             success: true,

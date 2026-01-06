@@ -122,6 +122,7 @@ export default function SellingScreen() {
     const [reportEndDate, setReportEndDate] = useState('');
     const [reportMemberFilter, setReportMemberFilter] = useState<string>(''); // Member ID filter for reports
     const [showReportMemberDropdown, setShowReportMemberDropdown] = useState(false);
+    const [reportMemberSearch, setReportMemberSearch] = useState(''); // Search text for report member filter
 
     // Balance Report state (fetched from server)
     const [balanceReportData, setBalanceReportData] = useState<MemberBalanceReport[]>([]);
@@ -1667,22 +1668,45 @@ export default function SellingScreen() {
                 <View style={styles.filterCard}>
                     <View style={styles.memberFilterRow}>
                         <Text style={styles.memberFilterLabel}>Member:</Text>
-                        <Pressable
-                            style={styles.memberFilterBtn}
-                            onPress={() => setShowReportMemberDropdown(!showReportMemberDropdown)}
-                        >
-                            <User size={14} color={colors.primary} />
-                            <Text style={styles.memberFilterText} numberOfLines={1}>{getSelectedReportMemberName()}</Text>
-                            <X
-                                size={14}
-                                color={reportMemberFilter ? colors.destructive : colors.muted}
-                                onPress={(e) => {
-                                    e.stopPropagation?.();
-                                    setReportMemberFilter('');
-                                    setShowReportMemberDropdown(false);
-                                }}
-                            />
-                        </Pressable>
+                        {showReportMemberDropdown ? (
+                            <View style={[styles.memberFilterBtn, { paddingVertical: 0 }]}>
+                                <Search size={14} color={colors.primary} />
+                                <TextInput
+                                    style={[styles.memberSearchInput, { flex: 1, paddingVertical: 8 }]}
+                                    placeholder="Search by name or mobile..."
+                                    value={reportMemberSearch}
+                                    onChangeText={setReportMemberSearch}
+                                    placeholderTextColor={colors.mutedForeground}
+                                    autoFocus
+                                />
+                                <Pressable
+                                    onPress={() => {
+                                        setReportMemberSearch('');
+                                        setShowReportMemberDropdown(false);
+                                    }}
+                                >
+                                    <X size={14} color={colors.destructive} />
+                                </Pressable>
+                            </View>
+                        ) : (
+                            <Pressable
+                                style={styles.memberFilterBtn}
+                                onPress={() => setShowReportMemberDropdown(true)}
+                            >
+                                <User size={14} color={colors.primary} />
+                                <Text style={styles.memberFilterText} numberOfLines={1}>{getSelectedReportMemberName()}</Text>
+                                {reportMemberFilter && (
+                                    <Pressable
+                                        onPress={(e) => {
+                                            e.stopPropagation?.();
+                                            setReportMemberFilter('');
+                                        }}
+                                    >
+                                        <X size={14} color={colors.destructive} />
+                                    </Pressable>
+                                )}
+                            </Pressable>
+                        )}
                     </View>
                     {showReportMemberDropdown && (
                         <View style={styles.memberFilterDropdown}>
@@ -1691,25 +1715,36 @@ export default function SellingScreen() {
                                     style={[styles.memberFilterItem, !reportMemberFilter && styles.memberFilterItemActive]}
                                     onPress={() => {
                                         setReportMemberFilter('');
+                                        setReportMemberSearch('');
                                         setShowReportMemberDropdown(false);
                                     }}
                                 >
                                     <Text style={styles.memberFilterItemText}>All Members</Text>
                                     {!reportMemberFilter && <Check size={14} color={colors.primary} />}
                                 </Pressable>
-                                {balanceReportData.map(member => (
-                                    <Pressable
-                                        key={member._id}
-                                        style={[styles.memberFilterItem, reportMemberFilter === member._id && styles.memberFilterItemActive]}
-                                        onPress={() => {
-                                            setReportMemberFilter(member._id);
-                                            setShowReportMemberDropdown(false);
-                                        }}
-                                    >
-                                        <Text style={styles.memberFilterItemText}>{member.name}</Text>
-                                        {reportMemberFilter === member._id && <Check size={14} color={colors.primary} />}
-                                    </Pressable>
-                                ))}
+                                {balanceReportData
+                                    .filter(member => {
+                                        if (!reportMemberSearch.trim()) return true;
+                                        const query = reportMemberSearch.toLowerCase();
+                                        return (
+                                            member.name?.toLowerCase().includes(query) ||
+                                            member.mobile?.toLowerCase().includes(query)
+                                        );
+                                    })
+                                    .map(member => (
+                                        <Pressable
+                                            key={member._id}
+                                            style={[styles.memberFilterItem, reportMemberFilter === member._id && styles.memberFilterItemActive]}
+                                            onPress={() => {
+                                                setReportMemberFilter(member._id);
+                                                setReportMemberSearch('');
+                                                setShowReportMemberDropdown(false);
+                                            }}
+                                        >
+                                            <Text style={styles.memberFilterItemText}>{member.name}</Text>
+                                            {reportMemberFilter === member._id && <Check size={14} color={colors.primary} />}
+                                        </Pressable>
+                                    ))}
                             </ScrollView>
                         </View>
                     )}

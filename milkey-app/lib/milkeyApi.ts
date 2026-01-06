@@ -372,7 +372,7 @@ export const farmersApi = {
         });
     },
 
-    update: async (id: string, data: { name?: string; mobile?: string; address?: string }) => {
+    update: async (id: string, data: { code?: string; name?: string; mobile?: string; address?: string }) => {
         return apiRequest<Farmer>(`/farmers/${id}`, {
             method: 'PUT',
             body: JSON.stringify(data),
