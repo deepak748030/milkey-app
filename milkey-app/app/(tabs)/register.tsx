@@ -63,6 +63,18 @@ export default function RegisterScreen() {
     const [farmers, setFarmers] = useState<Farmer[]>([]);
     const [advances, setAdvances] = useState<Advance[]>([]);
     const [payments, setPayments] = useState<Payment[]>([]);
+    const [farmerPayments, setFarmerPayments] = useState<Payment[]>([]); // Farmer-specific payments for settlement history
+
+    // Infinite scroll state for settlement history
+    const [paymentsPage, setPaymentsPage] = useState(1);
+    const [paymentsHasMore, setPaymentsHasMore] = useState(true);
+    const [paymentsLoadingMore, setPaymentsLoadingMore] = useState(false);
+    const [farmerPaymentsPage, setFarmerPaymentsPage] = useState(1);
+    const [farmerPaymentsHasMore, setFarmerPaymentsHasMore] = useState(true);
+    const [farmerPaymentsLoadingMore, setFarmerPaymentsLoadingMore] = useState(false);
+
+    // Infinite scroll state for advances
+    const [advancesDisplayCount, setAdvancesDisplayCount] = useState(20);
 
     // Payment tab state
     const [paymentCode, setPaymentCode] = useState('');
@@ -272,7 +284,9 @@ export default function RegisterScreen() {
                 paymentsApi.getAll({ limit: 20 }),
             ]);
 
-            if (farmersRes.success && farmersRes.response?.data) {
+            if (!farmersRes.success) {
+                showAlert('Error', farmersRes.message || 'Failed to load farmers');
+            } else if (farmersRes.response?.data) {
                 // Sort farmers by code as numeric values in ascending order
                 const sortedFarmers = [...farmersRes.response.data].sort((a, b) => {
                     const codeA = parseInt(a.code, 10) || 0;
@@ -281,14 +295,21 @@ export default function RegisterScreen() {
                 });
                 setFarmers(sortedFarmers);
             }
-            if (advancesRes.success && advancesRes.response?.data) {
+
+            if (!advancesRes.success) {
+                showAlert('Error', advancesRes.message || 'Failed to load advances');
+            } else if (advancesRes.response?.data) {
                 setAdvances(advancesRes.response.data);
             }
-            if (paymentsRes.success && paymentsRes.response?.data) {
+
+            if (!paymentsRes.success) {
+                showAlert('Error', paymentsRes.message || 'Failed to load settlements');
+            } else if (paymentsRes.response?.data) {
                 setPayments(paymentsRes.response.data);
             }
         } catch (error) {
             console.error('Error fetching data:', error);
+            showAlert('Error', 'Failed to load data. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -299,6 +320,77 @@ export default function RegisterScreen() {
         await fetchData();
         setRefreshing(false);
     }, []);
+
+    // Fetch farmer-specific payment history (with pagination)
+    const fetchFarmerPayments = async (farmerId: string, page: number = 1, append: boolean = false) => {
+        try {
+            if (page === 1) {
+                setFarmerPaymentsPage(1);
+                setFarmerPaymentsHasMore(true);
+            }
+            const res = await paymentsApi.getAll({ farmerId, limit: 20, page });
+            if (!res.success) {
+                showAlert('Error', res.message || 'Failed to load settlement history');
+                if (!append) setFarmerPayments([]);
+                return;
+            }
+            if (res.response?.data) {
+                if (append) {
+                    setFarmerPayments(prev => [...prev, ...res.response!.data]);
+                } else {
+                    setFarmerPayments(res.response.data);
+                }
+                // Check if more pages available
+                if (res.response.data.length < 20) {
+                    setFarmerPaymentsHasMore(false);
+                }
+            } else {
+                if (!append) setFarmerPayments([]);
+                setFarmerPaymentsHasMore(false);
+            }
+        } catch (error) {
+            console.error('Error fetching farmer payments:', error);
+            showAlert('Error', 'Failed to load settlement history. Please try again.');
+        }
+    };
+
+    // Load more farmer payments (infinite scroll)
+    const loadMoreFarmerPayments = async () => {
+        if (farmerPaymentsLoadingMore || !farmerPaymentsHasMore || !paymentFarmer) return;
+        setFarmerPaymentsLoadingMore(true);
+        const nextPage = farmerPaymentsPage + 1;
+        setFarmerPaymentsPage(nextPage);
+        await fetchFarmerPayments(paymentFarmer.farmer.id, nextPage, true);
+        setFarmerPaymentsLoadingMore(false);
+    };
+
+    // Load more global payments (infinite scroll)
+    const loadMorePayments = async () => {
+        if (paymentsLoadingMore || !paymentsHasMore) return;
+        setPaymentsLoadingMore(true);
+        const nextPage = paymentsPage + 1;
+        try {
+            const res = await paymentsApi.getAll({ limit: 20, page: nextPage });
+            if (res.success && res.response?.data) {
+                setPayments(prev => [...prev, ...res.response!.data]);
+                setPaymentsPage(nextPage);
+                if (res.response.data.length < 20) {
+                    setPaymentsHasMore(false);
+                }
+            } else {
+                setPaymentsHasMore(false);
+            }
+        } catch (error) {
+            console.error('Error loading more payments:', error);
+        } finally {
+            setPaymentsLoadingMore(false);
+        }
+    };
+
+    // Load more advances (client-side pagination)
+    const loadMoreAdvances = () => {
+        setAdvancesDisplayCount(prev => prev + 20);
+    };
 
     // Payment tab: fetch farmer summary
     const handleFetchFarmerSummary = async () => {
@@ -313,9 +405,12 @@ export default function RegisterScreen() {
                 setPaymentFarmer(res.response);
                 setMilkAmount(res.response.milk.totalAmount.toFixed(2));
                 setPaidAmount('');
+                // Fetch farmer-specific payment history
+                await fetchFarmerPayments(res.response.farmer.id);
             } else {
                 showAlert('Error', res.message || 'Farmer not found');
                 setPaymentFarmer(null);
+                setFarmerPayments([]);
             }
         } catch (error) {
             showAlert('Error', 'Failed to fetch farmer');
@@ -484,6 +579,7 @@ export default function RegisterScreen() {
         setPaymentFarmer(null);
         setPaidAmount('');
         setMilkAmount('');
+        setFarmerPayments([]); // Clear farmer-specific payments
     };
 
     // Handle edit payment - open modal with payment data
@@ -783,13 +879,17 @@ export default function RegisterScreen() {
     // Show all farmers (removed search filter)
     const filteredFarmers = farmers;
 
-    // Filter advances by search (name or code)
-    const filteredAdvances = advanceSearch
+    // Filter advances by search (name or code) and apply display limit
+    const allFilteredAdvances = advanceSearch
         ? advances.filter(a =>
             a.farmer?.code?.toLowerCase().includes(advanceSearch.toLowerCase()) ||
             a.farmer?.name?.toLowerCase().includes(advanceSearch.toLowerCase())
         )
         : advances;
+
+    // Apply display limit for infinite scroll
+    const filteredAdvances = allFilteredAdvances.slice(0, advancesDisplayCount);
+    const hasMoreAdvances = allFilteredAdvances.length > advancesDisplayCount;
 
     // Generate Advances PDF
     const generateAdvancesPDF = async () => {
@@ -1133,9 +1233,9 @@ export default function RegisterScreen() {
                 Settlement History {paymentFarmer ? `(${paymentFarmer.farmer.code})` : ''}
             </Text>
             {(() => {
-                // Filter payments by farmer code if a farmer is selected
+                // Use farmer-specific payments when a farmer is selected, otherwise use global payments
                 const filteredPayments = paymentFarmer
-                    ? payments.filter(p => p.farmer?.code === paymentFarmer.farmer.code)
+                    ? farmerPayments
                     : payments;
 
                 if (filteredPayments.length === 0) {
@@ -1146,11 +1246,11 @@ export default function RegisterScreen() {
                     );
                 }
 
-                // When farmer is searched - show card format
+                // When farmer is searched - show card format with infinite scroll
                 if (paymentFarmer) {
                     return (
                         <View style={{ gap: 8 }}>
-                            {filteredPayments.slice(0, 10).map((p) => (
+                            {filteredPayments.map((p) => (
                                 <View key={p._id} style={styles.historyCard}>
                                     <View style={styles.historyCardHeader}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -1200,11 +1300,25 @@ export default function RegisterScreen() {
                                     </View>
                                 </View>
                             ))}
+                            {/* Load More Button for farmer payments */}
+                            {farmerPaymentsHasMore && (
+                                <Pressable
+                                    style={[styles.loadMoreBtn, farmerPaymentsLoadingMore && { opacity: 0.6 }]}
+                                    onPress={loadMoreFarmerPayments}
+                                    disabled={farmerPaymentsLoadingMore}
+                                >
+                                    {farmerPaymentsLoadingMore ? (
+                                        <ActivityIndicator size="small" color={colors.primary} />
+                                    ) : (
+                                        <Text style={styles.loadMoreText}>Load More</Text>
+                                    )}
+                                </Pressable>
+                            )}
                         </View>
                     );
                 }
 
-                // Without search - show table format
+                // Without search - show table format with infinite scroll
                 return (
                     <View style={styles.historyTable}>
                         <View style={styles.historyTableHeader}>
@@ -1215,7 +1329,7 @@ export default function RegisterScreen() {
                             <Text style={[styles.historyTableHeaderCell, { flex: 0.8 }]}>Paid</Text>
                             <Text style={[styles.historyTableHeaderCell, { flex: 0.8 }]}>Bal</Text>
                         </View>
-                        {filteredPayments.slice(0, 15).map((p) => (
+                        {filteredPayments.map((p) => (
                             <View key={p._id} style={styles.historyTableRow}>
                                 <Text style={[styles.historyTableCell, { flex: 0.6, color: colors.primary, fontWeight: '600' }]}>
                                     {p.farmer?.code || '-'}
@@ -1237,6 +1351,20 @@ export default function RegisterScreen() {
                                 </Text>
                             </View>
                         ))}
+                        {/* Load More Button for global payments */}
+                        {paymentsHasMore && (
+                            <Pressable
+                                style={[styles.loadMoreBtn, paymentsLoadingMore && { opacity: 0.6 }]}
+                                onPress={loadMorePayments}
+                                disabled={paymentsLoadingMore}
+                            >
+                                {paymentsLoadingMore ? (
+                                    <ActivityIndicator size="small" color={colors.primary} />
+                                ) : (
+                                    <Text style={styles.loadMoreText}>Load More</Text>
+                                )}
+                            </Pressable>
+                        )}
                     </View>
                 );
             })()}
@@ -1253,6 +1381,7 @@ export default function RegisterScreen() {
                         placeholder="Code"
                         value={advCode}
                         onChangeText={handleAdvCodeChange}
+                        keyboardType="number-pad"
                         placeholderTextColor={colors.mutedForeground}
                     />
                 </View>
@@ -1401,6 +1530,15 @@ export default function RegisterScreen() {
                             </View>
                         );
                     })}
+                    {/* Load More Button for advances */}
+                    {hasMoreAdvances && (
+                        <Pressable
+                            style={styles.loadMoreBtn}
+                            onPress={loadMoreAdvances}
+                        >
+                            <Text style={styles.loadMoreText}>Load More ({allFilteredAdvances.length - advancesDisplayCount} remaining)</Text>
+                        </Pressable>
+                    )}
                 </View>
             ) : (
                 <Text style={styles.infoTextMuted}>
@@ -2796,5 +2934,22 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
         color: colors.white,
+    },
+    // Load More Button Styles
+    loadMoreBtn: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        backgroundColor: colors.muted,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    loadMoreText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.primary,
     },
 });

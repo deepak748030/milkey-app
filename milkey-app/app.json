@@ -4,20 +4,20 @@
     "slug": "milkey",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/milkey-logo.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "milkey",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/milkey-logo.png",
+      "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0D4A6B"
+      "backgroundColor": "#4CAF50"
     },
     "android": {
       "package": "com.milkey.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/milkey-logo.png",
-        "backgroundColor": "#0D4A6B"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#4CAF50"
       },
       "googleServicesFile": "./google-services.json"
     },
@@ -27,7 +27,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/milkey-logo.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
@@ -36,8 +36,8 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/milkey-logo.png",
-          "color": "#0D4A6B",
+          "icon": "./assets/images/icon.png",
+          "color": "#4CAF50",
           "sounds": [
             "./assets/sounds/notification.mp3"
           ]

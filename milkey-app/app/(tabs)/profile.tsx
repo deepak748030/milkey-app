@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet } from 'lucide-react-native';
+import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
@@ -44,6 +44,8 @@ export default function ProfileScreen() {
     { id: '4', icon: Wallet, label: 'Withdraw', action: () => router.push('/withdraw' as any) },
     { id: '5', icon: Bell, label: 'Notifications', action: () => router.push('/notifications') },
     { id: '6', icon: HelpCircle, label: 'Help & Support', action: () => router.push('/help-support' as any) },
+    { id: '7', icon: FileText, label: 'Terms & Conditions', action: () => router.push('/terms-conditions' as any) },
+    { id: '8', icon: Shield, label: 'Privacy Policy', action: () => router.push('/privacy-policy' as any) },
   ];
 
   return (

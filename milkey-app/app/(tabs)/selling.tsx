@@ -14,6 +14,7 @@ import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { useLocalSearchParams } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { useDebounce } from '@/hooks/useDebounce';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
 
@@ -165,59 +166,75 @@ export default function SellingScreen() {
         return d.toISOString().split('T')[0];
     }
 
-    // Filtered members for search - auto suggest
+    // Debounced search values for performance
+    const debouncedSearchMember = useDebounce(searchMember, 150);
+    const debouncedRecentMemberSearch = useDebounce(recentMemberSearch, 150);
+    const debouncedReportMemberSearch = useDebounce(reportMemberSearch, 150);
+
+    // Filtered members for search - auto suggest (using debounced value)
     // Filtered members for search - by name only
     const filteredMembers = useMemo(() => {
-        if (!searchMember.trim()) return members.slice(0, 10);
-        const query = searchMember.toLowerCase();
+        if (!debouncedSearchMember.trim()) return members.slice(0, 10);
+        const query = debouncedSearchMember.toLowerCase();
         return members.filter(m =>
             m.name.toLowerCase().includes(query)
         ).slice(0, 10);
-    }, [members, searchMember]);
+    }, [members, debouncedSearchMember]);
 
     const totalQuantity = (parseFloat(mornQty) || 0) + (parseFloat(eveQty) || 0);
     const totalAmount = totalQuantity * (parseFloat(rate) || 0);
 
-    // Filtered members for recent entries dropdown
+    // Filtered members for recent entries dropdown (using debounced value)
     const filteredRecentMembers = useMemo(() => {
-        if (!recentMemberSearch.trim()) return members.slice(0, 10);
-        const query = recentMemberSearch.toLowerCase();
-        return members.filter(m => m.name.toLowerCase().includes(query)).slice(0, 10);
-    }, [members, recentMemberSearch]);
+        if (!debouncedRecentMemberSearch.trim()) return members.slice(0, 15);
+        const query = debouncedRecentMemberSearch.toLowerCase();
+        return members.filter(m => m.name.toLowerCase().includes(query)).slice(0, 15);
+    }, [members, debouncedRecentMemberSearch]);
 
-    // Get selected recent member name for display
-    const getSelectedRecentMemberName = () => {
+    // Filtered balance report data for report member dropdown (using debounced value)
+    const filteredReportMembers = useMemo(() => {
+        if (!debouncedReportMemberSearch.trim()) return balanceReportData;
+        const query = debouncedReportMemberSearch.toLowerCase();
+        return balanceReportData.filter(m =>
+            m.name?.toLowerCase().includes(query) ||
+            m.mobile?.toLowerCase().includes(query)
+        );
+    }, [balanceReportData, debouncedReportMemberSearch]);
+
+    // Get selected recent member name for display (memoized for performance)
+    const selectedRecentMemberName = useMemo(() => {
         if (!recentEntriesMemberFilter) return 'All Members';
         const member = members.find(m => m._id === recentEntriesMemberFilter);
         return member?.name || 'All Members';
-    };
+    }, [recentEntriesMemberFilter, members]);
 
-    // Group entries by date and member for combined M/E display - with filters
+    // Pre-compute date strings for entries once to avoid repeated Date parsing
+    const entriesWithDateStr = useMemo(() => {
+        return recentEntries.map(entry => ({
+            ...entry,
+            dateStr: new Date(entry.date).toISOString().split('T')[0],
+        }));
+    }, [recentEntries]);
+
+    // Group entries by date and member for combined M/E display - with filters (optimized)
     const groupedEntries = useMemo((): GroupedEntry[] => {
         const groups: Record<string, GroupedEntry> = {};
 
-        // Apply filters to recentEntries
-        const filteredEntries = recentEntries.filter(entry => {
-            const entryDateStr = new Date(entry.date).toISOString().split('T')[0];
-
-            // Date filter
-            if (recentEntriesStartDate && entryDateStr < recentEntriesStartDate) return false;
-            if (recentEntriesEndDate && entryDateStr > recentEntriesEndDate) return false;
+        // Apply filters to recentEntries (using pre-computed dateStr)
+        for (const entry of entriesWithDateStr) {
+            // Date filter - quick string comparison
+            if (recentEntriesStartDate && entry.dateStr < recentEntriesStartDate) continue;
+            if (recentEntriesEndDate && entry.dateStr > recentEntriesEndDate) continue;
 
             // Member filter
-            if (recentEntriesMemberFilter && entry.member?._id !== recentEntriesMemberFilter) return false;
+            if (recentEntriesMemberFilter && entry.member?._id !== recentEntriesMemberFilter) continue;
 
-            return true;
-        });
-
-        filteredEntries.forEach(entry => {
-            const dateStr = new Date(entry.date).toISOString().split('T')[0];
             const memberId = entry.member?._id || '';
-            const key = `${dateStr}-${memberId}`;
+            const key = `${entry.dateStr}-${memberId}`;
 
             if (!groups[key]) {
                 groups[key] = {
-                    date: dateStr,
+                    date: entry.dateStr,
                     memberId,
                     memberName: entry.member?.name || 'Unknown',
                     morningQty: 0,
@@ -234,10 +251,11 @@ export default function SellingScreen() {
             groups[key].entryId = entry._id;
             groups[key].totalAmount += entry.amount;
             groups[key].entryCount = Math.max(groups[key].entryCount, (entry as any).entryCount || 1);
-        });
+        }
 
-        return Object.values(groups).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [recentEntries, recentEntriesStartDate, recentEntriesEndDate, recentEntriesMemberFilter]);
+        // Sort by date descending
+        return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
+    }, [entriesWithDateStr, recentEntriesStartDate, recentEntriesEndDate, recentEntriesMemberFilter]);
 
     // Fetch data - members and selling entries
     const fetchData = useCallback(async () => {
@@ -624,12 +642,12 @@ export default function SellingScreen() {
         });
     };
 
-    // Get selected member name for display
-    const getSelectedReportMemberName = () => {
+    // Get selected member name for display (memoized for performance)
+    const selectedReportMemberName = useMemo(() => {
         if (!reportMemberFilter) return 'All Members';
         const member = members.find(m => m._id === reportMemberFilter);
         return member?.name || 'All Members';
-    };
+    }, [reportMemberFilter, members]);
 
     const getFilteredPayments = () => {
         return recentPayments.filter(payment => {
@@ -788,7 +806,7 @@ export default function SellingScreen() {
             ? `Period: ${recentEntriesStartDate ? formatDate(recentEntriesStartDate) : 'Start'} to ${recentEntriesEndDate ? formatDate(recentEntriesEndDate) : 'End'}`
             : 'All Entries';
         const memberText = recentEntriesMemberFilter
-            ? `Member: ${getSelectedRecentMemberName()}`
+            ? `Member: ${selectedRecentMemberName}`
             : 'All Members';
 
         const html = `
@@ -1199,7 +1217,7 @@ export default function SellingScreen() {
                         >
                             <User size={14} color={colors.mutedForeground} />
                             <Text style={styles.recentFilterText} numberOfLines={1}>
-                                {getSelectedRecentMemberName()}
+                                {selectedRecentMemberName}
                             </Text>
                         </Pressable>
 
@@ -1694,7 +1712,7 @@ export default function SellingScreen() {
                                 onPress={() => setShowReportMemberDropdown(true)}
                             >
                                 <User size={14} color={colors.primary} />
-                                <Text style={styles.memberFilterText} numberOfLines={1}>{getSelectedReportMemberName()}</Text>
+                                <Text style={styles.memberFilterText} numberOfLines={1}>{selectedReportMemberName}</Text>
                                 {reportMemberFilter && (
                                     <Pressable
                                         onPress={(e) => {
@@ -1722,29 +1740,20 @@ export default function SellingScreen() {
                                     <Text style={styles.memberFilterItemText}>All Members</Text>
                                     {!reportMemberFilter && <Check size={14} color={colors.primary} />}
                                 </Pressable>
-                                {balanceReportData
-                                    .filter(member => {
-                                        if (!reportMemberSearch.trim()) return true;
-                                        const query = reportMemberSearch.toLowerCase();
-                                        return (
-                                            member.name?.toLowerCase().includes(query) ||
-                                            member.mobile?.toLowerCase().includes(query)
-                                        );
-                                    })
-                                    .map(member => (
-                                        <Pressable
-                                            key={member._id}
-                                            style={[styles.memberFilterItem, reportMemberFilter === member._id && styles.memberFilterItemActive]}
-                                            onPress={() => {
-                                                setReportMemberFilter(member._id);
-                                                setReportMemberSearch('');
-                                                setShowReportMemberDropdown(false);
-                                            }}
-                                        >
-                                            <Text style={styles.memberFilterItemText}>{member.name}</Text>
-                                            {reportMemberFilter === member._id && <Check size={14} color={colors.primary} />}
-                                        </Pressable>
-                                    ))}
+                                {filteredReportMembers.map(member => (
+                                    <Pressable
+                                        key={member._id}
+                                        style={[styles.memberFilterItem, reportMemberFilter === member._id && styles.memberFilterItemActive]}
+                                        onPress={() => {
+                                            setReportMemberFilter(member._id);
+                                            setReportMemberSearch('');
+                                            setShowReportMemberDropdown(false);
+                                        }}
+                                    >
+                                        <Text style={styles.memberFilterItemText}>{member.name}</Text>
+                                        {reportMemberFilter === member._id && <Check size={14} color={colors.primary} />}
+                                    </Pressable>
+                                ))}
                             </ScrollView>
                         </View>
                     )}
