@@ -3,10 +3,13 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, Shield, Database, Lock, Eye, UserCheck, CreditCard, RefreshCw, XCircle, AlertCircle, CheckCircle, Mail } from 'lucide-react-native';
-import { colors } from '@/lib/colors';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function PrivacyPolicyScreen() {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+
   const policyItems = [
     {
       icon: Database,
@@ -120,7 +123,7 @@ export default function PrivacyPolicyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

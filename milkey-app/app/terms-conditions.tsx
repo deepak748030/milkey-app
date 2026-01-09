@@ -3,10 +3,12 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, FileText, CheckCircle, CreditCard, User, Shield, AlertTriangle, RefreshCw, Mail } from 'lucide-react-native';
-import { colors } from '@/lib/colors';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function TermsConditionsScreen() {
     const insets = useSafeAreaInsets();
+    const { colors } = useTheme();
+    const styles = createStyles(colors);
 
     const termsItems = [
         {
@@ -111,7 +113,7 @@ export default function TermsConditionsScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.background,
