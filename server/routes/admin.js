@@ -3129,7 +3129,7 @@ const Notification = require('../models/Notification');
 router.get('/subscriptions/list', adminAuth, async (req, res) => {
     try {
         const subscriptions = await Subscription.find({ isActive: true })
-            .select('_id name amount durationMonths applicableTabs isFree description')
+            .select('_id name amount durationMonths durationDays durationType durationValue applicableTabs isFree description')
             .sort({ name: 1 })
             .lean();
 
