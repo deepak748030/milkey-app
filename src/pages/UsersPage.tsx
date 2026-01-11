@@ -360,11 +360,19 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
                                         className="w-full px-3 py-2 bg-card border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                     >
                                         <option value="">Choose subscription...</option>
-                                        {subscriptions.map(sub => (
-                                            <option key={sub._id} value={sub._id}>
-                                                {sub.name} - {sub.isFree ? 'FREE' : `₹${sub.amount}`} ({sub.durationMonths} months)
-                                            </option>
-                                        ))}
+                                        {subscriptions.map(sub => {
+                                            // Format duration properly based on durationType
+                                            const durationText = sub.durationType && sub.durationValue
+                                                ? `${sub.durationValue} ${sub.durationType}`
+                                                : sub.durationDays
+                                                    ? `${sub.durationDays} days`
+                                                    : `${sub.durationMonths || 1} months`;
+                                            return (
+                                                <option key={sub._id} value={sub._id}>
+                                                    {sub.name} - {sub.isFree ? 'FREE' : `₹${sub.amount}`} ({durationText})
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
 

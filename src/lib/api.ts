@@ -1700,6 +1700,11 @@ export const updateReferralCommission = async (id: string, commissionRate: numbe
     return response.data
 }
 
+export const getDefaultCommission = async () => {
+    const response = await api.get('/referrals/admin/default-commission')
+    return response.data
+}
+
 export const updateDefaultCommission = async (commissionRate: number) => {
     const response = await api.put('/referrals/admin/default-commission', { commissionRate })
     return response.data

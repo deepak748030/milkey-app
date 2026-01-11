@@ -257,6 +257,63 @@ router.put('/admin/:id/commission', async (req, res) => {
     }
 });
 
+// GET /api/referrals/admin/default-commission - Admin: Get current default commission rate
+router.get('/admin/default-commission', async (req, res) => {
+    try {
+        // Verify admin token
+        const jwt = require('jsonwebtoken');
+        const Admin = require('../models/Admin');
+
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                success: false,
+                message: 'Access denied. No token provided.'
+            });
+        }
+
+        const token = authHeader.split(' ')[1];
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (err) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid token.'
+            });
+        }
+
+        // Check for admin token
+        const adminId = decoded.adminId || decoded.userId;
+        const admin = await Admin.findById(adminId).lean();
+
+        if (!admin) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. Admin only.'
+            });
+        }
+
+        const ReferralConfig = require('../models/ReferralConfig');
+        const cfg = await ReferralConfig.findOne({}).lean();
+
+        const defaultCommissionRate = cfg?.defaultCommissionRate ?? 5;
+
+        res.json({
+            success: true,
+            response: {
+                commissionRate: defaultCommissionRate
+            }
+        });
+    } catch (error) {
+        console.error('Get default commission rate error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get default commission rate'
+        });
+    }
+});
+
 // PUT /api/referrals/admin/default-commission - Admin: Update default commission for all referrals
 router.put('/admin/default-commission', async (req, res) => {
     try {

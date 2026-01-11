@@ -3149,7 +3149,7 @@ router.get('/subscriptions/list', adminAuth, async (req, res) => {
 // POST /api/admin/users/:id/assign-subscription - Assign subscription to user
 router.post('/users/:id/assign-subscription', adminAuth, async (req, res) => {
     try {
-        const { subscriptionId, durationMonths, paymentMethod, transactionId, notes } = req.body;
+        const { subscriptionId, paymentMethod, transactionId, notes } = req.body;
         const userId = req.params.id;
 
         if (!subscriptionId) {
@@ -3177,13 +3177,51 @@ router.post('/users/:id/assign-subscription', adminAuth, async (req, res) => {
             });
         }
 
-        // Calculate dates
+        // Check if user already has an active subscription covering same tabs
+        const now = new Date();
+        const overlappingTabs = subscription.applicableTabs || [];
+
+        const existingActiveSubscription = await UserSubscription.findOne({
+            user: userId,
+            isActive: true,
+            paymentStatus: 'completed',
+            endDate: { $gte: now },
+            applicableTabs: { $in: overlappingTabs }
+        }).populate('subscription').lean();
+
+        if (existingActiveSubscription) {
+            const existingSubName = existingActiveSubscription.subscription?.name || 'Unknown';
+            const existingEndDate = new Date(existingActiveSubscription.endDate).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+            return res.status(400).json({
+                success: false,
+                message: `User already has an active subscription "${existingSubName}" for the same tabs, valid until ${existingEndDate}. Cannot assign another subscription while one is active.`
+            });
+        }
+
+        // Calculate dates based on subscription's actual duration settings
         const startDate = new Date();
         const endDate = new Date();
-        const duration = durationMonths || subscription.durationMonths;
-        endDate.setMonth(endDate.getMonth() + duration);
 
-        // Create user subscription
+        // Use the subscription's duration settings properly
+        if (subscription.durationType === 'days' || subscription.durationDays) {
+            // Duration is in days
+            const days = subscription.durationDays || (subscription.durationValue || 1) * 30;
+            endDate.setDate(endDate.getDate() + days);
+        } else if (subscription.durationType === 'years') {
+            // Duration is in years
+            const years = subscription.durationValue || 1;
+            endDate.setFullYear(endDate.getFullYear() + years);
+        } else {
+            // Default: duration is in months
+            const months = subscription.durationValue || subscription.durationMonths || 1;
+            endDate.setMonth(endDate.getMonth() + months);
+        }
+
+        // Create user subscription with proper locked-in values
         const userSubscription = new UserSubscription({
             user: userId,
             subscription: subscriptionId,
@@ -3191,7 +3229,14 @@ router.post('/users/:id/assign-subscription', adminAuth, async (req, res) => {
             startDate,
             endDate,
             amount: subscription.amount,
+            baseAmount: subscription.amount,
+            multiplier: 1,
+            lockedDurationDays: subscription.durationDays,
+            lockedDurationType: subscription.durationType || 'months',
+            lockedDurationValue: subscription.durationValue || subscription.durationMonths || 1,
+            lockedSubscriptionName: subscription.name,
             isFree: subscription.isFree,
+            isActive: true,
             paymentStatus: 'completed',
             paymentMethod: paymentMethod || 'cash',
             transactionId: transactionId || `ADMIN-${Date.now()}`
@@ -3213,7 +3258,7 @@ router.post('/users/:id/assign-subscription', adminAuth, async (req, res) => {
 
         res.status(201).json({
             success: true,
-            message: `Subscription "${subscription.name}" assigned successfully`,
+            message: `Subscription "${subscription.name}" assigned successfully until ${endDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
             response: userSubscription
         });
     } catch (error) {

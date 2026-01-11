@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Search, RefreshCw, Users, DollarSign, Percent, Edit2, X, Check, AlertCircle, Settings } from 'lucide-react'
 import { cn } from '../lib/utils'
-import { getAllActiveSubscriptions, getAllReferrals, updateReferralCommission, updateDefaultCommission } from '../lib/api'
+import { getAllActiveSubscriptions, getAllReferrals, updateReferralCommission, updateDefaultCommission, getDefaultCommission } from '../lib/api'
 import { TableSkeleton } from '../components/TableSkeleton'
 import { Pagination } from '../components/Pagination'
 
@@ -72,9 +72,10 @@ export function ActiveSubscriptionsPage() {
     const fetchData = async () => {
         setLoading(true)
         try {
-            const [subsRes, referralsRes] = await Promise.all([
+            const [subsRes, referralsRes, commissionRes] = await Promise.all([
                 getAllActiveSubscriptions(),
-                getAllReferrals()
+                getAllReferrals(),
+                getDefaultCommission()
             ])
 
             if (subsRes.success) {
@@ -84,6 +85,10 @@ export function ActiveSubscriptionsPage() {
 
             if (referralsRes.success) {
                 setReferrals(referralsRes.response || [])
+            }
+
+            if (commissionRes.success) {
+                setDefaultCommission(commissionRes.response.commissionRate ?? 5)
             }
         } catch (error) {
             console.error('Failed to fetch data:', error)
