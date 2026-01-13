@@ -2,11 +2,16 @@ const express = require('express');
 const router = express.Router();
 const Referral = require('../models/Referral');
 const User = require('../models/User');
+const ReferralConfig = require('../models/ReferralConfig');
 const auth = require('../middleware/auth');
 
 // GET /api/referrals - Get user's referral data
 router.get('/', auth, async (req, res) => {
     try {
+        // Fetch global commission rate from ReferralConfig
+        const config = await ReferralConfig.findOne({}).lean();
+        const globalCommissionRate = config?.defaultCommissionRate ?? 5;
+
         const user = await User.findById(req.userId)
             .select('referralCode referralEarnings totalReferralEarnings')
             .lean();
@@ -27,7 +32,7 @@ router.get('/', auth, async (req, res) => {
             pendingEarnings: referrals
                 .filter(r => r.status === 'pending')
                 .reduce((sum, r) => sum + (r.totalEarnings || 0), 0),
-            commissionRate: referrals.length > 0 ? referrals[0].commissionRate : 5
+            commissionRate: globalCommissionRate
         };
 
         const referralList = referrals.map(r => ({
