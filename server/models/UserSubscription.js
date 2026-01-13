@@ -76,6 +76,14 @@ const userSubscriptionSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    razorpayPaymentId: {
+        type: String,
+        default: ''
+    },
+    razorpayOrderId: {
+        type: String,
+        default: ''
+    },
     isActive: {
         type: Boolean,
         default: true

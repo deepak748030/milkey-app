@@ -3,8 +3,11 @@ const router = express.Router();
 const crypto = require('crypto');
 const auth = require('../middleware/auth');
 const UserSubscription = require('../models/UserSubscription');
+const User = require('../models/User');
+const Referral = require('../models/Referral');
+const { notifySubscriptionPurchased, notifyCommissionEarned } = require('../lib/pushNotifications');
 
-// Razorpay API configuration - Test credentials
+// Razorpay API configuration
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_S3OHPwaCk0J3XX';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '7yeN4EHzKGdS4Zhibag3u1n4';
 const RAZORPAY_API_URL = 'https://api.razorpay.com/v1';
@@ -28,6 +31,85 @@ const razorpayRequest = async (endpoint, method = 'GET', body = null) => {
     const response = await fetch(`${RAZORPAY_API_URL}${endpoint}`, options);
     return response.json();
 };
+
+/**
+ * Process referral commission after subscription activation
+ */
+async function processReferralCommission(userId, subscriptionAmount, subscriptionName) {
+    try {
+        const ReferralConfig = require('../models/ReferralConfig');
+        const cfg = await ReferralConfig.findOneAndUpdate(
+            {},
+            { $setOnInsert: { defaultCommissionRate: 5 } },
+            { new: true, upsert: true }
+        );
+        const defaultCommissionRate = typeof cfg?.defaultCommissionRate === 'number' ? cfg.defaultCommissionRate : 5;
+
+        const buyer = await User.findById(userId);
+        if (!buyer || !buyer.referredBy) {
+            return null;
+        }
+
+        const referrerId = buyer.referredBy;
+
+        let referral = await Referral.findOne({
+            referrer: referrerId,
+            referred: userId
+        });
+
+        if (!referral) {
+            const referrer = await User.findById(referrerId).select('referralCode').lean();
+            if (referrer) {
+                referral = await Referral.create({
+                    referrer: referrerId,
+                    referred: userId,
+                    code: referrer.referralCode,
+                    status: 'active',
+                    commissionRate: defaultCommissionRate,
+                    totalEarnings: 0
+                });
+            }
+        }
+
+        if (referral) {
+            const commissionRate = Number.isFinite(referral.commissionRate)
+                ? referral.commissionRate
+                : defaultCommissionRate;
+
+            const commissionAmount = Number(
+                ((subscriptionAmount * commissionRate) / 100).toFixed(2)
+            );
+
+            if (commissionAmount > 0) {
+                await Promise.all([
+                    Referral.findByIdAndUpdate(referral._id, {
+                        $inc: { totalEarnings: commissionAmount },
+                        $set: { status: 'active', commissionRate }
+                    }),
+                    User.findByIdAndUpdate(referrerId, {
+                        $inc: {
+                            referralEarnings: commissionAmount,
+                            totalReferralEarnings: commissionAmount
+                        }
+                    })
+                ]);
+
+                const buyerData = await User.findById(userId).select('name').lean();
+                notifyCommissionEarned(
+                    referrerId.toString(),
+                    commissionAmount,
+                    buyerData?.name || 'A user'
+                ).catch(err => console.error('Error sending commission notification:', err));
+
+                console.log(`[Razorpay] Commission of ₹${commissionAmount} credited to referrer ${referrerId}`);
+                return commissionAmount;
+            }
+        }
+    } catch (refError) {
+        console.error('Error processing referral commission:', refError);
+    }
+    return null;
+}
 
 // POST /api/razorpay/create-order - Create Razorpay order
 router.post('/create-order', auth, async (req, res) => {
@@ -83,7 +165,7 @@ router.post('/create-order', auth, async (req, res) => {
     }
 });
 
-// POST /api/razorpay/verify-payment - Verify Razorpay payment signature
+// POST /api/razorpay/verify-payment - Verify Razorpay payment signature and activate subscription
 router.post('/verify-payment', auth, async (req, res) => {
     try {
         const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
@@ -111,33 +193,53 @@ router.post('/verify-payment', auth, async (req, res) => {
             });
         }
 
-        // Signature verified, activate subscription
+        // Signature verified, find and activate subscription
         const subscription = await UserSubscription.findOne({
             transactionId: orderId,
             user: userId
-        });
+        }).populate('subscription');
 
-        if (subscription) {
-            if (subscription.paymentStatus !== 'completed') {
-                subscription.paymentStatus = 'completed';
-                subscription.isActive = true;
-                subscription.razorpayPaymentId = razorpay_payment_id;
-                subscription.razorpayOrderId = razorpay_order_id;
-                await subscription.save();
-                console.log(`Subscription activated via Razorpay for order: ${orderId}`);
-            }
-
-            return res.json({
-                success: true,
-                message: 'Payment verified successfully',
-                subscription: subscription
-            });
-        } else {
+        if (!subscription) {
             return res.status(404).json({
                 success: false,
                 message: 'Subscription not found for this order'
             });
         }
+
+        // Only activate if not already completed
+        if (subscription.paymentStatus !== 'completed') {
+            subscription.paymentStatus = 'completed';
+            subscription.isActive = true;
+            subscription.razorpayPaymentId = razorpay_payment_id;
+            subscription.razorpayOrderId = razorpay_order_id;
+            await subscription.save();
+
+            console.log(`[Razorpay] Subscription activated for order: ${orderId}, user: ${userId}`);
+
+            // Send subscription purchased notification
+            const subscriptionName = subscription.lockedSubscriptionName || subscription.subscription?.name || 'Subscription';
+            try {
+                await notifySubscriptionPurchased(
+                    userId.toString(),
+                    subscriptionName,
+                    subscription.endDate
+                );
+                console.log(`[Razorpay] Notification sent for subscription: ${subscriptionName}`);
+            } catch (notifyError) {
+                console.error('[Razorpay] Error sending subscription notification:', notifyError);
+            }
+
+            // Process referral commission
+            if (subscription.amount > 0) {
+                await processReferralCommission(userId, subscription.amount, subscriptionName);
+            }
+        }
+
+        return res.json({
+            success: true,
+            message: 'Payment verified and subscription activated successfully',
+            subscription: subscription
+        });
     } catch (error) {
         console.error('Razorpay verify payment error:', error);
         res.status(500).json({
@@ -195,6 +297,7 @@ router.post('/payment-status', auth, async (req, res) => {
 router.post('/check-order-status', auth, async (req, res) => {
     try {
         const { razorpayOrderId } = req.body;
+        const userId = req.user._id;
 
         if (!razorpayOrderId) {
             return res.status(400).json({
@@ -224,8 +327,9 @@ router.post('/check-order-status', auth, async (req, res) => {
             if (capturedPayment && internalOrderId) {
                 const subscription = await UserSubscription.findOne({
                     transactionId: internalOrderId,
+                    user: userId,
                     paymentStatus: 'pending'
-                });
+                }).populate('subscription');
 
                 if (subscription) {
                     subscription.paymentStatus = 'completed';
@@ -233,7 +337,26 @@ router.post('/check-order-status', auth, async (req, res) => {
                     subscription.razorpayPaymentId = capturedPayment.id;
                     subscription.razorpayOrderId = razorpayOrderId;
                     await subscription.save();
-                    console.log(`Subscription activated via status check for order: ${internalOrderId}`);
+
+                    console.log(`[Razorpay] Subscription activated via status check for order: ${internalOrderId}`);
+
+                    // Send subscription purchased notification
+                    const subscriptionName = subscription.lockedSubscriptionName || subscription.subscription?.name || 'Subscription';
+                    try {
+                        await notifySubscriptionPurchased(
+                            userId.toString(),
+                            subscriptionName,
+                            subscription.endDate
+                        );
+                        console.log(`[Razorpay] Notification sent for subscription: ${subscriptionName}`);
+                    } catch (notifyError) {
+                        console.error('[Razorpay] Error sending subscription notification:', notifyError);
+                    }
+
+                    // Process referral commission
+                    if (subscription.amount > 0) {
+                        await processReferralCommission(userId, subscription.amount, subscriptionName);
+                    }
                 }
             }
 
@@ -256,82 +379,6 @@ router.post('/check-order-status', auth, async (req, res) => {
             success: false,
             message: 'Failed to check order status'
         });
-    }
-});
-
-// POST /api/razorpay/webhook - Webhook for Razorpay payment notifications
-// NO AUTH REQUIRED - Razorpay will call this directly
-router.post('/webhook', async (req, res) => {
-    try {
-        const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
-        // Verify webhook signature if secret is configured
-        if (webhookSecret) {
-            const signature = req.headers['x-razorpay-signature'];
-            const body = JSON.stringify(req.body);
-
-            const expectedSignature = crypto
-                .createHmac('sha256', webhookSecret)
-                .update(body)
-                .digest('hex');
-
-            if (signature !== expectedSignature) {
-                console.error('Razorpay webhook signature verification failed');
-                return res.status(400).json({ success: false, message: 'Invalid signature' });
-            }
-        }
-
-        const { event, payload } = req.body;
-
-        console.log('Razorpay Webhook received:', event);
-
-        if (event === 'payment.captured' || event === 'payment.authorized') {
-            const payment = payload.payment.entity;
-            const orderId = payment.notes?.internal_order_id || payment.order_id;
-
-            console.log(`Payment ${event} for order: ${orderId}`);
-
-            // Find and activate pending subscription
-            const pendingSubscription = await UserSubscription.findOne({
-                transactionId: orderId,
-                paymentStatus: 'pending'
-            });
-
-            if (pendingSubscription) {
-                pendingSubscription.paymentStatus = 'completed';
-                pendingSubscription.isActive = true;
-                pendingSubscription.razorpayPaymentId = payment.id;
-                pendingSubscription.razorpayOrderId = payment.order_id;
-                await pendingSubscription.save();
-
-                console.log(`Subscription activated via webhook for order: ${orderId}`);
-            }
-        } else if (event === 'payment.failed') {
-            const payment = payload.payment.entity;
-            const orderId = payment.notes?.internal_order_id || payment.order_id;
-
-            console.log(`Payment failed for order: ${orderId}`);
-
-            const pendingSubscription = await UserSubscription.findOne({
-                transactionId: orderId,
-                paymentStatus: 'pending'
-            });
-
-            if (pendingSubscription) {
-                pendingSubscription.paymentStatus = 'failed';
-                pendingSubscription.isActive = false;
-                await pendingSubscription.save();
-
-                console.log(`Subscription marked as failed for order: ${orderId}`);
-            }
-        }
-
-        // Always respond with 200 to acknowledge receipt
-        res.json({ success: true, message: 'Webhook received' });
-    } catch (error) {
-        console.error('Razorpay webhook error:', error);
-        // Still return 200 to prevent retries
-        res.json({ success: true, message: 'Webhook processed' });
     }
 });
 
