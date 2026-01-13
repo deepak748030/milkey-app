@@ -5,7 +5,7 @@ import { ArrowLeft, CreditCard, Clock, CheckCircle, XCircle, Crown, Sparkles, Gi
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { userSubscriptionsApi, UserSubscription, Subscription as AvailableSubscription, formatSubscriptionDuration } from '@/lib/milkeyApi';
-import ZapUPIPaymentModal from '@/components/ZapUPIPaymentModal';
+import RazorpayPaymentModal from '@/components/RazorpayPaymentModal';
 import { useSubscriptionStore } from '@/lib/subscriptionStore';
 
 const { height } = Dimensions.get('window');
@@ -174,10 +174,12 @@ export default function SubscriptionsScreen() {
     const [successModal, setSuccessModal] = useState({ visible: false, title: '', message: '' });
     // Track multiplier per subscription (for extending duration)
     const [multipliers, setMultipliers] = useState<Record<string, number>>({});
-    // ZapUPI Payment states
-    const [showZapUPI, setShowZapUPI] = useState(false);
+    // Razorpay Payment states
+    const [showRazorpay, setShowRazorpay] = useState(false);
     const [pendingSubscription, setPendingSubscription] = useState<AvailableSubscription | null>(null);
     const [pendingOrderId, setPendingOrderId] = useState<string>('');
+    // Active subscription warning modal
+    const [showActiveWarning, setShowActiveWarning] = useState(false);
 
     const styles = createStyles(colors, isDark);
 
@@ -249,10 +251,16 @@ export default function SubscriptionsScreen() {
         const subscription = availableSubscriptions.find(s => s._id === subscriptionId);
         if (!subscription) return;
 
+        // Check if user already has an active subscription
+        if (activeSubscriptions.length > 0) {
+            setShowActiveWarning(true);
+            return;
+        }
+
         const multiplier = getMultiplier(subscriptionId);
         const totalPrice = subscription.amount * multiplier;
 
-        // For paid subscriptions, create pending record first, then show ZapUPI
+        // For paid subscriptions, create pending record first, then show Razorpay
         if (!subscription.isFree && totalPrice > 0) {
             const orderId = generateOrderId();
 
@@ -276,7 +284,7 @@ export default function SubscriptionsScreen() {
                 // Pending subscription created, now show payment modal
                 setPendingOrderId(orderId);
                 setPendingSubscription(subscription);
-                setShowZapUPI(true);
+                setShowRazorpay(true);
             } catch (error: any) {
                 console.error('Error creating pending subscription:', error);
                 setErrorModal({
@@ -292,11 +300,11 @@ export default function SubscriptionsScreen() {
         await completePurchase(subscriptionId, multiplier);
     };
 
-    const handleZapUPISuccess = async (transactionData: any) => {
-        setShowZapUPI(false);
+    const handleRazorpaySuccess = async (paymentData: any) => {
+        setShowRazorpay(false);
         if (pendingSubscription) {
-            // Activate the pending subscription instead of creating a new one
-            await activatePendingSubscription(transactionData?.txnId || pendingOrderId);
+            // Activate the pending subscription - payment already verified by server
+            await activatePendingSubscription(paymentData?.paymentId || pendingOrderId);
         }
         setPendingSubscription(null);
         setPendingOrderId('');
@@ -436,10 +444,13 @@ export default function SubscriptionsScreen() {
     };
 
     const renderActiveSubscription = (item: UserSubscription) => {
-        if (!item.subscription) return null;
+        // Use locked-in subscription name as fallback when subscription is not populated
+        const subscriptionName = item.lockedSubscriptionName || item.subscription?.name || 'Subscription';
+        const subscriptionType = item.subscription?.subscriptionType ||
+            (item.isFree ? 'free' : (item.applicableTabs?.length > 1 ? 'combined' : 'single'));
 
         const daysRemaining = getDaysRemaining(item.endDate);
-        const TypeIcon = getTypeIcon(item.subscription.subscriptionType);
+        const TypeIcon = getTypeIcon(subscriptionType);
         const isQueued = new Date(item.startDate) > new Date();
 
         return (
@@ -450,7 +461,7 @@ export default function SubscriptionsScreen() {
                     </View>
                     <View style={styles.cardHeaderInfo}>
                         <Text style={styles.subscriptionName}>
-                            {item.lockedSubscriptionName || item.subscription.name}
+                            {subscriptionName}
                         </Text>
                         <View style={[styles.statusBadge, isQueued && styles.queuedBadge]}>
                             {isQueued ? (
@@ -510,9 +521,12 @@ export default function SubscriptionsScreen() {
     };
 
     const renderExpiredSubscription = (item: UserSubscription) => {
-        if (!item.subscription) return null;
+        // Use locked-in subscription name as fallback when subscription is not populated
+        const subscriptionName = item.lockedSubscriptionName || item.subscription?.name || 'Subscription';
+        const subscriptionType = item.subscription?.subscriptionType ||
+            (item.isFree ? 'free' : (item.applicableTabs?.length > 1 ? 'combined' : 'single'));
 
-        const TypeIcon = getTypeIcon(item.subscription.subscriptionType);
+        const TypeIcon = getTypeIcon(subscriptionType);
 
         return (
             <View key={item._id} style={[styles.subscriptionCard, styles.expiredCard]}>
@@ -521,7 +535,7 @@ export default function SubscriptionsScreen() {
                         <TypeIcon size={24} color={colors.mutedForeground} />
                     </View>
                     <View style={styles.cardHeaderInfo}>
-                        <Text style={[styles.subscriptionName, styles.expiredText]}>{item.subscription.name}</Text>
+                        <Text style={[styles.subscriptionName, styles.expiredText]}>{subscriptionName}</Text>
                         <View style={[styles.statusBadge, styles.expiredBadge]}>
                             <XCircle size={12} color={colors.destructive} />
                             <Text style={[styles.statusText, { color: colors.destructive }]}>Expired</Text>
@@ -538,7 +552,7 @@ export default function SubscriptionsScreen() {
 
                 <View style={styles.tabsContainer}>
                     <Text style={styles.tabsLabel}>Covered: </Text>
-                    <Text style={styles.tabsValue}>{getTabNames(item.subscription.applicableTabs || [])}</Text>
+                    <Text style={styles.tabsValue}>{getTabNames(item.applicableTabs || item.subscription?.applicableTabs || [])}</Text>
                 </View>
             </View>
         );
@@ -780,19 +794,97 @@ export default function SubscriptionsScreen() {
             />
 
             {pendingSubscription && (
-                <ZapUPIPaymentModal
-                    visible={showZapUPI}
+                <RazorpayPaymentModal
+                    visible={showRazorpay}
                     onClose={() => {
-                        setShowZapUPI(false);
+                        setShowRazorpay(false);
                         setPendingSubscription(null);
                         setPendingOrderId('');
                     }}
                     amount={pendingSubscription.amount * getMultiplier(pendingSubscription._id)}
                     orderId={pendingOrderId}
-                    remark={`Subscription: ${pendingSubscription.name}`}
-                    onSuccess={handleZapUPISuccess}
+                    description={`Subscription: ${pendingSubscription.name}`}
+                    onSuccess={handleRazorpaySuccess}
                 />
             )}
+
+            {/* Active Subscription Warning Bottom Sheet */}
+            <Modal
+                visible={showActiveWarning}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowActiveWarning(false)}
+            >
+                <Pressable
+                    style={{
+                        flex: 1,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        justifyContent: 'flex-end',
+                    }}
+                    onPress={() => setShowActiveWarning(false)}
+                >
+                    <Pressable
+                        style={{
+                            backgroundColor: colors.card,
+                            borderTopLeftRadius: 24,
+                            borderTopRightRadius: 24,
+                            padding: 24,
+                            paddingBottom: 40,
+                        }}
+                        onPress={(e) => e.stopPropagation()}
+                    >
+                        <View style={{
+                            width: 40,
+                            height: 4,
+                            backgroundColor: colors.border,
+                            borderRadius: 2,
+                            alignSelf: 'center',
+                            marginBottom: 20,
+                        }} />
+                        <View style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: 32,
+                            backgroundColor: `${colors.warning || colors.primary}15`,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            alignSelf: 'center',
+                            marginBottom: 16,
+                        }}>
+                            <Crown size={32} color={colors.warning || colors.primary} />
+                        </View>
+                        <Text style={{
+                            fontSize: 20,
+                            fontWeight: '700',
+                            color: colors.foreground,
+                            textAlign: 'center',
+                            marginBottom: 8,
+                        }}>Already Subscribed</Text>
+                        <Text style={{
+                            fontSize: 14,
+                            color: colors.mutedForeground,
+                            textAlign: 'center',
+                            lineHeight: 22,
+                            marginBottom: 24,
+                        }}>You already have an active subscription. Please wait for it to expire before purchasing a new one.</Text>
+                        <Pressable
+                            style={{
+                                backgroundColor: colors.primary,
+                                paddingVertical: 14,
+                                borderRadius: 12,
+                                alignItems: 'center',
+                            }}
+                            onPress={() => setShowActiveWarning(false)}
+                        >
+                            <Text style={{
+                                fontSize: 16,
+                                fontWeight: '600',
+                                color: '#FFFFFF',
+                            }}>Got it</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 }

@@ -1486,7 +1486,7 @@ export const withdrawalsApi = {
     },
 };
 
-// ZapUPI Payment API
+// ZapUPI Payment API (Legacy - kept for backward compatibility)
 export const zapupiApi = {
     createOrder: async (data: {
         amount: number;
@@ -1520,6 +1520,74 @@ export const zapupiApi = {
         }>('/zapupi/order-status', {
             method: 'POST',
             body: JSON.stringify({ orderId }),
+        });
+    },
+};
+
+// Razorpay Payment API
+export const razorpayApi = {
+    createOrder: async (data: {
+        amount: number;
+        orderId: string;
+        description?: string;
+        customerName?: string;
+        customerEmail?: string;
+        customerPhone?: string;
+    }) => {
+        return apiRequest<{
+            razorpayOrderId: string;
+            amount: number;
+            currency: string;
+            receipt: string;
+            keyId: string;
+            orderId: string;
+        }>('/razorpay/create-order', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    verifyPayment: async (data: {
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        razorpay_signature: string;
+        orderId: string;
+    }) => {
+        return apiRequest<{
+            success: boolean;
+            message: string;
+            subscription?: any;
+        }>('/razorpay/verify-payment', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    getPaymentStatus: async (paymentId: string) => {
+        return apiRequest<{
+            paymentId: string;
+            orderId: string;
+            amount: number;
+            currency: string;
+            status: string;
+            method: string;
+            email: string;
+            contact: string;
+            createdAt: number;
+        }>('/razorpay/payment-status', {
+            method: 'POST',
+            body: JSON.stringify({ paymentId }),
+        });
+    },
+
+    checkPaymentStatus: async (razorpayOrderId: string) => {
+        return apiRequest<{
+            status: string;
+            paymentId?: string;
+            orderId: string;
+        }>('/razorpay/check-order-status', {
+            method: 'POST',
+            body: JSON.stringify({ razorpayOrderId }),
         });
     },
 };

@@ -4,7 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Crown, Check, Star, Zap, X, AlertCircle, CheckCircle, Wallet } from 'lucide-react-native';
 import { Subscription, userSubscriptionsApi, formatSubscriptionDuration } from '@/lib/milkeyApi';
 import { useSubscriptionStore } from '@/lib/subscriptionStore';
-import ZapUPIPaymentModal from './ZapUPIPaymentModal';
+import RazorpayPaymentModal from './RazorpayPaymentModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -32,7 +32,7 @@ export function SubscriptionModal({
     const [isNewUser, setIsNewUser] = useState(false);
     const [purchasing, setPurchasing] = useState<string | null>(null);
     const [multipliers, setMultipliers] = useState<Record<string, number>>({});
-    const [showZapUPI, setShowZapUPI] = useState(false);
+    const [showRazorpay, setShowRazorpay] = useState(false);
     const [pendingSubscription, setPendingSubscription] = useState<Subscription | null>(null);
     const [pendingOrderId, setPendingOrderId] = useState<string>('');
 
@@ -104,7 +104,7 @@ export function SubscriptionModal({
         const multiplier = getMultiplier(subscription._id);
         const totalPrice = subscription.amount * multiplier;
 
-        // For paid subscriptions, create pending record first, then show ZapUPI
+        // For paid subscriptions, create pending record first, then show Razorpay
         if (!subscription.isFree && totalPrice > 0) {
             const orderId = generateOrderId();
 
@@ -124,7 +124,7 @@ export function SubscriptionModal({
                 // Pending subscription created, now show payment modal
                 setPendingOrderId(orderId);
                 setPendingSubscription(subscription);
-                setShowZapUPI(true);
+                setShowRazorpay(true);
             } catch (error: any) {
                 console.error('Error creating pending subscription:', error);
                 Alert.alert('Error', 'Failed to initialize payment. Please try again.');
@@ -136,11 +136,11 @@ export function SubscriptionModal({
         await completePurchase(subscription, multiplier);
     };
 
-    const handleZapUPISuccess = async (transactionData: any) => {
-        setShowZapUPI(false);
+    const handleRazorpaySuccess = async (paymentData: any) => {
+        setShowRazorpay(false);
         if (pendingSubscription) {
-            // Activate the pending subscription instead of creating a new one
-            await activatePendingSubscription(transactionData?.txnId || pendingOrderId);
+            // Activate the pending subscription - payment already verified by server
+            await activatePendingSubscription(paymentData?.paymentId || pendingOrderId);
         }
         setPendingSubscription(null);
         setPendingOrderId('');
@@ -462,7 +462,7 @@ export function SubscriptionModal({
     return (
         <>
             <Modal
-                visible={visible && !showZapUPI}
+                visible={visible && !showRazorpay}
                 transparent={!fullScreen}
                 animationType="slide"
                 onRequestClose={onClose}
@@ -492,17 +492,17 @@ export function SubscriptionModal({
             </Modal>
 
             {pendingSubscription && (
-                <ZapUPIPaymentModal
-                    visible={showZapUPI}
+                <RazorpayPaymentModal
+                    visible={showRazorpay}
                     onClose={() => {
-                        setShowZapUPI(false);
+                        setShowRazorpay(false);
                         setPendingSubscription(null);
                         setPendingOrderId('');
                     }}
                     amount={pendingSubscription.amount * getMultiplier(pendingSubscription._id)}
                     orderId={pendingOrderId}
-                    remark={`Subscription: ${pendingSubscription.name}`}
-                    onSuccess={handleZapUPISuccess}
+                    description={`Subscription: ${pendingSubscription.name}`}
+                    onSuccess={handleRazorpaySuccess}
                 />
             )}
         </>
