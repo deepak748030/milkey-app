@@ -147,7 +147,7 @@ router.post('/verify-payment', auth, async (req, res) => {
     }
 });
 
-// POST /api/razorpay/payment-status - Check payment status
+// POST /api/razorpay/payment-status - Check payment status by payment ID
 router.post('/payment-status', auth, async (req, res) => {
     try {
         const { paymentId } = req.body;
@@ -187,6 +187,74 @@ router.post('/payment-status', auth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to check payment status'
+        });
+    }
+});
+
+// POST /api/razorpay/check-order-status - Check order payment status by Razorpay order ID
+router.post('/check-order-status', auth, async (req, res) => {
+    try {
+        const { razorpayOrderId } = req.body;
+
+        if (!razorpayOrderId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Razorpay order ID is required'
+            });
+        }
+
+        // Fetch order details from Razorpay
+        const orderData = await razorpayRequest(`/orders/${razorpayOrderId}`);
+
+        if (orderData.error) {
+            return res.status(404).json({
+                success: false,
+                message: orderData.error.description || 'Order not found'
+            });
+        }
+
+        // Check if order is paid
+        if (orderData.status === 'paid') {
+            // Fetch payments for this order to get payment ID
+            const paymentsData = await razorpayRequest(`/orders/${razorpayOrderId}/payments`);
+            const capturedPayment = paymentsData.items?.find(p => p.status === 'captured');
+
+            // Update subscription if payment was successful
+            const internalOrderId = orderData.receipt;
+            if (capturedPayment && internalOrderId) {
+                const subscription = await UserSubscription.findOne({
+                    transactionId: internalOrderId,
+                    paymentStatus: 'pending'
+                });
+
+                if (subscription) {
+                    subscription.paymentStatus = 'completed';
+                    subscription.isActive = true;
+                    subscription.razorpayPaymentId = capturedPayment.id;
+                    subscription.razorpayOrderId = razorpayOrderId;
+                    await subscription.save();
+                    console.log(`Subscription activated via status check for order: ${internalOrderId}`);
+                }
+            }
+
+            return res.json({
+                success: true,
+                status: 'paid',
+                paymentId: capturedPayment?.id,
+                orderId: razorpayOrderId,
+            });
+        }
+
+        res.json({
+            success: true,
+            status: orderData.status, // 'created', 'attempted', 'paid'
+            orderId: razorpayOrderId,
+        });
+    } catch (error) {
+        console.error('Razorpay check order status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to check order status'
         });
     }
 });
