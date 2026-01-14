@@ -86,6 +86,8 @@ export default function PurchaseScreen() {
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void }>({ title: '', message: '', onConfirm: () => { } });
 
+    const [deletingCollectionId, setDeletingCollectionId] = useState<string | null>(null);
+
     const styles = createStyles(colors, isDark);
 
     const showAlert = (title: string, message: string) => { setAlertTitle(title); setAlertMessage(message); setAlertVisible(true); };
@@ -244,6 +246,34 @@ export default function PurchaseScreen() {
 
     const handleDeleteRange = (rangeId: string) => { setCustomRanges(customRanges.filter(r => r.id !== rangeId)); setSelectedRanges(selectedRanges.filter(r => r !== rangeId)); };
 
+    const handleDeleteCollection = (collectionId: string) => {
+        showConfirm('Delete Entry', 'Are you sure you want to delete this entry?', async () => {
+            setConfirmVisible(false);
+            setDeletingCollectionId(collectionId);
+            try {
+                const res = await milkCollectionsApi.delete(collectionId);
+                if (res.success) {
+                    showAlert('Success', 'Entry deleted successfully');
+                    // Remove from local state
+                    setHistoryCollections(prev => prev.filter(c => c._id !== collectionId));
+                    // Update totals
+                    const deleted = historyCollections.find(c => c._id === collectionId);
+                    if (deleted) {
+                        setHistoryTotals(prev => ({
+                            quantity: prev.quantity - deleted.quantity,
+                            amount: prev.amount - deleted.amount
+                        }));
+                    }
+                } else {
+                    showAlert('Error', res.message || 'Failed to delete entry');
+                }
+            } catch (error) {
+                showAlert('Error', 'Failed to delete entry');
+            }
+            setDeletingCollectionId(null);
+        });
+    };
+
     const handleFetchHistory = async () => {
         setLoading(true);
         try {
@@ -372,46 +402,63 @@ export default function PurchaseScreen() {
                     {loading && <View style={styles.loadingRow}><ActivityIndicator size="small" color="#22c55e" /><Text style={styles.loadingText}>Loading...</Text></View>}
                     {/* Always show table with headers */}
                     <View style={styles.tableContainer}>
-                        <View style={styles.tableHeader}>
-                            <Text style={[styles.tableHeaderCell, styles.tableCellCode]}>Code</Text>
-                            <Text style={[styles.tableHeaderCell, styles.tableCellDate]}>Date</Text>
-                            <Text style={[styles.tableHeaderCell, styles.tableCellSession]}>Sess</Text>
-                            <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>FAT</Text>
-                            <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>SNF</Text>
-                            <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>Qty</Text>
-                            <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>Rate</Text>
-                            <Text style={[styles.tableHeaderCell, styles.tableCellAmount]}>Amt</Text>
-                        </View>
-                        {historyCollections.length > 0 ? (
-                            <>
-                                {historyCollections.map((item, index) => (
-                                    <View key={item._id} style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
-                                        <Text style={[styles.tableCell, styles.tableCellCode, { color: colors.primary, fontWeight: '600' }]}>{item.farmerCode || '-'}</Text>
-                                        <Text style={[styles.tableCell, styles.tableCellDate]}>{`${String(new Date(item.date).getDate()).padStart(2, '0')}/${String(new Date(item.date).getMonth() + 1).padStart(2, '0')}/${new Date(item.date).getFullYear()}`}</Text>
-                                        <Text style={[styles.tableCell, styles.tableCellSession, { color: item.shift === 'morning' ? '#f59e0b' : '#3b82f6' }]}>{item.shift}</Text>
-                                        <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.fat || '-'}</Text>
-                                        <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.snf || '-'}</Text>
-                                        <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.quantity}</Text>
-                                        <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.rate}</Text>
-                                        <Text style={[styles.tableCell, styles.tableCellAmount, { color: colors.success }]}>₹{item.amount.toFixed(2)}</Text>
-                                    </View>
-                                ))}
-                                <View style={[styles.tableRow, styles.totalRowTable]}>
-                                    <Text style={[styles.tableCell, styles.tableCellCode, { fontWeight: '700' }]}>Total</Text>
-                                    <Text style={[styles.tableCell, styles.tableCellDate]}></Text>
-                                    <Text style={[styles.tableCell, styles.tableCellSession]}></Text>
-                                    <Text style={[styles.tableCell, styles.tableCellSmall]}></Text>
-                                    <Text style={[styles.tableCell, styles.tableCellSmall]}></Text>
-                                    <Text style={[styles.tableCell, styles.tableCellSmall, { fontWeight: '700' }]}>{historyTotals.quantity.toFixed(1)}</Text>
-                                    <Text style={[styles.tableCell, styles.tableCellSmall]}></Text>
-                                    <Text style={[styles.tableCell, styles.tableCellAmount, { color: colors.success, fontWeight: '700' }]}>₹{historyTotals.amount.toFixed(2)}</Text>
-                                </View>
-                            </>
-                        ) : (
-                            <View style={styles.noDataRow}>
-                                <Text style={styles.noDataText}>{loading ? 'Loading...' : 'No data available'}</Text>
+                        <View style={styles.tableContainer}>
+                            <View style={styles.tableHeader}>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellCode]}>Code</Text>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellDate]}>Date</Text>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellSession]}>Sess</Text>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>FAT</Text>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>SNF</Text>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>Qty</Text>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellSmall]}>Rate</Text>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellAmount]}>Amt</Text>
+                                <Text style={[styles.tableHeaderCell, styles.tableCellAction]}></Text>
                             </View>
-                        )}
+                            {historyCollections.length > 0 ? (
+                                <>
+                                    {historyCollections.map((item, index) => (
+                                        <View key={item._id} style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
+                                            <Text style={[styles.tableCell, styles.tableCellCode, { color: colors.primary, fontWeight: '600' }]}>{item.farmerCode || '-'}</Text>
+                                            <Text style={[styles.tableCell, styles.tableCellDate]}>{`${String(new Date(item.date).getDate()).padStart(2, '0')}/${String(new Date(item.date).getMonth() + 1).padStart(2, '0')}/${new Date(item.date).getFullYear()}`}</Text>
+                                            <Text style={[styles.tableCell, styles.tableCellSession, { color: item.shift === 'morning' ? '#f59e0b' : '#3b82f6' }]}>{item.shift}</Text>
+                                            <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.fat || '-'}</Text>
+                                            <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.snf || '-'}</Text>
+                                            <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.quantity}</Text>
+                                            <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.rate}</Text>
+                                            <Text style={[styles.tableCell, styles.tableCellAmount, { color: colors.success }]}>₹{item.amount.toFixed(2)}</Text>
+                                            <View style={[styles.tableCellAction]}>
+                                                <Pressable
+                                                    style={styles.deleteRowBtn}
+                                                    onPress={() => handleDeleteCollection(item._id)}
+                                                    disabled={deletingCollectionId === item._id}
+                                                >
+                                                    {deletingCollectionId === item._id ? (
+                                                        <ActivityIndicator size="small" color="#ef4444" />
+                                                    ) : (
+                                                        <Trash2 size={14} color="#ef4444" />
+                                                    )}
+                                                </Pressable>
+                                            </View>
+                                        </View>
+                                    ))}
+                                    <View style={[styles.tableRow, styles.totalRowTable]}>
+                                        <Text style={[styles.tableCell, styles.tableCellCode, { fontWeight: '700' }]}>Total</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellDate]}></Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSession]}></Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSmall]}></Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSmall]}></Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSmall, { fontWeight: '700' }]}>{historyTotals.quantity.toFixed(1)}</Text>
+                                        <Text style={[styles.tableCell, styles.tableCellSmall]}></Text>
+                                        <Text style={[styles.tableCell, styles.tableCellAmount, { color: colors.success, fontWeight: '700' }]}>₹{historyTotals.amount.toFixed(2)}</Text>
+                                        <View style={[styles.tableCellAction]}></View>
+                                    </View>
+                                </>
+                            ) : (
+                                <View style={styles.noDataRow}>
+                                    <Text style={styles.noDataText}>{loading ? 'Loading...' : 'No data available'}</Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
                 </View>
             </ScrollView>
@@ -699,7 +746,7 @@ export default function PurchaseScreen() {
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     scrollView: { flex: 1 },
-    scrollContent: { paddingHorizontal: 6, paddingVertical: 12, gap: 12 },
+    scrollContent: { paddingHorizontal: 0, paddingVertical: 12, gap: 12 },
     card: { backgroundColor: colors.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border },
     cardTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground },
     row: { flexDirection: 'row', gap: 8, marginBottom: 8 },
@@ -759,6 +806,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     tableCellSession: { flex: 1 },
     tableCellSmall: { flex: 0.8 },
     tableCellAmount: { flex: 1.2, fontWeight: '600' },
+    tableCellAction: { flex: 0.5, alignItems: 'center', justifyContent: 'center' },
+    deleteRowBtn: { padding: 6, backgroundColor: '#fee2e2', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
     noDataRow: { paddingVertical: 24, alignItems: 'center', backgroundColor: colors.card },
     noDataText: { fontSize: 13, color: colors.mutedForeground },
     emptyText: { fontSize: 13, color: colors.mutedForeground, textAlign: 'center', marginTop: 16 },
