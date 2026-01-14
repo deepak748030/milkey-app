@@ -256,6 +256,7 @@ export function PaymentRangeCalendar({
                             (isStart || isEnd) && [styles.dayButtonSelected, { backgroundColor: colors.primary }],
                             isTodayDate && !isStart && !isEnd && [styles.dayButtonToday, { borderColor: colors.primary }],
                             pressed && !isDisabled && styles.dayButtonPressed,
+                            blocked && styles.dayButtonBlocked,
                         ]}
                         onPress={() => handleDatePress(day)}
                         disabled={isDisabled}
@@ -273,6 +274,12 @@ export function PaymentRangeCalendar({
                         >
                             {day}
                         </Text>
+                        {/* X mark for blocked dates */}
+                        {blocked && (
+                            <View style={styles.blockedXContainer}>
+                                <X size={16} color="#EF4444" strokeWidth={3} />
+                            </View>
+                        )}
                     </Pressable>
                 </View>
             );
@@ -546,7 +553,20 @@ const styles = StyleSheet.create({
         fontWeight: '700',
     },
     dayTextBlocked: {
-        textDecorationLine: 'line-through',
+        opacity: 0.6,
+    },
+    dayButtonBlocked: {
+        opacity: 0.8,
+    },
+    blockedXContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2,
     },
     rangeDisplay: {
         flexDirection: 'row',
