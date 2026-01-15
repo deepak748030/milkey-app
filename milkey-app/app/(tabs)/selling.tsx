@@ -4,6 +4,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
+import { SellingPaymentCalendar } from '@/components/SellingPaymentCalendar';
 import { membersApi, sellingEntriesApi, memberPaymentsApi, Member, SellingEntry, MemberPayment, MemberPaymentSummary, MemberBalanceReport, BalanceReportSummary } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
 import { exportPayments } from '@/lib/csvExport';
@@ -2092,8 +2093,9 @@ export default function SellingScreen() {
                             </Pressable>
                         </View>
                         <View style={styles.calendarBody}>
-                            <Calendar
+                            <SellingPaymentCalendar
                                 selectedDate={tempCalendarDate}
+                                blockedBeforeDate={calcStartDate}
                                 onDateSelect={async (date) => {
                                     if (date) {
                                         const y = date.getFullYear();
