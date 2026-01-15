@@ -5,10 +5,11 @@
     "build": {
         "production": {
             "releaseChannel": "production",
-            "distribution": "store",
+            "distribution": "internal",
             "credentialsSource": "remote",
             "android": {
-                "gradleCommand": ":app:bundleRelease"
+                "buildType": "apk",
+                "gradleCommand": ":app:assembleRelease"
             }
         }
     }
