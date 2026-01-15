@@ -426,7 +426,7 @@ export default function PurchaseScreen() {
                                             <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.quantity}</Text>
                                             <Text style={[styles.tableCell, styles.tableCellSmall]}>{item.rate}</Text>
                                             <Text style={[styles.tableCell, styles.tableCellAmount, { color: colors.success }]}>₹{item.amount.toFixed(2)}</Text>
-                                            <View style={[styles.tableCellAction]}>
+                                            <View style={styles.tableCellAction}>
                                                 <Pressable
                                                     style={styles.deleteRowBtn}
                                                     onPress={() => handleDeleteCollection(item._id)}
@@ -794,10 +794,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     makeRangeText: { fontSize: 13, color: '#22c55e', fontWeight: '500' },
     showBtn: { backgroundColor: '#22c55e', borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginBottom: 12 },
     showBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-    tableContainer: { borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
-    tableHeader: { flexDirection: 'row', backgroundColor: isDark ? colors.muted : '#f3f4f6', paddingVertical: 10, paddingHorizontal: 6 },
+    tableContainer: { borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, marginHorizontal: 0 },
+    tableHeader: { flexDirection: 'row', backgroundColor: isDark ? colors.muted : '#f3f4f6', paddingVertical: 10, paddingHorizontal: 2, alignItems: 'center' },
     tableHeaderCell: { fontSize: 11, fontWeight: '700', color: isDark ? colors.foreground : '#374151', textAlign: 'center' },
-    tableRow: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 6, backgroundColor: colors.card },
+    tableRow: { flexDirection: 'row', paddingVertical: 8, paddingHorizontal: 2, backgroundColor: colors.card, alignItems: 'center' },
     tableRowEven: { backgroundColor: isDark ? colors.muted : '#f9fafb' },
     totalRowTable: { backgroundColor: isDark ? 'rgba(34, 197, 94, 0.15)' : '#f0fdf4', borderTopWidth: 1, borderTopColor: '#22c55e' },
     tableCell: { fontSize: 12, color: colors.foreground, textAlign: 'center' },
@@ -806,8 +806,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     tableCellSession: { flex: 1 },
     tableCellSmall: { flex: 0.8 },
     tableCellAmount: { flex: 1.2, fontWeight: '600' },
-    tableCellAction: { flex: 0.5, alignItems: 'center', justifyContent: 'center' },
-    deleteRowBtn: { padding: 6, backgroundColor: '#fee2e2', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+    tableCellAction: { width: 32, alignItems: 'center', justifyContent: 'center' },
+    deleteRowBtn: { width: 28, height: 28, backgroundColor: '#fee2e2', borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
     noDataRow: { paddingVertical: 24, alignItems: 'center', backgroundColor: colors.card },
     noDataText: { fontSize: 13, color: colors.mutedForeground },
     emptyText: { fontSize: 13, color: colors.mutedForeground, textAlign: 'center', marginTop: 16 },
@@ -830,7 +830,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     modalTabText: { fontSize: 14, fontWeight: '600', color: colors.mutedForeground },
     modalTabTextActive: { color: '#fff' },
     modalScrollBody: { maxHeight: 400 },
-    farmerListSection: { padding: 12 },
+    farmerListSection: { padding: 6 },
     emptyFarmersText: { fontSize: 13, color: colors.mutedForeground, textAlign: 'center', paddingVertical: 30 },
     farmerItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.background, borderRadius: 10, padding: 12, marginBottom: 8 },
     farmerItemInfo: { flex: 1 },
