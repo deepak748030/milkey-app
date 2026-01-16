@@ -15,13 +15,13 @@ import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, Check, AlertCircle, Clock, RefreshCw, ShieldAlert } from 'lucide-react-native';
-import { razorpayApi, userSubscriptionsApi } from '@/lib/milkeyApi';
+import { X, Check, AlertCircle, Clock, RefreshCw } from 'lucide-react-native';
+import { razorpayApi } from '@/lib/milkeyApi';
 
 const { height } = Dimensions.get('window');
 const PAYMENT_TIMEOUT = 10 * 60; // 10 minutes in seconds
 
-interface RazorpayPaymentModalProps {
+interface RazorpayOrderPaymentModalProps {
     visible: boolean;
     onClose: () => void;
     amount: number;
@@ -32,79 +32,34 @@ interface RazorpayPaymentModalProps {
     customerPhone?: string;
     onSuccess: (paymentData: any) => void;
     onFailure?: (error: string) => void;
-    skipSubscriptionCheck?: boolean; // Skip subscription check for product orders
 }
 
-export default function RazorpayPaymentModal({
+export default function RazorpayOrderPaymentModal({
     visible,
     onClose,
     amount,
     orderId,
-    description = 'Subscription Payment',
+    description = 'Product Order',
     customerName = '',
     customerEmail = '',
     customerPhone = '',
     onSuccess,
     onFailure,
-    skipSubscriptionCheck = false,
-}: RazorpayPaymentModalProps) {
+}: RazorpayOrderPaymentModalProps) {
     const { colors, isDark } = useTheme();
     const insets = useSafeAreaInsets();
     const [isCreating, setIsCreating] = useState(false);
     const [orderData, setOrderData] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
-    const [showSuccess, setShowSuccess] = useState(false);
-    const [paymentResult, setPaymentResult] = useState<any>(null);
     const [timeRemaining, setTimeRemaining] = useState(PAYMENT_TIMEOUT);
     const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const webViewRef = useRef<WebView>(null);
     const [webviewError, setWebviewError] = useState<string | null>(null);
-    const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
-    const [checkingSubscription, setCheckingSubscription] = useState(true);
 
     const styles = createStyles(colors, isDark, insets);
 
-    // Check for active subscription when modal opens (only for subscription purchases)
     useEffect(() => {
-        if (visible) {
-            if (skipSubscriptionCheck) {
-                // Skip subscription check for product orders
-                setCheckingSubscription(false);
-                setHasActiveSubscription(false);
-            } else {
-                checkActiveSubscription();
-            }
-        } else {
-            setHasActiveSubscription(false);
-            setCheckingSubscription(true);
-        }
-    }, [visible, skipSubscriptionCheck]);
-
-    const checkActiveSubscription = async () => {
-        setCheckingSubscription(true);
-        try {
-            const response = await userSubscriptionsApi.getStatus();
-            if (response.success && response.response) {
-                const { hasPurchase, hasSelling, hasRegister } = response.response;
-                // If user has ANY active subscription, block new purchase
-                if (hasPurchase || hasSelling || hasRegister) {
-                    setHasActiveSubscription(true);
-                } else {
-                    setHasActiveSubscription(false);
-                }
-            } else {
-                setHasActiveSubscription(false);
-            }
-        } catch (err) {
-            setHasActiveSubscription(false);
-        } finally {
-            setCheckingSubscription(false);
-        }
-    };
-
-    useEffect(() => {
-        // Only create order if no active subscription (or skipped) and amount/orderId are valid
-        if (visible && amount > 0 && orderId && !hasActiveSubscription && !checkingSubscription) {
+        if (visible && amount > 0 && orderId) {
             setTimeRemaining(PAYMENT_TIMEOUT);
             createRazorpayOrder();
             startCountdownTimer();
@@ -113,7 +68,7 @@ export default function RazorpayPaymentModal({
         return () => {
             clearTimer();
         };
-    }, [visible, amount, orderId, hasActiveSubscription, checkingSubscription]);
+    }, [visible, amount, orderId]);
 
     const clearTimer = () => {
         if (timerIntervalRef.current) {
@@ -155,7 +110,8 @@ export default function RazorpayPaymentModal({
         setOrderData(null);
 
         try {
-            const response = await razorpayApi.createOrder({
+            // Use the order-specific API endpoint
+            const response = await razorpayApi.createOrderPayment({
                 amount,
                 orderId,
                 description,
@@ -183,8 +139,8 @@ export default function RazorpayPaymentModal({
             if (data.event === 'payment.success') {
                 clearTimer();
 
-                // Verify payment on server
-                const verifyResponse = await razorpayApi.verifyPayment({
+                // Verify payment on server using order-specific endpoint
+                const verifyResponse = await razorpayApi.verifyOrderPayment({
                     razorpay_order_id: data.razorpay_order_id,
                     razorpay_payment_id: data.razorpay_payment_id,
                     razorpay_signature: data.razorpay_signature,
@@ -200,8 +156,6 @@ export default function RazorpayPaymentModal({
                     // Auto-close and call success callback immediately
                     setOrderData(null);
                     setError(null);
-                    setShowSuccess(false);
-                    setPaymentResult(null);
                     setTimeRemaining(PAYMENT_TIMEOUT);
                     onSuccess(result);
                 } else {
@@ -270,18 +224,10 @@ export default function RazorpayPaymentModal({
         createRazorpayOrder();
     };
 
-    const handleSuccessClose = () => {
-        setShowSuccess(false);
-        clearTimer();
-        onSuccess(paymentResult);
-    };
-
     const handleClose = () => {
         clearTimer();
         setOrderData(null);
         setError(null);
-        setShowSuccess(false);
-        setPaymentResult(null);
         setTimeRemaining(PAYMENT_TIMEOUT);
         onClose();
     };
@@ -484,7 +430,7 @@ export default function RazorpayPaymentModal({
                     <View style={styles.header}>
                         <Text style={styles.title}>UPI Payment</Text>
                         <View style={styles.headerRight}>
-                            {orderData && !showSuccess && (
+                            {orderData && (
                                 <View style={[styles.timerBadge, { backgroundColor: getTimerColor() + '20' }]}>
                                     <Clock size={14} color={getTimerColor()} />
                                     <Text style={[styles.timerText, { color: getTimerColor() }]}>
@@ -498,23 +444,7 @@ export default function RazorpayPaymentModal({
                         </View>
                     </View>
 
-                    {checkingSubscription ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color={colors.primary} />
-                            <Text style={styles.loadingText}>Checking subscription status...</Text>
-                        </View>
-                    ) : hasActiveSubscription ? (
-                        <View style={styles.errorContainer}>
-                            <ShieldAlert size={64} color={colors.primary} />
-                            <Text style={styles.errorTitle}>Already Subscribed</Text>
-                            <Text style={styles.errorText}>
-                                You already have an active subscription. You cannot purchase another subscription until your current one expires.
-                            </Text>
-                            <Pressable style={styles.retryBtn} onPress={handleClose}>
-                                <Text style={styles.retryBtnText}>Close</Text>
-                            </Pressable>
-                        </View>
-                    ) : isCreating ? (
+                    {isCreating ? (
                         <View style={styles.loadingContainer}>
                             <ActivityIndicator size="large" color={colors.primary} />
                             <Text style={styles.loadingText}>Creating payment order...</Text>
@@ -525,16 +455,17 @@ export default function RazorpayPaymentModal({
                             <Text style={styles.errorTitle}>Payment Error</Text>
                             <Text style={styles.errorText}>{error}</Text>
                             <Pressable style={styles.retryBtn} onPress={createRazorpayOrder}>
+                                <RefreshCw size={18} color={colors.white} />
                                 <Text style={styles.retryBtnText}>Retry</Text>
                             </Pressable>
                         </View>
                     ) : webviewError ? (
                         <View style={styles.errorContainer}>
                             <AlertCircle size={48} color="#EF4444" />
-                            <Text style={styles.errorTitle}>Connection Error</Text>
+                            <Text style={styles.errorTitle}>Loading Error</Text>
                             <Text style={styles.errorText}>{webviewError}</Text>
                             <Pressable style={styles.retryBtn} onPress={retryWebView}>
-                                <RefreshCw size={16} color={colors.white} style={{ marginRight: 6 }} />
+                                <RefreshCw size={18} color={colors.white} />
                                 <Text style={styles.retryBtnText}>Retry</Text>
                             </Pressable>
                         </View>
@@ -543,32 +474,18 @@ export default function RazorpayPaymentModal({
                             <WebView
                                 ref={webViewRef}
                                 source={{ html: getCheckoutHTML() }}
-                                onMessage={handleWebViewMessage}
                                 style={styles.webview}
+                                onMessage={handleWebViewMessage}
+                                onShouldStartLoadWithRequest={handleIntentUrl}
+                                onError={handleWebViewError}
+                                onHttpError={handleWebViewHttpError}
                                 javaScriptEnabled={true}
                                 domStorageEnabled={true}
                                 startInLoadingState={true}
-
-                                // Production fixes for Android/iOS
-                                thirdPartyCookiesEnabled={true}
-                                sharedCookiesEnabled={true}
                                 mixedContentMode="always"
                                 allowsInlineMediaPlayback={true}
                                 originWhitelist={['*']}
-                                allowUniversalAccessFromFileURLs={true}
-                                allowFileAccessFromFileURLs={true}
-
-                                // Handle UPI deep links
-                                onShouldStartLoadWithRequest={handleIntentUrl}
-
-                                // Error handling
-                                onError={handleWebViewError}
-                                onHttpError={handleWebViewHttpError}
-
-                                // Additional settings
-                                cacheEnabled={true}
-                                incognito={false}
-
+                                setSupportMultipleWindows={false}
                                 renderLoading={() => (
                                     <View style={styles.webviewLoading}>
                                         <ActivityIndicator size="large" color={colors.primary} />
@@ -675,76 +592,41 @@ const createStyles = (colors: any, isDark: boolean, insets: any) =>
             color: colors.mutedForeground,
             textAlign: 'center',
             marginTop: 8,
-            paddingHorizontal: 20,
+            marginHorizontal: 20,
         },
         retryBtn: {
-            marginTop: 20,
-            paddingHorizontal: 24,
-            paddingVertical: 12,
-            backgroundColor: colors.primary,
-            borderRadius: 8,
             flexDirection: 'row',
             alignItems: 'center',
+            gap: 8,
+            backgroundColor: colors.primary,
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            borderRadius: 8,
+            marginTop: 20,
         },
         retryBtnText: {
             color: colors.white,
+            fontSize: 14,
             fontWeight: '600',
         },
         webviewContainer: {
             flex: 1,
-            minHeight: height * 0.5,
+            borderRadius: 12,
+            overflow: 'hidden',
+            backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
         },
         webview: {
             flex: 1,
             backgroundColor: 'transparent',
         },
         webviewLoading: {
-            ...StyleSheet.absoluteFillObject,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.card,
-        },
-        successContainer: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingVertical: 40,
-        },
-        successIcon: {
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            backgroundColor: '#22C55E',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 20,
-        },
-        successTitle: {
-            fontSize: 22,
-            fontWeight: '700',
-            color: colors.foreground,
-            marginBottom: 8,
-        },
-        successSubtitle: {
-            fontSize: 14,
-            color: colors.mutedForeground,
-            marginBottom: 12,
-        },
-        successAmount: {
-            fontSize: 28,
-            fontWeight: '700',
-            color: '#22C55E',
-            marginBottom: 24,
-        },
-        doneBtn: {
-            paddingHorizontal: 40,
-            paddingVertical: 14,
-            backgroundColor: colors.primary,
-            borderRadius: 10,
-        },
-        doneBtnText: {
-            color: colors.white,
-            fontSize: 16,
-            fontWeight: '600',
+            backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
         },
     });

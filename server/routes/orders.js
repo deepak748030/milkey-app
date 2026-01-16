@@ -73,7 +73,7 @@ router.get('/:id', auth, async (req, res) => {
 // POST /api/orders - Create new order
 router.post('/', auth, async (req, res) => {
     try {
-        const { items, deliveryAddress, notes, paymentMethod } = req.body;
+        const { items, deliveryAddress, notes, paymentMethod, transactionId } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
@@ -106,13 +106,18 @@ router.post('/', auth, async (req, res) => {
             };
         });
 
+        // Set payment status based on payment method
+        const paymentStatus = paymentMethod === 'upi' ? 'paid' : 'pending';
+
         const order = await Order.create({
             user: req.userId,
             items: orderItems,
             totalAmount,
             deliveryAddress: finalDeliveryAddress,
             notes: notes?.trim() || '',
-            paymentMethod: paymentMethod || 'cash'
+            paymentMethod: paymentMethod || 'cash',
+            paymentStatus,
+            transactionId: transactionId || null
         });
 
         res.status(201).json({

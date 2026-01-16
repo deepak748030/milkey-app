@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, CreditCard, Banknote, Wallet, Check } from 'lucide-react-native';
 import { ordersApi } from '@/lib/milkeyApi';
 import { useCartStore } from '@/lib/cartStore';
-import ZapUPIPaymentModal from './ZapUPIPaymentModal';
+import RazorpayOrderPaymentModal from './RazorpayOrderPaymentModal';
 
 const { height } = Dimensions.get('window');
 
@@ -24,7 +24,7 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
     const [isProcessing, setIsProcessing] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [showZapUPI, setShowZapUPI] = useState(false);
+    const [showRazorpay, setShowRazorpay] = useState(false);
     const [pendingOrderId, setPendingOrderId] = useState<string>('');
 
     const paymentMethods = [
@@ -44,10 +44,10 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
         if (!selectedMethod || items.length === 0) return;
 
         if (selectedMethod === 'upi') {
-            // Generate order ID and show ZapUPI modal
+            // Generate order ID and show Razorpay modal
             const orderId = generateOrderId();
             setPendingOrderId(orderId);
-            setShowZapUPI(true);
+            setShowRazorpay(true);
             return;
         }
 
@@ -86,8 +86,8 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
         }
     };
 
-    const handleZapUPISuccess = async (transactionData: any) => {
-        setShowZapUPI(false);
+    const handleRazorpaySuccess = async (paymentData: any) => {
+        setShowRazorpay(false);
         setIsProcessing(true);
         setError(null);
 
@@ -100,7 +100,7 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
                     quantity: item.quantity,
                 })),
                 paymentMethod: 'upi',
-                transactionId: transactionData?.txnId || pendingOrderId,
+                transactionId: paymentData?.paymentId || pendingOrderId,
             };
 
             const response = await ordersApi.create(orderData);
@@ -123,12 +123,17 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
         }
     };
 
+    const handleRazorpayFailure = (errorMsg: string) => {
+        setShowRazorpay(false);
+        setError(errorMsg || 'Payment failed. Please try again.');
+    };
+
     const handleClose = () => {
         setSelectedMethod(null);
         setShowSuccess(false);
         setIsProcessing(false);
         setError(null);
-        setShowZapUPI(false);
+        setShowRazorpay(false);
         setPendingOrderId('');
         onClose();
     };
@@ -136,7 +141,7 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
     return (
         <>
             <Modal
-                visible={visible && !showZapUPI}
+                visible={visible && !showRazorpay}
                 transparent
                 animationType="slide"
                 onRequestClose={handleClose}
@@ -236,13 +241,14 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
                 </View>
             </Modal>
 
-            <ZapUPIPaymentModal
-                visible={showZapUPI}
-                onClose={() => setShowZapUPI(false)}
+            <RazorpayOrderPaymentModal
+                visible={showRazorpay}
+                onClose={() => setShowRazorpay(false)}
                 amount={total}
                 orderId={pendingOrderId}
-                remark="Product Order"
-                onSuccess={handleZapUPISuccess}
+                description="Product Order"
+                onSuccess={handleRazorpaySuccess}
+                onFailure={handleRazorpayFailure}
             />
         </>
     );

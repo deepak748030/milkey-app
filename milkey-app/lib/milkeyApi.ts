@@ -1563,6 +1563,46 @@ export const razorpayApi = {
         });
     },
 
+    // Create Razorpay order for product orders (not subscriptions)
+    createOrderPayment: async (data: {
+        amount: number;
+        orderId: string;
+        description?: string;
+        customerName?: string;
+        customerEmail?: string;
+        customerPhone?: string;
+    }) => {
+        return apiRequest<{
+            razorpayOrderId: string;
+            amount: number;
+            currency: string;
+            receipt: string;
+            keyId: string;
+            orderId: string;
+        }>('/razorpay/create-order-payment', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    // Verify Razorpay payment for product orders
+    verifyOrderPayment: async (data: {
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        razorpay_signature: string;
+        orderId: string;
+    }) => {
+        return apiRequest<{
+            success: boolean;
+            message: string;
+            paymentId: string;
+            razorpayOrderId: string;
+        }>('/razorpay/verify-order-payment', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
     getPaymentStatus: async (paymentId: string) => {
         return apiRequest<{
             paymentId: string;

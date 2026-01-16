@@ -1,15 +1,14 @@
 {
     "cli": {
-        "version": ">= 3.0.0"
+        "version": ">= 16.20.4",
+        "appVersionSource": "remote"
     },
     "build": {
         "production": {
-            "releaseChannel": "production",
-            "distribution": "internal",
+            "distribution": "store",
             "credentialsSource": "remote",
             "android": {
-                "buildType": "apk",
-                "gradleCommand": ":app:assembleRelease"
+                "buildType": "app-bundle"
             }
         }
     }

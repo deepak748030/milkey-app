@@ -427,4 +427,106 @@ router.post('/refund', auth, async (req, res) => {
     }
 });
 
+// POST /api/razorpay/create-order-payment - Create Razorpay order for product orders (not subscriptions)
+router.post('/create-order-payment', auth, async (req, res) => {
+    try {
+        const { amount, orderId, description, customerName, customerEmail, customerPhone } = req.body;
+
+        if (!amount || !orderId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Amount and order ID are required'
+            });
+        }
+
+        // Create order with Razorpay
+        const orderData = await razorpayRequest('/orders', 'POST', {
+            amount: Math.round(amount * 100), // Convert to paise
+            currency: 'INR',
+            receipt: orderId,
+            notes: {
+                description: description || 'Product Order',
+                customer_name: customerName || '',
+                customer_email: customerEmail || '',
+                customer_phone: customerPhone || '',
+                internal_order_id: orderId,
+                order_type: 'product' // Mark as product order
+            }
+        });
+
+        if (orderData.error) {
+            console.error('Razorpay order creation error:', orderData.error);
+            return res.status(400).json({
+                success: false,
+                message: orderData.error.description || 'Failed to create payment order'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: {
+                razorpayOrderId: orderData.id,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                receipt: orderData.receipt,
+                keyId: RAZORPAY_KEY_ID,
+                orderId: orderId,
+            }
+        });
+    } catch (error) {
+        console.error('Razorpay create order payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create payment order'
+        });
+    }
+});
+
+// POST /api/razorpay/verify-order-payment - Verify Razorpay payment for product orders
+router.post('/verify-order-payment', auth, async (req, res) => {
+    try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
+        const userId = req.user._id;
+
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment verification data is required'
+            });
+        }
+
+        // Verify signature
+        const body = razorpay_order_id + '|' + razorpay_payment_id;
+        const expectedSignature = crypto
+            .createHmac('sha256', RAZORPAY_KEY_SECRET)
+            .update(body)
+            .digest('hex');
+
+        if (expectedSignature !== razorpay_signature) {
+            console.error('Razorpay signature verification failed for order payment');
+            return res.status(400).json({
+                success: false,
+                message: 'Payment verification failed - invalid signature'
+            });
+        }
+
+        // Signature verified - return success
+        // The order will be created after this verification succeeds
+        console.log(`[Razorpay] Order payment verified for orderId: ${orderId}, user: ${userId}`);
+
+        return res.json({
+            success: true,
+            message: 'Payment verified successfully',
+            paymentId: razorpay_payment_id,
+            razorpayOrderId: razorpay_order_id
+        });
+    } catch (error) {
+        console.error('Razorpay verify order payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to verify payment'
+        });
+    }
+});
+
 module.exports = router;

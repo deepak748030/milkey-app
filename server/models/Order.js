@@ -47,6 +47,18 @@ const orderSchema = new mongoose.Schema({
         enum: ['cash', 'upi', 'card', 'wallet'],
         default: 'cash'
     },
+    transactionId: {
+        type: String,
+        trim: true
+    },
+    razorpayOrderId: {
+        type: String,
+        trim: true
+    },
+    razorpayPaymentId: {
+        type: String,
+        trim: true
+    },
     deliveryAddress: {
         type: String,
         trim: true
