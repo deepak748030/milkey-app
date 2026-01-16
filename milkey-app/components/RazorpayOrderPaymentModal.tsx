@@ -179,17 +179,27 @@ export default function RazorpayOrderPaymentModal({
     const handleIntentUrl = (request: ShouldStartLoadRequest): boolean => {
         const { url } = request;
 
-        // Handle UPI intents (gpay://, phonepe://, paytm://, upi://, intent://)
-        if (
-            url.startsWith('upi://') ||
-            url.startsWith('gpay://') ||
-            url.startsWith('phonepe://') ||
-            url.startsWith('paytm://') ||
-            url.startsWith('intent://') ||
-            url.startsWith('tez://') ||
-            url.startsWith('bhim://') ||
-            url.startsWith('amazonpay://')
-        ) {
+        // List of all known UPI and payment app schemes
+        const paymentSchemes = [
+            'upi://',
+            'gpay://',
+            'phonepe://',
+            'paytm://',
+            'paytmmp://', // PayTM Merchant Payment
+            'intent://',
+            'tez://',
+            'bhim://',
+            'amazonpay://',
+            'cred://',
+            'mobikwik://',
+            'freecharge://',
+            'whatsapp://', // WhatsApp Pay
+        ];
+
+        // Check if URL starts with any payment scheme
+        const isPaymentUrl = paymentSchemes.some(scheme => url.startsWith(scheme));
+
+        if (isPaymentUrl) {
             Linking.openURL(url).catch(() => {
                 Alert.alert(
                     'Payment App Not Found',
