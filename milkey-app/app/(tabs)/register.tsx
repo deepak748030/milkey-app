@@ -1313,27 +1313,29 @@ export default function RegisterScreen() {
                 <Text style={styles.subTitle}>
                     Settlement History {paymentFarmer ? `(${paymentFarmer.farmer.code})` : ''}
                 </Text>
-                <View style={styles.settlementStatsRow}>
-                    <Pressable
-                        style={styles.settlementDateBtn}
-                        onPress={() => setShowSettlementDatePicker(true)}
-                    >
-                        <CalendarIcon size={14} color={colors.primary} />
-                        <Text style={styles.settlementDateText}>
-                            {formatDateDDMMYYYY(settlementSummaryDate)}
-                        </Text>
-                    </Pressable>
-                    <View style={styles.settlementStatChip}>
-                        <Text style={styles.settlementStatLabel}>paid</Text>
-                        <Text style={styles.settlementStatValue}>₹{settlementPaidOnDate.toLocaleString('en-IN')}</Text>
+                {!paymentFarmer && (
+                    <View style={styles.settlementStatsRow}>
+                        <Pressable
+                            style={styles.settlementDateBtn}
+                            onPress={() => setShowSettlementDatePicker(true)}
+                        >
+                            <CalendarIcon size={14} color={colors.primary} />
+                            <Text style={styles.settlementDateText}>
+                                {formatDateDDMMYYYY(settlementSummaryDate)}
+                            </Text>
+                        </Pressable>
+                        <View style={styles.settlementStatChip}>
+                            <Text style={styles.settlementStatLabel}>PAID</Text>
+                            <Text style={styles.settlementStatValue}>₹{settlementPaidOnDate.toLocaleString('en-IN')}</Text>
+                        </View>
+                        <View style={[styles.settlementStatChip, settlementTotalBalance < 0 && { borderColor: colors.destructive }]}>
+                            <Text style={styles.settlementStatLabel}>CURRENT</Text>
+                            <Text style={[styles.settlementStatValue, { color: settlementTotalBalance >= 0 ? colors.primary : colors.destructive }]}>
+                                ₹{settlementTotalBalance.toLocaleString('en-IN')}
+                            </Text>
+                        </View>
                     </View>
-                    <View style={[styles.settlementStatChip, { backgroundColor: settlementTotalBalance >= 0 ? colors.primary + '20' : colors.destructive + '20' }]}>
-                        <Text style={styles.settlementStatLabel}>current</Text>
-                        <Text style={[styles.settlementStatValue, { color: settlementTotalBalance >= 0 ? colors.primary : colors.destructive }]}>
-                            ₹{settlementTotalBalance.toLocaleString('en-IN')}
-                        </Text>
-                    </View>
-                </View>
+                )}
             </View>
 
             {/* Settlement Date Picker Modal */}
@@ -3197,13 +3199,14 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     settlementDateBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        backgroundColor: colors.primary + '15',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 6,
         borderWidth: 1,
         borderColor: colors.primary,
-        borderRadius: 20,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        borderStyle: 'dashed',
+        backgroundColor: 'transparent',
     },
     settlementDateText: {
         fontSize: 12,
@@ -3213,13 +3216,14 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     settlementStatChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        backgroundColor: colors.primary + '15',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 6,
         borderWidth: 1,
         borderColor: colors.primary,
-        borderRadius: 20,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        borderStyle: 'dashed',
+        backgroundColor: 'transparent',
     },
     settlementStatLabel: {
         fontSize: 11,
