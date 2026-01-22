@@ -39,10 +39,7 @@ router.get('/', auth, async (req, res) => {
                 const searchRegex = new RegExp(search, 'i');
                 const matchingFarmers = await Farmer.find({
                     owner: req.userId,
-                    $or: [
-                        { code: searchRegex },
-                        { name: searchRegex }
-                    ]
+                    code: searchRegex
                 }).select('_id').lean();
                 farmerIds = matchingFarmers.map(f => f._id);
                 pendingQuery.farmer = { $in: farmerIds };
@@ -94,10 +91,7 @@ router.get('/', auth, async (req, res) => {
                 const searchRegex = new RegExp(search, 'i');
                 const matchingFarmers = await Farmer.find({
                     owner: req.userId,
-                    $or: [
-                        { code: searchRegex },
-                        { name: searchRegex }
-                    ]
+                    code: searchRegex
                 }).select('_id').lean();
                 baseQuery.farmer = { $in: matchingFarmers.map(f => f._id) };
             }
@@ -120,7 +114,7 @@ router.get('/', auth, async (req, res) => {
             const searchRegex = new RegExp(search, 'i');
             const matchingFarmers = await Farmer.find({
                 owner: req.userId,
-                $or: [{ code: searchRegex }, { name: searchRegex }]
+                code: searchRegex
             }).select('_id').lean();
             const pendingAmountResult = await Advance.aggregate([
                 {

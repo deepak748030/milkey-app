@@ -3218,7 +3218,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     settlementChipDivider: {
         width: 1,
-        height: '100%',
+        alignSelf: 'stretch',
         backgroundColor: colors.primary,
     },
     settlementStatChipCombined: {
