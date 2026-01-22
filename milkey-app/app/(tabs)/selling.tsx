@@ -3692,8 +3692,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontWeight: '700',
     },
     clearPaymentBtn: {
+        backgroundColor: colors.muted,
         paddingVertical: 10,
         alignItems: 'center',
+        borderRadius: 8,
     },
     clearPaymentText: {
         color: colors.mutedForeground,
