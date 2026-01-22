@@ -149,6 +149,13 @@ export default function SellingScreen() {
     const [confirmVisible, setConfirmVisible] = useState(false);
     const [confirmData, setConfirmData] = useState<{ title: string; message: string; onConfirm: () => void }>({ title: '', message: '', onConfirm: () => { } });
 
+    // Edit Payment Modal state
+    const [editPaymentVisible, setEditPaymentVisible] = useState(false);
+    const [editingPayment, setEditingPayment] = useState<MemberPayment | null>(null);
+    const [editPaymentAmount, setEditPaymentAmount] = useState('');
+    const [editMilkAmount, setEditMilkAmount] = useState('');
+    const [updatingPayment, setUpdatingPayment] = useState(false);
+
     const showAlert = (title: string, message: string) => {
         setAlertTitle(title);
         setAlertMessage(message);
@@ -966,6 +973,51 @@ export default function SellingScreen() {
         }
     };
 
+    // Edit Payment Handler
+    const handleEditPayment = (payment: MemberPayment) => {
+        setEditingPayment(payment);
+        setEditPaymentAmount((payment.amount || 0).toString());
+        setEditMilkAmount((payment.totalSellAmount || 0).toString());
+        setEditPaymentVisible(true);
+    };
+
+    // Save Payment Update
+    const handleSavePaymentUpdate = async () => {
+        if (!editingPayment) return;
+
+        const newAmount = parseFloat(editPaymentAmount);
+        const newMilkAmount = parseFloat(editMilkAmount);
+
+        if (isNaN(newAmount) || newAmount < 0) {
+            showAlert('Error', 'Please enter a valid paid amount');
+            return;
+        }
+
+        setUpdatingPayment(true);
+        try {
+            const res = await memberPaymentsApi.update(editingPayment._id, {
+                amount: newAmount,
+                totalSellAmount: isNaN(newMilkAmount) ? undefined : newMilkAmount,
+            });
+
+            if (!res.success) {
+                showAlert('Error', res.message || 'Failed to update payment');
+                return;
+            }
+
+            showAlert('Success', 'Payment updated successfully');
+            setEditPaymentVisible(false);
+            setEditingPayment(null);
+
+            // Refresh payments
+            await fetchData();
+        } catch (error) {
+            showAlert('Error', 'Failed to update payment');
+        } finally {
+            setUpdatingPayment(false);
+        }
+    };
+
     // Print members list
     const handlePrintMembers = async () => {
         if (members.length === 0) {
@@ -1545,7 +1597,15 @@ export default function SellingScreen() {
                                                 Till: {formatDateDDMMYYYY(p.periodEnd)}
                                             </Text>
                                         )}
-                                        <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
+                                            <Pressable
+                                                style={styles.editPaymentBtn}
+                                                onPress={() => handleEditPayment(p)}
+                                            >
+                                                <Edit2 size={14} color={colors.primary} />
+                                            </Pressable>
+                                        </View>
                                     </View>
 
                                     {/* Milk Quantity - directly from saved payment record */}
@@ -1606,22 +1666,31 @@ export default function SellingScreen() {
                     <View style={styles.paymentTableContainer}>
                         {/* Table Header */}
                         <View style={styles.paymentTableHeader}>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 1.5 }]}>Name</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Milk</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Paid</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Balance</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Date</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 1, textAlign: 'center' }]}>Till</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 1.3 }]}>Name</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Milk</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Paid</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Balance</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.9, textAlign: 'center' }]}>Date</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.9, textAlign: 'center' }]}>Till</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.5, textAlign: 'center' }]}>Edit</Text>
                         </View>
                         {/* Table Rows */}
                         {filteredPayments.slice(0, 15).map((p, index) => (
                             <View key={p._id} style={[styles.paymentTableRow, index % 2 === 0 && styles.paymentTableRowAlt]}>
-                                <Text style={[styles.paymentTableCell, { flex: 1.5 }]} numberOfLines={1}>{p.member?.name || '-'}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', color: colors.success }]}>₹{(p.amount || 0).toFixed(0)}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', color: (p.closingBalance ?? 0) > 0 ? colors.success : (p.closingBalance ?? 0) < 0 ? colors.destructive : colors.mutedForeground }]}>{(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(0)}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', fontSize: 9 }]}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 1, textAlign: 'center', fontSize: 9 }]}>{p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 1.3 }]} numberOfLines={1}>{p.member?.name || '-'}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: colors.success }]}>₹{(p.amount || 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: (p.closingBalance ?? 0) > 0 ? colors.success : (p.closingBalance ?? 0) < 0 ? colors.destructive : colors.mutedForeground }]}>{(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.9, textAlign: 'center', fontSize: 9 }]}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.9, textAlign: 'center', fontSize: 9 }]}>{p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}</Text>
+                                <View style={{ flex: 0.5, alignItems: 'center', justifyContent: 'center' }}>
+                                    <Pressable
+                                        style={styles.editBtn}
+                                        onPress={() => handleEditPayment(p)}
+                                    >
+                                        <Edit2 size={12} color={colors.primary} />
+                                    </Pressable>
+                                </View>
                             </View>
                         ))}
                     </View>
@@ -2218,6 +2287,116 @@ export default function SellingScreen() {
                 cancelText="Cancel"
                 confirmDestructive
             />
+
+            {/* Edit Payment Modal */}
+            <Modal
+                visible={editPaymentVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setEditPaymentVisible(false)}
+            >
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.editPaymentModalOverlay}
+                >
+                    <Pressable style={{ flex: 1 }} onPress={() => setEditPaymentVisible(false)} />
+                    <View style={[styles.editPaymentModalContent, { backgroundColor: colors.card }]}>
+                        <View style={styles.editPaymentModalHeader}>
+                            <Text style={[styles.editPaymentModalTitle, { color: colors.foreground }]}>
+                                Edit Payment
+                            </Text>
+                            <Pressable onPress={() => setEditPaymentVisible(false)} style={styles.editPaymentModalClose}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+
+                        {editingPayment && (
+                            <View style={styles.editPaymentModalBody}>
+                                <Text style={[styles.editPaymentMemberName, { color: colors.primary }]}>
+                                    {editingPayment.member?.name || '-'}
+                                </Text>
+
+                                <View style={styles.editPaymentInputGroup}>
+                                    <Text style={[styles.editPaymentLabel, { color: colors.foreground }]}>
+                                        Milk Amount (₹)
+                                    </Text>
+                                    <TextInput
+                                        style={[styles.editPaymentInput, {
+                                            backgroundColor: colors.muted,
+                                            color: colors.foreground,
+                                            borderColor: colors.border
+                                        }]}
+                                        value={editMilkAmount}
+                                        onChangeText={setEditMilkAmount}
+                                        keyboardType="numeric"
+                                        placeholder="Milk amount"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+
+                                <View style={styles.editPaymentInputGroup}>
+                                    <Text style={[styles.editPaymentLabel, { color: colors.foreground }]}>
+                                        Paid Amount (₹)
+                                    </Text>
+                                    <TextInput
+                                        style={[styles.editPaymentInput, {
+                                            backgroundColor: colors.muted,
+                                            color: colors.foreground,
+                                            borderColor: colors.border
+                                        }]}
+                                        value={editPaymentAmount}
+                                        onChangeText={setEditPaymentAmount}
+                                        keyboardType="numeric"
+                                        placeholder="Paid amount"
+                                        placeholderTextColor={colors.mutedForeground}
+                                    />
+                                </View>
+
+                                {/* Summary */}
+                                <View style={[styles.editPaymentSummary, { backgroundColor: colors.muted }]}>
+                                    <View style={styles.editPaymentSummaryRow}>
+                                        <Text style={[styles.editPaymentSummaryLabel, { color: colors.mutedForeground }]}>
+                                            Original Milk Amount:
+                                        </Text>
+                                        <Text style={[styles.editPaymentSummaryValue, { color: colors.primary }]}>
+                                            ₹{(editingPayment.totalSellAmount || 0).toFixed(2)}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.editPaymentSummaryRow}>
+                                        <Text style={[styles.editPaymentSummaryLabel, { color: colors.mutedForeground }]}>
+                                            Original Paid:
+                                        </Text>
+                                        <Text style={[styles.editPaymentSummaryValue, { color: colors.success }]}>
+                                            ₹{(editingPayment.amount || 0).toFixed(2)}
+                                        </Text>
+                                    </View>
+                                </View>
+
+                                {/* Buttons */}
+                                <View style={styles.editPaymentBtnRow}>
+                                    <Pressable
+                                        style={[styles.editPaymentCancelBtn, { backgroundColor: colors.muted }]}
+                                        onPress={() => setEditPaymentVisible(false)}
+                                    >
+                                        <Text style={[styles.editPaymentCancelBtnText, { color: colors.foreground }]}>
+                                            Cancel
+                                        </Text>
+                                    </Pressable>
+                                    <Pressable
+                                        style={[styles.editPaymentSaveBtn, { backgroundColor: colors.primary }]}
+                                        onPress={handleSavePaymentUpdate}
+                                        disabled={updatingPayment}
+                                    >
+                                        <Text style={styles.editPaymentSaveBtnText}>
+                                            {updatingPayment ? 'Saving...' : 'Save Changes'}
+                                        </Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
 
             {renderMemberModal()}
         </View>
@@ -3756,5 +3935,100 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     endOfMonthBtnTextActive: {
         color: colors.white,
+    },
+    // Edit Payment Modal styles
+    editPaymentModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    editPaymentModalContent: {
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    },
+    editPaymentModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    editPaymentModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    editPaymentModalClose: {
+        padding: 4,
+    },
+    editPaymentModalBody: {
+        padding: 16,
+    },
+    editPaymentMemberName: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 16,
+    },
+    editPaymentInputGroup: {
+        marginBottom: 16,
+    },
+    editPaymentLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        marginBottom: 6,
+    },
+    editPaymentInput: {
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        fontSize: 15,
+    },
+    editPaymentSummary: {
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 16,
+    },
+    editPaymentSummaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    editPaymentSummaryLabel: {
+        fontSize: 13,
+    },
+    editPaymentSummaryValue: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    editPaymentBtnRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    editPaymentCancelBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    editPaymentCancelBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    editPaymentSaveBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    editPaymentSaveBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#fff',
+    },
+    editPaymentBtn: {
+        padding: 4,
     },
 });

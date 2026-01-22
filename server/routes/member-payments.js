@@ -370,4 +370,81 @@ router.get('/:id', auth, async (req, res) => {
     }
 });
 
+// PUT /api/member-payments/:id - Update member payment
+router.put('/:id', auth, async (req, res) => {
+    try {
+        const { amount, paymentMethod, reference, notes, totalSellAmount, periodStart, periodEnd } = req.body;
+
+        const payment = await MemberPayment.findOne({
+            _id: req.params.id,
+            owner: req.userId
+        });
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found'
+            });
+        }
+
+        // Get member for balance update
+        const member = await Member.findById(payment.member);
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Associated member not found'
+            });
+        }
+
+        // Calculate the difference in payment amount
+        const oldPaymentAmount = payment.amount;
+        const newPaymentAmount = amount !== undefined ? parseFloat(amount) : oldPaymentAmount;
+        const paymentDifference = newPaymentAmount - oldPaymentAmount;
+
+        // Recalculate closing balance if amount or milk amount changes
+        const newMilkAmount = totalSellAmount !== undefined ? parseFloat(totalSellAmount) : payment.totalSellAmount;
+        const netPayable = newMilkAmount + payment.previousBalance;
+        const newClosingBalance = netPayable - newPaymentAmount;
+
+        // Update payment fields
+        payment.amount = newPaymentAmount;
+        payment.totalSellAmount = newMilkAmount;
+        payment.netPayable = netPayable;
+        payment.closingBalance = newClosingBalance;
+
+        if (paymentMethod) payment.paymentMethod = paymentMethod;
+        if (reference !== undefined) payment.reference = reference.trim();
+        if (notes !== undefined) payment.notes = notes.trim();
+
+        if (periodStart) {
+            payment.periodStart = new Date(periodStart + 'T12:00:00');
+        }
+        if (periodEnd) {
+            payment.periodEnd = new Date(periodEnd + 'T12:00:00');
+        }
+
+        await payment.save();
+
+        // Update member's current balance based on payment difference
+        member.sellingPaymentBalance = (member.sellingPaymentBalance || 0) - paymentDifference;
+        await member.save();
+
+        const populatedPayment = await MemberPayment.findById(payment._id)
+            .populate('member', 'name mobile')
+            .lean();
+
+        res.json({
+            success: true,
+            message: 'Payment updated successfully',
+            response: populatedPayment
+        });
+    } catch (error) {
+        console.error('Update member payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update payment'
+        });
+    }
+});
+
 module.exports = router;

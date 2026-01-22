@@ -1223,6 +1223,21 @@ export const memberPaymentsApi = {
     getById: async (id: string) => {
         return apiRequest<MemberPayment>(`/member-payments/${id}`);
     },
+
+    update: async (id: string, data: {
+        amount?: number;
+        paymentMethod?: string;
+        reference?: string;
+        notes?: string;
+        totalSellAmount?: number;
+        periodStart?: string;
+        periodEnd?: string;
+    }) => {
+        return apiRequest<MemberPayment>(`/member-payments/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
 };
 
 export const healthCheck = async (): Promise<boolean> => {
