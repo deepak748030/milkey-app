@@ -1931,6 +1931,28 @@ export default function RegisterScreen() {
                                     />
                                 </View>
 
+                                {/* Settled Advances Section */}
+                                {editingPayment.settledAdvances && editingPayment.settledAdvances.length > 0 && (
+                                    <View style={styles.settledAdvancesSection}>
+                                        <Text style={[styles.settledAdvancesTitle, { color: colors.primary }]}>Advance History</Text>
+                                        {editingPayment.settledAdvances.map((adv, index) => (
+                                            <View key={adv._id || index} style={[styles.settledAdvanceRow, { borderColor: colors.border }]}>
+                                                <View style={styles.settledAdvanceInfo}>
+                                                    <Text style={[styles.settledAdvanceCode, { color: colors.foreground }]}>
+                                                        {adv.farmer?.code || '-'} - {adv.farmer?.name || '-'}
+                                                    </Text>
+                                                    <Text style={[styles.settledAdvanceNote, { color: colors.mutedForeground }]}>
+                                                        {adv.note || 'No note'} • {new Date(adv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </Text>
+                                                </View>
+                                                <Text style={[styles.settledAdvanceAmount, { color: colors.warning }]}>
+                                                    ₹{adv.amount.toLocaleString('en-IN')}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+
                                 <View style={styles.editPaymentSummary}>
                                     <View style={styles.editPaymentSummaryRow}>
                                         <Text style={[styles.editPaymentSummaryLabel, { color: colors.mutedForeground }]}>Advance Deduction:</Text>
@@ -2776,6 +2798,41 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 12,
         fontSize: 16,
+    },
+    settledAdvancesSection: {
+        backgroundColor: colors.muted,
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 16,
+    },
+    settledAdvancesTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 10,
+        textAlign: 'center',
+    },
+    settledAdvanceRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+    },
+    settledAdvanceInfo: {
+        flex: 1,
+    },
+    settledAdvanceCode: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    settledAdvanceNote: {
+        fontSize: 11,
+        marginTop: 2,
+    },
+    settledAdvanceAmount: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginLeft: 10,
     },
     editPaymentSummary: {
         backgroundColor: colors.muted,

@@ -154,6 +154,15 @@ export interface FarmerPaymentSummary {
     advanceBalance?: number;
 }
 
+export interface SettledAdvanceInPayment {
+    _id: string;
+    amount: number;
+    date: string;
+    note?: string;
+    status: 'pending' | 'settled' | 'partial';
+    farmer?: { _id: string; code: string; name: string };
+}
+
 export interface Payment {
     _id: string;
     farmer: { _id: string; code: string; name: string };
@@ -169,6 +178,7 @@ export interface Payment {
     periodStart?: string;
     periodEnd?: string;
     createdAt?: string;
+    settledAdvances?: SettledAdvanceInPayment[];
 }
 
 export interface RateChart {

@@ -27,10 +27,24 @@ router.get('/', auth, async (req, res) => {
 
         const payments = await Payment.find(query)
             .populate('farmer', 'code name')
+            .populate('settledAdvances', 'amount date note status farmer')
             .sort({ date: -1 })
             .limit(parseInt(limit))
             .skip((parseInt(page) - 1) * parseInt(limit))
             .lean();
+
+        // Populate farmer details in settledAdvances
+        for (const payment of payments) {
+            if (payment.settledAdvances && payment.settledAdvances.length > 0) {
+                for (let i = 0; i < payment.settledAdvances.length; i++) {
+                    const advance = payment.settledAdvances[i];
+                    if (advance && advance.farmer) {
+                        const farmer = await Farmer.findById(advance.farmer).select('code name').lean();
+                        payment.settledAdvances[i].farmer = farmer;
+                    }
+                }
+            }
+        }
 
         const total = await Payment.countDocuments(query);
 
