@@ -1079,7 +1079,7 @@ export default function RegisterScreen() {
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>
                             <Text style={styles.balanceLabel}>Current Balance</Text>
-                            <Text style={[styles.balanceValue, { color: colors.primary }]}>
+                            <Text style={[styles.balanceValue, { color: (paymentFarmer.farmer.currentBalance || 0) < 0 ? colors.destructive : colors.primary }]}>
                                 ₹{(paymentFarmer.farmer.currentBalance || 0).toFixed(2)}
                             </Text>
                         </View>
@@ -1626,9 +1626,10 @@ export default function RegisterScreen() {
                     <Search size={16} color={colors.mutedForeground} />
                     <TextInput
                         style={[styles.advanceSearchInput, { borderWidth: 0, backgroundColor: 'transparent', marginLeft: 8 }]}
-                        placeholder="Search by name or code"
+                        placeholder="Search by exact code"
                         value={advanceSearch}
                         onChangeText={setAdvanceSearch}
+                        keyboardType="numeric"
                         placeholderTextColor={colors.mutedForeground}
                     />
                 </View>
