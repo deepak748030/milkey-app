@@ -80,6 +80,12 @@ export default function RegisterScreen() {
     const [totalPendingAmount, setTotalPendingAmount] = useState(0);
     const [advancesTotalCount, setAdvancesTotalCount] = useState(0);
 
+    // Settlement History summary stats
+    const [settlementSummaryDate, setSettlementSummaryDate] = useState(() => new Date().toISOString().split('T')[0]);
+    const [settlementPaidOnDate, setSettlementPaidOnDate] = useState(0);
+    const [settlementTotalBalance, setSettlementTotalBalance] = useState(0);
+    const [showSettlementDatePicker, setShowSettlementDatePicker] = useState(false);
+
     // Payment tab state
     const [paymentCode, setPaymentCode] = useState('');
     const [paymentFarmer, setPaymentFarmer] = useState<FarmerPaymentSummary | null>(null);
@@ -340,6 +346,19 @@ export default function RegisterScreen() {
         setAdvancesLoadingMore(false);
     };
 
+    // Fetch settlement summary stats
+    const fetchSettlementSummaryStats = async (date?: string) => {
+        try {
+            const res = await paymentsApi.getSummaryStats(date || settlementSummaryDate);
+            if (res.success && res.response) {
+                setSettlementPaidOnDate(res.response.paidOnDate || 0);
+                setSettlementTotalBalance(res.response.totalCurrentBalance || 0);
+            }
+        } catch (error) {
+            console.error('Error fetching settlement summary stats:', error);
+        }
+    };
+
     const fetchData = async () => {
         setLoading(true);
         try {
@@ -368,6 +387,9 @@ export default function RegisterScreen() {
             } else if (paymentsRes.response?.data) {
                 setPayments(paymentsRes.response.data);
             }
+
+            // Fetch settlement summary stats
+            await fetchSettlementSummaryStats();
         } catch (error) {
             console.error('Error fetching data:', error);
             showAlert('Error', 'Failed to load data. Please try again.');
@@ -1287,9 +1309,66 @@ export default function RegisterScreen() {
             )}
 
             {/* Settlement History - Show filtered by farmer code when searched */}
-            <Text style={[styles.subTitle, { marginTop: 16 }]}>
-                Settlement History {paymentFarmer ? `(${paymentFarmer.farmer.code})` : ''}
-            </Text>
+            <View style={styles.settlementHistoryHeader}>
+                <Text style={styles.subTitle}>
+                    Settlement History {paymentFarmer ? `(${paymentFarmer.farmer.code})` : ''}
+                </Text>
+                <View style={styles.settlementStatsRow}>
+                    <Pressable
+                        style={styles.settlementDateBtn}
+                        onPress={() => setShowSettlementDatePicker(true)}
+                    >
+                        <CalendarIcon size={14} color={colors.primary} />
+                        <Text style={styles.settlementDateText}>
+                            {formatDateDDMMYYYY(settlementSummaryDate)}
+                        </Text>
+                    </Pressable>
+                    <View style={styles.settlementStatChip}>
+                        <Text style={styles.settlementStatLabel}>paid</Text>
+                        <Text style={styles.settlementStatValue}>₹{settlementPaidOnDate.toLocaleString('en-IN')}</Text>
+                    </View>
+                    <View style={[styles.settlementStatChip, { backgroundColor: settlementTotalBalance >= 0 ? colors.primary + '20' : colors.destructive + '20' }]}>
+                        <Text style={styles.settlementStatLabel}>current</Text>
+                        <Text style={[styles.settlementStatValue, { color: settlementTotalBalance >= 0 ? colors.primary : colors.destructive }]}>
+                            ₹{settlementTotalBalance.toLocaleString('en-IN')}
+                        </Text>
+                    </View>
+                </View>
+            </View>
+
+            {/* Settlement Date Picker Modal */}
+            <Modal
+                visible={showSettlementDatePicker}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowSettlementDatePicker(false)}
+            >
+                <View style={styles.dateModalOverlay}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowSettlementDatePicker(false)} />
+                    <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Select Date</Text>
+                            <Pressable onPress={() => setShowSettlementDatePicker(false)} style={styles.dateModalClose}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+                        <Calendar
+                            onDateSelect={(date) => {
+                                if (date) {
+                                    const year = date.getFullYear();
+                                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                                    const day = String(date.getDate()).padStart(2, '0');
+                                    const newDate = `${year}-${month}-${day}`;
+                                    setSettlementSummaryDate(newDate);
+                                    fetchSettlementSummaryStats(newDate);
+                                    setShowSettlementDatePicker(false);
+                                }
+                            }}
+                            selectedDate={settlementSummaryDate ? new Date(settlementSummaryDate + 'T00:00:00') : new Date()}
+                        />
+                    </View>
+                </View>
+            </Modal>
             {(() => {
                 // Use farmer-specific payments when a farmer is selected, otherwise use global payments
                 const filteredPayments = paymentFarmer
@@ -3100,6 +3179,56 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     totalAmountValue: {
         fontSize: 16,
+        fontWeight: '700',
+        color: colors.primary,
+    },
+    // Settlement History Header Styles
+    settlementHistoryHeader: {
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    settlementStatsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 8,
+        flexWrap: 'wrap',
+    },
+    settlementDateBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: colors.primary + '15',
+        borderWidth: 1,
+        borderColor: colors.primary,
+        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    settlementDateText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.primary,
+    },
+    settlementStatChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: colors.primary + '15',
+        borderWidth: 1,
+        borderColor: colors.primary,
+        borderRadius: 20,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    settlementStatLabel: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: colors.mutedForeground,
+        textTransform: 'uppercase',
+    },
+    settlementStatValue: {
+        fontSize: 12,
         fontWeight: '700',
         color: colors.primary,
     },

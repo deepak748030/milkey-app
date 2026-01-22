@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Payment = require('../models/Payment');
 const MilkCollection = require('../models/MilkCollection');
 const Advance = require('../models/Advance');
@@ -336,6 +337,69 @@ router.post('/', auth, requireSubscription('register'), async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to record payment'
+        });
+    }
+});
+
+// GET /api/payments/summary-stats - Get summary stats for Settlement History header
+router.get('/summary-stats', auth, async (req, res) => {
+    try {
+        const { date } = req.query;
+
+        // Calculate total paid for selected date
+        let paidOnDate = 0;
+        if (date) {
+            const selectedDate = new Date(date);
+            const startOfDay = new Date(selectedDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(selectedDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const paymentsOnDate = await Payment.aggregate([
+                {
+                    $match: {
+                        owner: new mongoose.Types.ObjectId(req.userId),
+                        date: { $gte: startOfDay, $lte: endOfDay }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        total: { $sum: '$amount' }
+                    }
+                }
+            ]);
+
+            paidOnDate = paymentsOnDate[0]?.total || 0;
+        }
+
+        // Calculate total current balance from all farmers
+        const farmersWithBalance = await Farmer.aggregate([
+            {
+                $match: { owner: new mongoose.Types.ObjectId(req.userId) }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalBalance: { $sum: { $ifNull: ['$currentBalance', 0] } }
+                }
+            }
+        ]);
+
+        const totalCurrentBalance = farmersWithBalance[0]?.totalBalance || 0;
+
+        res.json({
+            success: true,
+            response: {
+                paidOnDate,
+                totalCurrentBalance
+            }
+        });
+    } catch (error) {
+        console.error('Get summary stats error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get summary stats'
         });
     }
 });
