@@ -18,9 +18,9 @@ router.get('/', auth, async (req, res) => {
             query.type = type;
         }
 
-        // Search by code only
+        // Search by exact code only (no regex)
         if (search) {
-            query.code = { $regex: search, $options: 'i' };
+            query.code = normalizeCode(search);
         }
 
         const farmers = await Farmer.find(query)
