@@ -1315,18 +1315,21 @@ export default function RegisterScreen() {
                 </Text>
                 {!paymentFarmer && (
                     <View style={styles.settlementStatsRow}>
-                        <Pressable
-                            style={styles.settlementDateBtn}
-                            onPress={() => setShowSettlementDatePicker(true)}
-                        >
-                            <CalendarIcon size={14} color={colors.primary} />
-                            <Text style={styles.settlementDateText}>
-                                {formatDateDDMMYYYY(settlementSummaryDate)}
-                            </Text>
-                        </Pressable>
-                        <View style={styles.settlementStatChip}>
-                            <Text style={styles.settlementStatLabel}>PAID</Text>
-                            <Text style={styles.settlementStatValue}>₹{settlementPaidOnDate.toLocaleString('en-IN')}</Text>
+                        <View style={styles.settlementCombinedChip}>
+                            <Pressable
+                                style={styles.settlementDateBtnCombined}
+                                onPress={() => setShowSettlementDatePicker(true)}
+                            >
+                                <CalendarIcon size={14} color={colors.primary} />
+                                <Text style={styles.settlementDateText}>
+                                    {formatDateDDMMYYYY(settlementSummaryDate)}
+                                </Text>
+                            </Pressable>
+                            <View style={styles.settlementChipDivider} />
+                            <View style={styles.settlementStatChipCombined}>
+                                <Text style={styles.settlementStatLabel}>PAID</Text>
+                                <Text style={styles.settlementStatValue}>₹{settlementPaidOnDate.toLocaleString('en-IN')}</Text>
+                            </View>
                         </View>
                         <View style={[styles.settlementStatChip, settlementTotalBalance < 0 && { borderColor: colors.destructive }]}>
                             <Text style={styles.settlementStatLabel}>CURRENT</Text>
@@ -3195,6 +3198,35 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         gap: 8,
         marginTop: 8,
         flexWrap: 'wrap',
+    },
+    settlementCombinedChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.primary,
+        borderStyle: 'dashed',
+        backgroundColor: 'transparent',
+        overflow: 'hidden',
+    },
+    settlementDateBtnCombined: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+    },
+    settlementChipDivider: {
+        width: 1,
+        height: '100%',
+        backgroundColor: colors.primary,
+    },
+    settlementStatChipCombined: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
     },
     settlementDateBtn: {
         flexDirection: 'row',
