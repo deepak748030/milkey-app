@@ -33,13 +33,12 @@ router.get('/', auth, async (req, res) => {
             const pendingQuery = { ...baseQuery, status: 'pending' };
             const settledQuery = { ...baseQuery, status: { $in: ['settled', 'partial'] } };
 
-            // Apply search filter if provided
+            // Apply search filter if provided - search by code directly (no regex)
             let farmerIds = null;
             if (search) {
-                const searchRegex = new RegExp(search, 'i');
                 const matchingFarmers = await Farmer.find({
                     owner: req.userId,
-                    code: searchRegex
+                    code: search.trim()
                 }).select('_id').lean();
                 farmerIds = matchingFarmers.map(f => f._id);
                 pendingQuery.farmer = { $in: farmerIds };
@@ -86,12 +85,11 @@ router.get('/', auth, async (req, res) => {
                 advances = settledAdvances;
             }
         } else {
-            // Standard query with optional search
+            // Standard query with optional search - search by code directly (no regex)
             if (search) {
-                const searchRegex = new RegExp(search, 'i');
                 const matchingFarmers = await Farmer.find({
                     owner: req.userId,
-                    code: searchRegex
+                    code: search.trim()
                 }).select('_id').lean();
                 baseQuery.farmer = { $in: matchingFarmers.map(f => f._id) };
             }
@@ -111,10 +109,9 @@ router.get('/', auth, async (req, res) => {
         // Calculate total pending amount (only from pending advances)
         let totalPendingAmount = 0;
         if (search) {
-            const searchRegex = new RegExp(search, 'i');
             const matchingFarmers = await Farmer.find({
                 owner: req.userId,
-                code: searchRegex
+                code: search.trim()
             }).select('_id').lean();
             const pendingAmountResult = await Advance.aggregate([
                 {
