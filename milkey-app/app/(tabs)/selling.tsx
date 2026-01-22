@@ -1672,7 +1672,6 @@ export default function SellingScreen() {
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Balance</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.9, textAlign: 'center' }]}>Date</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.9, textAlign: 'center' }]}>Till</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 0.5, textAlign: 'center' }]}>Edit</Text>
                         </View>
                         {/* Table Rows */}
                         {filteredPayments.slice(0, 15).map((p, index) => (
@@ -1683,14 +1682,6 @@ export default function SellingScreen() {
                                 <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: (p.closingBalance ?? 0) > 0 ? colors.success : (p.closingBalance ?? 0) < 0 ? colors.destructive : colors.mutedForeground }]}>{(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(0)}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 0.9, textAlign: 'center', fontSize: 9 }]}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 0.9, textAlign: 'center', fontSize: 9 }]}>{p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}</Text>
-                                <View style={{ flex: 0.5, alignItems: 'center', justifyContent: 'center' }}>
-                                    <Pressable
-                                        style={styles.editBtn}
-                                        onPress={() => handleEditPayment(p)}
-                                    >
-                                        <Edit2 size={12} color={colors.primary} />
-                                    </Pressable>
-                                </View>
                             </View>
                         ))}
                     </View>
