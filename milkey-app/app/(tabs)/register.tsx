@@ -1625,10 +1625,11 @@ export default function RegisterScreen() {
                     <Search size={16} color={colors.mutedForeground} />
                     <TextInput
                         style={styles.farmerTabSearchInput}
-                        placeholder="Search by code, name, mobile, address..."
+                        placeholder="Search by code..."
                         placeholderTextColor={colors.mutedForeground}
                         value={farmerTabSearch}
                         onChangeText={setFarmerTabSearch}
+                        keyboardType="number-pad"
                     />
                     {farmerSearchLoading && (
                         <ActivityIndicator size="small" color={colors.primary} />

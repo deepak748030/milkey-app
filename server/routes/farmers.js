@@ -18,14 +18,9 @@ router.get('/', auth, async (req, res) => {
             query.type = type;
         }
 
-        // Search by code, name, mobile, or address
+        // Search by code only
         if (search) {
-            query.$or = [
-                { code: { $regex: search, $options: 'i' } },
-                { name: { $regex: search, $options: 'i' } },
-                { mobile: { $regex: search, $options: 'i' } },
-                { address: { $regex: search, $options: 'i' } }
-            ];
+            query.code = { $regex: search, $options: 'i' };
         }
 
         const farmers = await Farmer.find(query)
