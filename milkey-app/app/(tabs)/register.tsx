@@ -3171,6 +3171,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         backgroundColor: colors.primary + '15',
         borderWidth: 1,
         borderColor: colors.primary,
+        borderStyle: 'dashed',
         borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 10,
@@ -3217,9 +3218,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         paddingVertical: 8,
     },
     settlementChipDivider: {
-        width: 1,
+        width: 0,
         alignSelf: 'stretch',
-        backgroundColor: colors.primary,
+        borderLeftWidth: 1,
+        borderLeftColor: colors.primary,
+        borderStyle: 'dashed',
     },
     settlementStatChipCombined: {
         flexDirection: 'row',
