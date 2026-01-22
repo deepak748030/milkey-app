@@ -718,295 +718,296 @@ export const paymentsApi = {
         return apiRequest<Payment>(`/payments/${id}`, {
             method: 'PUT',
             body: JSON.stringify(data),
-        }),
+        });
+    },
 
-            getSummaryStats: async (date?: string) => {
-                const queryParams = new URLSearchParams();
-                if (date) queryParams.append('date', date);
-                const query = queryParams.toString();
-                return apiRequest<{ paidOnDate: number; totalCurrentBalance: number }>(`/payments/summary-stats${query ? `?${query}` : ''}`);
-            },
+    getSummaryStats: async (date?: string) => {
+        const queryParams = new URLSearchParams();
+        if (date) queryParams.append('date', date);
+        const query = queryParams.toString();
+        return apiRequest<{ paidOnDate: number; totalCurrentBalance: number }>(`/payments/summary-stats${query ? `?${query}` : ''}`);
+    },
 };
 
-    // Rate Charts API
-    export const rateChartsApi = {
-        getAll: async () => {
-            return apiRequest<{ data: RateChart[] }>('/rate-charts');
-        },
+// Rate Charts API
+export const rateChartsApi = {
+    getAll: async () => {
+        return apiRequest<{ data: RateChart[] }>('/rate-charts');
+    },
 
-        getActive: async () => {
-            return apiRequest<RateChart>('/rate-charts/active');
-        },
+    getActive: async () => {
+        return apiRequest<RateChart>('/rate-charts/active');
+    },
 
-        calculate: async (fat: number, snf: number) => {
-            return apiRequest<{ rate: number; fat: number; snf: number; chartName: string }>('/rate-charts/calculate', {
-                method: 'POST',
-                body: JSON.stringify({ fat, snf }),
-            });
-        },
+    calculate: async (fat: number, snf: number) => {
+        return apiRequest<{ rate: number; fat: number; snf: number; chartName: string }>('/rate-charts/calculate', {
+            method: 'POST',
+            body: JSON.stringify({ fat, snf }),
+        });
+    },
 
-        create: async (data: Partial<RateChart>) => {
-            return apiRequest<RateChart>('/rate-charts', {
-                method: 'POST',
-                body: JSON.stringify(data),
-            });
-        },
+    create: async (data: Partial<RateChart>) => {
+        return apiRequest<RateChart>('/rate-charts', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
 
-        update: async (id: string, data: Partial<RateChart>) => {
-            return apiRequest<RateChart>(`/rate-charts/${id}`, {
-                method: 'PUT',
-                body: JSON.stringify(data),
-            });
-        },
+    update: async (id: string, data: Partial<RateChart>) => {
+        return apiRequest<RateChart>(`/rate-charts/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
 
-        getTable: async (params?: { fatMin?: number; fatMax?: number; snfMin?: number; snfMax?: number; step?: number }) => {
-            const queryParams = new URLSearchParams();
-            if (params?.fatMin) queryParams.append('fatMin', params.fatMin.toString());
-            if (params?.fatMax) queryParams.append('fatMax', params.fatMax.toString());
-            if (params?.snfMin) queryParams.append('snfMin', params.snfMin.toString());
-            if (params?.snfMax) queryParams.append('snfMax', params.snfMax.toString());
-            if (params?.step) queryParams.append('step', params.step.toString());
-            const query = queryParams.toString();
+    getTable: async (params?: { fatMin?: number; fatMax?: number; snfMin?: number; snfMax?: number; step?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.fatMin) queryParams.append('fatMin', params.fatMin.toString());
+        if (params?.fatMax) queryParams.append('fatMax', params.fatMax.toString());
+        if (params?.snfMin) queryParams.append('snfMin', params.snfMin.toString());
+        if (params?.snfMax) queryParams.append('snfMax', params.snfMax.toString());
+        if (params?.step) queryParams.append('step', params.step.toString());
+        const query = queryParams.toString();
 
-            return apiRequest<{ chart: RateChart; table: Array<{ fat: number; rates: Array<{ snf: number; rate: number }> }> }>(
-                `/rate-charts/table${query ? `?${query}` : ''}`
-            );
-        },
-    };
+        return apiRequest<{ chart: RateChart; table: Array<{ fat: number; rates: Array<{ snf: number; rate: number }> }> }>(
+            `/rate-charts/table${query ? `?${query}` : ''}`
+        );
+    },
+};
 
-    // Reports API
-    export const reportsApi = {
-        getMilkCollections: async (params: {
-            startDate: string;
-            endDate: string;
-            farmerCode?: string;
-            shift?: string;
-            groupBy?: 'date' | 'farmer';
-        }) => {
-            const queryParams = new URLSearchParams();
-            queryParams.append('startDate', params.startDate);
-            queryParams.append('endDate', params.endDate);
-            if (params.farmerCode) queryParams.append('farmerCode', params.farmerCode);
-            if (params.shift) queryParams.append('shift', params.shift);
-            if (params.groupBy) queryParams.append('groupBy', params.groupBy);
+// Reports API
+export const reportsApi = {
+    getMilkCollections: async (params: {
+        startDate: string;
+        endDate: string;
+        farmerCode?: string;
+        shift?: string;
+        groupBy?: 'date' | 'farmer';
+    }) => {
+        const queryParams = new URLSearchParams();
+        queryParams.append('startDate', params.startDate);
+        queryParams.append('endDate', params.endDate);
+        if (params.farmerCode) queryParams.append('farmerCode', params.farmerCode);
+        if (params.shift) queryParams.append('shift', params.shift);
+        if (params.groupBy) queryParams.append('groupBy', params.groupBy);
 
-            return apiRequest<MilkReport>(`/reports/milk-collections?${queryParams.toString()}`);
-        },
+        return apiRequest<MilkReport>(`/reports/milk-collections?${queryParams.toString()}`);
+    },
 
-        getPayments: async (params: {
-            startDate: string;
-            endDate: string;
-            farmerCode?: string;
-            paymentMethod?: string;
-        }) => {
-            const queryParams = new URLSearchParams();
-            queryParams.append('startDate', params.startDate);
-            queryParams.append('endDate', params.endDate);
-            if (params.farmerCode) queryParams.append('farmerCode', params.farmerCode);
-            if (params.paymentMethod) queryParams.append('paymentMethod', params.paymentMethod);
+    getPayments: async (params: {
+        startDate: string;
+        endDate: string;
+        farmerCode?: string;
+        paymentMethod?: string;
+    }) => {
+        const queryParams = new URLSearchParams();
+        queryParams.append('startDate', params.startDate);
+        queryParams.append('endDate', params.endDate);
+        if (params.farmerCode) queryParams.append('farmerCode', params.farmerCode);
+        if (params.paymentMethod) queryParams.append('paymentMethod', params.paymentMethod);
 
-            return apiRequest<PaymentReport>(`/reports/payments?${queryParams.toString()}`);
-        },
+        return apiRequest<PaymentReport>(`/reports/payments?${queryParams.toString()}`);
+    },
 
-        getFarmerStatement: async (farmerCode: string, startDate?: string, endDate?: string) => {
-            const queryParams = new URLSearchParams();
-            if (startDate) queryParams.append('startDate', startDate);
-            if (endDate) queryParams.append('endDate', endDate);
-            const query = queryParams.toString();
+    getFarmerStatement: async (farmerCode: string, startDate?: string, endDate?: string) => {
+        const queryParams = new URLSearchParams();
+        if (startDate) queryParams.append('startDate', startDate);
+        if (endDate) queryParams.append('endDate', endDate);
+        const query = queryParams.toString();
 
-            return apiRequest<FarmerStatement>(`/reports/farmer-statement/${farmerCode}${query ? `?${query}` : ''}`);
-        },
+        return apiRequest<FarmerStatement>(`/reports/farmer-statement/${farmerCode}${query ? `?${query}` : ''}`);
+    },
 
-        getDashboard: async (params?: { farmerType?: 'farmer' | 'member' }) => {
-            const queryParams = new URLSearchParams();
-            if (params?.farmerType) queryParams.append('farmerType', params.farmerType);
-            const query = queryParams.toString();
-            return apiRequest<DashboardStats>(`/reports/dashboard${query ? `?${query}` : ''}`);
-        },
+    getDashboard: async (params?: { farmerType?: 'farmer' | 'member' }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.farmerType) queryParams.append('farmerType', params.farmerType);
+        const query = queryParams.toString();
+        return apiRequest<DashboardStats>(`/reports/dashboard${query ? `?${query}` : ''}`);
+    },
 
-        getHomeStats: async () => {
-            return apiRequest<HomeStats>('/reports/home-stats');
-        },
+    getHomeStats: async () => {
+        return apiRequest<HomeStats>('/reports/home-stats');
+    },
 
-        getAnalytics: async (params?: { period?: string; days?: number }) => {
-            const queryParams = new URLSearchParams();
-            if (params?.period) queryParams.append('period', params.period);
-            if (params?.days) queryParams.append('days', params.days.toString());
-            const query = queryParams.toString();
+    getAnalytics: async (params?: { period?: string; days?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.period) queryParams.append('period', params.period);
+        if (params?.days) queryParams.append('days', params.days.toString());
+        const query = queryParams.toString();
 
-            return apiRequest<{
-                period: { startDate: string; endDate: string };
-                chartData: Array<{
-                    date: string;
-                    label: string;
-                    quantity: number;
-                    amount: number;
-                    morningQty: number;
-                    eveningQty: number;
-                    payments: number;
-                }>;
-                totals: {
-                    totalQuantity: number;
-                    totalAmount: number;
-                    totalPayments: number;
-                    avgDailyQty: number;
-                    maxQty: number;
-                    minQty: number;
-                };
-            }>(`/reports/analytics${query ? `?${query}` : ''}`);
-        },
-
-        getTopFarmers: async (params?: { days?: number; limit?: number }) => {
-            const queryParams = new URLSearchParams();
-            if (params?.days) queryParams.append('days', params.days.toString());
-            if (params?.limit) queryParams.append('limit', params.limit.toString());
-            const query = queryParams.toString();
-
-            return apiRequest<Array<{
-                farmer: { _id: string; code: string; name: string };
+        return apiRequest<{
+            period: { startDate: string; endDate: string };
+            chartData: Array<{
+                date: string;
+                label: string;
+                quantity: number;
+                amount: number;
+                morningQty: number;
+                eveningQty: number;
+                payments: number;
+            }>;
+            totals: {
                 totalQuantity: number;
                 totalAmount: number;
-                collections: number;
-                avgRate: number;
-            }>>(`/reports/top-farmers${query ? `?${query}` : ''}`);
-        },
-    };
+                totalPayments: number;
+                avgDailyQty: number;
+                maxQty: number;
+                minQty: number;
+            };
+        }>(`/reports/analytics${query ? `?${query}` : ''}`);
+    },
 
-    // Feedback API
-    export const feedbackApi = {
-        getMyFeedbacks: async () => {
-            return apiRequest<{ data: Feedback[] }>('/feedback/my');
-        },
+    getTopFarmers: async (params?: { days?: number; limit?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.days) queryParams.append('days', params.days.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        const query = queryParams.toString();
 
-        submit: async (data: {
-            type: string;
-            subject: string;
-            message: string;
-            priority?: string
-        }) => {
-            return apiRequest<Feedback>('/feedback', {
-                method: 'POST',
-                body: JSON.stringify(data),
-            });
-        },
+        return apiRequest<Array<{
+            farmer: { _id: string; code: string; name: string };
+            totalQuantity: number;
+            totalAmount: number;
+            collections: number;
+            avgRate: number;
+        }>>(`/reports/top-farmers${query ? `?${query}` : ''}`);
+    },
+};
 
-        getById: async (id: string) => {
-            return apiRequest<Feedback>(`/feedback/${id}`);
-        },
+// Feedback API
+export const feedbackApi = {
+    getMyFeedbacks: async () => {
+        return apiRequest<{ data: Feedback[] }>('/feedback/my');
+    },
 
-        // Admin endpoints
-        getAll: async (params?: { status?: string; type?: string; page?: number; limit?: number }) => {
-            const queryParams = new URLSearchParams();
-            if (params?.status) queryParams.append('status', params.status);
-            if (params?.type) queryParams.append('type', params.type);
-            if (params?.page) queryParams.append('page', params.page.toString());
-            if (params?.limit) queryParams.append('limit', params.limit.toString());
-            const query = queryParams.toString();
+    submit: async (data: {
+        type: string;
+        subject: string;
+        message: string;
+        priority?: string
+    }) => {
+        return apiRequest<Feedback>('/feedback', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
 
-            return apiRequest<{ data: Feedback[]; total: number; page: number; pages: number }>(
-                `/feedback${query ? `?${query}` : ''}`
-            );
-        },
+    getById: async (id: string) => {
+        return apiRequest<Feedback>(`/feedback/${id}`);
+    },
 
-        getStats: async () => {
-            return apiRequest<{ total: number; pending: number; inReview: number; resolved: number; byType: any }>(
-                '/feedback/stats'
-            );
-        },
+    // Admin endpoints
+    getAll: async (params?: { status?: string; type?: string; page?: number; limit?: number }) => {
+        const queryParams = new URLSearchParams();
+        if (params?.status) queryParams.append('status', params.status);
+        if (params?.type) queryParams.append('type', params.type);
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        const query = queryParams.toString();
 
-        updateStatus: async (id: string, status: string, adminResponse?: string) => {
-            return apiRequest<Feedback>(`/feedback/${id}/status`, {
-                method: 'PUT',
-                body: JSON.stringify({ status, adminResponse }),
-            });
-        },
-    };
+        return apiRequest<{ data: Feedback[]; total: number; page: number; pages: number }>(
+            `/feedback${query ? `?${query}` : ''}`
+        );
+    },
 
-    // Auth API
-    export const authApiNew = {
-        login: async (email: string, password: string) => {
-            return apiRequest<{ token: string; user: any }>('/auth/login', {
-                method: 'POST',
-                body: JSON.stringify({ email, password }),
-            });
-        },
+    getStats: async () => {
+        return apiRequest<{ total: number; pending: number; inReview: number; resolved: number; byType: any }>(
+            '/feedback/stats'
+        );
+    },
 
-        register: async (data: { name: string; email: string; phone: string; password: string; address?: string; referralCode?: string }) => {
-            return apiRequest<{ token: string; user: any }>('/auth/register', {
-                method: 'POST',
-                body: JSON.stringify(data),
-            });
-        },
+    updateStatus: async (id: string, status: string, adminResponse?: string) => {
+        return apiRequest<Feedback>(`/feedback/${id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status, adminResponse }),
+        });
+    },
+};
 
-        sendOtp: async (email: string) => {
-            return apiRequest<{ message: string }>('/auth/send-otp', {
-                method: 'POST',
-                body: JSON.stringify({ email }),
-            });
-        },
+// Auth API
+export const authApiNew = {
+    login: async (email: string, password: string) => {
+        return apiRequest<{ token: string; user: any }>('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password }),
+        });
+    },
 
-        verifyOtp: async (email: string, otp: string) => {
-            return apiRequest<{ verified: boolean }>('/auth/verify-otp', {
-                method: 'POST',
-                body: JSON.stringify({ email, otp }),
-            });
-        },
+    register: async (data: { name: string; email: string; phone: string; password: string; address?: string; referralCode?: string }) => {
+        return apiRequest<{ token: string; user: any }>('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
 
-        logout: async () => {
-            return apiRequest<void>('/auth/logout', {
-                method: 'POST',
-            });
-        },
+    sendOtp: async (email: string) => {
+        return apiRequest<{ message: string }>('/auth/send-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    },
 
-        getMe: async () => {
-            return apiRequest<any>('/auth/me');
-        },
+    verifyOtp: async (email: string, otp: string) => {
+        return apiRequest<{ verified: boolean }>('/auth/verify-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email, otp }),
+        });
+    },
 
-        forgotPassword: async (email: string) => {
-            return apiRequest<{ message: string }>('/auth/forgot-password', {
-                method: 'POST',
-                body: JSON.stringify({ email }),
-            });
-        },
+    logout: async () => {
+        return apiRequest<void>('/auth/logout', {
+            method: 'POST',
+        });
+    },
 
-        verifyForgotPasswordOtp: async (email: string, otp: string) => {
-            return apiRequest<{ verified: boolean; resetToken: string }>('/auth/verify-forgot-otp', {
-                method: 'POST',
-                body: JSON.stringify({ email, otp }),
-            });
-        },
+    getMe: async () => {
+        return apiRequest<any>('/auth/me');
+    },
 
-        resetPassword: async (email: string, resetToken: string, newPassword: string) => {
-            return apiRequest<{ message: string }>('/auth/reset-password', {
-                method: 'POST',
-                body: JSON.stringify({ email, resetToken, newPassword }),
-            });
-        },
+    forgotPassword: async (email: string) => {
+        return apiRequest<{ message: string }>('/auth/forgot-password', {
+            method: 'POST',
+            body: JSON.stringify({ email }),
+        });
+    },
 
-        updatePushToken: async (expoPushToken: string) => {
-            return apiRequest<{ message: string }>('/auth/push-token', {
-                method: 'PUT',
-                body: JSON.stringify({ expoPushToken }),
-            });
-        },
+    verifyForgotPasswordOtp: async (email: string, otp: string) => {
+        return apiRequest<{ verified: boolean; resetToken: string }>('/auth/verify-forgot-otp', {
+            method: 'POST',
+            body: JSON.stringify({ email, otp }),
+        });
+    },
 
-        updateProfile: async (data: { name?: string; avatar?: string; address?: string }) => {
-            return apiRequest<any>('/auth/profile', {
-                method: 'PUT',
-                body: JSON.stringify(data),
-            });
-        },
-    };
+    resetPassword: async (email: string, resetToken: string, newPassword: string) => {
+        return apiRequest<{ message: string }>('/auth/reset-password', {
+            method: 'POST',
+            body: JSON.stringify({ email, resetToken, newPassword }),
+        });
+    },
 
-    // Custom Forms API
-    export interface CustomForm {
-        _id: string;
-formName: string;
-fields: { label: string; value: string } [];
-status: 'pending' | 'reviewed' | 'approved' | 'rejected';
-adminNotes ?: string;
-createdAt: string;
-user ?: { _id: string; name: string; email: string; phone: string };
+    updatePushToken: async (expoPushToken: string) => {
+        return apiRequest<{ message: string }>('/auth/push-token', {
+            method: 'PUT',
+            body: JSON.stringify({ expoPushToken }),
+        });
+    },
+
+    updateProfile: async (data: { name?: string; avatar?: string; address?: string }) => {
+        return apiRequest<any>('/auth/profile', {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+};
+
+// Custom Forms API
+export interface CustomForm {
+    _id: string;
+    formName: string;
+    fields: { label: string; value: string }[];
+    status: 'pending' | 'reviewed' | 'approved' | 'rejected';
+    adminNotes?: string;
+    createdAt: string;
+    user?: { _id: string; name: string; email: string; phone: string };
 }
 
 export const customFormsApi = {
