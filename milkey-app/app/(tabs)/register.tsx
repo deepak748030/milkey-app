@@ -449,10 +449,6 @@ export default function RegisterScreen() {
         }
     };
 
-    // Load more advances (client-side pagination)
-    const loadMoreAdvances = () => {
-        setAdvancesDisplayCount(prev => prev + 20);
-    };
 
     // Payment tab: fetch farmer summary
     const handleFetchFarmerSummary = async () => {
@@ -1561,7 +1557,7 @@ export default function RegisterScreen() {
             {/* Total Amount Header */}
             {advances.length > 0 && (
                 <View style={styles.totalAmountHeader}>
-                    <Text style={styles.totalAmountLabel}>Total Pending Amount</Text>
+                    <Text style={styles.totalAmountLabel}>Total Amount</Text>
                     <Text style={styles.totalAmountValue}>₹{totalPendingAmount.toLocaleString('en-IN')}</Text>
                 </View>
             )}
