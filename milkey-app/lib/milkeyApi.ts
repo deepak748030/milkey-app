@@ -429,13 +429,35 @@ export const purchaseFarmersApi = {
 
 // Advances API
 export const advancesApi = {
-    getAll: async (params?: { farmerId?: string; status?: string }) => {
+    getAll: async (params?: {
+        farmerId?: string;
+        status?: string;
+        page?: number;
+        limit?: number;
+        search?: string;
+        sortOrder?: 'pendingFirst' | 'date';
+    }) => {
         const queryParams = new URLSearchParams();
         if (params?.farmerId) queryParams.append('farmerId', params.farmerId);
         if (params?.status) queryParams.append('status', params.status);
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.search) queryParams.append('search', params.search);
+        if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
         const query = queryParams.toString();
 
-        return apiRequest<{ data: Advance[] }>(`/advances${query ? `?${query}` : ''}`);
+        return apiRequest<{
+            data: Advance[];
+            pagination: {
+                page: number;
+                limit: number;
+                total: number;
+                pages: number;
+                pendingCount: number;
+                settledCount: number;
+            };
+            totalPendingAmount: number;
+        }>(`/advances${query ? `?${query}` : ''}`);
     },
 
     create: async (data: { farmerCode: string; amount: number; date?: string; note?: string }) => {

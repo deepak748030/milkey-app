@@ -73,8 +73,12 @@ export default function RegisterScreen() {
     const [farmerPaymentsHasMore, setFarmerPaymentsHasMore] = useState(true);
     const [farmerPaymentsLoadingMore, setFarmerPaymentsLoadingMore] = useState(false);
 
-    // Infinite scroll state for advances
-    const [advancesDisplayCount, setAdvancesDisplayCount] = useState(20);
+    // Server-side pagination state for advances
+    const [advancesPage, setAdvancesPage] = useState(1);
+    const [advancesHasMore, setAdvancesHasMore] = useState(true);
+    const [advancesLoadingMore, setAdvancesLoadingMore] = useState(false);
+    const [totalPendingAmount, setTotalPendingAmount] = useState(0);
+    const [advancesTotalCount, setAdvancesTotalCount] = useState(0);
 
     // Payment tab state
     const [paymentCode, setPaymentCode] = useState('');
@@ -275,12 +279,72 @@ export default function RegisterScreen() {
         }
     }, [blockedPeriods, paymentFarmer]);
 
+    // Fetch advances with server-side pagination
+    const fetchAdvances = async (page: number = 1, search: string = '', append: boolean = false) => {
+        try {
+            if (page === 1 && !append) {
+                setAdvancesPage(1);
+                setAdvancesHasMore(true);
+            }
+
+            const res = await advancesApi.getAll({
+                page,
+                limit: 20,
+                search: search || undefined,
+                sortOrder: 'pendingFirst'
+            });
+
+            if (!res.success) {
+                showAlert('Error', res.message || 'Failed to load advances');
+                if (!append) setAdvances([]);
+                return;
+            }
+
+            if (res.response?.data) {
+                if (append) {
+                    setAdvances(prev => [...prev, ...res.response!.data]);
+                } else {
+                    setAdvances(res.response.data);
+                }
+
+                // Update pagination state
+                const pagination = res.response.pagination;
+                if (pagination) {
+                    setAdvancesTotalCount(pagination.total);
+                    setAdvancesHasMore(page < pagination.pages);
+                } else {
+                    setAdvancesHasMore(res.response.data.length >= 20);
+                }
+
+                // Update total pending amount from server
+                if (res.response.totalPendingAmount !== undefined) {
+                    setTotalPendingAmount(res.response.totalPendingAmount);
+                }
+            } else {
+                if (!append) setAdvances([]);
+                setAdvancesHasMore(false);
+            }
+        } catch (error) {
+            console.error('Error fetching advances:', error);
+            if (!append) setAdvances([]);
+        }
+    };
+
+    // Load more advances
+    const loadMoreAdvances = async () => {
+        if (advancesLoadingMore || !advancesHasMore) return;
+        setAdvancesLoadingMore(true);
+        const nextPage = advancesPage + 1;
+        await fetchAdvances(nextPage, advanceSearch, true);
+        setAdvancesPage(nextPage);
+        setAdvancesLoadingMore(false);
+    };
+
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [farmersRes, advancesRes, paymentsRes] = await Promise.all([
+            const [farmersRes, paymentsRes] = await Promise.all([
                 farmersApi.getAll(),
-                advancesApi.getAll(),
                 paymentsApi.getAll({ limit: 20 }),
             ]);
 
@@ -296,11 +360,8 @@ export default function RegisterScreen() {
                 setFarmers(sortedFarmers);
             }
 
-            if (!advancesRes.success) {
-                showAlert('Error', advancesRes.message || 'Failed to load advances');
-            } else if (advancesRes.response?.data) {
-                setAdvances(advancesRes.response.data);
-            }
+            // Fetch advances separately with pagination
+            await fetchAdvances(1, advanceSearch, false);
 
             if (!paymentsRes.success) {
                 showAlert('Error', paymentsRes.message || 'Failed to load settlements');
@@ -317,9 +378,10 @@ export default function RegisterScreen() {
 
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
+        setAdvancesPage(1);
         await fetchData();
         setRefreshing(false);
-    }, []);
+    }, [advanceSearch]);
 
     // Fetch farmer-specific payment history (with pagination)
     const fetchFarmerPayments = async (farmerId: string, page: number = 1, append: boolean = false) => {
@@ -879,21 +941,21 @@ export default function RegisterScreen() {
     // Show all farmers (removed search filter)
     const filteredFarmers = farmers;
 
-    // Filter advances by search (name or code) and apply display limit
-    const allFilteredAdvances = advanceSearch
-        ? advances.filter(a =>
-            a.farmer?.code?.toLowerCase().includes(advanceSearch.toLowerCase()) ||
-            a.farmer?.name?.toLowerCase().includes(advanceSearch.toLowerCase())
-        )
-        : advances;
+    // Debounce advance search and fetch from server
+    const debouncedAdvanceSearch = useDebounce(advanceSearch, 400);
 
-    // Apply display limit for infinite scroll
-    const filteredAdvances = allFilteredAdvances.slice(0, advancesDisplayCount);
-    const hasMoreAdvances = allFilteredAdvances.length > advancesDisplayCount;
+    useEffect(() => {
+        // Reset page and fetch with new search term
+        setAdvancesPage(1);
+        fetchAdvances(1, debouncedAdvanceSearch, false);
+    }, [debouncedAdvanceSearch]);
+
+    // Data comes pre-sorted from server (pending first, then settled)
+    // No need for client-side filtering/sorting
 
     // Generate Advances PDF
     const generateAdvancesPDF = async () => {
-        const dataToExport = filteredAdvances;
+        const dataToExport = advances;
         const rows = dataToExport.map(item => {
             const isSettled = item.status === 'settled' || item.status === 'partial';
             return `
@@ -1496,8 +1558,16 @@ export default function RegisterScreen() {
                 </Pressable>
             </View>
 
+            {/* Total Amount Header */}
+            {advances.length > 0 && (
+                <View style={styles.totalAmountHeader}>
+                    <Text style={styles.totalAmountLabel}>Total Pending Amount</Text>
+                    <Text style={styles.totalAmountValue}>₹{totalPendingAmount.toLocaleString('en-IN')}</Text>
+                </View>
+            )}
+
             {/* Advances Table */}
-            {filteredAdvances.length > 0 ? (
+            {advances.length > 0 ? (
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Code</Text>
@@ -1507,7 +1577,7 @@ export default function RegisterScreen() {
                         <Text style={[styles.tableHeaderCell, { flex: 0.9 }]}>Date</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Del</Text>
                     </View>
-                    {filteredAdvances.map((item) => {
+                    {advances.map((item) => {
                         // Only show cross-line for advances that are settled or partial (used in payments)
                         const isUsedInPayment = item.status === 'settled' || item.status === 'partial';
                         return (
@@ -1531,12 +1601,15 @@ export default function RegisterScreen() {
                         );
                     })}
                     {/* Load More Button for advances */}
-                    {hasMoreAdvances && (
+                    {advancesHasMore && (
                         <Pressable
                             style={styles.loadMoreBtn}
                             onPress={loadMoreAdvances}
+                            disabled={advancesLoadingMore}
                         >
-                            <Text style={styles.loadMoreText}>Load More ({allFilteredAdvances.length - advancesDisplayCount} remaining)</Text>
+                            <Text style={styles.loadMoreText}>
+                                {advancesLoadingMore ? 'Loading...' : `Load More (${advancesTotalCount - advances.length} remaining)`}
+                            </Text>
                         </Pressable>
                     )}
                 </View>
@@ -2950,6 +3023,30 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     loadMoreText: {
         fontSize: 14,
         fontWeight: '600',
+        color: colors.primary,
+    },
+    // Total Amount Header Styles
+    totalAmountHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: colors.primary + '15',
+        borderWidth: 1,
+        borderColor: colors.primary,
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginTop: 12,
+        marginBottom: 8,
+    },
+    totalAmountLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.primary,
+    },
+    totalAmountValue: {
+        fontSize: 16,
+        fontWeight: '700',
         color: colors.primary,
     },
 });

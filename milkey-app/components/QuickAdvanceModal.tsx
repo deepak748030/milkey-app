@@ -224,6 +224,7 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
                                             }}
                                             onFocus={() => setShowSuggestions(true)}
                                             placeholderTextColor={colors.mutedForeground}
+                                            keyboardType="number-pad"
                                         />
                                         {selectedFarmer && (
                                             <View style={styles.selectedBadge}>
@@ -294,7 +295,7 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
                                             style={styles.input}
                                             value={amount}
                                             onChangeText={setAmount}
-                                            keyboardType="numeric"
+                                            keyboardType="number-pad"
                                             placeholder="0"
                                             placeholderTextColor={colors.mutedForeground}
                                         />
