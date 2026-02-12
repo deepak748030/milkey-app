@@ -15,6 +15,7 @@
     },
     "android": {
       "package": "com.milkey.app",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#4CAF50"

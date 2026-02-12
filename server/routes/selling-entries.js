@@ -17,12 +17,17 @@ const normalizeToUtcStartOfDay = (value) => {
 // GET /api/selling-entries - Get all entries for current user
 router.get('/', auth, async (req, res) => {
     try {
-        const { limit = 50, page = 1, memberId, startDate, endDate } = req.query;
+        const { limit = 50, page = 1, memberId, startDate, endDate, isPaid } = req.query;
 
         const query = { owner: req.userId };
 
         if (memberId) {
             query.member = memberId;
+        }
+
+        // Allow filtering by isPaid status; if not provided, return ALL entries (settled + unsettled)
+        if (isPaid !== undefined && isPaid !== '') {
+            query.isPaid = isPaid === 'true';
         }
 
         if (startDate || endDate) {
