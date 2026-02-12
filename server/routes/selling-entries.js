@@ -17,7 +17,7 @@ const normalizeToUtcStartOfDay = (value) => {
 // GET /api/selling-entries - Get all entries for current user
 router.get('/', auth, async (req, res) => {
     try {
-        const { limit = 50, page = 1, memberId, startDate, endDate, isPaid } = req.query;
+        const { limit = 500, page = 1, memberId, startDate, endDate, isPaid } = req.query;
 
         const query = { owner: req.userId };
 
