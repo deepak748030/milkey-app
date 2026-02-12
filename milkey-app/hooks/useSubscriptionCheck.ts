@@ -37,10 +37,10 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
         setLoading(true);
         setAccessChecked(false);
         try {
-            // Initialize from storage first for instant UI
-            await initializeFromStorage();
+            // Clear stale cache before fetching fresh data
+            useSubscriptionStore.getState().clearCache();
 
-            // Always fetch fresh data to ensure accurate subscription status
+            // Fetch fresh tab data from server
             const data = await fetchTabData(tab);
 
             // Show modal if no access
@@ -70,7 +70,7 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
             setLoading(false);
             setAccessChecked(true);
         }
-    }, [tab, fetchTabData, fetchStatus, initializeFromStorage]);
+    }, [tab, fetchTabData, fetchStatus]);
 
     // Check subscription on mount
     useEffect(() => {

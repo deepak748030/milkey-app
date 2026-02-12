@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield } from 'lucide-react-native';
+import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
@@ -55,32 +55,51 @@ export default function ProfileScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          <Pressable style={styles.editButton} onPress={() => setShowEditModal(true)}>
-            <Edit2 size={18} color={colors.primary} />
-          </Pressable>
-          <View style={styles.avatarContainer}>
+          {/* Banner */}
+          <View style={styles.banner}>
+            <Pressable style={styles.editButton} onPress={() => setShowEditModal(true)}>
+              <Edit2 size={14} color={colors.white} />
+            </Pressable>
+          </View>
+          {/* Avatar overlapping banner */}
+          <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
-              <User size={40} color={colors.white} />
+              <User size={26} color={colors.white} />
             </View>
           </View>
-          <Text style={styles.userName}>{user?.name || 'Dairy Owner'}</Text>
-          <Text style={styles.userRole}>{user?.role || 'Owner'}</Text>
-          <View style={styles.contactInfo}>
-            <Text style={styles.contactText}>{user?.phone || ''}</Text>
-            <Text style={styles.contactText}>{user?.email || ''}</Text>
+          {/* Info */}
+          <View style={styles.profileInfo}>
+            <Text style={styles.userName} numberOfLines={1}>{user?.name || 'Dairy Owner'}</Text>
+            <View style={styles.roleBadge}>
+              <Text style={styles.userRole}>{user?.role || 'Owner'}</Text>
+            </View>
+            <View style={styles.contactRow}>
+              {user?.phone ? (
+                <View style={styles.contactItem}>
+                  <Phone size={13} color={colors.primary} />
+                  <Text style={styles.contactText}>{user.phone}</Text>
+                </View>
+              ) : null}
+              {user?.email ? (
+                <View style={styles.contactItem}>
+                  <Mail size={13} color={colors.primary} />
+                  <Text style={styles.contactText} numberOfLines={1}>{user.email}</Text>
+                </View>
+              ) : null}
+            </View>
+            {user?.address ? (
+              <View style={styles.addressContainer}>
+                <MapPin size={13} color={colors.primary} />
+                <Text style={styles.addressText} numberOfLines={2}>{user.address}</Text>
+              </View>
+            ) : null}
+            {user?.referralCode && (
+              <View style={styles.referralBadge}>
+                <Text style={styles.referralLabel}>Referral Code:</Text>
+                <Text style={styles.referralCode}>{user.referralCode}</Text>
+              </View>
+            )}
           </View>
-          {user?.address && (
-            <View style={styles.addressContainer}>
-              <MapPin size={14} color={colors.mutedForeground} />
-              <Text style={styles.addressText}>{user.address}</Text>
-            </View>
-          )}
-          {user?.referralCode && (
-            <View style={styles.referralBadge}>
-              <Text style={styles.referralLabel}>Your Code:</Text>
-              <Text style={styles.referralCode}>{user.referralCode}</Text>
-            </View>
-          )}
         </View>
 
         {/* Theme Toggle with Switcher */}
@@ -160,86 +179,109 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   profileCard: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 16,
+    borderRadius: 12,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  banner: {
+    height: 60,
+    backgroundColor: colors.primary,
     position: 'relative',
   },
   editButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.primary + '15',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarContainer: {
-    marginBottom: 12,
+  avatarWrapper: {
+    alignItems: 'center',
+    marginTop: -30,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: colors.card,
+  },
+  profileInfo: {
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 4,
   },
   userName: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.foreground,
-    marginBottom: 4,
+  },
+  roleBadge: {
+    backgroundColor: colors.primary + '18',
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginTop: 2,
+    marginBottom: 6,
   },
   userRole: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.primary,
     fontWeight: '600',
-    marginBottom: 12,
     textTransform: 'capitalize',
   },
-  contactInfo: {
+  contactRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 4,
+  },
+  contactItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
   contactText: {
-    fontSize: 12,
-    color: colors.mutedForeground,
-    marginBottom: 2,
+    fontSize: 13,
+    color: colors.foreground,
   },
   addressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    paddingHorizontal: 12,
-    gap: 6,
+    gap: 4,
+    marginTop: 4,
   },
   addressText: {
     fontSize: 12,
-    color: colors.mutedForeground,
-    flex: 1,
-    textAlign: 'center',
+    color: colors.foreground,
   },
   referralBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: colors.primary + '15',
-    borderRadius: 20,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: colors.primary + '12',
+    borderRadius: 14,
     gap: 6,
   },
   referralLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.mutedForeground,
   },
   referralCode: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.primary,
     letterSpacing: 1,
@@ -250,7 +292,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -308,7 +350,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: 6,
     borderWidth: 1,
     borderColor: colors.border,
   },

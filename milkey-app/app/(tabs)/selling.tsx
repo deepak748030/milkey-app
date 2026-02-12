@@ -306,9 +306,53 @@ export default function SellingScreen() {
         fetchData();
     }, [fetchData]);
 
+    // Re-fetch entries from server when recent entries filters change
+    const fetchFilteredEntries = useCallback(async () => {
+        const token = await getAuthToken();
+        if (!token) return;
+
+        const hasFilters = recentEntriesMemberFilter || recentEntriesStartDate || recentEntriesEndDate;
+        if (!hasFilters) return;
+
+        try {
+            setIsLoading(true);
+            const params: Record<string, any> = { limit: 50 };
+            if (recentEntriesMemberFilter) params.memberId = recentEntriesMemberFilter;
+            if (recentEntriesStartDate) params.startDate = recentEntriesStartDate;
+            if (recentEntriesEndDate) params.endDate = recentEntriesEndDate;
+
+            const res = await sellingEntriesApi.getAll(params);
+            if (res.success) {
+                const data = res.response?.data || [];
+                setRecentEntries(data);
+                setHasMoreEntries(data.length >= 50);
+                setEntriesPage(1);
+            }
+        } catch (error) {
+            console.error('Filtered fetch error:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [recentEntriesMemberFilter, recentEntriesStartDate, recentEntriesEndDate]);
+
+    useEffect(() => {
+        const hasFilters = recentEntriesMemberFilter || recentEntriesStartDate || recentEntriesEndDate;
+        if (hasFilters) {
+            fetchFilteredEntries();
+        } else {
+            // Filters cleared - re-fetch default data
+            fetchData();
+        }
+    }, [recentEntriesMemberFilter, recentEntriesStartDate, recentEntriesEndDate]);
+
     const onRefresh = () => {
         setRefreshing(true);
-        fetchData();
+        const hasFilters = recentEntriesMemberFilter || recentEntriesStartDate || recentEntriesEndDate;
+        if (hasFilters) {
+            fetchFilteredEntries().finally(() => setRefreshing(false));
+        } else {
+            fetchData();
+        }
     };
 
     // Load more entries
@@ -317,7 +361,11 @@ export default function SellingScreen() {
         setLoadingMore(true);
         try {
             const nextPage = entriesPage + 1;
-            const res = await sellingEntriesApi.getAll({ limit: 50, page: nextPage });
+            const params: Record<string, any> = { limit: 50, page: nextPage };
+            if (recentEntriesMemberFilter) params.memberId = recentEntriesMemberFilter;
+            if (recentEntriesStartDate) params.startDate = recentEntriesStartDate;
+            if (recentEntriesEndDate) params.endDate = recentEntriesEndDate;
+            const res = await sellingEntriesApi.getAll(params);
             if (res.success) {
                 const newEntries = res.response?.data || [];
                 setRecentEntries(prev => [...prev, ...newEntries]);
@@ -1169,8 +1217,14 @@ export default function SellingScreen() {
                             <Check size={12} color={colors.white} />
                         </View>
                     )}
-                    {selectedMember && (
-                        <Pressable onPress={() => { setSelectedMember(null); setSearchMember(''); }}>
+                    {(selectedMember || showSuggestions) && (
+                        <Pressable onPress={() => {
+                            setShowSuggestions(false);
+                            if (selectedMember) {
+                                setSelectedMember(null);
+                                setSearchMember('');
+                            }
+                        }}>
                             <X size={16} color={colors.destructive} />
                         </Pressable>
                     )}
@@ -1264,28 +1318,35 @@ export default function SellingScreen() {
                 <View style={styles.recentFiltersRow}>
                     {/* Member Filter */}
                     <View style={{ flex: 1, position: 'relative' }}>
-                        <Pressable
-                            style={styles.recentMemberFilter}
-                            onPress={() => setShowRecentMemberDropdown(!showRecentMemberDropdown)}
-                        >
-                            <User size={14} color={colors.mutedForeground} />
-                            <Text style={styles.recentFilterText} numberOfLines={1}>
-                                {selectedRecentMemberName}
-                            </Text>
-                        </Pressable>
+                        {showRecentMemberDropdown ? (
+                            <View style={styles.recentMemberFilter}>
+                                <Search size={14} color={colors.mutedForeground} />
+                                <TextInput
+                                    style={[styles.memberSearchInput, { flex: 1 }]}
+                                    placeholder="Search member..."
+                                    value={recentMemberSearch}
+                                    onChangeText={setRecentMemberSearch}
+                                    placeholderTextColor={colors.mutedForeground}
+                                    autoFocus
+                                />
+                                <Pressable onPress={() => { setShowRecentMemberDropdown(false); setRecentMemberSearch(''); }}>
+                                    <X size={14} color={colors.mutedForeground} />
+                                </Pressable>
+                            </View>
+                        ) : (
+                            <Pressable
+                                style={styles.recentMemberFilter}
+                                onPress={() => setShowRecentMemberDropdown(true)}
+                            >
+                                <User size={14} color={colors.mutedForeground} />
+                                <Text style={styles.recentFilterText} numberOfLines={1}>
+                                    {selectedRecentMemberName}
+                                </Text>
+                            </Pressable>
+                        )}
 
                         {showRecentMemberDropdown && (
                             <View style={styles.recentMemberDropdown}>
-                                <View style={styles.memberSearchContainer}>
-                                    <Search size={14} color={colors.mutedForeground} />
-                                    <TextInput
-                                        style={styles.memberSearchInput}
-                                        placeholder="Search member..."
-                                        value={recentMemberSearch}
-                                        onChangeText={setRecentMemberSearch}
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                </View>
                                 <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                                     <Pressable
                                         style={[styles.memberDropdownItem, !recentEntriesMemberFilter && styles.memberDropdownItemActive]}

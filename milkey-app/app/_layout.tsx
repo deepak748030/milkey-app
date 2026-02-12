@@ -4,15 +4,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePendingSubscriptionSync } from '@/hooks/usePendingSubscriptionSync';
+import { useTheme } from '@/hooks/useTheme';
 
 export default function RootLayout() {
   useFrameworkReady();
-
-  // Initialize push notifications with deep linking support
   usePushNotifications();
-
-  // Sync any pending subscriptions on app startup (handles webhook failures)
   usePendingSubscriptionSync();
+  const { isDark } = useTheme();
 
   return (
     <SafeAreaProvider>
@@ -30,9 +28,8 @@ export default function RootLayout() {
           <Stack.Screen name="subscriptions" />
           <Stack.Screen name="+not-found" />
         </Stack>
-        <StatusBar style="auto" />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
       </>
     </SafeAreaProvider>
   );
 }
-
