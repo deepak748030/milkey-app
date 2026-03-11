@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin } from 'lucide-react-native';
@@ -18,7 +18,6 @@ export default function AuthScreen() {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
-    // Form state
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
@@ -26,12 +25,10 @@ export default function AuthScreen() {
     const [address, setAddress] = useState('');
     const [referralCode, setReferralCode] = useState('');
 
-    // OTP state
     const [showOtpScreen, setShowOtpScreen] = useState(false);
     const [otp, setOtp] = useState('');
     const [tempEmail, setTempEmail] = useState('');
 
-    // Forgot password state
     const [showForgotPassword, setShowForgotPassword] = useState(false);
     const [showForgotOtpScreen, setShowForgotOtpScreen] = useState(false);
     const [showResetPasswordScreen, setShowResetPasswordScreen] = useState(false);
@@ -40,12 +37,11 @@ export default function AuthScreen() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showNewPassword, setShowNewPassword] = useState(false);
 
-    // Modal state
     const [modalVisible, setModalVisible] = useState(false);
     const [modalTitle, setModalTitle] = useState('');
     const [modalMessage, setModalMessage] = useState('');
 
-    const styles = createStyles(colors, isDark, insets);
+    const s = createStyles(colors, isDark, insets);
 
     const showModal = (title: string, message: string) => {
         setModalTitle(title);
@@ -55,120 +51,62 @@ export default function AuthScreen() {
 
     const handleAuth = async () => {
         if (isLogin) {
-            if (!email || !password) {
-                showModal('Error', 'Please enter email and password');
-                return;
-            }
+            if (!email || !password) { showModal('Error', 'Please enter email and password'); return; }
         } else {
-            if (!name || !email || !phone || !password) {
-                showModal('Error', 'Please fill all required fields');
-                return;
-            }
-            if (password.length < 6) {
-                showModal('Error', 'Password must be at least 6 characters');
-                return;
-            }
-            if (phone.length !== 10) {
-                showModal('Error', 'Please enter a valid 10-digit phone number');
-                return;
-            }
+            if (!name || !email || !phone || !password) { showModal('Error', 'Please fill all required fields'); return; }
+            if (password.length < 6) { showModal('Error', 'Password must be at least 6 characters'); return; }
+            if (phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
         }
-
         setLoading(true);
         try {
             if (isLogin) {
                 const result = await authApiNew.login(email, password);
                 if (result.success && result.response) {
                     await setAuthUser(result.response.token, result.response.user);
-                    // Send push token after login
-                    if (expoPushToken) {
-                        authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                    }
+                    if (expoPushToken) { authApiNew.updatePushToken(expoPushToken).catch(console.error); }
                     router.replace('/(tabs)');
-                } else {
-                    showModal('Error', result.message || 'Invalid email or password');
-                }
+                } else { showModal('Error', result.message || 'Invalid email or password'); }
             } else {
-                // For registration, send OTP first
                 const otpResult = await authApiNew.sendOtp(email);
                 if (otpResult.success) {
                     setTempEmail(email);
                     setShowOtpScreen(true);
                     showModal('OTP Sent', 'Please check your email for the verification code');
-                } else {
-                    showModal('Error', otpResult.message || 'Failed to send OTP');
-                }
+                } else { showModal('Error', otpResult.message || 'Failed to send OTP'); }
             }
-        } catch (error) {
-            showModal('Error', 'Network error. Please check your connection.');
-        } finally {
-            setLoading(false);
-        }
+        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+        finally { setLoading(false); }
     };
 
     const handleVerifyOtp = async () => {
-        if (!otp || otp.length !== 6) {
-            showModal('Error', 'Please enter a valid 6-digit OTP');
-            return;
-        }
-
+        if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
         setLoading(true);
         try {
             const verifyResult = await authApiNew.verifyOtp(tempEmail, otp);
             if (verifyResult.success) {
-                // OTP verified, now register
-                const result = await authApiNew.register({
-                    name,
-                    email: tempEmail,
-                    phone,
-                    password,
-                    address: address || undefined,
-                    referralCode: referralCode || undefined,
-                });
-
+                const result = await authApiNew.register({ name, email: tempEmail, phone, password, address: address || undefined, referralCode: referralCode || undefined });
                 if (result.success && result.response) {
                     await setAuthUser(result.response.token, result.response.user);
-                    // Send push token after registration
-                    if (expoPushToken) {
-                        authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                    }
+                    if (expoPushToken) { authApiNew.updatePushToken(expoPushToken).catch(console.error); }
                     router.replace('/(tabs)');
-                } else {
-                    showModal('Error', result.message || 'Registration failed');
-                }
-            } else {
-                showModal('Error', verifyResult.message || 'Invalid OTP');
-            }
-        } catch (error) {
-            showModal('Error', 'Network error. Please check your connection.');
-        } finally {
-            setLoading(false);
-        }
+                } else { showModal('Error', result.message || 'Registration failed'); }
+            } else { showModal('Error', verifyResult.message || 'Invalid OTP'); }
+        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+        finally { setLoading(false); }
     };
 
     const handleResendOtp = async () => {
         setLoading(true);
         try {
             const result = await authApiNew.sendOtp(tempEmail);
-            if (result.success) {
-                showModal('Success', 'OTP resent to your email');
-            } else {
-                showModal('Error', result.message || 'Failed to resend OTP');
-            }
-        } catch (error) {
-            showModal('Error', 'Network error. Please check your connection.');
-        } finally {
-            setLoading(false);
-        }
+            if (result.success) { showModal('Success', 'OTP resent to your email'); }
+            else { showModal('Error', result.message || 'Failed to resend OTP'); }
+        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+        finally { setLoading(false); }
     };
 
-    // Forgot password handlers
     const handleForgotPassword = async () => {
-        if (!email) {
-            showModal('Error', 'Please enter your email address');
-            return;
-        }
-
+        if (!email) { showModal('Error', 'Please enter your email address'); return; }
         setLoading(true);
         try {
             const result = await authApiNew.forgotPassword(email);
@@ -177,22 +115,13 @@ export default function AuthScreen() {
                 setShowForgotPassword(false);
                 setShowForgotOtpScreen(true);
                 showModal('OTP Sent', 'Password reset OTP sent to your email');
-            } else {
-                showModal('Error', result.message || 'Failed to send OTP');
-            }
-        } catch (error) {
-            showModal('Error', 'Network error. Please check your connection.');
-        } finally {
-            setLoading(false);
-        }
+            } else { showModal('Error', result.message || 'Failed to send OTP'); }
+        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+        finally { setLoading(false); }
     };
 
     const handleVerifyForgotOtp = async () => {
-        if (!otp || otp.length !== 6) {
-            showModal('Error', 'Please enter a valid 6-digit OTP');
-            return;
-        }
-
+        if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
         setLoading(true);
         try {
             const result = await authApiNew.verifyForgotPasswordOtp(tempEmail, otp);
@@ -201,315 +130,151 @@ export default function AuthScreen() {
                 setShowForgotOtpScreen(false);
                 setShowResetPasswordScreen(true);
                 setOtp('');
-            } else {
-                showModal('Error', result.message || 'Invalid OTP');
-            }
-        } catch (error) {
-            showModal('Error', 'Network error. Please check your connection.');
-        } finally {
-            setLoading(false);
-        }
+            } else { showModal('Error', result.message || 'Invalid OTP'); }
+        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+        finally { setLoading(false); }
     };
 
     const handleResetPassword = async () => {
-        if (!newPassword || newPassword.length < 6) {
-            showModal('Error', 'Password must be at least 6 characters');
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            showModal('Error', 'Passwords do not match');
-            return;
-        }
-
+        if (!newPassword || newPassword.length < 6) { showModal('Error', 'Password must be at least 6 characters'); return; }
+        if (newPassword !== confirmPassword) { showModal('Error', 'Passwords do not match'); return; }
         setLoading(true);
         try {
             const result = await authApiNew.resetPassword(tempEmail, resetToken, newPassword);
             if (result.success) {
                 showModal('Success', 'Password reset successfully! You can now login.');
-                // Reset all states
-                setShowResetPasswordScreen(false);
-                setTempEmail('');
-                setResetToken('');
-                setNewPassword('');
-                setConfirmPassword('');
-                setIsLogin(true);
-            } else {
-                showModal('Error', result.message || 'Failed to reset password');
-            }
-        } catch (error) {
-            showModal('Error', 'Network error. Please check your connection.');
-        } finally {
-            setLoading(false);
-        }
+                setShowResetPasswordScreen(false); setTempEmail(''); setResetToken(''); setNewPassword(''); setConfirmPassword(''); setIsLogin(true);
+            } else { showModal('Error', result.message || 'Failed to reset password'); }
+        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+        finally { setLoading(false); }
     };
 
     const handleResendForgotOtp = async () => {
         setLoading(true);
         try {
             const result = await authApiNew.forgotPassword(tempEmail);
-            if (result.success) {
-                showModal('Success', 'OTP resent to your email');
-            } else {
-                showModal('Error', result.message || 'Failed to resend OTP');
-            }
-        } catch (error) {
-            showModal('Error', 'Network error. Please check your connection.');
-        } finally {
-            setLoading(false);
-        }
+            if (result.success) { showModal('Success', 'OTP resent to your email'); }
+            else { showModal('Error', result.message || 'Failed to resend OTP'); }
+        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+        finally { setLoading(false); }
     };
 
     const resetForgotPasswordFlow = () => {
-        setShowForgotPassword(false);
-        setShowForgotOtpScreen(false);
-        setShowResetPasswordScreen(false);
-        setTempEmail('');
-        setOtp('');
-        setResetToken('');
-        setNewPassword('');
-        setConfirmPassword('');
+        setShowForgotPassword(false); setShowForgotOtpScreen(false); setShowResetPasswordScreen(false);
+        setTempEmail(''); setOtp(''); setResetToken(''); setNewPassword(''); setConfirmPassword('');
     };
 
-    // Forgot Password - Enter Email Screen
+    // Reusable input
+    const InputField = ({ icon: Icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, maxLength, autoCapitalize, multiline, showToggle, toggleValue, onToggle }: any) => (
+        <View style={[s.inputContainer, { borderColor: colors.border }]}>
+            <Icon size={16} color={colors.mutedForeground} style={s.inputIcon} />
+            <TextInput
+                style={s.input}
+                placeholder={placeholder}
+                value={value}
+                onChangeText={onChangeText}
+                secureTextEntry={secureTextEntry}
+                keyboardType={keyboardType}
+                maxLength={maxLength}
+                autoCapitalize={autoCapitalize || 'none'}
+                placeholderTextColor={colors.mutedForeground}
+                multiline={multiline}
+            />
+            {showToggle && (
+                <Pressable onPress={onToggle} style={s.eyeIcon}>
+                    {toggleValue ? <EyeOff size={16} color={colors.mutedForeground} /> : <Eye size={16} color={colors.mutedForeground} />}
+                </Pressable>
+            )}
+        </View>
+    );
+
+    // Reusable button with spinner
+    const AuthButton = ({ onPress, label, disabled }: { onPress: () => void; label: string; disabled?: boolean }) => (
+        <Pressable
+            style={[s.authButton, (loading || disabled) && s.authButtonDisabled]}
+            onPress={onPress}
+            disabled={loading || disabled}
+        >
+            {loading ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={s.authButtonText}>{label}</Text>}
+        </Pressable>
+    );
+
+    // Logo header
+    const LogoHeader = ({ title, subtitle }: { title: string; subtitle: string }) => (
+        <View style={s.logoContainer}>
+            <Image source={require('@/assets/images/icon.png')} style={s.logoImage} resizeMode="contain" />
+            <Text style={[s.appName, { color: colors.foreground }]}>{title}</Text>
+            <Text style={[s.tagline, { color: colors.mutedForeground }]}>{subtitle}</Text>
+        </View>
+    );
+
+    // Forgot Password - Enter Email
     if (showForgotPassword) {
         return (
-            <KeyboardAvoidingView
-                style={styles.container}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
-                <LinearGradient
-                    colors={[colors.primary + '20', colors.background]}
-                    style={styles.gradient}
-                />
-
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <View style={styles.logoContainer}>
-                        <View style={[styles.logo, { backgroundColor: colors.destructive }]}>
-                            <Text style={styles.logoEmoji}>🔐</Text>
-                        </View>
-                        <Text style={styles.appName}>Forgot Password</Text>
-                        <Text style={styles.tagline}>Enter your email to reset password</Text>
-                    </View>
-
-                    <View style={styles.formCard}>
-                        <Text style={styles.formTitle}>Reset Password</Text>
-                        <Text style={styles.formSubtitle}>We'll send you a verification code</Text>
-
-                        <View style={styles.inputContainer}>
-                            <Mail size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Email Address"
-                                value={email}
-                                onChangeText={setEmail}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                        </View>
-
-                        <Pressable
-                            style={[styles.authButton, loading && styles.authButtonDisabled]}
-                            onPress={handleForgotPassword}
-                            disabled={loading}
-                        >
-                            <Text style={styles.authButtonText}>
-                                {loading ? 'Sending...' : 'Send OTP'}
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            style={styles.backButton}
-                            onPress={() => {
-                                setShowForgotPassword(false);
-                                setEmail('');
-                            }}
-                        >
-                            <Text style={styles.backButtonText}>← Back to Login</Text>
+            <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
+                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <LogoHeader title="Forgot Password" subtitle="Enter your email to reset password" />
+                    <View style={s.formCard}>
+                        <Text style={[s.formTitle, { color: colors.foreground }]}>Reset Password</Text>
+                        <Text style={[s.formSubtitle, { color: colors.mutedForeground }]}>We'll send you a verification code</Text>
+                        <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" />
+                        <AuthButton onPress={handleForgotPassword} label="Send OTP" />
+                        <Pressable style={s.backButton} onPress={() => { setShowForgotPassword(false); setEmail(''); }}>
+                            <Text style={[s.backButtonText, { color: colors.mutedForeground }]}>← Back to Login</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
-
-                <SuccessModal
-                    isVisible={modalVisible}
-                    onClose={() => setModalVisible(false)}
-                    title={modalTitle}
-                    message={modalMessage}
-                    autoClose={false}
-                />
+                <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
             </KeyboardAvoidingView>
         );
     }
 
-    // Forgot Password - OTP Verification Screen
+    // Forgot Password - OTP
     if (showForgotOtpScreen) {
         return (
-            <KeyboardAvoidingView
-                style={styles.container}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
-                <LinearGradient
-                    colors={[colors.primary + '20', colors.background]}
-                    style={styles.gradient}
-                />
-
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <View style={styles.logoContainer}>
-                        <View style={[styles.logo, { backgroundColor: colors.destructive }]}>
-                            <Text style={styles.logoEmoji}>📧</Text>
+            <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
+                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <LogoHeader title="Verify OTP" subtitle={`Enter the 6-digit code sent to ${tempEmail}`} />
+                    <View style={s.formCard}>
+                        <Text style={[s.formTitle, { color: colors.foreground }]}>Enter OTP</Text>
+                        <Text style={[s.formSubtitle, { color: colors.mutedForeground }]}>Check your email inbox</Text>
+                        <InputField icon={Mail} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />
+                        <AuthButton onPress={handleVerifyForgotOtp} label="Verify OTP" />
+                        <View style={s.switchContainer}>
+                            <Text style={[s.switchText, { color: colors.mutedForeground }]}>Didn't receive the code? </Text>
+                            <Pressable onPress={handleResendForgotOtp} disabled={loading}><Text style={[s.switchLink, { color: colors.primary }]}>Resend OTP</Text></Pressable>
                         </View>
-                        <Text style={styles.appName}>Verify OTP</Text>
-                        <Text style={styles.tagline}>Enter the 6-digit code sent to {tempEmail}</Text>
-                    </View>
-
-                    <View style={styles.formCard}>
-                        <Text style={styles.formTitle}>Enter OTP</Text>
-                        <Text style={styles.formSubtitle}>Check your email inbox</Text>
-
-                        <View style={styles.inputContainer}>
-                            <Mail size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="6-digit OTP"
-                                value={otp}
-                                onChangeText={setOtp}
-                                keyboardType="number-pad"
-                                maxLength={6}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                        </View>
-
-                        <Pressable
-                            style={[styles.authButton, loading && styles.authButtonDisabled]}
-                            onPress={handleVerifyForgotOtp}
-                            disabled={loading}
-                        >
-                            <Text style={styles.authButtonText}>
-                                {loading ? 'Verifying...' : 'Verify OTP'}
-                            </Text>
-                        </Pressable>
-
-                        <View style={styles.switchContainer}>
-                            <Text style={styles.switchText}>Didn't receive the code? </Text>
-                            <Pressable onPress={handleResendForgotOtp} disabled={loading}>
-                                <Text style={styles.switchLink}>Resend OTP</Text>
-                            </Pressable>
-                        </View>
-
-                        <Pressable
-                            style={styles.backButton}
-                            onPress={resetForgotPasswordFlow}
-                        >
-                            <Text style={styles.backButtonText}>← Back to Login</Text>
+                        <Pressable style={s.backButton} onPress={resetForgotPasswordFlow}>
+                            <Text style={[s.backButtonText, { color: colors.mutedForeground }]}>← Back to Login</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
-
-                <SuccessModal
-                    isVisible={modalVisible}
-                    onClose={() => setModalVisible(false)}
-                    title={modalTitle}
-                    message={modalMessage}
-                    autoClose={false}
-                />
+                <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
             </KeyboardAvoidingView>
         );
     }
 
-    // Reset Password Screen
+    // Reset Password
     if (showResetPasswordScreen) {
         return (
-            <KeyboardAvoidingView
-                style={styles.container}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
-                <LinearGradient
-                    colors={[colors.primary + '20', colors.background]}
-                    style={styles.gradient}
-                />
-
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <View style={styles.logoContainer}>
-                        <View style={[styles.logo, { backgroundColor: colors.success || colors.primary }]}>
-                            <Text style={styles.logoEmoji}>🔑</Text>
-                        </View>
-                        <Text style={styles.appName}>New Password</Text>
-                        <Text style={styles.tagline}>Create a strong password</Text>
-                    </View>
-
-                    <View style={styles.formCard}>
-                        <Text style={styles.formTitle}>Set New Password</Text>
-                        <Text style={styles.formSubtitle}>Minimum 6 characters</Text>
-
-                        <View style={styles.inputContainer}>
-                            <Lock size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="New Password"
-                                value={newPassword}
-                                onChangeText={setNewPassword}
-                                secureTextEntry={!showNewPassword}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                            <Pressable onPress={() => setShowNewPassword(!showNewPassword)} style={styles.eyeIcon}>
-                                {showNewPassword ? (
-                                    <EyeOff size={18} color={colors.mutedForeground} />
-                                ) : (
-                                    <Eye size={18} color={colors.mutedForeground} />
-                                )}
-                            </Pressable>
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                            <Lock size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Confirm Password"
-                                value={confirmPassword}
-                                onChangeText={setConfirmPassword}
-                                secureTextEntry={!showNewPassword}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                        </View>
-
-                        <Pressable
-                            style={[styles.authButton, loading && styles.authButtonDisabled]}
-                            onPress={handleResetPassword}
-                            disabled={loading}
-                        >
-                            <Text style={styles.authButtonText}>
-                                {loading ? 'Resetting...' : 'Reset Password'}
-                            </Text>
-                        </Pressable>
-
-                        <Pressable
-                            style={styles.backButton}
-                            onPress={resetForgotPasswordFlow}
-                        >
-                            <Text style={styles.backButtonText}>← Cancel</Text>
+            <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
+                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <LogoHeader title="New Password" subtitle="Create a strong password" />
+                    <View style={s.formCard}>
+                        <Text style={[s.formTitle, { color: colors.foreground }]}>Set New Password</Text>
+                        <Text style={[s.formSubtitle, { color: colors.mutedForeground }]}>Minimum 6 characters</Text>
+                        <InputField icon={Lock} placeholder="New Password" value={newPassword} onChangeText={setNewPassword} secureTextEntry={!showNewPassword} showToggle onToggle={() => setShowNewPassword(!showNewPassword)} toggleValue={showNewPassword} />
+                        <InputField icon={Lock} placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showNewPassword} />
+                        <AuthButton onPress={handleResetPassword} label="Reset Password" />
+                        <Pressable style={s.backButton} onPress={resetForgotPasswordFlow}>
+                            <Text style={[s.backButtonText, { color: colors.mutedForeground }]}>← Cancel</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
-
-                <SuccessModal
-                    isVisible={modalVisible}
-                    onClose={() => setModalVisible(false)}
-                    title={modalTitle}
-                    message={modalMessage}
-                    autoClose={false}
-                />
+                <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
             </KeyboardAvoidingView>
         );
     }
@@ -517,241 +282,106 @@ export default function AuthScreen() {
     // OTP Screen
     if (showOtpScreen) {
         return (
-            <KeyboardAvoidingView
-                style={styles.container}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
-                <LinearGradient
-                    colors={[colors.primary + '20', colors.background]}
-                    style={styles.gradient}
-                />
-
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <View style={styles.logoContainer}>
-                        <View style={styles.logo}>
-                            <Text style={styles.logoEmoji}>📧</Text>
+            <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+                <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
+                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <LogoHeader title="Verify Email" subtitle={`Enter the 6-digit code sent to ${tempEmail}`} />
+                    <View style={s.formCard}>
+                        <Text style={[s.formTitle, { color: colors.foreground }]}>Enter OTP</Text>
+                        <Text style={[s.formSubtitle, { color: colors.mutedForeground }]}>Check your email inbox</Text>
+                        <InputField icon={Mail} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />
+                        <AuthButton onPress={handleVerifyOtp} label="Verify & Create Account" />
+                        <View style={s.switchContainer}>
+                            <Text style={[s.switchText, { color: colors.mutedForeground }]}>Didn't receive the code? </Text>
+                            <Pressable onPress={handleResendOtp} disabled={loading}><Text style={[s.switchLink, { color: colors.primary }]}>Resend OTP</Text></Pressable>
                         </View>
-                        <Text style={styles.appName}>Verify Email</Text>
-                        <Text style={styles.tagline}>Enter the 6-digit code sent to {tempEmail}</Text>
-                    </View>
-
-                    <View style={styles.formCard}>
-                        <Text style={styles.formTitle}>Enter OTP</Text>
-                        <Text style={styles.formSubtitle}>Check your email inbox</Text>
-
-                        <View style={styles.inputContainer}>
-                            <Mail size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="6-digit OTP"
-                                value={otp}
-                                onChangeText={setOtp}
-                                keyboardType="number-pad"
-                                maxLength={6}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                        </View>
-
-                        <Pressable
-                            style={[styles.authButton, loading && styles.authButtonDisabled]}
-                            onPress={handleVerifyOtp}
-                            disabled={loading}
-                        >
-                            <Text style={styles.authButtonText}>
-                                {loading ? 'Verifying...' : 'Verify & Register'}
-                            </Text>
-                        </Pressable>
-
-                        <View style={styles.switchContainer}>
-                            <Text style={styles.switchText}>Didn't receive the code? </Text>
-                            <Pressable onPress={handleResendOtp} disabled={loading}>
-                                <Text style={styles.switchLink}>Resend OTP</Text>
-                            </Pressable>
-                        </View>
-
-                        <Pressable
-                            style={styles.backButton}
-                            onPress={() => {
-                                setShowOtpScreen(false);
-                                setOtp('');
-                            }}
-                        >
-                            <Text style={styles.backButtonText}>← Back to Sign Up</Text>
+                        <Pressable style={s.backButton} onPress={() => { setShowOtpScreen(false); setOtp(''); }}>
+                            <Text style={[s.backButtonText, { color: colors.mutedForeground }]}>← Back to Sign Up</Text>
                         </Pressable>
                     </View>
                 </ScrollView>
-
-                <SuccessModal
-                    isVisible={modalVisible}
-                    onClose={() => setModalVisible(false)}
-                    title={modalTitle}
-                    message={modalMessage}
-                    autoClose={false}
-                />
+                <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
             </KeyboardAvoidingView>
         );
     }
 
+    // Main Login / Sign Up
     return (
-        <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-            <LinearGradient
-                colors={[colors.primary + '20', colors.background]}
-                style={styles.gradient}
-            />
+        <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+            <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
+            <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <LogoHeader
+                    title="Milkey"
+                    subtitle={isLogin ? 'Welcome back! Sign in to continue' : 'Create your account to get started'}
+                />
 
-            <ScrollView
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-            >
-                {/* Logo */}
-                <View style={styles.logoContainer}>
-                    <View style={styles.logo}>
-                        <Text style={styles.logoEmoji}>🥛</Text>
-                    </View>
-                    <Text style={styles.appName}>Milkey</Text>
-                    <Text style={styles.tagline}>Your Complete Dairy Solution</Text>
-                </View>
-
-                {/* Form Card */}
-                <View style={styles.formCard}>
-                    <Text style={styles.formTitle}>{isLogin ? 'Welcome Back' : 'Create Account'}</Text>
-                    <Text style={styles.formSubtitle}>
-                        {isLogin ? 'Sign in to continue' : 'Sign up to get started'}
-                    </Text>
-
-                    {!isLogin && (
-                        <View style={styles.inputContainer}>
-                            <User size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Full Name"
-                                value={name}
-                                onChangeText={setName}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                        </View>
-                    )}
-
-                    <View style={styles.inputContainer}>
-                        <Mail size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Email Address"
-                            value={email}
-                            onChangeText={setEmail}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                    </View>
-
-                    {!isLogin && (
-                        <View style={styles.inputContainer}>
-                            <Phone size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Phone Number (10 digits)"
-                                value={phone}
-                                onChangeText={setPhone}
-                                keyboardType="phone-pad"
-                                maxLength={10}
-                                placeholderTextColor={colors.mutedForeground}
-                            />
-                        </View>
-                    )}
-
-                    <View style={styles.inputContainer}>
-                        <Lock size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Password"
-                            value={password}
-                            onChangeText={setPassword}
-                            secureTextEntry={!showPassword}
-                            placeholderTextColor={colors.mutedForeground}
-                        />
-                        <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                            {showPassword ? (
-                                <EyeOff size={18} color={colors.mutedForeground} />
-                            ) : (
-                                <Eye size={18} color={colors.mutedForeground} />
-                            )}
+                <View style={s.formCard}>
+                    {/* Tab Switcher */}
+                    <View style={s.tabContainer}>
+                        <Pressable style={[s.tab, isLogin && s.tabActive]} onPress={() => setIsLogin(true)}>
+                            <Text style={[s.tabText, isLogin && s.tabTextActive, { color: isLogin ? colors.white : colors.mutedForeground }]}>Login</Text>
+                        </Pressable>
+                        <Pressable style={[s.tab, !isLogin && s.tabActive]} onPress={() => setIsLogin(false)}>
+                            <Text style={[s.tabText, !isLogin && s.tabTextActive, { color: !isLogin ? colors.white : colors.mutedForeground }]}>Sign Up</Text>
                         </Pressable>
                     </View>
 
                     {!isLogin && (
-                        <>
-                            <View style={styles.inputContainer}>
-                                <MapPin size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Address (Optional)"
-                                    value={address}
-                                    onChangeText={setAddress}
-                                    placeholderTextColor={colors.mutedForeground}
-                                    multiline
-                                />
-                            </View>
+                        <InputField icon={User} placeholder="Full Name" value={name} onChangeText={setName} />
+                    )}
 
-                            <View style={styles.inputContainer}>
-                                <Gift size={18} color={colors.mutedForeground} style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Referral Code (Optional)"
-                                    value={referralCode}
-                                    onChangeText={(text) => setReferralCode(text.toUpperCase())}
-                                    autoCapitalize="characters"
-                                    placeholderTextColor={colors.mutedForeground}
-                                />
-                            </View>
+                    <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" />
+
+                    {!isLogin && (
+                        <InputField icon={Phone} placeholder="Phone Number (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} />
+                    )}
+
+                    <InputField
+                        icon={Lock}
+                        placeholder="Password"
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry={!showPassword}
+                        showToggle
+                        onToggle={() => setShowPassword(!showPassword)}
+                        toggleValue={showPassword}
+                    />
+
+                    {!isLogin && (
+                        <>
+                            <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline />
+                            <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={(t: string) => setReferralCode(t.toUpperCase())} autoCapitalize="characters" />
                         </>
                     )}
 
                     {isLogin && (
-                        <Pressable
-                            style={styles.forgotPasswordButton}
-                            onPress={() => setShowForgotPassword(true)}
-                        >
-                            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                        <Pressable style={s.forgotPasswordButton} onPress={() => setShowForgotPassword(true)}>
+                            <Text style={[s.forgotPasswordText, { color: colors.primary }]}>Forgot Password?</Text>
                         </Pressable>
                     )}
 
-                    <Pressable
-                        style={[styles.authButton, loading && styles.authButtonDisabled]}
+                    <AuthButton
                         onPress={handleAuth}
-                        disabled={loading}
-                    >
-                        <Text style={styles.authButtonText}>
-                            {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Continue')}
-                        </Text>
-                    </Pressable>
+                        label={isLogin ? 'Login' : 'Create Account'}
+                    />
 
-                    <View style={styles.switchContainer}>
-                        <Text style={styles.switchText}>
+                    <View style={s.switchContainer}>
+                        <Text style={[s.switchText, { color: colors.mutedForeground }]}>
                             {isLogin ? "Don't have an account? " : "Already have an account? "}
                         </Text>
                         <Pressable onPress={() => setIsLogin(!isLogin)}>
-                            <Text style={styles.switchLink}>{isLogin ? 'Sign Up' : 'Sign In'}</Text>
+                            <Text style={[s.switchLink, { color: colors.primary }]}>{isLogin ? 'Sign Up' : 'Login'}</Text>
                         </Pressable>
                     </View>
                 </View>
+
+                {/* Footer */}
+                <Text style={[s.footer, { color: colors.mutedForeground }]}>
+                    By continuing, you agree to our Terms & Privacy Policy
+                </Text>
             </ScrollView>
 
-            <SuccessModal
-                isVisible={modalVisible}
-                onClose={() => setModalVisible(false)}
-                title={modalTitle}
-                message={modalMessage}
-                autoClose={false}
-            />
+            <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
         </KeyboardAvoidingView>
     );
 }
@@ -766,89 +396,103 @@ const createStyles = (colors: any, isDark: boolean, insets: any) => StyleSheet.c
         top: 0,
         left: 0,
         right: 0,
-        height: 300,
+        height: 350,
     },
     scrollContent: {
         flexGrow: 1,
-        paddingHorizontal: 20,
-        paddingTop: insets.top + 40,
-        paddingBottom: 40,
+        paddingHorizontal: 6,
+        paddingTop: insets.top + 30,
+        paddingBottom: 30,
     },
     logoContainer: {
         alignItems: 'center',
-        marginBottom: 32,
+        marginBottom: 20,
     },
-    logo: {
-        width: 80,
-        height: 80,
-        borderRadius: 20,
-        backgroundColor: colors.primary,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginBottom: 12,
-    },
-    logoEmoji: {
-        fontSize: 40,
+    logoImage: {
+        width: 90,
+        height: 90,
+        borderRadius: 22,
+        marginBottom: 10,
     },
     appName: {
-        fontSize: 28,
+        fontSize: 30,
         fontWeight: '800',
-        color: colors.foreground,
-        letterSpacing: 1,
+        letterSpacing: 2,
     },
     tagline: {
-        fontSize: 13,
-        color: colors.mutedForeground,
+        fontSize: 12,
         marginTop: 4,
+        textAlign: 'center',
     },
     formCard: {
         backgroundColor: colors.card,
         borderRadius: 16,
-        padding: 20,
+        padding: 16,
         borderWidth: 1,
         borderColor: colors.border,
+        marginHorizontal: 6,
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        backgroundColor: colors.muted,
+        borderRadius: 10,
+        padding: 3,
+        marginBottom: 16,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 8,
+    },
+    tabActive: {
+        backgroundColor: colors.primary,
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    tabTextActive: {
+        fontWeight: '700',
     },
     formTitle: {
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: '700',
-        color: colors.foreground,
         textAlign: 'center',
     },
     formSubtitle: {
-        fontSize: 13,
-        color: colors.mutedForeground,
+        fontSize: 12,
         textAlign: 'center',
-        marginTop: 4,
-        marginBottom: 24,
+        marginTop: 2,
+        marginBottom: 16,
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.secondary,
+        backgroundColor: colors.input,
         borderRadius: 10,
-        marginBottom: 12,
+        marginBottom: 8,
         borderWidth: 1,
-        borderColor: colors.border,
     },
     inputIcon: {
-        marginLeft: 12,
+        marginLeft: 10,
     },
     input: {
         flex: 1,
-        paddingVertical: 12,
-        paddingHorizontal: 10,
-        fontSize: 14,
+        paddingVertical: 10,
+        paddingHorizontal: 8,
+        fontSize: 13,
         color: colors.foreground,
     },
     eyeIcon: {
-        padding: 12,
+        padding: 10,
     },
     authButton: {
         backgroundColor: colors.primary,
         borderRadius: 10,
-        paddingVertical: 14,
+        paddingVertical: 13,
         alignItems: 'center',
-        marginTop: 8,
+        marginTop: 6,
     },
     authButtonDisabled: {
         opacity: 0.6,
@@ -861,33 +505,35 @@ const createStyles = (colors: any, isDark: boolean, insets: any) => StyleSheet.c
     switchContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginTop: 20,
+        marginTop: 14,
     },
     switchText: {
         fontSize: 13,
-        color: colors.mutedForeground,
     },
     switchLink: {
         fontSize: 13,
-        color: colors.primary,
         fontWeight: '600',
     },
     backButton: {
-        marginTop: 16,
+        marginTop: 12,
         alignItems: 'center',
     },
     backButtonText: {
         fontSize: 13,
-        color: colors.mutedForeground,
     },
     forgotPasswordButton: {
         alignSelf: 'flex-end',
-        marginTop: -4,
-        marginBottom: 8,
+        marginTop: -2,
+        marginBottom: 6,
     },
     forgotPasswordText: {
-        fontSize: 13,
-        color: colors.primary,
+        fontSize: 12,
         fontWeight: '500',
+    },
+    footer: {
+        fontSize: 11,
+        textAlign: 'center',
+        marginTop: 16,
+        paddingHorizontal: 20,
     },
 });
