@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, memo } from 'react';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Dimensions } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin } from 'lucide-react-native';
@@ -9,6 +9,92 @@ import { authApiNew } from '@/lib/milkeyApi';
 import { setAuthUser } from '@/lib/authStore';
 import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// ─── Extracted & memoized sub-components (prevents keyboard dismiss) ───
+
+const InputField = memo(({ icon: Icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, maxLength, autoCapitalize, multiline, showToggle, toggleValue, onToggle, colors }: any) => (
+    <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.input,
+        borderRadius: 12,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: colors.border,
+    }}>
+        <Icon size={18} color={colors.mutedForeground} style={{ marginLeft: 12 }} />
+        <TextInput
+            style={{
+                flex: 1,
+                paddingVertical: Platform.OS === 'ios' ? 13 : 10,
+                paddingHorizontal: 10,
+                fontSize: 14,
+                color: colors.foreground,
+            }}
+            placeholder={placeholder}
+            value={value}
+            onChangeText={onChangeText}
+            secureTextEntry={secureTextEntry}
+            keyboardType={keyboardType}
+            maxLength={maxLength}
+            autoCapitalize={autoCapitalize || 'none'}
+            placeholderTextColor={colors.mutedForeground + '99'}
+            multiline={multiline}
+        />
+        {showToggle && (
+            <Pressable onPress={onToggle} hitSlop={8} style={{ padding: 12 }}>
+                {toggleValue ? <EyeOff size={18} color={colors.mutedForeground} /> : <Eye size={18} color={colors.mutedForeground} />}
+            </Pressable>
+        )}
+    </View>
+));
+
+const AuthButton = memo(({ onPress, label, disabled, loading, colors }: any) => (
+    <Pressable
+        style={({ pressed }) => ({
+            backgroundColor: colors.primary,
+            borderRadius: 12,
+            paddingVertical: 14,
+            alignItems: 'center' as const,
+            marginTop: 8,
+            opacity: (loading || disabled) ? 0.6 : pressed ? 0.85 : 1,
+        })}
+        onPress={onPress}
+        disabled={loading || disabled}
+    >
+        {loading
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 }}>{label}</Text>
+        }
+    </Pressable>
+));
+
+const LogoHeader = memo(({ title, subtitle, colors, compact }: any) => (
+    <View style={{ alignItems: 'center', marginBottom: compact ? 14 : 20 }}>
+        <View style={{
+            width: compact ? 70 : 88,
+            height: compact ? 70 : 88,
+            borderRadius: compact ? 18 : 22,
+            overflow: 'hidden',
+            marginBottom: 8,
+            shadowColor: colors.primary,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.15,
+            shadowRadius: 12,
+            elevation: 6,
+        }}>
+            <Image
+                source={require('@/assets/images/icon.png')}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+            />
+        </View>
+        <Text style={{ fontSize: compact ? 24 : 28, fontWeight: '800', letterSpacing: 1.5, color: colors.foreground }}>{title}</Text>
+        <Text style={{ fontSize: 13, marginTop: 3, textAlign: 'center', color: colors.mutedForeground, paddingHorizontal: 20 }}>{subtitle}</Text>
+    </View>
+));
 
 export default function AuthScreen() {
     const { colors, isDark } = useTheme();
@@ -41,15 +127,18 @@ export default function AuthScreen() {
     const [modalTitle, setModalTitle] = useState('');
     const [modalMessage, setModalMessage] = useState('');
 
-    const s = createStyles(colors, isDark, insets);
-
-    const showModal = (title: string, message: string) => {
+    const showModal = useCallback((title: string, message: string) => {
         setModalTitle(title);
         setModalMessage(message);
         setModalVisible(true);
-    };
+    }, []);
 
-    const handleAuth = async () => {
+    // ─── Stable callbacks to prevent re-renders ───
+    const togglePassword = useCallback(() => setShowPassword(v => !v), []);
+    const toggleNewPassword = useCallback(() => setShowNewPassword(v => !v), []);
+    const handleReferralChange = useCallback((t: string) => setReferralCode(t.toUpperCase()), []);
+
+    const handleAuth = useCallback(async () => {
         if (isLogin) {
             if (!email || !password) { showModal('Error', 'Please enter email and password'); return; }
         } else {
@@ -63,22 +152,22 @@ export default function AuthScreen() {
                 const result = await authApiNew.login(email, password);
                 if (result.success && result.response) {
                     await setAuthUser(result.response.token, result.response.user);
-                    if (expoPushToken) { authApiNew.updatePushToken(expoPushToken).catch(console.error); }
+                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                     router.replace('/(tabs)');
-                } else { showModal('Error', result.message || 'Invalid email or password'); }
+                } else showModal('Error', result.message || 'Invalid email or password');
             } else {
                 const otpResult = await authApiNew.sendOtp(email);
                 if (otpResult.success) {
                     setTempEmail(email);
                     setShowOtpScreen(true);
                     showModal('OTP Sent', 'Please check your email for the verification code');
-                } else { showModal('Error', otpResult.message || 'Failed to send OTP'); }
+                } else showModal('Error', otpResult.message || 'Failed to send OTP');
             }
-        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+        } catch { showModal('Error', 'Network error. Please check your connection.'); }
         finally { setLoading(false); }
-    };
+    }, [isLogin, email, password, name, phone, expoPushToken, showModal]);
 
-    const handleVerifyOtp = async () => {
+    const handleVerifyOtp = useCallback(async () => {
         if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
         setLoading(true);
         try {
@@ -87,25 +176,25 @@ export default function AuthScreen() {
                 const result = await authApiNew.register({ name, email: tempEmail, phone, password, address: address || undefined, referralCode: referralCode || undefined });
                 if (result.success && result.response) {
                     await setAuthUser(result.response.token, result.response.user);
-                    if (expoPushToken) { authApiNew.updatePushToken(expoPushToken).catch(console.error); }
+                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                     router.replace('/(tabs)');
-                } else { showModal('Error', result.message || 'Registration failed'); }
-            } else { showModal('Error', verifyResult.message || 'Invalid OTP'); }
-        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+                } else showModal('Error', result.message || 'Registration failed');
+            } else showModal('Error', verifyResult.message || 'Invalid OTP');
+        } catch { showModal('Error', 'Network error. Please check your connection.'); }
         finally { setLoading(false); }
-    };
+    }, [otp, tempEmail, name, phone, password, address, referralCode, expoPushToken, showModal]);
 
-    const handleResendOtp = async () => {
+    const handleResendOtp = useCallback(async () => {
         setLoading(true);
         try {
             const result = await authApiNew.sendOtp(tempEmail);
-            if (result.success) { showModal('Success', 'OTP resent to your email'); }
-            else { showModal('Error', result.message || 'Failed to resend OTP'); }
-        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+            if (result.success) showModal('Success', 'OTP resent to your email');
+            else showModal('Error', result.message || 'Failed to resend OTP');
+        } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    };
+    }, [tempEmail, showModal]);
 
-    const handleForgotPassword = async () => {
+    const handleForgotPassword = useCallback(async () => {
         if (!email) { showModal('Error', 'Please enter your email address'); return; }
         setLoading(true);
         try {
@@ -115,12 +204,12 @@ export default function AuthScreen() {
                 setShowForgotPassword(false);
                 setShowForgotOtpScreen(true);
                 showModal('OTP Sent', 'Password reset OTP sent to your email');
-            } else { showModal('Error', result.message || 'Failed to send OTP'); }
-        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+            } else showModal('Error', result.message || 'Failed to send OTP');
+        } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    };
+    }, [email, showModal]);
 
-    const handleVerifyForgotOtp = async () => {
+    const handleVerifyForgotOtp = useCallback(async () => {
         if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
         setLoading(true);
         try {
@@ -130,12 +219,12 @@ export default function AuthScreen() {
                 setShowForgotOtpScreen(false);
                 setShowResetPasswordScreen(true);
                 setOtp('');
-            } else { showModal('Error', result.message || 'Invalid OTP'); }
-        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+            } else showModal('Error', result.message || 'Invalid OTP');
+        } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    };
+    }, [otp, tempEmail, showModal]);
 
-    const handleResetPassword = async () => {
+    const handleResetPassword = useCallback(async () => {
         if (!newPassword || newPassword.length < 6) { showModal('Error', 'Password must be at least 6 characters'); return; }
         if (newPassword !== confirmPassword) { showModal('Error', 'Passwords do not match'); return; }
         setLoading(true);
@@ -144,396 +233,238 @@ export default function AuthScreen() {
             if (result.success) {
                 showModal('Success', 'Password reset successfully! You can now login.');
                 setShowResetPasswordScreen(false); setTempEmail(''); setResetToken(''); setNewPassword(''); setConfirmPassword(''); setIsLogin(true);
-            } else { showModal('Error', result.message || 'Failed to reset password'); }
-        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+            } else showModal('Error', result.message || 'Failed to reset password');
+        } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    };
+    }, [newPassword, confirmPassword, tempEmail, resetToken, showModal]);
 
-    const handleResendForgotOtp = async () => {
+    const handleResendForgotOtp = useCallback(async () => {
         setLoading(true);
         try {
             const result = await authApiNew.forgotPassword(tempEmail);
-            if (result.success) { showModal('Success', 'OTP resent to your email'); }
-            else { showModal('Error', result.message || 'Failed to resend OTP'); }
-        } catch (error) { showModal('Error', 'Network error. Please check your connection.'); }
+            if (result.success) showModal('Success', 'OTP resent to your email');
+            else showModal('Error', result.message || 'Failed to resend OTP');
+        } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    };
+    }, [tempEmail, showModal]);
 
-    const resetForgotPasswordFlow = () => {
+    const resetForgotPasswordFlow = useCallback(() => {
         setShowForgotPassword(false); setShowForgotOtpScreen(false); setShowResetPasswordScreen(false);
         setTempEmail(''); setOtp(''); setResetToken(''); setNewPassword(''); setConfirmPassword('');
-    };
+    }, []);
 
-    // Reusable input
-    const InputField = ({ icon: Icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, maxLength, autoCapitalize, multiline, showToggle, toggleValue, onToggle }: any) => (
-        <View style={[s.inputContainer, { borderColor: colors.border }]}>
-            <Icon size={16} color={colors.mutedForeground} style={s.inputIcon} />
-            <TextInput
-                style={s.input}
-                placeholder={placeholder}
-                value={value}
-                onChangeText={onChangeText}
-                secureTextEntry={secureTextEntry}
-                keyboardType={keyboardType}
-                maxLength={maxLength}
-                autoCapitalize={autoCapitalize || 'none'}
-                placeholderTextColor={colors.mutedForeground}
-                multiline={multiline}
+    // ─── Shared wrapper for all screens ───
+    const ScreenWrapper = useCallback(({ children }: { children: React.ReactNode }) => (
+        <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <LinearGradient
+                colors={[colors.primary + '18', colors.primary + '08', colors.background]}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 300 }}
             />
-            {showToggle && (
-                <Pressable onPress={onToggle} style={s.eyeIcon}>
-                    {toggleValue ? <EyeOff size={16} color={colors.mutedForeground} /> : <Eye size={16} color={colors.mutedForeground} />}
-                </Pressable>
-            )}
-        </View>
-    );
-
-    // Reusable button with spinner
-    const AuthButton = ({ onPress, label, disabled }: { onPress: () => void; label: string; disabled?: boolean }) => (
-        <Pressable
-            style={[s.authButton, (loading || disabled) && s.authButtonDisabled]}
-            onPress={onPress}
-            disabled={loading || disabled}
-        >
-            {loading ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={s.authButtonText}>{label}</Text>}
-        </Pressable>
-    );
-
-    // Logo header
-    const LogoHeader = ({ title, subtitle }: { title: string; subtitle: string }) => (
-        <View style={s.logoContainer}>
-            <Image source={require('@/assets/images/icon.png')} style={s.logoImage} resizeMode="contain" />
-            <Text style={[s.appName, { color: colors.foreground }]}>{title}</Text>
-            <Text style={[s.tagline, { color: colors.mutedForeground }]}>{subtitle}</Text>
-        </View>
-    );
-
-    // Forgot Password - Enter Email
-    if (showForgotPassword) {
-        return (
-            <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
-                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                    <LogoHeader title="Forgot Password" subtitle="Enter your email to reset password" />
-                    <View style={s.formCard}>
-                        <Text style={[s.formTitle, { color: colors.foreground }]}>Reset Password</Text>
-                        <Text style={[s.formSubtitle, { color: colors.mutedForeground }]}>We'll send you a verification code</Text>
-                        <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" />
-                        <AuthButton onPress={handleForgotPassword} label="Send OTP" />
-                        <Pressable style={s.backButton} onPress={() => { setShowForgotPassword(false); setEmail(''); }}>
-                            <Text style={[s.backButtonText, { color: colors.mutedForeground }]}>← Back to Login</Text>
-                        </Pressable>
-                    </View>
-                </ScrollView>
-                <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
-            </KeyboardAvoidingView>
-        );
-    }
-
-    // Forgot Password - OTP
-    if (showForgotOtpScreen) {
-        return (
-            <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
-                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                    <LogoHeader title="Verify OTP" subtitle={`Enter the 6-digit code sent to ${tempEmail}`} />
-                    <View style={s.formCard}>
-                        <Text style={[s.formTitle, { color: colors.foreground }]}>Enter OTP</Text>
-                        <Text style={[s.formSubtitle, { color: colors.mutedForeground }]}>Check your email inbox</Text>
-                        <InputField icon={Mail} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />
-                        <AuthButton onPress={handleVerifyForgotOtp} label="Verify OTP" />
-                        <View style={s.switchContainer}>
-                            <Text style={[s.switchText, { color: colors.mutedForeground }]}>Didn't receive the code? </Text>
-                            <Pressable onPress={handleResendForgotOtp} disabled={loading}><Text style={[s.switchLink, { color: colors.primary }]}>Resend OTP</Text></Pressable>
-                        </View>
-                        <Pressable style={s.backButton} onPress={resetForgotPasswordFlow}>
-                            <Text style={[s.backButtonText, { color: colors.mutedForeground }]}>← Back to Login</Text>
-                        </Pressable>
-                    </View>
-                </ScrollView>
-                <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
-            </KeyboardAvoidingView>
-        );
-    }
-
-    // Reset Password
-    if (showResetPasswordScreen) {
-        return (
-            <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
-                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                    <LogoHeader title="New Password" subtitle="Create a strong password" />
-                    <View style={s.formCard}>
-                        <Text style={[s.formTitle, { color: colors.foreground }]}>Set New Password</Text>
-                        <Text style={[s.formSubtitle, { color: colors.mutedForeground }]}>Minimum 6 characters</Text>
-                        <InputField icon={Lock} placeholder="New Password" value={newPassword} onChangeText={setNewPassword} secureTextEntry={!showNewPassword} showToggle onToggle={() => setShowNewPassword(!showNewPassword)} toggleValue={showNewPassword} />
-                        <InputField icon={Lock} placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showNewPassword} />
-                        <AuthButton onPress={handleResetPassword} label="Reset Password" />
-                        <Pressable style={s.backButton} onPress={resetForgotPasswordFlow}>
-                            <Text style={[s.backButtonText, { color: colors.mutedForeground }]}>← Cancel</Text>
-                        </Pressable>
-                    </View>
-                </ScrollView>
-                <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
-            </KeyboardAvoidingView>
-        );
-    }
-
-    // OTP Screen
-    if (showOtpScreen) {
-        return (
-            <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
-                <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                    <LogoHeader title="Verify Email" subtitle={`Enter the 6-digit code sent to ${tempEmail}`} />
-                    <View style={s.formCard}>
-                        <Text style={[s.formTitle, { color: colors.foreground }]}>Enter OTP</Text>
-                        <Text style={[s.formSubtitle, { color: colors.mutedForeground }]}>Check your email inbox</Text>
-                        <InputField icon={Mail} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} />
-                        <AuthButton onPress={handleVerifyOtp} label="Verify & Create Account" />
-                        <View style={s.switchContainer}>
-                            <Text style={[s.switchText, { color: colors.mutedForeground }]}>Didn't receive the code? </Text>
-                            <Pressable onPress={handleResendOtp} disabled={loading}><Text style={[s.switchLink, { color: colors.primary }]}>Resend OTP</Text></Pressable>
-                        </View>
-                        <Pressable style={s.backButton} onPress={() => { setShowOtpScreen(false); setOtp(''); }}>
-                            <Text style={[s.backButtonText, { color: colors.mutedForeground }]}>← Back to Sign Up</Text>
-                        </Pressable>
-                    </View>
-                </ScrollView>
-                <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
-            </KeyboardAvoidingView>
-        );
-    }
-
-    // Main Login / Sign Up
-    return (
-        <KeyboardAvoidingView style={s.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-            <LinearGradient colors={[colors.primary + '15', colors.background, colors.background]} style={s.gradient} />
-            <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <LogoHeader
-                    title="Milkey"
-                    subtitle={isLogin ? 'Welcome back! Sign in to continue' : 'Create your account to get started'}
-                />
-
-                <View style={s.formCard}>
-                    {/* Tab Switcher */}
-                    <View style={s.tabContainer}>
-                        <Pressable style={[s.tab, isLogin && s.tabActive]} onPress={() => setIsLogin(true)}>
-                            <Text style={[s.tabText, isLogin && s.tabTextActive, { color: isLogin ? colors.white : colors.mutedForeground }]}>Login</Text>
-                        </Pressable>
-                        <Pressable style={[s.tab, !isLogin && s.tabActive]} onPress={() => setIsLogin(false)}>
-                            <Text style={[s.tabText, !isLogin && s.tabTextActive, { color: !isLogin ? colors.white : colors.mutedForeground }]}>Sign Up</Text>
-                        </Pressable>
-                    </View>
-
-                    {!isLogin && (
-                        <InputField icon={User} placeholder="Full Name" value={name} onChangeText={setName} />
-                    )}
-
-                    <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" />
-
-                    {!isLogin && (
-                        <InputField icon={Phone} placeholder="Phone Number (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} />
-                    )}
-
-                    <InputField
-                        icon={Lock}
-                        placeholder="Password"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry={!showPassword}
-                        showToggle
-                        onToggle={() => setShowPassword(!showPassword)}
-                        toggleValue={showPassword}
-                    />
-
-                    {!isLogin && (
-                        <>
-                            <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline />
-                            <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={(t: string) => setReferralCode(t.toUpperCase())} autoCapitalize="characters" />
-                        </>
-                    )}
-
-                    {isLogin && (
-                        <Pressable style={s.forgotPasswordButton} onPress={() => setShowForgotPassword(true)}>
-                            <Text style={[s.forgotPasswordText, { color: colors.primary }]}>Forgot Password?</Text>
-                        </Pressable>
-                    )}
-
-                    <AuthButton
-                        onPress={handleAuth}
-                        label={isLogin ? 'Login' : 'Create Account'}
-                    />
-
-                    <View style={s.switchContainer}>
-                        <Text style={[s.switchText, { color: colors.mutedForeground }]}>
-                            {isLogin ? "Don't have an account? " : "Already have an account? "}
-                        </Text>
-                        <Pressable onPress={() => setIsLogin(!isLogin)}>
-                            <Text style={[s.switchLink, { color: colors.primary }]}>{isLogin ? 'Sign Up' : 'Login'}</Text>
-                        </Pressable>
-                    </View>
-                </View>
-
-                {/* Footer */}
-                <Text style={[s.footer, { color: colors.mutedForeground }]}>
-                    By continuing, you agree to our Terms & Privacy Policy
-                </Text>
+            <ScrollView
+                contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 6, paddingTop: insets.top + 20, paddingBottom: 24 }}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
+                bounces={false}
+            >
+                {children}
             </ScrollView>
-
             <SuccessModal isVisible={modalVisible} onClose={() => setModalVisible(false)} title={modalTitle} message={modalMessage} autoClose={false} />
         </KeyboardAvoidingView>
+    ), [colors, insets, modalVisible, modalTitle, modalMessage]);
+
+    const FormCard = useCallback(({ children }: { children: React.ReactNode }) => (
+        <View style={{
+            backgroundColor: colors.card,
+            borderRadius: 18,
+            padding: 14,
+            borderWidth: 1,
+            borderColor: colors.border,
+        }}>
+            {children}
+        </View>
+    ), [colors]);
+
+    // ─── Forgot Password - Enter Email ───
+    if (showForgotPassword) {
+        return (
+            <ScreenWrapper>
+                <LogoHeader title="Forgot Password" subtitle="Enter your email to reset password" colors={colors} compact />
+                <FormCard>
+                    <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.foreground }}>Reset Password</Text>
+                    <Text style={{ fontSize: 12, textAlign: 'center', color: colors.mutedForeground, marginTop: 2, marginBottom: 14 }}>We'll send you a verification code</Text>
+                    <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" colors={colors} />
+                    <AuthButton onPress={handleForgotPassword} label="Send OTP" loading={loading} colors={colors} />
+                    <Pressable style={{ marginTop: 14, alignItems: 'center' }} onPress={() => { setShowForgotPassword(false); setEmail(''); }}>
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>← Back to Login</Text>
+                    </Pressable>
+                </FormCard>
+            </ScreenWrapper>
+        );
+    }
+
+    // ─── Forgot Password - OTP ───
+    if (showForgotOtpScreen) {
+        return (
+            <ScreenWrapper>
+                <LogoHeader title="Verify OTP" subtitle={`Code sent to ${tempEmail}`} colors={colors} compact />
+                <FormCard>
+                    <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.foreground }}>Enter OTP</Text>
+                    <Text style={{ fontSize: 12, textAlign: 'center', color: colors.mutedForeground, marginTop: 2, marginBottom: 14 }}>Check your email inbox</Text>
+                    <InputField icon={Mail} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
+                    <AuthButton onPress={handleVerifyForgotOtp} label="Verify OTP" loading={loading} colors={colors} />
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 14 }}>
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>Didn't receive? </Text>
+                        <Pressable onPress={handleResendForgotOtp} disabled={loading}><Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>Resend</Text></Pressable>
+                    </View>
+                    <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={resetForgotPasswordFlow}>
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>← Back to Login</Text>
+                    </Pressable>
+                </FormCard>
+            </ScreenWrapper>
+        );
+    }
+
+    // ─── Reset Password ───
+    if (showResetPasswordScreen) {
+        return (
+            <ScreenWrapper>
+                <LogoHeader title="New Password" subtitle="Create a strong password" colors={colors} compact />
+                <FormCard>
+                    <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.foreground }}>Set New Password</Text>
+                    <Text style={{ fontSize: 12, textAlign: 'center', color: colors.mutedForeground, marginTop: 2, marginBottom: 14 }}>Minimum 6 characters</Text>
+                    <InputField icon={Lock} placeholder="New Password" value={newPassword} onChangeText={setNewPassword} secureTextEntry={!showNewPassword} showToggle onToggle={toggleNewPassword} toggleValue={showNewPassword} colors={colors} />
+                    <InputField icon={Lock} placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showNewPassword} colors={colors} />
+                    <AuthButton onPress={handleResetPassword} label="Reset Password" loading={loading} colors={colors} />
+                    <Pressable style={{ marginTop: 14, alignItems: 'center' }} onPress={resetForgotPasswordFlow}>
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>← Cancel</Text>
+                    </Pressable>
+                </FormCard>
+            </ScreenWrapper>
+        );
+    }
+
+    // ─── OTP Screen ───
+    if (showOtpScreen) {
+        return (
+            <ScreenWrapper>
+                <LogoHeader title="Verify Email" subtitle={`Code sent to ${tempEmail}`} colors={colors} compact />
+                <FormCard>
+                    <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.foreground }}>Enter OTP</Text>
+                    <Text style={{ fontSize: 12, textAlign: 'center', color: colors.mutedForeground, marginTop: 2, marginBottom: 14 }}>Check your email inbox</Text>
+                    <InputField icon={Mail} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
+                    <AuthButton onPress={handleVerifyOtp} label="Verify & Create Account" loading={loading} colors={colors} />
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 14 }}>
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>Didn't receive? </Text>
+                        <Pressable onPress={handleResendOtp} disabled={loading}><Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>Resend</Text></Pressable>
+                    </View>
+                    <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={() => { setShowOtpScreen(false); setOtp(''); }}>
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>← Back to Sign Up</Text>
+                    </Pressable>
+                </FormCard>
+            </ScreenWrapper>
+        );
+    }
+
+    // ─── Main Login / Sign Up ───
+    return (
+        <ScreenWrapper>
+            <LogoHeader
+                title="Milkey"
+                subtitle={isLogin ? 'Welcome back! Sign in to continue' : 'Create your account to get started'}
+                colors={colors}
+            />
+
+            <FormCard>
+                {/* Tab Switcher */}
+                <View style={{
+                    flexDirection: 'row',
+                    backgroundColor: colors.muted,
+                    borderRadius: 12,
+                    padding: 3,
+                    marginBottom: 14,
+                }}>
+                    <Pressable
+                        style={{
+                            flex: 1,
+                            paddingVertical: 10,
+                            alignItems: 'center',
+                            borderRadius: 10,
+                            backgroundColor: isLogin ? colors.primary : 'transparent',
+                        }}
+                        onPress={() => setIsLogin(true)}
+                    >
+                        <Text style={{ fontSize: 14, fontWeight: isLogin ? '700' : '600', color: isLogin ? '#fff' : colors.mutedForeground }}>Login</Text>
+                    </Pressable>
+                    <Pressable
+                        style={{
+                            flex: 1,
+                            paddingVertical: 10,
+                            alignItems: 'center',
+                            borderRadius: 10,
+                            backgroundColor: !isLogin ? colors.primary : 'transparent',
+                        }}
+                        onPress={() => setIsLogin(false)}
+                    >
+                        <Text style={{ fontSize: 14, fontWeight: !isLogin ? '700' : '600', color: !isLogin ? '#fff' : colors.mutedForeground }}>Sign Up</Text>
+                    </Pressable>
+                </View>
+
+                {!isLogin && (
+                    <InputField icon={User} placeholder="Full Name" value={name} onChangeText={setName} colors={colors} />
+                )}
+
+                <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" colors={colors} />
+
+                {!isLogin && (
+                    <InputField icon={Phone} placeholder="Phone Number (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} colors={colors} />
+                )}
+
+                <InputField
+                    icon={Lock}
+                    placeholder="Password"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    showToggle
+                    onToggle={togglePassword}
+                    toggleValue={showPassword}
+                    colors={colors}
+                />
+
+                {!isLogin && (
+                    <>
+                        <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline colors={colors} />
+                        <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={handleReferralChange} autoCapitalize="characters" colors={colors} />
+                    </>
+                )}
+
+                {isLogin && (
+                    <Pressable style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 4 }} onPress={() => setShowForgotPassword(true)}>
+                        <Text style={{ fontSize: 12, fontWeight: '500', color: colors.primary }}>Forgot Password?</Text>
+                    </Pressable>
+                )}
+
+                <AuthButton
+                    onPress={handleAuth}
+                    label={isLogin ? 'Login' : 'Create Account'}
+                    loading={loading}
+                    colors={colors}
+                />
+
+                <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 14 }}>
+                    <Text style={{ fontSize: 13, color: colors.mutedForeground }}>
+                        {isLogin ? "Don't have an account? " : "Already have an account? "}
+                    </Text>
+                    <Pressable onPress={() => setIsLogin(!isLogin)}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>{isLogin ? 'Sign Up' : 'Login'}</Text>
+                    </Pressable>
+                </View>
+            </FormCard>
+
+            <Text style={{ fontSize: 11, textAlign: 'center', marginTop: 14, color: colors.mutedForeground, paddingHorizontal: 20 }}>
+                By continuing, you agree to our Terms & Privacy Policy
+            </Text>
+        </ScreenWrapper>
     );
 }
-
-const createStyles = (colors: any, isDark: boolean, insets: any) => StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
-    gradient: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 350,
-    },
-    scrollContent: {
-        flexGrow: 1,
-        paddingHorizontal: 6,
-        paddingTop: insets.top + 30,
-        paddingBottom: 30,
-    },
-    logoContainer: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    logoImage: {
-        width: 90,
-        height: 90,
-        borderRadius: 22,
-        marginBottom: 10,
-    },
-    appName: {
-        fontSize: 30,
-        fontWeight: '800',
-        letterSpacing: 2,
-    },
-    tagline: {
-        fontSize: 12,
-        marginTop: 4,
-        textAlign: 'center',
-    },
-    formCard: {
-        backgroundColor: colors.card,
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: colors.border,
-        marginHorizontal: 6,
-    },
-    tabContainer: {
-        flexDirection: 'row',
-        backgroundColor: colors.muted,
-        borderRadius: 10,
-        padding: 3,
-        marginBottom: 16,
-    },
-    tab: {
-        flex: 1,
-        paddingVertical: 10,
-        alignItems: 'center',
-        borderRadius: 8,
-    },
-    tabActive: {
-        backgroundColor: colors.primary,
-    },
-    tabText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    tabTextActive: {
-        fontWeight: '700',
-    },
-    formTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        textAlign: 'center',
-    },
-    formSubtitle: {
-        fontSize: 12,
-        textAlign: 'center',
-        marginTop: 2,
-        marginBottom: 16,
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.input,
-        borderRadius: 10,
-        marginBottom: 8,
-        borderWidth: 1,
-    },
-    inputIcon: {
-        marginLeft: 10,
-    },
-    input: {
-        flex: 1,
-        paddingVertical: 10,
-        paddingHorizontal: 8,
-        fontSize: 13,
-        color: colors.foreground,
-    },
-    eyeIcon: {
-        padding: 10,
-    },
-    authButton: {
-        backgroundColor: colors.primary,
-        borderRadius: 10,
-        paddingVertical: 13,
-        alignItems: 'center',
-        marginTop: 6,
-    },
-    authButtonDisabled: {
-        opacity: 0.6,
-    },
-    authButtonText: {
-        color: colors.white,
-        fontSize: 15,
-        fontWeight: '700',
-    },
-    switchContainer: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginTop: 14,
-    },
-    switchText: {
-        fontSize: 13,
-    },
-    switchLink: {
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    backButton: {
-        marginTop: 12,
-        alignItems: 'center',
-    },
-    backButtonText: {
-        fontSize: 13,
-    },
-    forgotPasswordButton: {
-        alignSelf: 'flex-end',
-        marginTop: -2,
-        marginBottom: 6,
-    },
-    forgotPasswordText: {
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    footer: {
-        fontSize: 11,
-        textAlign: 'center',
-        marginTop: 16,
-        paddingHorizontal: 20,
-    },
-});
