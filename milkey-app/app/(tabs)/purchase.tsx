@@ -255,29 +255,19 @@ export default function PurchaseScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
                 keyboardShouldPersistTaps="handled"
             >
-                {/* ── Top Controls: Date + Shift ── */}
+                {/* ── Top Controls: Date + Add Customer ── */}
                 <View style={s.topControls}>
                     <Pressable style={s.dateBtn} onPress={() => setShowDateModal(true)}>
                         <CalendarIcon size={14} color={colors.primary} />
                         <Text style={s.dateText}>{formatDate(entryDate)}</Text>
                         <ChevronDown size={12} color={colors.mutedForeground} />
                     </Pressable>
-                    <View style={s.shiftRow}>
-                        <Pressable
-                            onPress={() => setEntryShift('morning')}
-                            style={[s.shiftBtn, isMorning && s.shiftBtnActive]}
-                        >
-                            <Sun size={12} color={isMorning ? '#fff' : colors.mutedForeground} />
-                            <Text style={[s.shiftBtnText, isMorning && s.shiftBtnTextActive]}>AM</Text>
-                        </Pressable>
-                        <Pressable
-                            onPress={() => setEntryShift('evening')}
-                            style={[s.shiftBtn, !isMorning && s.shiftBtnActive]}
-                        >
-                            <Moon size={12} color={!isMorning ? '#fff' : colors.mutedForeground} />
-                            <Text style={[s.shiftBtnText, !isMorning && s.shiftBtnTextActive]}>PM</Text>
-                        </Pressable>
-                    </View>
+                    <Pressable
+                        style={s.addCustTopBtn}
+                        onPress={() => { setEditingCustomer(null); setShowAddCustomer(true); }}
+                    >
+                        <Plus size={16} color="#fff" />
+                    </Pressable>
                 </View>
 
                 {/* ── Summary Bar ── */}
@@ -285,7 +275,7 @@ export default function PurchaseScreen() {
                     <View style={s.summaryCell}>
                         <Droplets size={14} color={colors.primary} />
                         <View>
-                            <Text style={s.summaryVal}>{milkQty || '0'} L</Text>
+                            <Text style={s.summaryVal}>{historyTotals.quantity.toFixed(1)} L</Text>
                             <Text style={s.summaryLbl}>Quantity</Text>
                         </View>
                     </View>
@@ -293,18 +283,36 @@ export default function PurchaseScreen() {
                     <View style={s.summaryCell}>
                         <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
                         <View>
-                            <Text style={s.summaryVal}>{rateValue || '0'}</Text>
-                            <Text style={s.summaryLbl}>Rate/L</Text>
+                            <Text style={s.summaryVal}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '0'}</Text>
+                            <Text style={s.summaryLbl}>Avg Rate</Text>
                         </View>
                     </View>
                     <View style={s.summaryDivider} />
                     <View style={s.summaryCell}>
                         <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
                         <View>
-                            <Text style={[s.summaryVal, { color: colors.primary }]}>{computeAmount().toFixed(1)}</Text>
+                            <Text style={[s.summaryVal, { color: colors.primary }]}>{historyTotals.amount.toFixed(1)}</Text>
                             <Text style={s.summaryLbl}>Amount</Text>
                         </View>
                     </View>
+                </View>
+
+                {/* ── AM / PM Shift Toggle ── */}
+                <View style={s.shiftRow}>
+                    <Pressable
+                        onPress={() => setEntryShift('morning')}
+                        style={[s.shiftBtn, isMorning && s.shiftBtnActive]}
+                    >
+                        <Sun size={13} color={isMorning ? '#fff' : colors.mutedForeground} />
+                        <Text style={[s.shiftBtnText, isMorning && s.shiftBtnTextActive]}>AM</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={() => setEntryShift('evening')}
+                        style={[s.shiftBtn, !isMorning && s.shiftBtnActive]}
+                    >
+                        <Moon size={13} color={!isMorning ? '#fff' : colors.mutedForeground} />
+                        <Text style={[s.shiftBtnText, !isMorning && s.shiftBtnTextActive]}>PM</Text>
+                    </Pressable>
                 </View>
 
                 {/* ── Customer Selector ── */}
@@ -459,7 +467,7 @@ export default function PurchaseScreen() {
                                 <Text style={[s.tFootText, s.entryCell1]}>Total ({collections.length})</Text>
                                 <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity.toFixed(1)}</Text>
                                 <Text style={[s.tFootText, s.entryCell2]}></Text>
-                                <Text style={[s.tFootText, s.entryCell2]}></Text>
+                                <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '-'}</Text>
                                 <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{historyTotals.amount.toFixed(0)}</Text>
                                 <View style={{ width: 26 }} />
                             </View>
@@ -575,9 +583,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
     dateText: { fontSize: 12, fontWeight: '600', color: colors.foreground },
 
+    addCustTopBtn: { width: 36, height: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+
     // Shift
     shiftRow: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-    shiftBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 6, backgroundColor: colors.card },
+    shiftBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, backgroundColor: colors.card },
     shiftBtnActive: { backgroundColor: colors.primary },
     shiftBtnText: { fontSize: 12, fontWeight: '700', color: colors.foreground },
     shiftBtnTextActive: { color: '#fff' },
