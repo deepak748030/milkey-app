@@ -3,10 +3,12 @@ import { Tabs } from 'expo-router';
 import { Home, BookOpen, Store, ClipboardList, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <Tabs
@@ -33,7 +35,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: t.tabs.home,
           tabBarIcon: ({ color, focused }) => (
             <Home
               size={focused ? 26 : 22}
@@ -47,7 +49,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="purchase"
         options={{
-          title: 'Purchase',
+          title: t.tabs.purchase,
           tabBarIcon: ({ color, focused }) => (
             <BookOpen
               size={focused ? 26 : 22}
@@ -60,7 +62,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="selling"
         options={{
-          title: 'Selling',
+          title: t.tabs.selling,
           tabBarIcon: ({ color, focused }) => (
             <Store
               size={focused ? 26 : 22}
@@ -73,7 +75,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="register"
         options={{
-          title: 'Register',
+          title: t.tabs.register,
           tabBarIcon: ({ color, focused }) => (
             <ClipboardList
               size={focused ? 26 : 22}
@@ -86,7 +88,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: t.tabs.profile,
           tabBarIcon: ({ color, focused }) => (
             <User
               size={focused ? 26 : 22}

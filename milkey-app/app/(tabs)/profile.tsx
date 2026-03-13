@@ -1,23 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Linking, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail, ExternalLink } from 'lucide-react-native';
+import { useTranslation } from '@/hooks/useTranslation';
+import { AVAILABLE_LANGUAGES, LanguageCode } from '@/lib/translations';
+import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail, ExternalLink, Globe, Check } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
 import { authApiNew, socialLinksApi, SocialLink } from '@/lib/milkeyApi';
-import { clearAuth, updateAuthUser } from '@/lib/authStore';
+import { clearAuth } from '@/lib/authStore';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { EditProfileModal } from '@/components/EditProfileModal';
 
 export default function ProfileScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
+  const { t, language, changeLanguage } = useTranslation();
   const { user, refreshUser } = useAuth();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
   const [socialLinksLoading, setSocialLinksLoading] = useState(true);
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
 
   useEffect(() => {
     const fetchSocialLinks = async () => {
@@ -54,16 +58,23 @@ export default function ProfileScreen() {
     router.replace('/auth' as any);
   };
 
+  const handleLanguageSelect = async (code: LanguageCode) => {
+    await changeLanguage(code);
+    setShowLanguagePicker(false);
+  };
+
+  const currentLangOption = AVAILABLE_LANGUAGES.find(l => l.code === language);
+
   const menuItems = [
-    { id: '0', icon: Package, label: 'My Orders', action: () => router.push('/orders' as any) },
-    { id: '1', icon: CreditCard, label: 'My Subscriptions', action: () => router.push('/subscriptions' as any) },
-    { id: '2', icon: FileEdit, label: 'Submit Form', action: () => router.push('/submit-form' as any) },
-    { id: '3', icon: Users, label: 'Referral Program', action: () => router.push('/referral') },
-    { id: '4', icon: Wallet, label: 'Withdraw', action: () => router.push('/withdraw' as any) },
-    { id: '5', icon: Bell, label: 'Notifications', action: () => router.push('/notifications') },
-    { id: '6', icon: HelpCircle, label: 'Help & Support', action: () => router.push('/help-support' as any) },
-    { id: '7', icon: FileText, label: 'Terms & Conditions', action: () => router.push('/terms-conditions' as any) },
-    { id: '8', icon: Shield, label: 'Privacy Policy', action: () => router.push('/privacy-policy' as any) },
+    { id: '0', icon: Package, label: t.profile.myOrders, action: () => router.push('/orders' as any) },
+    { id: '1', icon: CreditCard, label: t.profile.mySubscriptions, action: () => router.push('/subscriptions' as any) },
+    { id: '2', icon: FileEdit, label: t.profile.submitForm, action: () => router.push('/submit-form' as any) },
+    { id: '3', icon: Users, label: t.profile.referralProgram, action: () => router.push('/referral') },
+    { id: '4', icon: Wallet, label: t.profile.withdraw, action: () => router.push('/withdraw' as any) },
+    { id: '5', icon: Bell, label: t.profile.notifications, action: () => router.push('/notifications') },
+    { id: '6', icon: HelpCircle, label: t.profile.helpSupport, action: () => router.push('/help-support' as any) },
+    { id: '7', icon: FileText, label: t.profile.termsConditions, action: () => router.push('/terms-conditions' as any) },
+    { id: '8', icon: Shield, label: t.profile.privacyPolicy, action: () => router.push('/privacy-policy' as any) },
   ];
 
   return (
@@ -73,23 +84,20 @@ export default function ProfileScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          {/* Banner */}
           <View style={styles.banner}>
             <Pressable style={styles.editButton} onPress={() => setShowEditModal(true)}>
               <Edit2 size={14} color={colors.white} />
             </Pressable>
           </View>
-          {/* Avatar overlapping banner */}
           <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
               <User size={26} color={colors.white} />
             </View>
           </View>
-          {/* Info */}
           <View style={styles.profileInfo}>
-            <Text style={styles.userName} numberOfLines={1}>{user?.name || 'Dairy Owner'}</Text>
+            <Text style={styles.userName} numberOfLines={1}>{user?.name || t.profile.dairyOwner}</Text>
             <View style={styles.roleBadge}>
-              <Text style={styles.userRole}>{user?.role || 'Owner'}</Text>
+              <Text style={styles.userRole}>{user?.role || t.profile.owner}</Text>
             </View>
             <View style={styles.contactRow}>
               {user?.phone ? (
@@ -113,21 +121,21 @@ export default function ProfileScreen() {
             ) : null}
             {user?.referralCode && (
               <View style={styles.referralBadge}>
-                <Text style={styles.referralLabel}>Referral Code:</Text>
+                <Text style={styles.referralLabel}>{t.profile.referralCode}</Text>
                 <Text style={styles.referralCode}>{user.referralCode}</Text>
               </View>
             )}
           </View>
         </View>
 
-        {/* Theme Toggle with Switcher */}
-        <View style={styles.themeToggle}>
-          <View style={styles.themeIconContainer}>
+        {/* Theme Toggle */}
+        <View style={styles.settingRow}>
+          <View style={styles.settingIconContainer}>
             {isDark ? <Moon size={20} color={colors.primary} /> : <Sun size={20} color={colors.primary} />}
           </View>
-          <View style={styles.themeInfo}>
-            <Text style={styles.themeLabel}>Appearance</Text>
-            <Text style={styles.themeValue}>{isDark ? 'Dark Mode' : 'Light Mode'}</Text>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>{t.profile.appearance}</Text>
+            <Text style={styles.settingValue}>{isDark ? t.profile.darkMode : t.profile.lightMode}</Text>
           </View>
           <Pressable style={styles.themeSwitcher} onPress={toggleTheme}>
             <View style={[styles.switchTrack, isDark && styles.switchTrackActive]}>
@@ -135,6 +143,41 @@ export default function ProfileScreen() {
             </View>
           </Pressable>
         </View>
+
+        {/* Language Selector */}
+        <Pressable style={styles.settingRow} onPress={() => setShowLanguagePicker(!showLanguagePicker)}>
+          <View style={styles.settingIconContainer}>
+            <Globe size={20} color={colors.primary} />
+          </View>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>{t.profile.language}</Text>
+            <Text style={styles.settingValue}>{currentLangOption?.label} ({currentLangOption?.englishLabel})</Text>
+          </View>
+          <ChevronRight size={18} color={colors.mutedForeground} style={{ transform: [{ rotate: showLanguagePicker ? '90deg' : '0deg' }] }} />
+        </Pressable>
+
+        {/* Language Options (expandable) */}
+        {showLanguagePicker && (
+          <View style={styles.languageOptions}>
+            {AVAILABLE_LANGUAGES.map((lang) => {
+              const isSelected = lang.code === language;
+              return (
+                <Pressable
+                  key={lang.code}
+                  style={[styles.languageItem, isSelected && styles.languageItemSelected]}
+                  onPress={() => handleLanguageSelect(lang.code)}
+                >
+                  <Text style={styles.languageFlag}>{lang.flag}</Text>
+                  <View style={styles.languageTextWrap}>
+                    <Text style={[styles.languageNative, isSelected && styles.languageNativeSelected]}>{lang.label}</Text>
+                    <Text style={styles.languageEnglish}>{lang.englishLabel}</Text>
+                  </View>
+                  {isSelected && <Check size={18} color={colors.primary} />}
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {/* Menu Items */}
         <View style={styles.menuSection}>
@@ -155,7 +198,7 @@ export default function ProfileScreen() {
         {/* Follow Us On */}
         {(socialLinksLoading || socialLinks.length > 0) && (
           <View style={styles.followSection}>
-            <Text style={styles.followTitle}>Follow Us On</Text>
+            <Text style={styles.followTitle}>{t.profile.followUs}</Text>
             {socialLinksLoading ? (
               <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
             ) : (
@@ -179,7 +222,7 @@ export default function ProfileScreen() {
         {/* Logout Button */}
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
           <LogOut size={20} color={colors.destructive} />
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.logoutText}>{t.profile.logout}</Text>
         </Pressable>
       </ScrollView>
 
@@ -195,10 +238,10 @@ export default function ProfileScreen() {
         visible={showLogoutModal}
         onClose={() => setShowLogoutModal(false)}
         onConfirm={confirmLogout}
-        title="Logout"
-        message="Are you sure you want to logout?"
-        confirmText="Logout"
-        cancelText="Cancel"
+        title={t.profile.logout}
+        message={t.profile.logoutConfirm}
+        confirmText={t.profile.logout}
+        cancelText={t.common.cancel}
         confirmDestructive
         isLoading={isLoggingOut}
       />
@@ -328,7 +371,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     color: colors.primary,
     letterSpacing: 1,
   },
-  themeToggle: {
+  // Settings rows (theme, language)
+  settingRow: {
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
@@ -338,7 +382,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  themeIconContainer: {
+  settingIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 10,
@@ -347,16 +391,16 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  themeInfo: {
+  settingInfo: {
     flex: 1,
   },
-  themeLabel: {
+  settingLabel: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.foreground,
     marginBottom: 2,
   },
-  themeValue: {
+  settingValue: {
     fontSize: 12,
     color: colors.mutedForeground,
   },
@@ -388,6 +432,46 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   switchThumbActive: {
     alignSelf: 'flex-end',
   },
+  // Language picker
+  languageOptions: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  languageItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 12,
+  },
+  languageItemSelected: {
+    backgroundColor: colors.primary + '10',
+  },
+  languageFlag: {
+    fontSize: 22,
+  },
+  languageTextWrap: {
+    flex: 1,
+  },
+  languageNative: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.foreground,
+  },
+  languageNativeSelected: {
+    color: colors.primary,
+  },
+  languageEnglish: {
+    fontSize: 12,
+    color: colors.mutedForeground,
+  },
+  // Menu
   menuSection: {
     backgroundColor: colors.card,
     borderRadius: 12,
