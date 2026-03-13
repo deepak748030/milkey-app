@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const Admin = require('../models/Admin');
 const User = require('../models/User');
+const SocialLink = require('../models/SocialLink');
 const Order = require('../models/Order');
 const MilkCollection = require('../models/MilkCollection');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
@@ -3417,6 +3418,132 @@ router.post('/send-bulk-notification', adminAuth, async (req, res) => {
             success: false,
             message: 'Failed to send notifications'
         });
+    }
+});
+
+// ==================== SOCIAL LINKS MANAGEMENT ROUTES ====================
+
+// GET /api/admin/social-links
+router.get('/social-links', adminAuth, async (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
+        const skip = (page - 1) * limit;
+        const search = req.query.search?.trim() || '';
+        const status = req.query.status || 'all';
+
+        const query = {};
+        if (status === 'active') query.isActive = true;
+        else if (status === 'inactive') query.isActive = false;
+
+        if (search) {
+            query.title = { $regex: search, $options: 'i' };
+        }
+
+        const [total, socialLinks] = await Promise.all([
+            SocialLink.countDocuments(query),
+            SocialLink.find(query)
+                .sort({ order: 1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                socialLinks,
+                pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+            }
+        });
+    } catch (error) {
+        console.error('Get social links error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch social links' });
+    }
+});
+
+// POST /api/admin/social-links
+router.post('/social-links', adminAuth, async (req, res) => {
+    try {
+        const { title, image, link, order } = req.body;
+
+        if (!title || !image || !link) {
+            return res.status(400).json({ success: false, message: 'Title, image and link are required' });
+        }
+
+        let linkOrder = order;
+        if (linkOrder === undefined || linkOrder === null) {
+            const maxOrder = await SocialLink.findOne().sort({ order: -1 }).lean();
+            linkOrder = maxOrder ? maxOrder.order + 1 : 0;
+        }
+
+        const socialLink = await SocialLink.create({
+            title: title.trim(),
+            image,
+            link: link.trim(),
+            order: parseInt(linkOrder) || 0,
+            isActive: true
+        });
+
+        res.status(201).json({ success: true, message: 'Social link created', response: socialLink });
+    } catch (error) {
+        console.error('Create social link error:', error);
+        res.status(500).json({ success: false, message: 'Failed to create social link' });
+    }
+});
+
+// PUT /api/admin/social-links/:id
+router.put('/social-links/:id', adminAuth, async (req, res) => {
+    try {
+        const { title, image, link, order, isActive } = req.body;
+        const updates = {};
+
+        if (title) updates.title = title.trim();
+        if (image) updates.image = image;
+        if (link) updates.link = link.trim();
+        if (order !== undefined) updates.order = parseInt(order) || 0;
+        if (isActive !== undefined) updates.isActive = isActive;
+
+        const socialLink = await SocialLink.findByIdAndUpdate(req.params.id, updates, { new: true }).lean();
+        if (!socialLink) {
+            return res.status(404).json({ success: false, message: 'Social link not found' });
+        }
+
+        res.json({ success: true, message: 'Social link updated', response: socialLink });
+    } catch (error) {
+        console.error('Update social link error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update social link' });
+    }
+});
+
+// PUT /api/admin/social-links/:id/toggle
+router.put('/social-links/:id/toggle', adminAuth, async (req, res) => {
+    try {
+        const socialLink = await SocialLink.findById(req.params.id);
+        if (!socialLink) {
+            return res.status(404).json({ success: false, message: 'Social link not found' });
+        }
+        socialLink.isActive = !socialLink.isActive;
+        await socialLink.save();
+
+        res.json({ success: true, message: `Social link ${socialLink.isActive ? 'activated' : 'deactivated'}`, response: socialLink });
+    } catch (error) {
+        console.error('Toggle social link error:', error);
+        res.status(500).json({ success: false, message: 'Failed to toggle social link' });
+    }
+});
+
+// DELETE /api/admin/social-links/:id
+router.delete('/social-links/:id', adminAuth, async (req, res) => {
+    try {
+        const socialLink = await SocialLink.findByIdAndDelete(req.params.id);
+        if (!socialLink) {
+            return res.status(404).json({ success: false, message: 'Social link not found' });
+        }
+        res.json({ success: true, message: 'Social link deleted' });
+    } catch (error) {
+        console.error('Delete social link error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete social link' });
     }
 });
 

@@ -1436,6 +1436,26 @@ export const bannersApi = {
     },
 };
 
+// Social Links types
+export interface SocialLink {
+    _id: string;
+    title: string;
+    image: string;
+    link: string;
+    order: number;
+}
+
+// Social Links API
+export const socialLinksApi = {
+    getAll: async () => {
+        const res = await apiRequest<any>('/products/social-links');
+        if (!res.success) return res as ApiResponse<SocialLink[]>;
+        const raw = (res as any).response;
+        const links: SocialLink[] = Array.isArray(raw) ? raw : [];
+        return { ...res, response: links } as ApiResponse<SocialLink[]>;
+    },
+};
+
 // Notification type
 export interface Notification {
     _id: string;

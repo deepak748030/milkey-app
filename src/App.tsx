@@ -25,6 +25,7 @@ import { SubscriptionsPage } from './pages/SubscriptionsPage'
 import { CustomFormsPage } from './pages/CustomFormsPage'
 import { ActiveSubscriptionsPage } from './pages/ActiveSubscriptionsPage'
 import { WithdrawalsPage } from './pages/WithdrawalsPage'
+import { SocialLinksPage } from './pages/SocialLinksPage'
 
 function App() {
     return (
@@ -63,6 +64,7 @@ function App() {
                         <Route path="withdrawals" element={<WithdrawalsPage />} />
                         <Route path="custom-forms" element={<CustomFormsPage />} />
                         <Route path="settings" element={<SettingsPage />} />
+                        <Route path="social-links" element={<SocialLinksPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

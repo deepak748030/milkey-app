@@ -25,6 +25,7 @@ import {
     CreditCard as SubscriptionIcon,
     Sun,
     Moon,
+    Share2,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -47,6 +48,7 @@ const navItems = [
     { to: '/active-subscriptions', icon: UserCheck, label: 'Active Users' },
     { to: '/withdrawals', icon: Wallet, label: 'Withdrawals' },
     { to: '/custom-forms', icon: FileText, label: 'Custom Forms' },
+    { to: '/social-links', icon: Share2, label: 'Social Links' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/Product');
 const Banner = require('../models/Banner');
+const SocialLink = require('../models/SocialLink');
 const auth = require('../middleware/auth');
 
 // GET /api/products - Get all products (public - no auth required)
@@ -55,6 +56,27 @@ router.get('/banners', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to get banners'
+        });
+    }
+});
+
+// GET /api/products/social-links - Get all active social links (public)
+router.get('/social-links', async (req, res) => {
+    try {
+        const links = await SocialLink.find({ isActive: true })
+            .sort({ order: 1 })
+            .select('_id title image link order')
+            .lean();
+
+        res.json({
+            success: true,
+            response: links
+        });
+    } catch (error) {
+        console.error('Get social links error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get social links'
         });
     }
 });

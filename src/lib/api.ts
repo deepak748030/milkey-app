@@ -1807,4 +1807,57 @@ export const sendBulkNotification = async (data: {
     return response.data
 }
 
+// ==================== SOCIAL LINKS APIs ====================
+
+export interface SocialLink {
+    _id: string
+    title: string
+    image: string
+    link: string
+    order: number
+    isActive: boolean
+    createdAt: string
+}
+
+export const getSocialLinksAdmin = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+}) => {
+    const response = await api.get('/admin/social-links', { params })
+    return response.data
+}
+
+export const createSocialLink = async (data: {
+    title: string
+    image: string
+    link: string
+    order?: number
+}) => {
+    const response = await api.post('/admin/social-links', data)
+    return response.data
+}
+
+export const updateSocialLink = async (id: string, data: {
+    title?: string
+    image?: string
+    link?: string
+    order?: number
+    isActive?: boolean
+}) => {
+    const response = await api.put(`/admin/social-links/${id}`, data)
+    return response.data
+}
+
+export const deleteSocialLink = async (id: string) => {
+    const response = await api.delete(`/admin/social-links/${id}`)
+    return response.data
+}
+
+export const toggleSocialLinkStatus = async (id: string) => {
+    const response = await api.put(`/admin/social-links/${id}/toggle`)
+    return response.data
+}
+
 export default api

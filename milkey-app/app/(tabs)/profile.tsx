@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Linking, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail } from 'lucide-react-native';
+import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail, ExternalLink } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
-import { authApiNew } from '@/lib/milkeyApi';
+import { authApiNew, socialLinksApi, SocialLink } from '@/lib/milkeyApi';
 import { clearAuth, updateAuthUser } from '@/lib/authStore';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { EditProfileModal } from '@/components/EditProfileModal';
@@ -16,6 +16,24 @@ export default function ProfileScreen() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
+  const [socialLinksLoading, setSocialLinksLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSocialLinks = async () => {
+      try {
+        const res = await socialLinksApi.getAll();
+        if (res.success && res.response) {
+          setSocialLinks(res.response);
+        }
+      } catch (e) {
+        // silent
+      } finally {
+        setSocialLinksLoading(false);
+      }
+    };
+    fetchSocialLinks();
+  }, []);
 
   const styles = createStyles(colors, isDark);
 
@@ -133,6 +151,30 @@ export default function ProfileScreen() {
             );
           })}
         </View>
+
+        {/* Follow Us On */}
+        {(socialLinksLoading || socialLinks.length > 0) && (
+          <View style={styles.followSection}>
+            <Text style={styles.followTitle}>Follow Us On</Text>
+            {socialLinksLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
+            ) : (
+              <View style={styles.followGrid}>
+                {socialLinks.map((link) => (
+                  <Pressable
+                    key={link._id}
+                    style={styles.followItem}
+                    onPress={() => Linking.openURL(link.link)}
+                  >
+                    <Image source={{ uri: link.image }} style={styles.followImage} />
+                    <Text style={styles.followLabel} numberOfLines={1}>{link.title}</Text>
+                    <ExternalLink size={10} color={colors.mutedForeground} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Logout Button */}
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
@@ -376,6 +418,45 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.foreground,
+  },
+  followSection: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  followTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.foreground,
+    marginBottom: 10,
+  },
+  followGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  followItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.secondary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 8,
+  },
+  followImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+  },
+  followLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.foreground,
+    maxWidth: 80,
   },
   logoutButton: {
     flexDirection: 'row',
