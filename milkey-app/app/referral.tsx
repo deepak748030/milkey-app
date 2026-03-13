@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Share, Dimensions, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
 import { ArrowLeft, Copy, Share2, Users, Wallet, Gift } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +13,7 @@ const { width } = Dimensions.get('window');
 
 export default function ReferralScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [copied, setCopied] = useState(false);
@@ -79,7 +81,7 @@ export default function ReferralScreen() {
                 <Pressable onPress={() => router.back()} style={styles.backBtn}>
                     <ArrowLeft size={22} color={colors.foreground} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Referral Program</Text>
+                <Text style={styles.headerTitle}>{t.referral.title}</Text>
                 <View style={styles.placeholder} />
             </View>
 
@@ -95,7 +97,7 @@ export default function ReferralScreen() {
 
                 {/* Referral Code Card */}
                 <View style={styles.codeCard}>
-                    <Text style={styles.codeLabel}>Your Referral Code</Text>
+                    <Text style={styles.codeLabel}>{t.referral.yourCode}</Text>
                     <View style={styles.codeContainer}>
                         <Text style={styles.codeText}>{code}</Text>
                         <Pressable onPress={copyCode} style={styles.copyBtn}>
@@ -105,7 +107,7 @@ export default function ReferralScreen() {
                     </View>
                     <Pressable onPress={shareCode} style={styles.shareBtn}>
                         <Share2 size={18} color={colors.white} />
-                        <Text style={styles.shareBtnText}>Share with Friends</Text>
+                        <Text style={styles.shareBtnText}>{t.referral.shareWithFriends}</Text>
                     </Pressable>
                 </View>
 
@@ -114,12 +116,12 @@ export default function ReferralScreen() {
                     <View style={styles.statCard}>
                         <Users size={20} color={colors.primary} />
                         <Text style={styles.statValue}>{stats.totalReferrals}</Text>
-                        <Text style={styles.statLabel}>Total Referrals</Text>
+                        <Text style={styles.statLabel}>{t.referral.totalReferrals}</Text>
                     </View>
                     <View style={styles.statCard}>
                         <Users size={20} color={colors.success} />
                         <Text style={styles.statValue}>{stats.activeUsers}</Text>
-                        <Text style={styles.statLabel}>Active Users</Text>
+                        <Text style={styles.statLabel}>{t.referral.activeUsers}</Text>
                     </View>
                 </View>
 
@@ -127,11 +129,11 @@ export default function ReferralScreen() {
                 <View style={styles.earningsCard}>
                     <View style={styles.earningsHeader}>
                         <Wallet size={22} color={colors.primary} />
-                        <Text style={styles.earningsTitle}>Your Earnings</Text>
+                        <Text style={styles.earningsTitle}>{t.referral.yourEarnings}</Text>
                     </View>
                     <View style={styles.earningsRow}>
                         <View style={styles.earningItem}>
-                            <Text style={styles.earningLabel}>Total Earned</Text>
+                            <Text style={styles.earningLabel}>{t.referral.totalEarned}</Text>
                             <Text style={styles.earningValue}>₹{stats.totalEarnings}</Text>
                         </View>
                         <View style={styles.earningDivider} />
@@ -143,7 +145,7 @@ export default function ReferralScreen() {
                 </View>
 
                 {/* Referral History */}
-                <Text style={styles.sectionTitle}>Referral History</Text>
+                <Text style={styles.sectionTitle}>{t.referral.referralHistory}</Text>
                 {referrals.length > 0 ? (
                     <View style={styles.historyCard}>
                         {referrals.map((referral, index) => (

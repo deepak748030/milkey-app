@@ -4,10 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, Shield, Database, Lock, Eye, UserCheck, CreditCard, RefreshCw, XCircle, AlertCircle, CheckCircle, Mail } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function PrivacyPolicyScreen() {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = createStyles(colors);
 
   const policyItems = [
@@ -69,7 +71,7 @@ export default function PrivacyPolicyScreen() {
         <Pressable style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={22} color={colors.foreground} />
         </Pressable>
-        <Text style={styles.headerTitle}>Privacy Policy</Text>
+        <Text style={styles.headerTitle}>{t.privacy.title}</Text>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -79,9 +81,9 @@ export default function PrivacyPolicyScreen() {
             <View style={styles.heroIcon}>
               <Shield size={32} color={colors.primary} />
             </View>
-            <Text style={styles.heroTitle}>Your Privacy Matters</Text>
+            <Text style={styles.heroTitle}>{t.privacy.yourPrivacyMatters}</Text>
             <Text style={styles.heroDescription}>
-              Milkey values your privacy. This policy explains how we collect and use your data.
+              {t.privacy.description}
             </Text>
           </View>
 
@@ -102,20 +104,20 @@ export default function PrivacyPolicyScreen() {
 
           {/* Contact Information */}
           <View style={styles.additionalInfo}>
-            <Text style={styles.additionalTitle}>Contact Us</Text>
+            <Text style={styles.additionalTitle}>{t.privacy.contactUs}</Text>
             <Text style={styles.additionalText}>
-              For privacy concerns, data requests, or questions about this policy, please contact us:
+              {t.privacy.contactDescription}
             </Text>
             <Pressable style={styles.emailButton} onPress={handleEmailPress}>
               <Mail size={18} color={colors.primary} />
               <Text style={styles.emailText}>support@milkey.app</Text>
             </Pressable>
-            <Text style={styles.businessHours}>Business Hours: 10 AM – 7 PM (Mon–Sat)</Text>
+            <Text style={styles.businessHours}>{t.privacy.businessHours}</Text>
           </View>
 
           {/* Last Updated */}
           <Text style={styles.lastUpdated}>
-            Last updated: January 2025
+            {t.privacy.lastUpdated}
           </Text>
         </View>
       </ScrollView>

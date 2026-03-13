@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, Activity
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, CheckCheck, Trash2, ChevronLeft, Gift, CreditCard, AlertCircle, Package, Users } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { notificationsApiNew, Notification } from '@/lib/milkeyApi';
 import { router } from 'expo-router';
 
 export default function NotificationsScreen() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const styles = createStyles(colors);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -145,7 +147,7 @@ export default function NotificationsScreen() {
           <Pressable style={styles.backBtn} onPress={() => router.back()}>
             <ChevronLeft size={24} color={colors.foreground} />
           </Pressable>
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerTitle}>{t.notifications.title}</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -160,7 +162,7 @@ export default function NotificationsScreen() {
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
           <ChevronLeft size={24} color={colors.foreground} />
         </Pressable>
-        <Text style={styles.headerTitle}>Notifications</Text>
+        <Text style={styles.headerTitle}>{t.notifications.title}</Text>
       </View>
 
       <ScrollView
@@ -176,7 +178,7 @@ export default function NotificationsScreen() {
               {unreadCount > 0 && (
                 <Pressable style={styles.actionButton} onPress={handleMarkAllRead}>
                   <CheckCheck size={16} color={colors.primary} />
-                  <Text style={styles.actionButtonText}>Mark all read</Text>
+                  <Text style={styles.actionButtonText}>{t.notifications.markAllRead}</Text>
                 </Pressable>
               )}
               <Pressable style={[styles.actionButton, styles.deleteButton]} onPress={handleClearAll}>
@@ -189,7 +191,7 @@ export default function NotificationsScreen() {
           {notifications.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Bell size={48} color={colors.mutedForeground} style={styles.emptyIcon} />
-              <Text style={styles.emptyText}>No notifications yet</Text>
+              <Text style={styles.emptyText}>{t.notifications.noNotifications}</Text>
               <Text style={styles.emptySubtext}>
                 We'll notify you when there are updates
               </Text>

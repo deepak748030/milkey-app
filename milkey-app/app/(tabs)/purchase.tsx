@@ -4,6 +4,7 @@ import {
     ActivityIndicator, RefreshControl, Modal, ScrollView
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import {
     Plus, Edit2, Trash2, Calendar as CalendarIcon, Search, X,
     ChevronDown, FileText, User, Sun, Moon,
@@ -26,6 +27,7 @@ import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
 
 export default function PurchaseScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const {
         hasAccess, loading: subscriptionLoading, showSubscriptionModal,
         handleModalClose, handleSubscriptionSuccess
@@ -276,7 +278,7 @@ export default function PurchaseScreen() {
                         <Droplets size={14} color={colors.primary} />
                         <View>
                             <Text style={s.summaryVal}>{historyTotals.quantity.toFixed(1)} L</Text>
-                            <Text style={s.summaryLbl}>Quantity</Text>
+                            <Text style={s.summaryLbl}>{t.common.quantity}</Text>
                         </View>
                     </View>
                     <View style={s.summaryDivider} />
@@ -284,7 +286,7 @@ export default function PurchaseScreen() {
                         <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
                         <View>
                             <Text style={s.summaryVal}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '0'}</Text>
-                            <Text style={s.summaryLbl}>Avg Rate</Text>
+                            <Text style={s.summaryLbl}>{t.purchase.avgRate}</Text>
                         </View>
                     </View>
                     <View style={s.summaryDivider} />
@@ -292,7 +294,7 @@ export default function PurchaseScreen() {
                         <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
                         <View>
                             <Text style={[s.summaryVal, { color: colors.primary }]}>{historyTotals.amount.toFixed(1)}</Text>
-                            <Text style={s.summaryLbl}>Amount</Text>
+                            <Text style={s.summaryLbl}>{t.common.amount}</Text>
                         </View>
                     </View>
                 </View>
@@ -304,14 +306,14 @@ export default function PurchaseScreen() {
                         style={[s.shiftBtn, isMorning && s.shiftBtnActive]}
                     >
                         <Sun size={13} color={isMorning ? '#fff' : colors.mutedForeground} />
-                        <Text style={[s.shiftBtnText, isMorning && s.shiftBtnTextActive]}>AM</Text>
+                        <Text style={[s.shiftBtnText, isMorning && s.shiftBtnTextActive]}>{t.common.morning}</Text>
                     </Pressable>
                     <Pressable
                         onPress={() => setEntryShift('evening')}
                         style={[s.shiftBtn, !isMorning && s.shiftBtnActive]}
                     >
                         <Moon size={13} color={!isMorning ? '#fff' : colors.mutedForeground} />
-                        <Text style={[s.shiftBtnText, !isMorning && s.shiftBtnTextActive]}>PM</Text>
+                        <Text style={[s.shiftBtnText, !isMorning && s.shiftBtnTextActive]}>{t.common.evening}</Text>
                     </Pressable>
                 </View>
 
@@ -326,11 +328,11 @@ export default function PurchaseScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                         <Text style={[s.customerName, !selectedCustomer && { color: colors.mutedForeground }]}>
-                            {selectedCustomer ? selectedCustomer.name : 'Select Customer'}
+                            {selectedCustomer ? selectedCustomer.name : t.purchase.selectCustomer}
                         </Text>
                         {selectedCustomer && (
                             <Text style={s.customerMeta}>
-                                {selectedCustomer.priceBasis === 'rate' ? '📊 Rate Based' : '📊 Fat Based'}
+                                {selectedCustomer.priceBasis === 'rate' ? `📊 ${t.purchase.rateBased}` : `📊 ${t.purchase.fatBased}`}
                                 {selectedCustomer.mobile ? ` • ${selectedCustomer.mobile}` : ''}
                             </Text>
                         )}
@@ -348,7 +350,7 @@ export default function PurchaseScreen() {
                                 style={[s.milkBtn, milkType === 'cow' && s.milkBtnActive]}
                             >
                                 <Text style={{ fontSize: 16 }}>🐄</Text>
-                                <Text style={[s.milkBtnText, milkType === 'cow' && { color: '#fff' }]}>Cow</Text>
+                                <Text style={[s.milkBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
                                 {milkType === 'cow' && <Check size={12} color="#fff" />}
                             </Pressable>
                         )}
@@ -358,7 +360,7 @@ export default function PurchaseScreen() {
                                 style={[s.milkBtn, milkType === 'buffalo' && s.milkBtnActive]}
                             >
                                 <Text style={{ fontSize: 16 }}>🐃</Text>
-                                <Text style={[s.milkBtnText, milkType === 'buffalo' && { color: '#fff' }]}>Buffalo</Text>
+                                <Text style={[s.milkBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
                                 {milkType === 'buffalo' && <Check size={12} color="#fff" />}
                             </Pressable>
                         )}
@@ -367,7 +369,7 @@ export default function PurchaseScreen() {
                     {/* Input fields inline */}
                     <View style={s.fieldsRow}>
                         <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>Milk (L)</Text>
+                            <Text style={s.fieldLabel}>{t.purchase.milk} (L)</Text>
                             <TextInput
                                 style={s.fieldInput}
                                 value={milkQty}
@@ -380,7 +382,7 @@ export default function PurchaseScreen() {
                         </View>
                         {selectedCustomer?.priceBasis !== 'rate' && (
                             <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>Fat</Text>
+                                <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
                                 <TextInput
                                     style={s.fieldInput}
                                     value={fatValue}
@@ -392,7 +394,7 @@ export default function PurchaseScreen() {
                             </View>
                         )}
                         <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>Rate ₹</Text>
+                            <Text style={s.fieldLabel}>{t.common.rate} ₹</Text>
                             <TextInput
                                 style={s.fieldInput}
                                 value={isZero ? '0' : rateValue}
@@ -412,7 +414,7 @@ export default function PurchaseScreen() {
                             onPress={() => setIsZero(!isZero)}
                         >
                             <CircleDot size={13} color={isZero ? '#fff' : colors.mutedForeground} />
-                            <Text style={[s.zeroText, isZero && { color: '#fff' }]}>Zero</Text>
+                            <Text style={[s.zeroText, isZero && { color: '#fff' }]}>{t.purchase.zeroEntry}</Text>
                         </Pressable>
                         <Pressable
                             style={[s.saveEntryBtn, saving && { opacity: 0.5 }]}
@@ -422,7 +424,7 @@ export default function PurchaseScreen() {
                             {saving ? (
                                 <ActivityIndicator size="small" color="#fff" />
                             ) : (
-                                <Text style={s.saveEntryText}>✓ Save Entry</Text>
+                                <Text style={s.saveEntryText}>✓ {t.common.save}</Text>
                             )}
                         </Pressable>
                     </View>
@@ -433,7 +435,7 @@ export default function PurchaseScreen() {
                     <View style={s.tableBar}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                             <FileText size={13} color={colors.primary} />
-                            <Text style={s.tableBarTitle}>Entries</Text>
+                            <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
                             <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
                         </View>
                         <Pressable style={s.pdfBtn} onPress={handleExportPdf}>
@@ -443,11 +445,11 @@ export default function PurchaseScreen() {
                     </View>
 
                     <View style={s.tHead}>
-                        <Text style={[s.tHeadText, s.entryCell1]}>Code</Text>
-                        <Text style={[s.tHeadText, s.entryCell2]}>Milk</Text>
-                        <Text style={[s.tHeadText, s.entryCell2]}>Fat</Text>
-                        <Text style={[s.tHeadText, s.entryCell2]}>Rate</Text>
-                        <Text style={[s.tHeadText, s.entryCell3]}>Amt</Text>
+                        <Text style={[s.tHeadText, s.entryCell1]}>{t.common.code}</Text>
+                        <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.milk}</Text>
+                        <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
+                        <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
+                        <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
                         <View style={{ width: 26 }} />
                     </View>
 
@@ -456,7 +458,7 @@ export default function PurchaseScreen() {
                     ) : collections.length === 0 ? (
                         <View style={s.emptyBox}>
                             <Droplets size={24} color={colors.border} />
-                            <Text style={s.emptyText}>No entries yet</Text>
+                            <Text style={s.emptyText}>{t.purchase.noEntries}</Text>
                         </View>
                     ) : (
                         <>
@@ -464,7 +466,7 @@ export default function PurchaseScreen() {
                                 <View key={item._id}>{renderCollectionItem({ item, index })}</View>
                             ))}
                             <View style={s.tFootRow}>
-                                <Text style={[s.tFootText, s.entryCell1]}>Total ({collections.length})</Text>
+                                <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({collections.length})</Text>
                                 <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity.toFixed(1)}</Text>
                                 <Text style={[s.tFootText, s.entryCell2]}></Text>
                                 <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '-'}</Text>
@@ -485,7 +487,7 @@ export default function PurchaseScreen() {
                     <View style={s.modalSheet}>
                         <View style={s.modalHandle} />
                         <View style={s.modalHeader}>
-                            <Text style={s.modalTitle}>Select Date</Text>
+                            <Text style={s.modalTitle}>{t.common.date}</Text>
                             <Pressable onPress={() => setShowDateModal(false)}><X size={18} color={colors.foreground} /></Pressable>
                         </View>
                         <Calendar selectedDate={entryDate} onDateSelect={(d) => { if (d) { setEntryDate(d); setShowDateModal(false); } }} />
@@ -499,7 +501,7 @@ export default function PurchaseScreen() {
                     <View style={[s.modalSheet, { maxHeight: '80%' }]}>
                         <View style={s.modalHandle} />
                         <View style={s.modalHeader}>
-                            <Text style={s.modalTitle}>Select Customer</Text>
+                            <Text style={s.modalTitle}>{t.purchase.selectCustomer}</Text>
                             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                                 <Pressable onPress={() => { setShowCustomerModal(false); setEditingCustomer(null); setShowAddCustomer(true); }} style={s.addCustBtn}>
                                     <Plus size={14} color="#fff" />
@@ -515,7 +517,7 @@ export default function PurchaseScreen() {
                                 style={s.searchInput}
                                 value={customerSearch}
                                 onChangeText={setCustomerSearch}
-                                placeholder="Search name or code..."
+                                placeholder={`${t.common.search}...`}
                                 placeholderTextColor={colors.mutedForeground}
                             />
                             {customerSearch.length > 0 && (

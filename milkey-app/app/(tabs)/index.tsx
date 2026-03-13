@@ -9,6 +9,7 @@ import { productsApi, reportsApi, bannersApi, Product, HomeStats, Banner } from 
 import { useAuth } from '@/hooks/useAuth';
 import { Plus, Wallet } from 'lucide-react-native';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
+import { useTranslation } from '@/hooks/useTranslation';
 import { QuickEntryModal } from '@/components/QuickEntryModal';
 import { QuickAdvanceModal } from '@/components/QuickAdvanceModal';
 import { useSubscriptionStore, shouldShowSubscriptionModal, markSubscriptionModalShown } from '@/lib/subscriptionStore';
@@ -20,6 +21,7 @@ const CARD_WIDTH = (width - 18) / 2;
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
   const [currentBanner, setCurrentBanner] = useState(0);
   const [loading, setLoading] = useState(true);
   const [bannersLoading, setBannersLoading] = useState(true);
@@ -214,7 +216,7 @@ export default function HomeScreen() {
       <SubscriptionModal
         visible={showSubscriptionModal}
         onClose={() => setShowSubscriptionModal(false)}
-        title="Choose Your Plan"
+        title={t.home.choosePlan}
       />
       <TopBar />
 
@@ -278,34 +280,34 @@ export default function HomeScreen() {
         ) : null
         }
         {/* Quick Overview */}
-        <Text style={styles.sectionTitle}>Quick Overview</Text>
+        <Text style={styles.sectionTitle}>{t.home.quickOverview}</Text>
         <View style={styles.overviewCard}>
           <View style={styles.overviewMain}>
             <View>
-              <Text style={styles.overviewLabel}>Today</Text>
-              <Text style={styles.overviewSubLabel}>Milk Collection</Text>
+              <Text style={styles.overviewLabel}>{t.home.today}</Text>
+              <Text style={styles.overviewSubLabel}>{t.home.milkCollection}</Text>
               <Text style={styles.overviewValue}>₹{homeStats?.today.amount.toFixed(0) || '0'}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
               <Text style={styles.overviewStatValue}>{homeStats?.todaySell.quantity.toFixed(1) || '0'}L</Text>
-              <Text style={styles.overviewStatLabel}>Sell Qty</Text>
+              <Text style={styles.overviewStatLabel}>{t.home.sellQty}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
               <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{homeStats?.totalMembers || 0}</Text>
-              <Text style={styles.overviewStatLabel}>Members</Text>
+              <Text style={styles.overviewStatLabel}>{t.home.members}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
               <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{homeStats?.totalFarmers || 0}</Text>
-              <Text style={styles.overviewStatLabel}>Farmers</Text>
+              <Text style={styles.overviewStatLabel}>{t.home.farmers}</Text>
             </View>
           </View>
         </View>
 
         {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={styles.sectionTitle}>{t.home.quickActions}</Text>
         <View style={styles.quickActionsRow}>
           <Pressable
             style={styles.quickActionCard}
@@ -314,7 +316,7 @@ export default function HomeScreen() {
             <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
               <Plus size={20} color={colors.primary} />
             </View>
-            <Text style={styles.quickActionText}>Entry</Text>
+            <Text style={styles.quickActionText}>{t.home.entry}</Text>
           </Pressable>
           <Pressable
             style={styles.quickActionCard}
@@ -323,7 +325,7 @@ export default function HomeScreen() {
             <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
               <Wallet size={20} color={colors.primary} />
             </View>
-            <Text style={styles.quickActionText}>Advance</Text>
+            <Text style={styles.quickActionText}>{t.home.advance}</Text>
           </Pressable>
         </View>
 
@@ -342,7 +344,7 @@ export default function HomeScreen() {
         />
 
         {/* Products */}
-        <Text style={styles.sectionTitle}>Products</Text>
+        <Text style={styles.sectionTitle}>{t.home.products}</Text>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -383,7 +385,7 @@ export default function HomeScreen() {
                   </View>
 
                   <Pressable style={styles.addToCartBtn} onPress={() => handleAddToCart(product)}>
-                    <Text style={styles.addToCartText}>Add to Cart</Text>
+                    <Text style={styles.addToCartText}>{t.home.addToCart}</Text>
                   </Pressable>
                 </View>
               </View>

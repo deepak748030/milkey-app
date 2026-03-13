@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { ChevronLeft, TrendingUp, Users, Droplets, Wallet, Calendar } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { reportsApi } from '@/lib/milkeyApi';
@@ -31,6 +32,7 @@ interface TopFarmer {
 
 export default function AnalyticsScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [period, setPeriod] = useState<PeriodType>('7');

@@ -4,10 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, FileQuestionMark as FileQuestion, MessageCircle, Mail, Phone, ChevronRight, ChevronDown } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function HelpSupportScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   const styles = createStyles(colors, isDark, insets);
@@ -77,7 +79,7 @@ export default function HelpSupportScreen() {
         <Pressable style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft size={22} color={colors.foreground} />
         </Pressable>
-        <Text style={styles.headerTitle}>Help & Support</Text>
+        <Text style={styles.headerTitle}>{t.helpSupport.title}</Text>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -95,7 +97,7 @@ export default function HelpSupportScreen() {
 
           {/* Contact Options */}
           <View style={styles.contactSection}>
-            <Text style={styles.sectionTitle}>Get in Touch</Text>
+            <Text style={styles.sectionTitle}>{t.helpSupport.contactUs}</Text>
             <View style={styles.contactOptions}>
               {contactOptions.map((option, index) => (
                 <Pressable key={index} style={styles.contactOption} onPress={option.onPress}>

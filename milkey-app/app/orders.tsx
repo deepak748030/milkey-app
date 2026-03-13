@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
 import { ArrowLeft, Package, Clock, CheckCircle, XCircle, Truck } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +9,7 @@ import { ordersApi, Order } from '@/lib/milkeyApi';
 
 export default function OrdersScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
@@ -88,7 +90,7 @@ export default function OrdersScreen() {
                     <Pressable onPress={() => router.back()} style={styles.backBtn}>
                         <ArrowLeft size={22} color={colors.foreground} />
                     </Pressable>
-                    <Text style={styles.headerTitle}>My Orders</Text>
+                    <Text style={styles.headerTitle}>{t.orders.title}</Text>
                     <View style={styles.placeholder} />
                 </View>
                 <View style={styles.loadingContainer}>
@@ -105,7 +107,7 @@ export default function OrdersScreen() {
                 <Pressable onPress={() => router.back()} style={styles.backBtn}>
                     <ArrowLeft size={22} color={colors.foreground} />
                 </Pressable>
-                <Text style={styles.headerTitle}>My Orders</Text>
+                <Text style={styles.headerTitle}>{t.orders.title}</Text>
                 <View style={styles.placeholder} />
             </View>
 
@@ -119,7 +121,7 @@ export default function OrdersScreen() {
                 {orders.length === 0 ? (
                     <View style={styles.emptyContainer}>
                         <Package size={60} color={colors.mutedForeground} />
-                        <Text style={styles.emptyTitle}>No orders yet</Text>
+                        <Text style={styles.emptyTitle}>{t.orders.noOrders}</Text>
                         <Text style={styles.emptySubtitle}>Your order history will appear here</Text>
                         <Pressable onPress={() => router.push('/')} style={styles.shopBtn}>
                             <Text style={styles.shopBtnText}>Start Shopping</Text>

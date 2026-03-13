@@ -4,10 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, FileText, CheckCircle, CreditCard, User, Shield, AlertTriangle, RefreshCw, Mail } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export default function TermsConditionsScreen() {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
+    const { t } = useTranslation();
     const styles = createStyles(colors);
 
     const termsItems = [
@@ -59,7 +61,7 @@ export default function TermsConditionsScreen() {
                 <Pressable style={styles.backButton} onPress={() => router.back()}>
                     <ArrowLeft size={22} color={colors.foreground} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Terms & Conditions</Text>
+                <Text style={styles.headerTitle}>{t.terms.title}</Text>
             </View>
 
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -69,9 +71,9 @@ export default function TermsConditionsScreen() {
                         <View style={styles.heroIcon}>
                             <FileText size={32} color={colors.primary} />
                         </View>
-                        <Text style={styles.heroTitle}>Terms of Service</Text>
+                        <Text style={styles.heroTitle}>{t.terms.termsOfService}</Text>
                         <Text style={styles.heroDescription}>
-                            Welcome to Milkey. By using this App, you agree to the following terms and conditions.
+                            {t.terms.description}
                         </Text>
                     </View>
 
@@ -92,9 +94,9 @@ export default function TermsConditionsScreen() {
 
                     {/* Contact Information */}
                     <View style={styles.additionalInfo}>
-                        <Text style={styles.additionalTitle}>Contact & Support</Text>
+                        <Text style={styles.additionalTitle}>{t.terms.contactSupport}</Text>
                         <Text style={styles.additionalText}>
-                            For any questions or concerns regarding these terms, please contact us:
+                            {t.terms.contactDescription}
                         </Text>
                         <Pressable style={styles.emailButton} onPress={handleEmailPress}>
                             <Mail size={18} color={colors.primary} />

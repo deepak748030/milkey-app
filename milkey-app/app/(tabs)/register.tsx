@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Printer, User } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
@@ -37,6 +38,7 @@ interface DateRange {
 
 export default function RegisterScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
 
     // Subscription check
@@ -1896,15 +1898,22 @@ export default function RegisterScreen() {
 
             {/* Tabs */}
             <View style={styles.tabRow}>
-                {(['Payments', 'Advances', 'Farmers'] as TabType[]).map((tab) => (
-                    <Pressable
-                        key={tab}
-                        style={[styles.tab, activeTab === tab && styles.tabActive]}
-                        onPress={() => setActiveTab(tab)}
-                    >
-                        <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-                    </Pressable>
-                ))}
+                {(['Payments', 'Advances', 'Farmers'] as TabType[]).map((tab) => {
+                    const tabLabels: Record<TabType, string> = {
+                        Payments: t.register.payments,
+                        Advances: t.register.advances,
+                        Farmers: t.register.farmers,
+                    };
+                    return (
+                        <Pressable
+                            key={tab}
+                            style={[styles.tab, activeTab === tab && styles.tabActive]}
+                            onPress={() => setActiveTab(tab)}
+                        >
+                            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tabLabels[tab]}</Text>
+                        </Pressable>
+                    );
+                })}
             </View>
 
             <ScrollView

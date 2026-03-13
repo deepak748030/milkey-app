@@ -1,6 +1,7 @@
 import React, { useState, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Dimensions } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
 import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -98,6 +99,7 @@ const LogoHeader = memo(({ title, subtitle, colors, compact }: any) => (
 
 export default function AuthScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { expoPushToken } = usePushNotifications();
     const [isLogin, setIsLogin] = useState(true);
@@ -394,7 +396,7 @@ export default function AuthScreen() {
                         }}
                         onPress={() => setIsLogin(true)}
                     >
-                        <Text style={{ fontSize: 14, fontWeight: isLogin ? '700' : '600', color: isLogin ? '#fff' : colors.mutedForeground }}>Login</Text>
+                        <Text style={{ fontSize: 14, fontWeight: isLogin ? '700' : '600', color: isLogin ? '#fff' : colors.mutedForeground }}>{t.auth.login}</Text>
                     </Pressable>
                     <Pressable
                         style={{
@@ -406,7 +408,7 @@ export default function AuthScreen() {
                         }}
                         onPress={() => setIsLogin(false)}
                     >
-                        <Text style={{ fontSize: 14, fontWeight: !isLogin ? '700' : '600', color: !isLogin ? '#fff' : colors.mutedForeground }}>Sign Up</Text>
+                        <Text style={{ fontSize: 14, fontWeight: !isLogin ? '700' : '600', color: !isLogin ? '#fff' : colors.mutedForeground }}>{t.auth.signup}</Text>
                     </Pressable>
                 </View>
 
@@ -441,23 +443,23 @@ export default function AuthScreen() {
 
                 {isLogin && (
                     <Pressable style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 4 }} onPress={() => setShowForgotPassword(true)}>
-                        <Text style={{ fontSize: 12, fontWeight: '500', color: colors.primary }}>Forgot Password?</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '500', color: colors.primary }}>{t.auth.forgotPassword}</Text>
                     </Pressable>
                 )}
 
                 <AuthButton
                     onPress={handleAuth}
-                    label={isLogin ? 'Login' : 'Create Account'}
+                    label={isLogin ? t.auth.login : t.auth.createAccount}
                     loading={loading}
                     colors={colors}
                 />
 
                 <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 14 }}>
                     <Text style={{ fontSize: 13, color: colors.mutedForeground }}>
-                        {isLogin ? "Don't have an account? " : "Already have an account? "}
+                        {isLogin ? t.auth.dontHaveAccount + ' ' : t.auth.alreadyHaveAccount + ' '}
                     </Text>
                     <Pressable onPress={() => setIsLogin(!isLogin)}>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>{isLogin ? 'Sign Up' : 'Login'}</Text>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>{isLogin ? t.auth.signup : t.auth.login}</Text>
                     </Pressable>
                 </View>
             </FormCard>

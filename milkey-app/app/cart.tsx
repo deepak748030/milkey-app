@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
 import { ArrowLeft, Minus, Plus, Trash2, ShoppingBag, ShoppingCart } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +13,7 @@ const { width } = Dimensions.get('window');
 
 export default function CartScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { items, updateQuantity, removeFromCart, clearCart, getTotal, getItemCount, loadCart } = useCartStore();
 
@@ -56,7 +58,7 @@ export default function CartScreen() {
                 <Pressable onPress={() => router.back()} style={styles.backBtn}>
                     <ArrowLeft size={22} color={colors.foreground} />
                 </Pressable>
-                <Text style={styles.headerTitle}>My Cart</Text>
+                <Text style={styles.headerTitle}>{t.cart.title}</Text>
                 <View style={styles.cartBadgeContainer}>
                     <ShoppingCart size={20} color={colors.foreground} />
                     {getItemCount() > 0 && (
@@ -70,10 +72,10 @@ export default function CartScreen() {
             {items.length === 0 ? (
                 <View style={styles.emptyContainer}>
                     <ShoppingBag size={60} color={colors.mutedForeground} />
-                    <Text style={styles.emptyTitle}>Your cart is empty</Text>
-                    <Text style={styles.emptySubtitle}>Add some products to get started</Text>
+                    <Text style={styles.emptyTitle}>{t.cart.emptyCart}</Text>
+                    <Text style={styles.emptySubtitle}>{t.cart.addProducts}</Text>
                     <Pressable onPress={() => router.back()} style={styles.shopBtn}>
-                        <Text style={styles.shopBtnText}>Start Shopping</Text>
+                        <Text style={styles.shopBtnText}>{t.cart.startShopping}</Text>
                     </Pressable>
                 </View>
             ) : (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { ChevronLeft, FileText, Share2, Calendar } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { reportsApi, FarmerStatement } from '@/lib/milkeyApi';
@@ -15,6 +16,7 @@ function getDateString(daysOffset: number) {
 
 export default function FarmerStatementScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [farmerCode, setFarmerCode] = useState('');
     const [dateRange, setDateRange] = useState({ start: getDateString(-30), end: getDateString(0) });

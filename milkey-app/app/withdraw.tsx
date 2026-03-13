@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
 import { ArrowLeft, Wallet, Clock, CheckCircle, XCircle, CreditCard, Building2 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +9,7 @@ import { withdrawalsApi, Withdrawal, WithdrawalData } from '@/lib/milkeyApi';
 
 export default function WithdrawScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const styles = createStyles(colors, isDark, insets);
 
@@ -151,7 +153,7 @@ export default function WithdrawScreen() {
                 <Pressable onPress={() => router.back()} style={styles.backBtn}>
                     <ArrowLeft size={22} color={colors.foreground} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Withdraw</Text>
+                <Text style={styles.headerTitle}>{t.withdraw.title}</Text>
                 <View style={styles.placeholder} />
             </View>
 
@@ -166,12 +168,12 @@ export default function WithdrawScreen() {
                 <View style={styles.balanceCard}>
                     <View style={styles.balanceHeader}>
                         <Wallet size={22} color={colors.primary} />
-                        <Text style={styles.balanceTitle}>Available Balance</Text>
+                        <Text style={styles.balanceTitle}>{t.withdraw.availableBalance}</Text>
                     </View>
                     <Text style={styles.balanceAmount}>₹{data?.balance?.toLocaleString() || 0}</Text>
                     <View style={styles.balanceStats}>
                         <View style={styles.balanceStat}>
-                            <Text style={styles.balanceStatLabel}>Total Withdrawn</Text>
+                            <Text style={styles.balanceStatLabel}>{t.withdraw.totalWithdrawn}</Text>
                             <Text style={styles.balanceStatValue}>₹{data?.totalWithdrawn?.toLocaleString() || 0}</Text>
                         </View>
                         <View style={styles.balanceDivider} />
@@ -185,7 +187,7 @@ export default function WithdrawScreen() {
                 {/* Withdraw Form */}
                 {(data?.balance || 0) > 0 && (
                     <View style={styles.formCard}>
-                        <Text style={styles.formTitle}>Request Withdrawal</Text>
+                        <Text style={styles.formTitle}>{t.withdraw.requestWithdrawal}</Text>
 
                         {/* Amount */}
                         <View style={styles.inputGroup}>
@@ -202,7 +204,7 @@ export default function WithdrawScreen() {
 
                         {/* Payment Method */}
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Payment Method</Text>
+                            <Text style={styles.inputLabel}>{t.withdraw.paymentMethod}</Text>
                             <View style={styles.methodRow}>
                                 <Pressable
                                     style={[styles.methodBtn, paymentMethod === 'upi' && styles.methodBtnActive]}

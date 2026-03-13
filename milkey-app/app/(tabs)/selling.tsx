@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
@@ -34,6 +35,7 @@ interface GroupedEntry {
 
 export default function SellingScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
 
     // Subscription check
@@ -2138,15 +2140,23 @@ export default function SellingScreen() {
             />
             <TopBar />
             <View style={styles.tabRow}>
-                {(['Entry', 'Payment', 'Reports', 'Member'] as TabType[]).map((tab) => (
-                    <Pressable
-                        key={tab}
-                        style={[styles.tab, activeTab === tab && styles.tabActive]}
-                        onPress={() => setActiveTab(tab)}
-                    >
-                        <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-                    </Pressable>
-                ))}
+                {(['Entry', 'Payment', 'Reports', 'Member'] as TabType[]).map((tab) => {
+                    const tabLabels: Record<TabType, string> = {
+                        Entry: t.selling.entry,
+                        Payment: t.selling.payment,
+                        Reports: t.selling.reports,
+                        Member: t.selling.member,
+                    };
+                    return (
+                        <Pressable
+                            key={tab}
+                            style={[styles.tab, activeTab === tab && styles.tabActive]}
+                            onPress={() => setActiveTab(tab)}
+                        >
+                            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tabLabels[tab]}</Text>
+                        </Pressable>
+                    );
+                })}
             </View>
 
             <ScrollView

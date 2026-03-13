@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal, Dimensions } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { ArrowLeft, CreditCard, Clock, CheckCircle, XCircle, Crown, Sparkles, Gift, Calendar, Zap, Check, Star, AlertCircle, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -162,6 +163,7 @@ function SuccessModal({ visible, title, message, onClose }: SuccessModalProps) {
 
 export default function SubscriptionsScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<'active' | 'available' | 'expired'>('active');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -737,7 +739,7 @@ export default function SubscriptionsScreen() {
                 <Pressable style={styles.backButton} onPress={() => router.back()}>
                     <ArrowLeft size={24} color={colors.foreground} />
                 </Pressable>
-                <Text style={styles.headerTitle}>My Subscriptions</Text>
+                <Text style={styles.headerTitle}>{t.subscriptions.title}</Text>
                 <View style={styles.headerSpacer} />
             </View>
 

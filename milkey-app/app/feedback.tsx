@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, RefreshControl, Modal } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { MessageSquare, Send, ChevronLeft, Plus, X, Check, Clock, AlertCircle } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { feedbackApi, Feedback } from '@/lib/milkeyApi';
@@ -21,6 +22,7 @@ const priorityOptions = [
 
 export default function FeedbackScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
@@ -106,7 +108,7 @@ export default function FeedbackScreen() {
                 <Pressable onPress={() => router.back()} style={styles.backBtn}>
                     <ChevronLeft size={24} color={colors.foreground} />
                 </Pressable>
-                <Text style={styles.headerTitle}>Feedback & Support</Text>
+                <Text style={styles.headerTitle}>{t.feedback.title}</Text>
                 <Pressable onPress={() => setShowModal(true)} style={styles.addBtn}>
                     <Plus size={20} color={colors.white} />
                 </Pressable>

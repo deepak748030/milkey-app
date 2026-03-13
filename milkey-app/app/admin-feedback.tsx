@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, RefreshControl, Modal } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from '@/hooks/useTranslation';
 import { ChevronLeft, MessageSquare, Check, Clock, AlertCircle, X, Send, Filter } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { feedbackApi, Feedback } from '@/lib/milkeyApi';
@@ -22,6 +23,7 @@ const feedbackTypes = [
 
 export default function AdminFeedbackScreen() {
     const { colors, isDark } = useTheme();
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [feedbacks, setFeedbacks] = useState<(Feedback & { user?: any })[]>([]);

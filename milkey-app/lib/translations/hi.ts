@@ -2,7 +2,6 @@
 import type { TranslationKeys } from './en';
 
 const hi: TranslationKeys = {
-    // Tab Labels
     tabs: {
         home: 'होम',
         purchase: 'खरीदी',
@@ -11,7 +10,6 @@ const hi: TranslationKeys = {
         profile: 'प्रोफाइल',
     },
 
-    // Common
     common: {
         save: 'सेव करें',
         cancel: 'रद्द करें',
@@ -46,9 +44,22 @@ const hi: TranslationKeys = {
         actions: 'कार्रवाई',
         morning: 'सुबह',
         evening: 'शाम',
+        error: 'त्रुटि',
+        success: 'सफल',
+        info: 'जानकारी',
+        code: 'कोड',
+        mobile: 'मोबाइल',
+        note: 'नोट',
+        all: 'सभी',
+        from: 'से',
+        to: 'तक',
+        export: 'निर्यात',
+        print: 'प्रिंट',
+        clear: 'साफ करें',
+        update: 'अपडेट',
+        select: 'चुनें',
     },
 
-    // Profile Screen
     profile: {
         title: 'प्रोफाइल',
         editProfile: 'प्रोफाइल संपादित करें',
@@ -74,7 +85,6 @@ const hi: TranslationKeys = {
         owner: 'मालिक',
     },
 
-    // Home Screen
     home: {
         quickOverview: 'त्वरित अवलोकन',
         today: 'आज',
@@ -90,7 +100,6 @@ const hi: TranslationKeys = {
         choosePlan: 'अपना प्लान चुनें',
     },
 
-    // Purchase Screen
     purchase: {
         title: 'खरीदी',
         addCustomer: 'ग्राहक जोड़ें',
@@ -112,9 +121,24 @@ const hi: TranslationKeys = {
         customerDetails: 'ग्राहक विवरण',
         defaultMilkType: 'डिफॉल्ट दूध प्रकार',
         milkSettings: 'दूध सेटिंग्स',
+        selectCustomer: 'ग्राहक चुनें',
+        rateBased: 'दर आधारित',
+        fatBased: 'फैट आधारित',
+        fatSnfBased: 'फैट/एसएनएफ आधारित',
+        enterQty: 'मात्रा दर्ज करें',
+        enterRate: 'दर दर्ज करें',
+        enterFat: 'फैट दर्ज करें',
+        zeroEntry: 'शून्य',
+        amt: 'राशि',
+        qty: 'मात्रा',
+        deleteEntry: 'यह दूध प्रविष्टि हटाएं?',
+        deleteCustomer: 'क्या आप सुनिश्चित हैं?',
+        entrySaved: 'प्रविष्टि सेव हुई',
+        entryDeleted: 'प्रविष्टि हटाई गई',
+        customerDeleted: 'ग्राहक हटाया गया',
+        purchaseReport: 'खरीदी रिपोर्ट',
     },
 
-    // Selling Screen
     selling: {
         title: 'बिक्री',
         entry: 'एंट्री',
@@ -124,9 +148,34 @@ const hi: TranslationKeys = {
         addMember: 'सदस्य जोड़ें',
         memberName: 'सदस्य का नाम',
         memberCode: 'सदस्य कोड',
+        morningQty: 'सु.मात्रा',
+        eveningQty: 'शा.मात्रा',
+        ratePerLiter: 'दर/ली',
+        selectMember: 'सदस्य चुनें',
+        recentEntries: 'हाल की प्रविष्टियां',
+        balanceReport: 'बैलेंस रिपोर्ट',
+        milkAmount: 'दूध राशि',
+        paidAmount: 'भुगतान राशि',
+        cash: 'नकद',
+        upi: 'यूपीआई',
+        bank: 'बैंक',
+        settlement: 'भुगतान',
+        totalQty: 'कुल मात्रा',
+        totalAmt: 'कुल राशि',
+        allMembers: 'सभी सदस्य',
+        payNow: 'अभी भुगतान करें',
+        balance: 'बैलेंस',
+        paid: 'भुगतान',
+        pending: 'लंबित',
+        memberMobile: 'मोबाइल',
+        memberAddress: 'पता',
+        addNewMember: 'नया सदस्य जोड़ें',
+        editMember: 'सदस्य संपादित करें',
+        deleteMember: 'सदस्य हटाएं',
+        noMembers: 'अभी कोई सदस्य नहीं',
+        noEntries: 'अभी कोई प्रविष्टि नहीं',
     },
 
-    // Register Screen
     register: {
         title: 'रजिस्टर',
         payments: 'भुगतान',
@@ -135,9 +184,23 @@ const hi: TranslationKeys = {
         addFarmer: 'किसान जोड़ें',
         farmerName: 'किसान का नाम',
         farmerCode: 'किसान कोड',
+        addAdvance: 'अग्रिम जोड़ें',
+        advanceAmount: 'अग्रिम राशि',
+        advanceNote: 'नोट',
+        totalPending: 'कुल लंबित',
+        settlementHistory: 'भुगतान इतिहास',
+        pendingAmount: 'लंबित राशि',
+        noFarmers: 'अभी कोई किसान नहीं',
+        noAdvances: 'अभी कोई अग्रिम नहीं',
+        noPayments: 'अभी कोई भुगतान नहीं',
+        farmerMobile: 'मोबाइल',
+        farmerAddress: 'पता',
+        editFarmer: 'किसान संपादित करें',
+        deleteFarmer: 'किसान हटाएं',
+        paidOnDate: 'इस तारीख को भुगतान',
+        totalBalance: 'कुल बैलेंस',
     },
 
-    // Auth
     auth: {
         login: 'लॉगिन',
         signup: 'साइन अप',
@@ -147,16 +210,20 @@ const hi: TranslationKeys = {
         forgotPassword: 'पासवर्ड भूल गए?',
         dontHaveAccount: 'अकाउंट नहीं है?',
         alreadyHaveAccount: 'पहले से अकाउंट है?',
+        dairyName: 'डेयरी का नाम',
+        ownerName: 'मालिक का नाम',
+        referralCodeOptional: 'रेफरल कोड (वैकल्पिक)',
+        createAccount: 'अकाउंट बनाएं',
+        loginToAccount: 'अपने अकाउंट में लॉगिन करें',
+        signupDescription: 'अपना डेयरी अकाउंट बनाएं',
     },
 
-    // Notifications
     notifications: {
         title: 'सूचनाएं',
         noNotifications: 'अभी कोई सूचना नहीं',
         markAllRead: 'सभी को पढ़ा हुआ चिह्नित करें',
     },
 
-    // Orders
     orders: {
         title: 'मेरे ऑर्डर',
         noOrders: 'अभी कोई ऑर्डर नहीं',
@@ -167,7 +234,6 @@ const hi: TranslationKeys = {
         cancelled: 'रद्द',
     },
 
-    // Subscriptions
     subscriptions: {
         title: 'मेरी सदस्यता',
         activePlan: 'सक्रिय प्लान',
@@ -175,35 +241,82 @@ const hi: TranslationKeys = {
         active: 'सक्रिय',
     },
 
-    // Help & Support
     helpSupport: {
         title: 'सहायता और समर्थन',
         contactUs: 'संपर्क करें',
         faq: 'अक्सर पूछे जाने वाले प्रश्न',
+        emailUs: 'ईमेल करें',
+        frequentlyAsked: 'अक्सर पूछे जाने वाले प्रश्न',
     },
 
-    // Feedback
     feedback: {
         title: 'प्रतिक्रिया',
         submitFeedback: 'प्रतिक्रिया जमा करें',
         placeholder: 'यहां अपनी प्रतिक्रिया लिखें...',
     },
 
-    // Referral
     referral: {
         title: 'रेफरल प्रोग्राम',
         yourCode: 'आपका रेफरल कोड',
         shareCode: 'कोड शेयर करें',
         totalReferrals: 'कुल रेफरल',
         earnings: 'कमाई',
+        shareWithFriends: 'दोस्तों के साथ शेयर करें',
+        activeUsers: 'सक्रिय उपयोगकर्ता',
+        yourEarnings: 'आपकी कमाई',
+        totalEarned: 'कुल कमाई',
+        referralHistory: 'रेफरल इतिहास',
+        noReferrals: 'अभी कोई रेफरल नहीं',
     },
 
-    // Withdraw
     withdraw: {
         title: 'निकासी',
         availableBalance: 'उपलब्ध शेष',
         withdrawAmount: 'निकासी राशि',
         withdrawNow: 'अभी निकालें',
+        totalWithdrawn: 'कुल निकाली गई',
+        requestWithdrawal: 'निकासी अनुरोध',
+        paymentMethod: 'भुगतान विधि',
+        bankTransfer: 'बैंक ट्रांसफर',
+        withdrawHistory: 'निकासी इतिहास',
+        noWithdrawals: 'अभी कोई निकासी नहीं',
+    },
+
+    cart: {
+        title: 'मेरा कार्ट',
+        emptyCart: 'आपका कार्ट खाली है',
+        addProducts: 'शुरू करने के लिए कुछ उत्पाद जोड़ें',
+        startShopping: 'खरीदारी शुरू करें',
+        checkout: 'चेकआउट',
+        removeItem: 'आइटम हटाएं',
+        removeConfirm: 'क्या आप इस आइटम को हटाना चाहते हैं?',
+    },
+
+    terms: {
+        title: 'नियम और शर्तें',
+        termsOfService: 'सेवा की शर्तें',
+        description: 'मिल्की में आपका स्वागत है। इस ऐप का उपयोग करके, आप निम्नलिखित नियमों और शर्तों से सहमत हैं।',
+        contactSupport: 'संपर्क और समर्थन',
+        contactDescription: 'इन शर्तों के बारे में किसी भी प्रश्न या चिंता के लिए कृपया संपर्क करें:',
+    },
+
+    privacy: {
+        title: 'गोपनीयता नीति',
+        yourPrivacyMatters: 'आपकी गोपनीयता महत्वपूर्ण है',
+        description: 'मिल्की आपकी गोपनीयता को महत्व देता है। यह नीति बताती है कि हम आपका डेटा कैसे एकत्र और उपयोग करते हैं।',
+        contactUs: 'संपर्क करें',
+        contactDescription: 'गोपनीयता संबंधी चिंताओं, डेटा अनुरोधों, या इस नीति के बारे में प्रश्नों के लिए कृपया संपर्क करें:',
+        businessHours: 'कार्य समय: सुबह 10 - शाम 7 (सोम-शनि)',
+        lastUpdated: 'अंतिम अपडेट: जनवरी 2025',
+        dataWeCollect: 'हम कौनसा डेटा एकत्र करते हैं',
+        howDataUsed: 'डेटा का उपयोग कैसे होता है',
+        dataSecurity: 'डेटा संग्रहण और सुरक्षा',
+        thirdParty: 'तृतीय-पक्ष सेवाएं',
+        userControl: 'उपयोगकर्ता नियंत्रण',
+        policyUpdates: 'नीति अपडेट',
+        subscriptionCancellation: 'सदस्यता रद्दीकरण',
+        refundPolicy: 'रिफंड नीति',
+        exceptionalRefunds: 'असाधारण रिफंड मामले',
     },
 };
 

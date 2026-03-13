@@ -2,7 +2,6 @@
 import type { TranslationKeys } from './en';
 
 const mr: TranslationKeys = {
-    // Tab Labels
     tabs: {
         home: 'होम',
         purchase: 'खरेदी',
@@ -11,7 +10,6 @@ const mr: TranslationKeys = {
         profile: 'प्रोफाइल',
     },
 
-    // Common
     common: {
         save: 'सेव्ह करा',
         cancel: 'रद्द करा',
@@ -46,9 +44,22 @@ const mr: TranslationKeys = {
         actions: 'क्रिया',
         morning: 'सकाळ',
         evening: 'संध्याकाळ',
+        error: 'त्रुटी',
+        success: 'यशस्वी',
+        info: 'माहिती',
+        code: 'कोड',
+        mobile: 'मोबाइल',
+        note: 'नोट',
+        all: 'सर्व',
+        from: 'पासून',
+        to: 'पर्यंत',
+        export: 'निर्यात',
+        print: 'प्रिंट',
+        clear: 'साफ करा',
+        update: 'अपडेट',
+        select: 'निवडा',
     },
 
-    // Profile Screen
     profile: {
         title: 'प्रोफाइल',
         editProfile: 'प्रोफाइल संपादित करा',
@@ -74,7 +85,6 @@ const mr: TranslationKeys = {
         owner: 'मालक',
     },
 
-    // Home Screen
     home: {
         quickOverview: 'जलद अवलोकन',
         today: 'आज',
@@ -90,7 +100,6 @@ const mr: TranslationKeys = {
         choosePlan: 'तुमचा प्लॅन निवडा',
     },
 
-    // Purchase Screen
     purchase: {
         title: 'खरेदी',
         addCustomer: 'ग्राहक जोडा',
@@ -112,9 +121,24 @@ const mr: TranslationKeys = {
         customerDetails: 'ग्राहक तपशील',
         defaultMilkType: 'डीफॉल्ट दूध प्रकार',
         milkSettings: 'दूध सेटिंग्ज',
+        selectCustomer: 'ग्राहक निवडा',
+        rateBased: 'दर आधारित',
+        fatBased: 'फॅट आधारित',
+        fatSnfBased: 'फॅट/एसएनएफ आधारित',
+        enterQty: 'प्रमाण भरा',
+        enterRate: 'दर भरा',
+        enterFat: 'फॅट भरा',
+        zeroEntry: 'शून्य',
+        amt: 'रक्कम',
+        qty: 'प्रमाण',
+        deleteEntry: 'ही दूध नोंद हटवायची?',
+        deleteCustomer: 'तुम्हाला खात्री आहे?',
+        entrySaved: 'नोंद सेव्ह झाली',
+        entryDeleted: 'नोंद हटवली',
+        customerDeleted: 'ग्राहक हटवला',
+        purchaseReport: 'खरेदी रिपोर्ट',
     },
 
-    // Selling Screen
     selling: {
         title: 'विक्री',
         entry: 'एंट्री',
@@ -124,9 +148,34 @@ const mr: TranslationKeys = {
         addMember: 'सदस्य जोडा',
         memberName: 'सदस्याचे नाव',
         memberCode: 'सदस्य कोड',
+        morningQty: 'स.प्रमाण',
+        eveningQty: 'सं.प्रमाण',
+        ratePerLiter: 'दर/ली',
+        selectMember: 'सदस्य निवडा',
+        recentEntries: 'अलीकडील नोंदी',
+        balanceReport: 'बॅलन्स रिपोर्ट',
+        milkAmount: 'दूध रक्कम',
+        paidAmount: 'भरलेली रक्कम',
+        cash: 'रोख',
+        upi: 'यूपीआय',
+        bank: 'बँक',
+        settlement: 'सेटलमेंट',
+        totalQty: 'एकूण प्रमाण',
+        totalAmt: 'एकूण रक्कम',
+        allMembers: 'सर्व सदस्य',
+        payNow: 'आता पैसे द्या',
+        balance: 'बॅलन्स',
+        paid: 'भरलेले',
+        pending: 'प्रलंबित',
+        memberMobile: 'मोबाइल',
+        memberAddress: 'पत्ता',
+        addNewMember: 'नवीन सदस्य जोडा',
+        editMember: 'सदस्य संपादित करा',
+        deleteMember: 'सदस्य हटवा',
+        noMembers: 'अजून सदस्य नाहीत',
+        noEntries: 'अजून नोंदी नाहीत',
     },
 
-    // Register Screen
     register: {
         title: 'रजिस्टर',
         payments: 'पेमेंट',
@@ -135,9 +184,23 @@ const mr: TranslationKeys = {
         addFarmer: 'शेतकरी जोडा',
         farmerName: 'शेतकऱ्याचे नाव',
         farmerCode: 'शेतकरी कोड',
+        addAdvance: 'अॅडव्हान्स जोडा',
+        advanceAmount: 'अॅडव्हान्स रक्कम',
+        advanceNote: 'नोट',
+        totalPending: 'एकूण प्रलंबित',
+        settlementHistory: 'सेटलमेंट इतिहास',
+        pendingAmount: 'प्रलंबित रक्कम',
+        noFarmers: 'अजून शेतकरी नाहीत',
+        noAdvances: 'अजून अॅडव्हान्स नाही',
+        noPayments: 'अजून पेमेंट नाही',
+        farmerMobile: 'मोबाइल',
+        farmerAddress: 'पत्ता',
+        editFarmer: 'शेतकरी संपादित करा',
+        deleteFarmer: 'शेतकरी हटवा',
+        paidOnDate: 'या तारखेला भरलेले',
+        totalBalance: 'एकूण बॅलन्स',
     },
 
-    // Auth
     auth: {
         login: 'लॉगिन',
         signup: 'साइन अप',
@@ -147,16 +210,20 @@ const mr: TranslationKeys = {
         forgotPassword: 'पासवर्ड विसरलात?',
         dontHaveAccount: 'अकाउंट नाही?',
         alreadyHaveAccount: 'आधीच अकाउंट आहे?',
+        dairyName: 'डेअरीचे नाव',
+        ownerName: 'मालकाचे नाव',
+        referralCodeOptional: 'रेफरल कोड (ऐच्छिक)',
+        createAccount: 'अकाउंट तयार करा',
+        loginToAccount: 'तुमच्या अकाउंटमध्ये लॉगिन करा',
+        signupDescription: 'तुमचे डेअरी अकाउंट तयार करा',
     },
 
-    // Notifications
     notifications: {
         title: 'सूचना',
         noNotifications: 'अजून कोणतीही सूचना नाही',
         markAllRead: 'सर्व वाचलेले म्हणून चिन्हांकित करा',
     },
 
-    // Orders
     orders: {
         title: 'माझे ऑर्डर',
         noOrders: 'अजून कोणताही ऑर्डर नाही',
@@ -167,7 +234,6 @@ const mr: TranslationKeys = {
         cancelled: 'रद्द',
     },
 
-    // Subscriptions
     subscriptions: {
         title: 'माझी सदस्यता',
         activePlan: 'सक्रिय प्लॅन',
@@ -175,35 +241,82 @@ const mr: TranslationKeys = {
         active: 'सक्रिय',
     },
 
-    // Help & Support
     helpSupport: {
         title: 'मदत आणि समर्थन',
         contactUs: 'संपर्क करा',
         faq: 'वारंवार विचारले जाणारे प्रश्न',
+        emailUs: 'ईमेल करा',
+        frequentlyAsked: 'वारंवार विचारले जाणारे प्रश्न',
     },
 
-    // Feedback
     feedback: {
         title: 'अभिप्राय',
         submitFeedback: 'अभिप्राय सबमिट करा',
         placeholder: 'येथे तुमचा अभिप्राय लिहा...',
     },
 
-    // Referral
     referral: {
         title: 'रेफरल प्रोग्राम',
         yourCode: 'तुमचा रेफरल कोड',
         shareCode: 'कोड शेअर करा',
         totalReferrals: 'एकूण रेफरल',
         earnings: 'कमाई',
+        shareWithFriends: 'मित्रांसोबत शेअर करा',
+        activeUsers: 'सक्रिय वापरकर्ते',
+        yourEarnings: 'तुमची कमाई',
+        totalEarned: 'एकूण कमाई',
+        referralHistory: 'रेफरल इतिहास',
+        noReferrals: 'अजून रेफरल नाही',
     },
 
-    // Withdraw
     withdraw: {
         title: 'पैसे काढा',
         availableBalance: 'उपलब्ध शिल्लक',
         withdrawAmount: 'काढण्याची रक्कम',
         withdrawNow: 'आता काढा',
+        totalWithdrawn: 'एकूण काढलेले',
+        requestWithdrawal: 'काढण्याची विनंती',
+        paymentMethod: 'पेमेंट पद्धत',
+        bankTransfer: 'बँक ट्रान्सफर',
+        withdrawHistory: 'काढण्याचा इतिहास',
+        noWithdrawals: 'अजून काढणे नाही',
+    },
+
+    cart: {
+        title: 'माझी कार्ट',
+        emptyCart: 'तुमची कार्ट रिकामी आहे',
+        addProducts: 'सुरू करण्यासाठी काही उत्पादने जोडा',
+        startShopping: 'खरेदी सुरू करा',
+        checkout: 'चेकआउट',
+        removeItem: 'आयटम काढा',
+        removeConfirm: 'तुम्हाला हा आयटम काढायचा आहे का?',
+    },
+
+    terms: {
+        title: 'अटी आणि शर्ती',
+        termsOfService: 'सेवा अटी',
+        description: 'मिल्कीमध्ये आपले स्वागत आहे. हे अॅप वापरून, तुम्ही खालील अटी आणि शर्तींशी सहमत आहात.',
+        contactSupport: 'संपर्क आणि समर्थन',
+        contactDescription: 'या अटींबद्दल कोणत्याही प्रश्नांसाठी किंवा चिंतेसाठी कृपया संपर्क करा:',
+    },
+
+    privacy: {
+        title: 'गोपनीयता धोरण',
+        yourPrivacyMatters: 'तुमची गोपनीयता महत्त्वाची आहे',
+        description: 'मिल्की तुमच्या गोपनीयतेला महत्त्व देते. हे धोरण आम्ही तुमचा डेटा कसा गोळा करतो आणि वापरतो ते स्पष्ट करते.',
+        contactUs: 'संपर्क करा',
+        contactDescription: 'गोपनीयता चिंता, डेटा विनंत्या, किंवा या धोरणाबद्दल प्रश्नांसाठी कृपया संपर्क करा:',
+        businessHours: 'कामाचे तास: सकाळी 10 – संध्याकाळी 7 (सोम–शनि)',
+        lastUpdated: 'शेवटचे अपडेट: जानेवारी 2025',
+        dataWeCollect: 'आम्ही कोणता डेटा गोळा करतो',
+        howDataUsed: 'डेटा कसा वापरला जातो',
+        dataSecurity: 'डेटा संचयन आणि सुरक्षा',
+        thirdParty: 'तृतीय-पक्ष सेवा',
+        userControl: 'वापरकर्ता नियंत्रण',
+        policyUpdates: 'धोरण अपडेट',
+        subscriptionCancellation: 'सदस्यता रद्दीकरण',
+        refundPolicy: 'रिफंड धोरण',
+        exceptionalRefunds: 'अपवादात्मक रिफंड प्रकरणे',
     },
 };
 
