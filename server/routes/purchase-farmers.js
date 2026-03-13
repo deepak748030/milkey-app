@@ -8,10 +8,10 @@ const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const normalizeCode = (code) => String(code || '').trim().toUpperCase();
 const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`, 'i');
 
-// GET /api/purchase-farmers - Get all purchase farmers for current user
+// GET /api/purchase-farmers
 router.get('/', auth, async (req, res) => {
     try {
-        const { search } = req.query;
+        const { search, page = 1, limit = 50 } = req.query;
         const query = { owner: req.userId, isActive: true };
 
         if (search) {
@@ -22,51 +22,41 @@ router.get('/', auth, async (req, res) => {
             ];
         }
 
+        const total = await PurchaseFarmer.countDocuments(query);
         const farmers = await PurchaseFarmer.find(query)
             .sort({ code: 1 })
+            .limit(parseInt(limit))
+            .skip((parseInt(page) - 1) * parseInt(limit))
             .lean();
 
         res.json({
             success: true,
             response: {
                 data: farmers,
-                count: farmers.length
+                count: total,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total,
+                    pages: Math.ceil(total / parseInt(limit))
+                }
             }
         });
     } catch (error) {
         console.error('Get purchase farmers error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to get purchase farmers'
-        });
+        res.status(500).json({ success: false, message: 'Failed to get purchase farmers' });
     }
 });
 
 // GET /api/purchase-farmers/:id
 router.get('/:id', auth, async (req, res) => {
     try {
-        const farmer = await PurchaseFarmer.findOne({
-            _id: req.params.id,
-            owner: req.userId
-        }).lean();
-
-        if (!farmer) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase farmer not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            response: farmer
-        });
+        const farmer = await PurchaseFarmer.findOne({ _id: req.params.id, owner: req.userId }).lean();
+        if (!farmer) return res.status(404).json({ success: false, message: 'Purchase farmer not found' });
+        res.json({ success: true, response: farmer });
     } catch (error) {
         console.error('Get purchase farmer error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to get purchase farmer'
-        });
+        res.status(500).json({ success: false, message: 'Failed to get purchase farmer' });
     }
 });
 
@@ -78,144 +68,118 @@ router.get('/code/:code', auth, async (req, res) => {
             owner: req.userId,
             isActive: true
         }).lean();
-
-        if (!farmer) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase farmer not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            response: farmer
-        });
+        if (!farmer) return res.status(404).json({ success: false, message: 'Purchase farmer not found' });
+        res.json({ success: true, response: farmer });
     } catch (error) {
         console.error('Get purchase farmer by code error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to get purchase farmer'
-        });
+        res.status(500).json({ success: false, message: 'Failed to get purchase farmer' });
     }
 });
 
-// POST /api/purchase-farmers (requires purchase subscription)
+// POST /api/purchase-farmers
 router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
     try {
-        const { code, name, mobile, address } = req.body;
-
+        const { code, name, mobile, address, cowEnabled, buffaloEnabled, defaultMilk, priceBasis, cowRate, buffaloRate, cowFat, buffaloFat, cowSnf, buffaloSnf } = req.body;
         const normalizedCode = normalizeCode(code);
 
-        if (!normalizedCode || !name || !mobile) {
-            return res.status(400).json({
-                success: false,
-                message: 'Code, name, and mobile are required'
-            });
+        if (!normalizedCode || !name) {
+            return res.status(400).json({ success: false, message: 'Code and name are required' });
         }
 
-        // Check if code already exists for this owner (case-insensitive)
-        const existingFarmer = await PurchaseFarmer.findOne({
-            code: codeRegex(normalizedCode),
-            owner: req.userId
-        });
-
-        if (existingFarmer) {
-            return res.status(400).json({
-                success: false,
-                message: 'Purchase farmer with this code already exists'
-            });
-        }
+        const existing = await PurchaseFarmer.findOne({ code: codeRegex(normalizedCode), owner: req.userId });
+        if (existing) return res.status(400).json({ success: false, message: 'Customer with this code already exists' });
 
         const farmer = await PurchaseFarmer.create({
             code: normalizedCode,
             name: String(name).trim(),
-            mobile: String(mobile).trim(),
+            mobile: mobile?.trim() || '',
             address: address?.trim() || '',
-            owner: req.userId
+            owner: req.userId,
+            cowEnabled: cowEnabled !== undefined ? cowEnabled : true,
+            buffaloEnabled: buffaloEnabled !== undefined ? buffaloEnabled : true,
+            defaultMilk: defaultMilk || 'buffalo',
+            priceBasis: priceBasis || 'rate',
+            cowRate: parseFloat(cowRate) || 0,
+            buffaloRate: parseFloat(buffaloRate) || 0,
+            cowFat: parseFloat(cowFat) || 0,
+            buffaloFat: parseFloat(buffaloFat) || 0,
+            cowSnf: parseFloat(cowSnf) || 0,
+            buffaloSnf: parseFloat(buffaloSnf) || 0,
         });
 
-        res.status(201).json({
-            success: true,
-            message: 'Purchase farmer added successfully',
-            response: farmer
-        });
+        res.status(201).json({ success: true, message: 'Customer added successfully', response: farmer });
     } catch (error) {
         console.error('Create purchase farmer error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to add purchase farmer'
-        });
+        res.status(500).json({ success: false, message: 'Failed to add customer' });
     }
 });
 
-// PUT /api/purchase-farmers/:id (requires purchase subscription)
+// PUT /api/purchase-farmers/:id
 router.put('/:id', auth, requireSubscription('purchase'), async (req, res) => {
     try {
-        const { name, mobile, address } = req.body;
+        const { name, mobile, address, cowEnabled, buffaloEnabled, defaultMilk, priceBasis, cowRate, buffaloRate, cowFat, buffaloFat, cowSnf, buffaloSnf } = req.body;
+
+        const updateData = {};
+        if (name !== undefined) updateData.name = name;
+        if (mobile !== undefined) updateData.mobile = mobile;
+        if (address !== undefined) updateData.address = address;
+        if (cowEnabled !== undefined) updateData.cowEnabled = cowEnabled;
+        if (buffaloEnabled !== undefined) updateData.buffaloEnabled = buffaloEnabled;
+        if (defaultMilk !== undefined) updateData.defaultMilk = defaultMilk;
+        if (priceBasis !== undefined) updateData.priceBasis = priceBasis;
+        if (cowRate !== undefined) updateData.cowRate = parseFloat(cowRate) || 0;
+        if (buffaloRate !== undefined) updateData.buffaloRate = parseFloat(buffaloRate) || 0;
+        if (cowFat !== undefined) updateData.cowFat = parseFloat(cowFat) || 0;
+        if (buffaloFat !== undefined) updateData.buffaloFat = parseFloat(buffaloFat) || 0;
+        if (cowSnf !== undefined) updateData.cowSnf = parseFloat(cowSnf) || 0;
+        if (buffaloSnf !== undefined) updateData.buffaloSnf = parseFloat(buffaloSnf) || 0;
 
         const farmer = await PurchaseFarmer.findOneAndUpdate(
             { _id: req.params.id, owner: req.userId },
-            { name, mobile, address },
+            updateData,
             { new: true }
         );
 
-        if (!farmer) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase farmer not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            message: 'Purchase farmer updated successfully',
-            response: farmer
-        });
+        if (!farmer) return res.status(404).json({ success: false, message: 'Customer not found' });
+        res.json({ success: true, message: 'Customer updated successfully', response: farmer });
     } catch (error) {
         console.error('Update purchase farmer error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update purchase farmer'
-        });
+        res.status(500).json({ success: false, message: 'Failed to update customer' });
     }
 });
 
-// PUT /api/purchase-farmers/:id/stats - Update farmer stats after milk collection (requires purchase subscription)
+// PUT /api/purchase-farmers/:id/stats
 router.put('/:id/stats', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const { quantity, amount } = req.body;
-
         const farmer = await PurchaseFarmer.findOneAndUpdate(
             { _id: req.params.id, owner: req.userId },
-            {
-                $inc: { totalQuantity: quantity || 0, totalAmount: amount || 0 },
-                lastPurchaseDate: new Date()
-            },
+            { $inc: { totalQuantity: quantity || 0, totalAmount: amount || 0 }, lastPurchaseDate: new Date() },
             { new: true }
         );
-
-        if (!farmer) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase farmer not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            message: 'Purchase farmer stats updated',
-            response: farmer
-        });
+        if (!farmer) return res.status(404).json({ success: false, message: 'Customer not found' });
+        res.json({ success: true, message: 'Customer stats updated', response: farmer });
     } catch (error) {
         console.error('Update purchase farmer stats error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update purchase farmer stats'
-        });
+        res.status(500).json({ success: false, message: 'Failed to update stats' });
     }
 });
 
-// DELETE /api/purchase-farmers/:id (requires purchase subscription)
+// Check code availability
+router.get('/check-code/:code', auth, async (req, res) => {
+    try {
+        const existing = await PurchaseFarmer.findOne({
+            code: codeRegex(req.params.code),
+            owner: req.userId,
+            isActive: true
+        });
+        res.json({ success: true, response: { available: !existing } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to check code' });
+    }
+});
+
+// DELETE /api/purchase-farmers/:id
 router.delete('/:id', auth, requireSubscription('purchase'), async (req, res) => {
     try {
         const farmer = await PurchaseFarmer.findOneAndUpdate(
@@ -223,24 +187,11 @@ router.delete('/:id', auth, requireSubscription('purchase'), async (req, res) =>
             { isActive: false },
             { new: true }
         );
-
-        if (!farmer) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase farmer not found'
-            });
-        }
-
-        res.json({
-            success: true,
-            message: 'Purchase farmer deleted successfully'
-        });
+        if (!farmer) return res.status(404).json({ success: false, message: 'Customer not found' });
+        res.json({ success: true, message: 'Customer deleted successfully' });
     } catch (error) {
         console.error('Delete purchase farmer error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to delete purchase farmer'
-        });
+        res.status(500).json({ success: false, message: 'Failed to delete customer' });
     }
 });
 

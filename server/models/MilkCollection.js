@@ -7,6 +7,11 @@ const milkCollectionSchema = new mongoose.Schema({
         required: false,
         default: null
     },
+    milkType: {
+        type: String,
+        enum: ['cow', 'buffalo'],
+        default: 'buffalo'
+    },
     farmerCode: {
         type: String,
         trim: true,

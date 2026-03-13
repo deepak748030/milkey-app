@@ -157,7 +157,7 @@ router.get('/today', auth, async (req, res) => {
 // POST /api/milk-collections - Add new collection (requires purchase subscription)
 router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
     try {
-        const { farmerCode, purchaseFarmerId, date, shift, quantity, fat, snf, rate, notes } = req.body;
+        const { farmerCode, purchaseFarmerId, date, shift, quantity, fat, snf, rate, notes, milkType } = req.body;
 
         const qty = Number(quantity);
         const r = Number(rate);
@@ -171,34 +171,21 @@ router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
 
         let purchaseFarmerRef = null;
 
-        // If purchaseFarmerId provided directly, use it
         if (purchaseFarmerId) {
-            const pFarmer = await PurchaseFarmer.findOne({
-                _id: purchaseFarmerId,
-                owner: req.userId,
-                isActive: true
-            });
-            if (pFarmer) {
-                purchaseFarmerRef = pFarmer._id;
-            }
+            const pFarmer = await PurchaseFarmer.findOne({ _id: purchaseFarmerId, owner: req.userId, isActive: true });
+            if (pFarmer) purchaseFarmerRef = pFarmer._id;
         }
 
-        // If farmerCode provided and no purchaseFarmer found yet, try to find by code
         if (farmerCode && !purchaseFarmerRef) {
             const normalizedCode = normalizeCode(farmerCode);
-            const pFarmer = await PurchaseFarmer.findOne({
-                code: codeRegex(normalizedCode),
-                owner: req.userId,
-                isActive: true
-            });
-            if (pFarmer) {
-                purchaseFarmerRef = pFarmer._id;
-            }
+            const pFarmer = await PurchaseFarmer.findOne({ code: codeRegex(normalizedCode), owner: req.userId, isActive: true });
+            if (pFarmer) purchaseFarmerRef = pFarmer._id;
         }
 
         const collection = await MilkCollection.create({
             purchaseFarmer: purchaseFarmerRef,
             farmerCode: farmerCode ? normalizeCode(farmerCode) : '',
+            milkType: milkType || 'buffalo',
             owner: req.userId,
             date: date ? new Date(date) : new Date(),
             shift: shift || (new Date().getHours() < 12 ? 'morning' : 'evening'),

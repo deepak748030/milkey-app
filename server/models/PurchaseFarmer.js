@@ -14,8 +14,8 @@ const purchaseFarmerSchema = new mongoose.Schema({
     },
     mobile: {
         type: String,
-        required: [true, 'Mobile number is required'],
-        trim: true
+        trim: true,
+        default: ''
     },
     address: {
         type: String,
@@ -26,6 +26,53 @@ const purchaseFarmerSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
+    },
+    // Cow/Buffalo settings
+    cowEnabled: {
+        type: Boolean,
+        default: true
+    },
+    buffaloEnabled: {
+        type: Boolean,
+        default: true
+    },
+    defaultMilk: {
+        type: String,
+        enum: ['cow', 'buffalo'],
+        default: 'buffalo'
+    },
+    // Price basis: 'rate' = fixed rate, 'fat' = fat-based, 'fat_snf' = fat+SNF based
+    priceBasis: {
+        type: String,
+        enum: ['rate', 'fat', 'fat_snf'],
+        default: 'rate'
+    },
+    // Rates for rate-based pricing
+    cowRate: {
+        type: Number,
+        default: 0
+    },
+    buffaloRate: {
+        type: Number,
+        default: 0
+    },
+    // Fat values for fat-based pricing
+    cowFat: {
+        type: Number,
+        default: 0
+    },
+    buffaloFat: {
+        type: Number,
+        default: 0
+    },
+    // SNF values for fat+snf pricing
+    cowSnf: {
+        type: Number,
+        default: 0
+    },
+    buffaloSnf: {
+        type: Number,
+        default: 0
     },
     totalQuantity: {
         type: Number,

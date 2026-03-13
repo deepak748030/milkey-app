@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthToken } from './authStore';
 
 // API Base URL - Vercel deployed server
-const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
-// const API_BASE_URL = 'http://localhost:5000/api'
+// const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
+const API_BASE_URL = 'http://localhost:5000/api'
 
 export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
 
@@ -63,6 +63,16 @@ export interface PurchaseFarmer {
     name: string;
     mobile: string;
     address: string;
+    cowEnabled: boolean;
+    buffaloEnabled: boolean;
+    defaultMilk: 'cow' | 'buffalo';
+    priceBasis: 'rate' | 'fat' | 'fat_snf';
+    cowRate: number;
+    buffaloRate: number;
+    cowFat: number;
+    buffaloFat: number;
+    cowSnf: number;
+    buffaloSnf: number;
     totalQuantity: number;
     totalAmount: number;
     lastPurchaseDate?: string;
@@ -118,6 +128,7 @@ export interface MilkCollection {
     _id: string;
     purchaseFarmer: { _id: string; code: string; name: string; mobile: string } | null;
     farmerCode?: string;
+    milkType?: 'cow' | 'buffalo';
     date: string;
     shift: 'morning' | 'evening';
     quantity: number;
@@ -398,25 +409,31 @@ export const farmersApi = {
 
 // Purchase Farmers API (for Purchase tab only)
 export const purchaseFarmersApi = {
-    getAll: async (params?: { search?: string }) => {
+    getAll: async (params?: { search?: string; page?: number; limit?: number }) => {
         const queryParams = new URLSearchParams();
         if (params?.search) queryParams.append('search', params.search);
+        if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.limit) queryParams.append('limit', params.limit.toString());
         const query = queryParams.toString();
-        return apiRequest<{ data: PurchaseFarmer[]; count: number }>(`/purchase-farmers${query ? `?${query}` : ''}`);
+        return apiRequest<{ data: PurchaseFarmer[]; count: number; pagination?: { page: number; limit: number; total: number; pages: number } }>(`/purchase-farmers${query ? `?${query}` : ''}`);
     },
 
     getByCode: async (code: string) => {
         return apiRequest<PurchaseFarmer>(`/purchase-farmers/code/${code}`);
     },
 
-    create: async (data: { code: string; name: string; mobile: string; address?: string }) => {
+    checkCode: async (code: string) => {
+        return apiRequest<{ available: boolean }>(`/purchase-farmers/check-code/${code}`);
+    },
+
+    create: async (data: Partial<PurchaseFarmer>) => {
         return apiRequest<PurchaseFarmer>('/purchase-farmers', {
             method: 'POST',
             body: JSON.stringify(data),
         });
     },
 
-    update: async (id: string, data: { name?: string; mobile?: string; address?: string }) => {
+    update: async (id: string, data: Partial<PurchaseFarmer>) => {
         return apiRequest<PurchaseFarmer>(`/purchase-farmers/${id}`, {
             method: 'PUT',
             body: JSON.stringify(data),
@@ -643,6 +660,7 @@ export const milkCollectionsApi = {
         fat?: number;
         snf?: number;
         notes?: string;
+        milkType?: 'cow' | 'buffalo';
     }) => {
         return apiRequest<MilkCollection>('/milk-collections', {
             method: 'POST',

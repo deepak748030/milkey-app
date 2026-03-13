@@ -1,0 +1,298 @@
+import React, { useState, useCallback, memo } from 'react';
+import { View, Text, StyleSheet, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, Switch, FlatList } from 'react-native';
+import { X, Check, ChevronDown, Search } from 'lucide-react-native';
+import { PurchaseFarmer, purchaseFarmersApi } from '@/lib/milkeyApi';
+import { SuccessModal } from '../SuccessModal';
+import { ConfirmationModal } from '../ConfirmationModal';
+import { useDebounce } from '@/hooks/useDebounce';
+
+interface AddCustomerSheetProps {
+    visible: boolean;
+    onClose: () => void;
+    onSuccess: () => void;
+    editingFarmer?: PurchaseFarmer | null;
+    colors: any;
+    isDark: boolean;
+}
+
+const PRICE_BASIS_OPTIONS = [
+    { value: 'fat', label: 'Fat' },
+    { value: 'rate', label: 'Rate' },
+    { value: 'fat_snf', label: 'Fat/SNF' },
+];
+
+function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, colors, isDark }: AddCustomerSheetProps) {
+    const [code, setCode] = useState('');
+    const [name, setName] = useState('');
+    const [phone, setPhone] = useState('');
+    const [defaultMilk, setDefaultMilk] = useState<'cow' | 'buffalo'>('buffalo');
+    const [cowEnabled, setCowEnabled] = useState(true);
+    const [buffaloEnabled, setBuffaloEnabled] = useState(true);
+    const [priceBasis, setPriceBasis] = useState<'rate' | 'fat' | 'fat_snf'>('rate');
+    const [buffaloRate, setBuffaloRate] = useState('');
+    const [cowRate, setCowRate] = useState('');
+    const [buffaloFat, setBuffaloFat] = useState('');
+    const [cowFat, setCowFat] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [codeAvailable, setCodeAvailable] = useState<boolean | null>(null);
+    const [checkingCode, setCheckingCode] = useState(false);
+    const [showPriceBasisDropdown, setShowPriceBasisDropdown] = useState(false);
+
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertTitle, setAlertTitle] = useState('');
+    const [alertMessage, setAlertMessage] = useState('');
+
+    const debouncedCode = useDebounce(code, 400);
+
+    React.useEffect(() => {
+        if (visible) {
+            if (editingFarmer) {
+                setCode(editingFarmer.code);
+                setName(editingFarmer.name);
+                setPhone(editingFarmer.mobile);
+                setDefaultMilk(editingFarmer.defaultMilk || 'buffalo');
+                setCowEnabled(editingFarmer.cowEnabled ?? true);
+                setBuffaloEnabled(editingFarmer.buffaloEnabled ?? true);
+                setPriceBasis(editingFarmer.priceBasis || 'rate');
+                setBuffaloRate(editingFarmer.buffaloRate ? String(editingFarmer.buffaloRate) : '');
+                setCowRate(editingFarmer.cowRate ? String(editingFarmer.cowRate) : '');
+                setBuffaloFat(editingFarmer.buffaloFat ? String(editingFarmer.buffaloFat) : '');
+                setCowFat(editingFarmer.cowFat ? String(editingFarmer.cowFat) : '');
+                setCodeAvailable(null);
+            } else {
+                resetForm();
+            }
+        }
+    }, [visible, editingFarmer]);
+
+    React.useEffect(() => {
+        if (debouncedCode && !editingFarmer && debouncedCode.trim().length > 0) {
+            checkCodeAvailability(debouncedCode.trim());
+        }
+    }, [debouncedCode]);
+
+    const resetForm = () => {
+        setCode(''); setName(''); setPhone(''); setDefaultMilk('buffalo');
+        setCowEnabled(true); setBuffaloEnabled(true); setPriceBasis('rate');
+        setBuffaloRate(''); setCowRate(''); setBuffaloFat(''); setCowFat('');
+        setCodeAvailable(null);
+    };
+
+    const checkCodeAvailability = async (c: string) => {
+        setCheckingCode(true);
+        try {
+            const res = await purchaseFarmersApi.checkCode(c);
+            if (res.success) setCodeAvailable(res.response?.available ?? null);
+        } catch { }
+        setCheckingCode(false);
+    };
+
+    const handleSave = async () => {
+        if (!code.trim() || !name.trim()) {
+            setAlertTitle('Error'); setAlertMessage('Code and Name are required'); setAlertVisible(true);
+            return;
+        }
+        setSaving(true);
+        try {
+            const data: any = {
+                code: code.trim().toUpperCase(), name: name.trim(), mobile: phone.trim(),
+                cowEnabled, buffaloEnabled, defaultMilk, priceBasis,
+                cowRate: parseFloat(cowRate) || 0, buffaloRate: parseFloat(buffaloRate) || 0,
+                cowFat: parseFloat(cowFat) || 0, buffaloFat: parseFloat(buffaloFat) || 0,
+            };
+            const res = editingFarmer
+                ? await purchaseFarmersApi.update(editingFarmer._id, data)
+                : await purchaseFarmersApi.create(data);
+            if (res.success) {
+                onSuccess();
+                onClose();
+                resetForm();
+            } else {
+                setAlertTitle('Error'); setAlertMessage(res.message || 'Failed'); setAlertVisible(true);
+            }
+        } catch {
+            setAlertTitle('Error'); setAlertMessage('Something went wrong'); setAlertVisible(true);
+        }
+        setSaving(false);
+    };
+
+    const s = createSheetStyles(colors, isDark);
+
+    return (
+        <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+            <View style={s.overlay}>
+                <Pressable style={{ flex: 1 }} onPress={onClose} />
+                <View style={s.sheet}>
+                    <View style={s.handle} />
+                    <View style={s.header}>
+                        <Text style={s.title}>{editingFarmer ? 'Edit Customer' : 'Add Customer'}</Text>
+                        <Pressable onPress={onClose}><X size={22} color={colors.foreground} /></Pressable>
+                    </View>
+
+                    <ScrollView style={s.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                        {/* Customer Details Card */}
+                        <View style={s.sectionCard}>
+                            <Text style={s.sectionTitle}>Customer Details</Text>
+
+                            <View style={s.field}>
+                                <Text style={s.fieldLabel}>Code</Text>
+                                <View style={s.inputRow}>
+                                    <TextInput
+                                        style={[s.input, { flex: 1 }, editingFarmer && s.inputDisabled]}
+                                        value={code}
+                                        onChangeText={setCode}
+                                        placeholder="e.g. 1, A01"
+                                        placeholderTextColor={colors.mutedForeground}
+                                        editable={!editingFarmer}
+                                        autoCapitalize="characters"
+                                    />
+                                    {!editingFarmer && code.trim().length > 0 && (
+                                        <View style={s.codeStatus}>
+                                            {checkingCode ? (
+                                                <ActivityIndicator size="small" color={colors.primary} />
+                                            ) : codeAvailable === true ? (
+                                                <View style={[s.codeIcon, { backgroundColor: colors.primary + '20' }]}>
+                                                    <Check size={16} color={colors.primary} />
+                                                </View>
+                                            ) : codeAvailable === false ? (
+                                                <View style={[s.codeIcon, { backgroundColor: '#ef444420' }]}>
+                                                    <X size={16} color="#ef4444" />
+                                                </View>
+                                            ) : null}
+                                        </View>
+                                    )}
+                                </View>
+                                {!editingFarmer && codeAvailable === true && (
+                                    <Text style={[s.codeHint, { color: colors.primary }]}>Code available</Text>
+                                )}
+                                {!editingFarmer && codeAvailable === false && (
+                                    <Text style={[s.codeHint, { color: '#ef4444' }]}>Code already taken</Text>
+                                )}
+                            </View>
+
+                            <View style={s.field}>
+                                <Text style={s.fieldLabel}>Name</Text>
+                                <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Customer name" placeholderTextColor={colors.mutedForeground} />
+                            </View>
+
+                            <View style={s.field}>
+                                <Text style={s.fieldLabel}>Phone (Optional)</Text>
+                                <TextInput style={s.input} value={phone} onChangeText={setPhone} placeholder="Mobile number" placeholderTextColor={colors.mutedForeground} keyboardType="phone-pad" maxLength={10} />
+                            </View>
+
+                            <View style={s.field}>
+                                <Text style={s.fieldLabel}>Default Milk</Text>
+                                <View style={s.toggleRow}>
+                                    <Text style={s.toggleLabel}>🐄 Cow</Text>
+                                    <Switch value={defaultMilk === 'cow'} onValueChange={(v) => setDefaultMilk(v ? 'cow' : 'buffalo')} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#fff" />
+                                    <Text style={[s.toggleLabel, { marginLeft: 16 }]}>🐃 Buffalo</Text>
+                                    <Switch value={defaultMilk === 'buffalo'} onValueChange={(v) => setDefaultMilk(v ? 'buffalo' : 'cow')} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#fff" />
+                                </View>
+                            </View>
+                        </View>
+
+                        {/* Price Basis Card */}
+                        <View style={s.sectionCard}>
+                            <Text style={s.sectionTitle}>Rate Based On</Text>
+                            <View style={s.priceBasisRow}>
+                                {PRICE_BASIS_OPTIONS.map(opt => (
+                                    <Pressable
+                                        key={opt.value}
+                                        style={[s.priceBasisChip, priceBasis === opt.value && s.priceBasisChipActive]}
+                                        onPress={() => setPriceBasis(opt.value as any)}
+                                    >
+                                        {priceBasis === opt.value && <Check size={14} color="#fff" style={{ marginRight: 4 }} />}
+                                        <Text style={[s.priceBasisText, priceBasis === opt.value && s.priceBasisTextActive]}>{opt.label}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </View>
+
+                        {/* Buffalo Milk Card */}
+                        {buffaloEnabled && (
+                            <View style={s.sectionCard}>
+                                <Text style={s.sectionTitle}>🐃 Buffalo Milk</Text>
+                                <View style={s.inputRow}>
+                                    <TextInput
+                                        style={[s.input, { flex: 1 }]}
+                                        value={priceBasis === 'rate' ? buffaloRate : buffaloFat}
+                                        onChangeText={priceBasis === 'rate' ? setBuffaloRate : setBuffaloFat}
+                                        placeholder={priceBasis === 'rate' ? 'Rate / litre' : 'Fat value'}
+                                        placeholderTextColor={colors.mutedForeground}
+                                        keyboardType="decimal-pad"
+                                    />
+                                    <Switch value={buffaloEnabled} onValueChange={setBuffaloEnabled} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#fff" />
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Cow Milk Card */}
+                        {cowEnabled && (
+                            <View style={s.sectionCard}>
+                                <Text style={s.sectionTitle}>🐄 Cow Milk</Text>
+                                <View style={s.inputRow}>
+                                    <TextInput
+                                        style={[s.input, { flex: 1 }]}
+                                        value={priceBasis === 'rate' ? cowRate : cowFat}
+                                        onChangeText={priceBasis === 'rate' ? setCowRate : setCowFat}
+                                        placeholder={priceBasis === 'rate' ? 'Rate / litre' : 'Fat value'}
+                                        placeholderTextColor={colors.mutedForeground}
+                                        keyboardType="decimal-pad"
+                                    />
+                                    <Switch value={cowEnabled} onValueChange={setCowEnabled} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#fff" />
+                                </View>
+                            </View>
+                        )}
+
+                        <View style={{ height: 20 }} />
+                    </ScrollView>
+
+                    {/* Footer Buttons */}
+                    <View style={s.footer}>
+                        <Pressable style={s.cancelBtn} onPress={() => { onClose(); resetForm(); }}>
+                            <X size={16} color={colors.foreground} />
+                            <Text style={s.cancelBtnText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+                            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>💾 Save</Text>}
+                        </Pressable>
+                    </View>
+                </View>
+            </View>
+            <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} />
+        </Modal>
+    );
+}
+
+export const AddCustomerSheet = memo(AddCustomerSheetInner);
+
+const createSheetStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    sheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
+    handle: { width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginTop: 8 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 12 },
+    title: { fontSize: 18, fontWeight: '700', color: colors.foreground },
+    body: { paddingHorizontal: 6 },
+    sectionCard: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: colors.border },
+    sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 10 },
+    field: { marginBottom: 10 },
+    fieldLabel: { fontSize: 12, fontWeight: '500', color: colors.mutedForeground, marginBottom: 4 },
+    input: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: colors.foreground },
+    inputDisabled: { backgroundColor: colors.muted, opacity: 0.7 },
+    inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    codeStatus: { width: 32, alignItems: 'center' },
+    codeIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    codeHint: { fontSize: 11, marginTop: 2, fontWeight: '500' },
+    toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    toggleLabel: { fontSize: 13, color: colors.foreground },
+    priceBasisRow: { flexDirection: 'row', gap: 8 },
+    priceBasisChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+    priceBasisChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    priceBasisText: { fontSize: 13, fontWeight: '500', color: colors.foreground },
+    priceBasisTextActive: { color: '#fff' },
+    footer: { flexDirection: 'row', gap: 10, paddingHorizontal: 6, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border },
+    cancelBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+    cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.foreground },
+    saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.primary },
+    saveBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+});
