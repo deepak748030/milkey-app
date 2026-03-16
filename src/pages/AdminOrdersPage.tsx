@@ -193,7 +193,7 @@ export function AdminOrdersPage() {
                     <select
                         value={status}
                         onChange={(e) => { setStatus(e.target.value); setPage(1) }}
-                        className="px-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                        className="px-4 py-2.5 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm text-foreground [&>option]:bg-card [&>option]:text-foreground"
                     >
                         <option value="all">All Status</option>
                         <option value="pending">Pending</option>
@@ -205,7 +205,7 @@ export function AdminOrdersPage() {
                     <select
                         value={paymentStatus}
                         onChange={(e) => { setPaymentStatus(e.target.value); setPage(1) }}
-                        className="px-4 py-2.5 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                        className="px-4 py-2.5 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm text-foreground [&>option]:bg-card [&>option]:text-foreground"
                     >
                         <option value="all">All Payment</option>
                         <option value="pending">Pending</option>
@@ -276,7 +276,7 @@ export function AdminOrdersPage() {
                                         value={order.paymentStatus}
                                         onChange={(e) => handlePaymentStatusChange(order._id, e.target.value)}
                                         disabled={actionLoading}
-                                        className={`mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border-0 cursor-pointer ${paymentStatusColors[order.paymentStatus]}`}
+                                        className={`mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-border cursor-pointer bg-card text-foreground [&>option]:bg-card [&>option]:text-foreground`}
                                     >
                                         <option value="pending">Pending</option>
                                         <option value="paid">Paid</option>
@@ -366,7 +366,7 @@ export function AdminOrdersPage() {
                                                 value={order.paymentStatus}
                                                 onChange={(e) => handlePaymentStatusChange(order._id, e.target.value)}
                                                 disabled={actionLoading}
-                                                className={`px-2 py-1 rounded-full text-xs font-medium border-0 cursor-pointer ${paymentStatusColors[order.paymentStatus]}`}
+                                                className="px-2 py-1 rounded-lg text-xs font-medium border border-border cursor-pointer bg-card text-foreground [&>option]:bg-card [&>option]:text-foreground"
                                             >
                                                 <option value="pending">Pending</option>
                                                 <option value="paid">Paid</option>
@@ -460,7 +460,7 @@ export function AdminOrdersPage() {
                                     value={selectedOrder.status}
                                     onChange={(e) => handleStatusChange(selectedOrder._id, e.target.value)}
                                     disabled={actionLoading}
-                                    className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                                    className="w-full px-4 py-2 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary text-foreground [&>option]:bg-card [&>option]:text-foreground"
                                 >
                                     <option value="pending">Pending</option>
                                     <option value="confirmed">Confirmed</option>
@@ -477,7 +477,7 @@ export function AdminOrdersPage() {
                                         value={selectedOrder.paymentStatus}
                                         onChange={(e) => handlePaymentStatusChange(selectedOrder._id, e.target.value)}
                                         disabled={actionLoading}
-                                        className="flex-1 px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                                        className="flex-1 px-4 py-2 bg-card border border-border rounded-lg focus:ring-2 focus:ring-primary text-foreground [&>option]:bg-card [&>option]:text-foreground"
                                     >
                                         <option value="pending">Pending</option>
                                         <option value="paid">Paid</option>
