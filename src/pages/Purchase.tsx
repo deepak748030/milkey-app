@@ -229,7 +229,7 @@ export function Purchase() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
                             type="text"
-                            placeholder="Search by code..."
+                            placeholder="Search by code or name..."
                             value={search}
                             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
                             className="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -357,6 +357,7 @@ export function Purchase() {
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Date</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Farmer</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Owner</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Type</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Shift</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">FAT</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">SNF</th>
@@ -372,7 +373,7 @@ export function Purchase() {
                                 Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                             ) : collections.length === 0 ? (
                                 <tr>
-                                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground">
                                         <Milk className="w-12 h-12 mx-auto mb-2 opacity-50" />
                                         No collections found
                                     </td>
@@ -388,6 +389,11 @@ export function Purchase() {
                                         <td className="px-4 py-3">
                                             <div className="text-sm">{collection.owner?.name}</div>
                                             <div className="text-xs text-muted-foreground">{collection.owner?.phone}</div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${collection.milkType === 'cow' ? 'bg-orange-500/20 text-orange-700 dark:text-orange-300' : 'bg-blue-500/20 text-blue-700 dark:text-blue-300'}`}>
+                                                {collection.milkType || 'buffalo'}
+                                            </span>
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${collection.shift === 'morning' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'

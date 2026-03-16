@@ -113,6 +113,23 @@ export function AdminOrdersPage() {
         }
     }
 
+    const handlePaymentStatusChange = async (orderId: string, newPaymentStatus: string) => {
+        setActionLoading(true)
+        try {
+            const response = await updateAdminOrderStatus(orderId, { paymentStatus: newPaymentStatus })
+            if (response.success) {
+                fetchOrders()
+                if (selectedOrder?._id === orderId) {
+                    setSelectedOrder({ ...selectedOrder, paymentStatus: newPaymentStatus })
+                }
+            }
+        } catch (error) {
+            console.error('Failed to update payment status:', error)
+        } finally {
+            setActionLoading(false)
+        }
+    }
+
     const handleDelete = async (orderId: string) => {
         if (!confirm('Are you sure you want to delete this order?')) return
         setActionLoading(true)
@@ -255,9 +272,18 @@ export function AdminOrdersPage() {
                                 <div className="bg-muted/50 rounded-lg p-2">
                                     <p className="text-[10px] text-muted-foreground uppercase">Amount</p>
                                     <p className="text-sm font-semibold text-foreground">₹{order.totalAmount?.toFixed(2)}</p>
-                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${paymentStatusColors[order.paymentStatus]}`}>
-                                        {order.paymentStatus}
-                                    </span>
+                                    <select
+                                        value={order.paymentStatus}
+                                        onChange={(e) => handlePaymentStatusChange(order._id, e.target.value)}
+                                        disabled={actionLoading}
+                                        className={`mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border-0 cursor-pointer ${paymentStatusColors[order.paymentStatus]}`}
+                                    >
+                                        <option value="pending">Pending</option>
+                                        <option value="paid">Paid</option>
+                                        <option value="failed">Failed</option>
+                                        <option value="refunded">Refunded</option>
+                                    </select>
+                                    <span className="block text-[10px] text-muted-foreground mt-0.5 uppercase">{order.paymentMethod}</span>
                                 </div>
                             </div>
                             {order.deliveryAddress && (
@@ -336,9 +362,18 @@ export function AdminOrdersPage() {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${paymentStatusColors[order.paymentStatus]}`}>
-                                                {order.paymentStatus}
-                                            </span>
+                                            <select
+                                                value={order.paymentStatus}
+                                                onChange={(e) => handlePaymentStatusChange(order._id, e.target.value)}
+                                                disabled={actionLoading}
+                                                className={`px-2 py-1 rounded-full text-xs font-medium border-0 cursor-pointer ${paymentStatusColors[order.paymentStatus]}`}
+                                            >
+                                                <option value="pending">Pending</option>
+                                                <option value="paid">Paid</option>
+                                                <option value="failed">Failed</option>
+                                                <option value="refunded">Refunded</option>
+                                            </select>
+                                            <span className="block text-[10px] text-muted-foreground mt-0.5 uppercase">{order.paymentMethod}</span>
                                         </td>
                                         <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(order.createdAt)}</td>
                                         <td className="px-4 py-3">
@@ -433,6 +468,27 @@ export function AdminOrdersPage() {
                                     <option value="delivered">Delivered</option>
                                     <option value="cancelled">Cancelled</option>
                                 </select>
+                            </div>
+
+                            <div>
+                                <label className="text-sm text-muted-foreground block mb-2">Payment Status</label>
+                                <div className="flex items-center gap-3">
+                                    <select
+                                        value={selectedOrder.paymentStatus}
+                                        onChange={(e) => handlePaymentStatusChange(selectedOrder._id, e.target.value)}
+                                        disabled={actionLoading}
+                                        className="flex-1 px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary"
+                                    >
+                                        <option value="pending">Pending</option>
+                                        <option value="paid">Paid</option>
+                                        <option value="failed">Failed</option>
+                                        <option value="refunded">Refunded</option>
+                                    </select>
+                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${paymentStatusColors[selectedOrder.paymentStatus]}`}>
+                                        {selectedOrder.paymentStatus}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">Payment Method: <span className="uppercase font-medium">{selectedOrder.paymentMethod}</span></p>
                             </div>
 
                             <div>

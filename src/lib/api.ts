@@ -1098,6 +1098,7 @@ export const deleteAdminMilkCollection = async (id: string) => {
 // Note: AdminOrder interface is defined above at line 961
 
 export interface AdminMilkCollection {
+    milkType: string
     _id: string
     purchaseFarmer: {
         _id: string

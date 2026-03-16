@@ -449,8 +449,63 @@ export default function RegisterScreen() {
         await fetchFarmerPayments(paymentFarmer.farmer.id, nextPage, true);
         setFarmerPaymentsLoadingMore(false);
     };
+    // Print payment slip
+    const handlePrintPaymentSlip = async (p: Payment) => {
+        const html = `
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
+                    .center { text-align: center; }
+                    .title { font-size: 18px; font-weight: bold; margin-bottom: 12px; }
+                    .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
+                    .info-row .value { color: #d32f2f; font-weight: 600; }
+                    .separator { text-align: center; margin: 10px 0; color: #999; font-size: 11px; letter-spacing: 1px; }
+                    .amount-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
+                    .amount-row .value { font-weight: 600; text-align: right; min-width: 100px; }
+                    .generated { text-align: center; font-size: 12px; color: #666; margin-top: 8px; }
+                </style>
+            </head>
+            <body>
+                <div class="center title">Payment Slip</div>
 
-    // Load more global payments (infinite scroll)
+                <div class="info-row"><span>From :</span><span class="value">${formatDateDDMMYYYY(p.periodStart || p.date)}  To  ${formatDateDDMMYYYY(p.periodEnd || p.date)}</span></div>
+                <div class="info-row"><span>Farmer Code :</span><span class="value">${p.farmer?.code || '—'}</span></div>
+                <div class="info-row"><span>Name :</span><span class="value">${p.farmer?.name || '—'}</span></div>
+
+                <div class="separator">${'*'.repeat(40)}</div>
+
+                <div class="amount-row"><span>Last payment :</span><span class="value">${(p.previousBalance || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>Milk Amount :</span><span class="value">${(p.totalMilkAmount || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>Advance / Product :</span><span class="value">${(p.totalAdvanceDeduction || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>Total Payable :</span><span class="value">${(p.netPayable || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>Paid Amount :</span><span class="value">${(p.amount || 0).toFixed(0)}</span></div>
+
+                <div class="separator">${'*'.repeat(40)}</div>
+
+                <div class="amount-row"><span><b>Closing Balance :</b></span><span class="value" style="color: ${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#333'}"><b>${(p.closingBalance || 0).toFixed(0)}</b></span></div>
+
+                <div class="separator">${'*'.repeat(40)}</div>
+
+                <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
+            </body>
+            </html>
+        `;
+
+        try {
+            const { uri } = await Print.printToFileAsync({ html, width: 380 });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            }
+        } catch (error) {
+            console.error('Print error:', error);
+            showAlert('Error', 'Failed to generate payment slip');
+        }
+    };
+
+
     const loadMorePayments = async () => {
         if (paymentsLoadingMore || !paymentsHasMore) return;
         setPaymentsLoadingMore(true);
@@ -1408,12 +1463,20 @@ export default function RegisterScreen() {
                                         <Text style={[styles.historyPeriod, { color: colors.mutedForeground, fontSize: 11 }]}>
                                             {formatDateDDMMYYYY(p.periodStart || p.date)} - {formatDateDDMMYYYY(p.periodEnd || p.date)}
                                         </Text>
-                                        <Pressable
-                                            style={styles.editPaymentBtn}
-                                            onPress={() => handleEditPayment(p)}
-                                        >
-                                            <Edit2 size={14} color={colors.primary} />
-                                        </Pressable>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                            <Pressable
+                                                style={styles.editPaymentBtn}
+                                                onPress={() => handlePrintPaymentSlip(p)}
+                                            >
+                                                <Printer size={14} color={colors.primary} />
+                                            </Pressable>
+                                            <Pressable
+                                                style={styles.editPaymentBtn}
+                                                onPress={() => handleEditPayment(p)}
+                                            >
+                                                <Edit2 size={14} color={colors.primary} />
+                                            </Pressable>
+                                        </View>
                                     </View>
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Milk Amount:</Text>
@@ -1472,6 +1535,7 @@ export default function RegisterScreen() {
                             <Text style={[styles.historyTableHeaderCell, { flex: 0.7 }]}>Adv</Text>
                             <Text style={[styles.historyTableHeaderCell, { flex: 0.8 }]}>Paid</Text>
                             <Text style={[styles.historyTableHeaderCell, { flex: 0.8 }]}>Bal</Text>
+                            <Text style={[styles.historyTableHeaderCell, { flex: 0.4 }]}></Text>
                         </View>
                         {filteredPayments.map((p) => (
                             <View key={p._id} style={styles.historyTableRow}>
@@ -1493,6 +1557,9 @@ export default function RegisterScreen() {
                                 <Text style={[styles.historyTableCell, { flex: 0.8, fontWeight: '600', color: (p.closingBalance || 0) >= 0 ? colors.primary : colors.destructive }]}>
                                     ₹{(p.closingBalance || 0).toFixed(0)}
                                 </Text>
+                                <Pressable style={{ flex: 0.4, alignItems: 'center', justifyContent: 'center' }} onPress={() => handlePrintPaymentSlip(p)}>
+                                    <Printer size={13} color={colors.primary} />
+                                </Pressable>
                             </View>
                         ))}
                         {/* Load More Button for global payments */}
