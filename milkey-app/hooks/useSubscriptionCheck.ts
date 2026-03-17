@@ -33,21 +33,24 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
     const cachedTabData = tabData[tab];
     const hasAccess = hasTabAccess(tab);
 
-    const checkSubscription = useCallback(async () => {
+    // Track if modal was already dismissed this session for this tab
+    const [modalDismissed, setModalDismissed] = useState(false);
+
+    const checkSubscription = useCallback(async (forceRefresh = false) => {
         setLoading(true);
         setAccessChecked(false);
         try {
-            // Clear stale cache before fetching fresh data
-            useSubscriptionStore.getState().clearCache();
+            if (forceRefresh) {
+                useSubscriptionStore.getState().clearCache();
+            }
 
-            // Fetch fresh tab data from server
+            // Fetch tab data (will use cache if available)
             const data = await fetchTabData(tab);
 
-            // Show modal if no access
-            if (data && !data.hasValidSubscription) {
+            // Only show modal if no access AND not already dismissed
+            if (data && !data.hasValidSubscription && !modalDismissed) {
                 setShowSubscriptionModal(true);
             } else if (!data) {
-                // Fallback to status check
                 const statusData = await fetchStatus();
                 if (statusData) {
                     const tabAccess =
@@ -55,51 +58,46 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
                             tab === 'selling' ? statusData.hasSelling :
                                 statusData.hasRegister;
 
-                    if (!tabAccess) {
+                    if (!tabAccess && !modalDismissed) {
                         setShowSubscriptionModal(true);
                     }
-                } else {
-                    // No data available, show modal
+                } else if (!modalDismissed) {
                     setShowSubscriptionModal(true);
                 }
             }
         } catch (error) {
             console.error('Error checking subscription:', error);
-            setShowSubscriptionModal(true);
+            if (!modalDismissed) {
+                setShowSubscriptionModal(true);
+            }
         } finally {
             setLoading(false);
             setAccessChecked(true);
         }
-    }, [tab, fetchTabData, fetchStatus]);
+    }, [tab, fetchTabData, fetchStatus, modalDismissed]);
 
-    // Check subscription on mount
+    // Check subscription on mount only (not on every re-render)
     useEffect(() => {
         checkSubscription();
-    }, [checkSubscription]);
-
-    // Always show modal if user doesn't have access after check is complete
-    useEffect(() => {
-        if (accessChecked && !loading && !hasAccess) {
-            setShowSubscriptionModal(true);
-        }
-    }, [accessChecked, loading, hasAccess]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tab]);
 
     // Handle modal close - redirect to home since user has no access
     const handleModalClose = useCallback(() => {
-        // Don't allow closing if user doesn't have access - redirect to home
+        setModalDismissed(true);
+        setShowSubscriptionModal(false);
         if (!hasAccess) {
             router.replace('/(tabs)');
         }
-        setShowSubscriptionModal(false);
     }, [hasAccess]);
 
     // Handle successful subscription purchase
     const handleSubscriptionSuccess = useCallback(async () => {
+        setModalDismissed(true);
         setShowSubscriptionModal(false);
 
-        // Clear cache and refresh
-        useSubscriptionStore.getState().clearCache();
-        await checkSubscription();
+        // Force refresh after purchase
+        await checkSubscription(true);
     }, [checkSubscription]);
 
     return {

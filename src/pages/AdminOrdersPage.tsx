@@ -272,18 +272,10 @@ export function AdminOrdersPage() {
                                 <div className="bg-muted/50 rounded-lg p-2">
                                     <p className="text-[10px] text-muted-foreground uppercase">Amount</p>
                                     <p className="text-sm font-semibold text-foreground">₹{order.totalAmount?.toFixed(2)}</p>
-                                    <select
-                                        value={order.paymentStatus}
-                                        onChange={(e) => handlePaymentStatusChange(order._id, e.target.value)}
-                                        disabled={actionLoading}
-                                        className={`mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-border cursor-pointer bg-card text-foreground [&>option]:bg-card [&>option]:text-foreground`}
-                                    >
-                                        <option value="pending">Pending</option>
-                                        <option value="paid">Paid</option>
-                                        <option value="failed">Failed</option>
-                                        <option value="refunded">Refunded</option>
-                                    </select>
-                                    <span className="block text-[10px] text-muted-foreground mt-0.5 uppercase">{order.paymentMethod}</span>
+                                    <span className={`inline-flex items-center mt-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${statusColors[order.status]}`}>
+                                        {statusIcons[order.status]}
+                                        {order.status}
+                                    </span>
                                 </div>
                             </div>
                             {order.deliveryAddress && (
@@ -326,7 +318,6 @@ export function AdminOrdersPage() {
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Delivery Address</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Amount</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Status</th>
-                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Payment</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Date</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Actions</th>
                             </tr>
@@ -336,7 +327,7 @@ export function AdminOrdersPage() {
                                 Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)
                             ) : orders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
                                         <Package className="w-12 h-12 mx-auto mb-2 opacity-50" />
                                         No orders found
                                     </td>
@@ -360,20 +351,6 @@ export function AdminOrdersPage() {
                                                 {statusIcons[order.status]}
                                                 {order.status}
                                             </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <select
-                                                value={order.paymentStatus}
-                                                onChange={(e) => handlePaymentStatusChange(order._id, e.target.value)}
-                                                disabled={actionLoading}
-                                                className="px-2 py-1 rounded-lg text-xs font-medium border border-border cursor-pointer bg-card text-foreground [&>option]:bg-card [&>option]:text-foreground"
-                                            >
-                                                <option value="pending">Pending</option>
-                                                <option value="paid">Paid</option>
-                                                <option value="failed">Failed</option>
-                                                <option value="refunded">Refunded</option>
-                                            </select>
-                                            <span className="block text-[10px] text-muted-foreground mt-0.5 uppercase">{order.paymentMethod}</span>
                                         </td>
                                         <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(order.createdAt)}</td>
                                         <td className="px-4 py-3">

@@ -10,6 +10,7 @@ import {
     LogOut,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     Settings,
     Package,
     Milk,
@@ -26,21 +27,15 @@ import {
     Sun,
     Moon,
     Share2,
+    BookOpen,
+    Store,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
 
-const navItems = [
+const mainNavItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/admin-orders', icon: ClipboardList, label: 'Admin Orders' },
-    { to: '/purchase', icon: ShoppingCart, label: 'Purchase Data' },
-    { to: '/register-farmers', icon: UserPlus, label: 'Register Farmers' },
-    { to: '/register-advances', icon: Banknote, label: 'Register Advances' },
-    { to: '/register-payments', icon: Wallet, label: 'Register Payments' },
-    { to: '/selling-members', icon: UserCheck, label: 'Selling Members' },
-    { to: '/selling-entries', icon: FileText, label: 'Selling Entries' },
-    { to: '/selling-payments', icon: CreditCard, label: 'Selling Payments' },
-    { to: '/selling-report', icon: BarChart3, label: 'Selling Report' },
     { to: '/product-management', icon: Package, label: 'Products' },
     { to: '/users', icon: Users, label: 'Users' },
     { to: '/banners', icon: Image, label: 'Banners' },
@@ -51,6 +46,119 @@ const navItems = [
     { to: '/social-links', icon: Share2, label: 'Social Links' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
+
+const purchaseSubItems = [
+    { to: '/purchase', icon: ShoppingCart, label: 'Purchase Data' },
+]
+
+const registerSubItems = [
+    { to: '/register-farmers', icon: UserPlus, label: 'Farmers' },
+    { to: '/register-advances', icon: Banknote, label: 'Advances' },
+    { to: '/register-payments', icon: Wallet, label: 'Payments' },
+]
+
+const sellingSubItems = [
+    { to: '/selling-members', icon: UserCheck, label: 'Members' },
+    { to: '/selling-entries', icon: FileText, label: 'Entries' },
+    { to: '/selling-payments', icon: CreditCard, label: 'Payments' },
+    { to: '/selling-report', icon: BarChart3, label: 'Report' },
+]
+
+function CollapsibleGroup({
+    label,
+    icon: Icon,
+    items,
+    sidebarOpen,
+    pathname,
+    onNavigate,
+}: {
+    label: string
+    icon: any
+    items: typeof mainNavItems
+    sidebarOpen: boolean
+    pathname: string
+    onNavigate: () => void
+}) {
+    const isChildActive = items.some((i) => pathname === i.to)
+    const [open, setOpen] = useState(isChildActive)
+
+    useEffect(() => {
+        if (isChildActive) setOpen(true)
+    }, [isChildActive])
+
+    return (
+        <div>
+            <button
+                onClick={() => setOpen(!open)}
+                className={cn(
+                    'w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-150',
+                    isChildActive
+                        ? 'text-foreground'
+                        : 'text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-foreground'
+                )}
+            >
+                <Icon className="w-5 h-5 flex-shrink-0" />
+                {sidebarOpen && (
+                    <>
+                        <span className="text-base font-medium flex-1 text-left">{label}</span>
+                        <ChevronDown
+                            className={cn(
+                                'w-4 h-4 transition-transform duration-200',
+                                open ? 'rotate-0' : '-rotate-90'
+                            )}
+                        />
+                    </>
+                )}
+            </button>
+            {open && sidebarOpen && (
+                <div className="ml-4 pl-3 border-l border-border/30 space-y-0.5 mt-0.5">
+                    {items.map((item) => {
+                        const isActive = pathname === item.to
+                        return (
+                            <NavLink
+                                key={item.to}
+                                to={item.to}
+                                onClick={onNavigate}
+                                className={cn(
+                                    'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 text-sm',
+                                    isActive
+                                        ? 'bg-sidebar-active text-foreground font-medium'
+                                        : 'text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-foreground'
+                                )}
+                            >
+                                <item.icon className="w-4 h-4 flex-shrink-0" />
+                                <span>{item.label}</span>
+                            </NavLink>
+                        )
+                    })}
+                </div>
+            )}
+            {!sidebarOpen && (
+                <div className="space-y-0.5">
+                    {items.map((item) => {
+                        const isActive = pathname === item.to
+                        return (
+                            <NavLink
+                                key={item.to}
+                                to={item.to}
+                                onClick={onNavigate}
+                                className={cn(
+                                    'flex items-center justify-center px-4 py-2 rounded-lg transition-all duration-150',
+                                    isActive
+                                        ? 'bg-sidebar-active text-foreground'
+                                        : 'text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-foreground'
+                                )}
+                                title={item.label}
+                            >
+                                <item.icon className="w-4 h-4 flex-shrink-0" />
+                            </NavLink>
+                        )
+                    })}
+                </div>
+            )}
+        </div>
+    )
+}
 
 export function DashboardLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -73,18 +181,17 @@ export function DashboardLayout() {
     }, [isDark])
 
     const toggleTheme = () => setIsDark(!isDark)
+    const closeMobile = () => setMobileMenuOpen(false)
 
     return (
         <div className="h-screen flex bg-background overflow-hidden">
-            {/* Mobile Menu Overlay */}
             {mobileMenuOpen && (
                 <div
                     className="fixed inset-0 bg-black/60 z-40 lg:hidden"
-                    onClick={() => setMobileMenuOpen(false)}
+                    onClick={closeMobile}
                 />
             )}
 
-            {/* Sidebar */}
             <aside
                 className={cn(
                     'fixed inset-y-0 left-0 z-50 bg-sidebar text-sidebar-foreground transition-all duration-200 ease-out lg:relative flex flex-col h-screen',
@@ -92,7 +199,7 @@ export function DashboardLayout() {
                     mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
                 )}
             >
-                {/* Logo Area */}
+                {/* Logo */}
                 <div className={cn(
                     'h-16 flex items-center border-b border-border/30 px-4 flex-shrink-0',
                     sidebarOpen ? 'justify-between' : 'justify-center'
@@ -112,43 +219,70 @@ export function DashboardLayout() {
                         onClick={() => setSidebarOpen(!sidebarOpen)}
                         className="p-2 rounded-lg hover:bg-sidebar-hover transition-colors hidden lg:flex"
                     >
-                        {sidebarOpen ? (
-                            <ChevronLeft className="w-5 h-5" />
-                        ) : (
-                            <ChevronRight className="w-5 h-5" />
-                        )}
+                        {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                     </button>
                     <button
-                        onClick={() => setMobileMenuOpen(false)}
+                        onClick={closeMobile}
                         className="p-2 rounded-lg hover:bg-sidebar-hover transition-colors lg:hidden"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                {/* Navigation - Scrollable */}
-                <nav className="flex-1 overflow-y-auto p-3 space-y-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-                    {navItems.map((item) => {
-                        const isActive = location.pathname === item.to
-                        return (
-                            <NavLink
-                                key={item.to}
-                                to={item.to}
-                                onClick={() => setMobileMenuOpen(false)}
-                                className={cn(
-                                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-150',
-                                    isActive
-                                        ? 'bg-sidebar-active text-foreground'
-                                        : 'text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-foreground'
-                                )}
-                            >
-                                <item.icon className="w-5 h-5 flex-shrink-0" />
-                                {sidebarOpen && (
-                                    <span className="text-base font-medium">{item.label}</span>
-                                )}
-                            </NavLink>
-                        )
-                    })}
+                {/* Navigation */}
+                <nav className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent flex flex-col">
+                    {/* Main nav items */}
+                    <div className="space-y-1 flex-1">
+                        {mainNavItems.map((item) => {
+                            const isActive = location.pathname === item.to
+                            return (
+                                <NavLink
+                                    key={item.to}
+                                    to={item.to}
+                                    onClick={closeMobile}
+                                    className={cn(
+                                        'flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-150',
+                                        isActive
+                                            ? 'bg-sidebar-active text-foreground'
+                                            : 'text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-foreground'
+                                    )}
+                                >
+                                    <item.icon className="w-5 h-5 flex-shrink-0" />
+                                    {sidebarOpen && (
+                                        <span className="text-base font-medium">{item.label}</span>
+                                    )}
+                                </NavLink>
+                            )
+                        })}
+                    </div>
+
+                    {/* Purchase, Register & Selling collapsible groups at bottom */}
+                    <div className="space-y-1 border-t border-border/30 pt-2 mt-2">
+                        <CollapsibleGroup
+                            label="Purchase"
+                            icon={ShoppingCart}
+                            items={purchaseSubItems}
+                            sidebarOpen={sidebarOpen}
+                            pathname={location.pathname}
+                            onNavigate={closeMobile}
+                        />
+                        <CollapsibleGroup
+                            label="Register"
+                            icon={BookOpen}
+                            items={registerSubItems}
+                            sidebarOpen={sidebarOpen}
+                            pathname={location.pathname}
+                            onNavigate={closeMobile}
+                        />
+                        <CollapsibleGroup
+                            label="Selling"
+                            icon={Store}
+                            items={sellingSubItems}
+                            sidebarOpen={sidebarOpen}
+                            pathname={location.pathname}
+                            onNavigate={closeMobile}
+                        />
+                    </div>
                 </nav>
 
                 {/* User Section */}
@@ -157,39 +291,21 @@ export function DashboardLayout() {
                         <div className="flex items-center gap-3 px-3 py-2">
                             <div className="w-10 h-10 rounded-full bg-sidebar-hover flex items-center justify-center overflow-hidden">
                                 {admin?.avatar ? (
-                                    <img
-                                        src={admin.avatar}
-                                        alt={admin.name}
-                                        className="w-full h-full object-cover"
-                                    />
+                                    <img src={admin.avatar} alt={admin.name} className="w-full h-full object-cover" />
                                 ) : (
-                                    <span className="text-sm font-medium">
-                                        {admin?.name?.charAt(0).toUpperCase()}
-                                    </span>
+                                    <span className="text-sm font-medium">{admin?.name?.charAt(0).toUpperCase()}</span>
                                 )}
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground truncate">
-                                    {admin?.name}
-                                </p>
-                                <p className="text-xs text-sidebar-foreground/60 truncate">
-                                    {admin?.role}
-                                </p>
+                                <p className="text-sm font-medium text-foreground truncate">{admin?.name}</p>
+                                <p className="text-xs text-sidebar-foreground/60 truncate">{admin?.role}</p>
                             </div>
-                            <button
-                                onClick={logout}
-                                className="p-2 rounded-lg hover:bg-sidebar-hover transition-colors"
-                                title="Logout"
-                            >
+                            <button onClick={logout} className="p-2 rounded-lg hover:bg-sidebar-hover transition-colors" title="Logout">
                                 <LogOut className="w-5 h-5" />
                             </button>
                         </div>
                     ) : (
-                        <button
-                            onClick={logout}
-                            className="w-full flex justify-center p-2 rounded-lg hover:bg-sidebar-hover transition-colors"
-                            title="Logout"
-                        >
+                        <button onClick={logout} className="w-full flex justify-center p-2 rounded-lg hover:bg-sidebar-hover transition-colors" title="Logout">
                             <LogOut className="w-5 h-5" />
                         </button>
                     )}
@@ -198,25 +314,15 @@ export function DashboardLayout() {
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col h-screen overflow-hidden">
-                {/* Top Bar */}
                 <header className="h-16 bg-card border-b border-border flex items-center px-4 lg:px-6 flex-shrink-0">
-                    <button
-                        onClick={() => setMobileMenuOpen(true)}
-                        className="p-2 rounded-lg hover:bg-muted transition-colors lg:hidden"
-                    >
+                    <button onClick={() => setMobileMenuOpen(true)} className="p-2 rounded-lg hover:bg-muted transition-colors lg:hidden">
                         <Menu className="w-5 h-5" />
                     </button>
                     <div className="flex-1" />
-                    <button
-                        onClick={toggleTheme}
-                        className="p-2 rounded-lg hover:bg-muted transition-colors"
-                        title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-                    >
+                    <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-muted transition-colors" title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
                         {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                     </button>
                 </header>
-
-                {/* Page Content - Separate scroll */}
                 <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
                     <Outlet />
                 </main>
