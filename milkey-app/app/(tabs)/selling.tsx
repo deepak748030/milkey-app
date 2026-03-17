@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, Animated } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
 import { SellingPaymentCalendar } from '@/components/SellingPaymentCalendar';
-import { membersApi, sellingEntriesApi, memberPaymentsApi, Member, SellingEntry, MemberPayment, MemberPaymentSummary, MemberBalanceReport, BalanceReportSummary } from '@/lib/milkeyApi';
+import { membersApi, sellingEntriesApi, memberPaymentsApi, printSettingsApi, Member, SellingEntry, MemberPayment, MemberPaymentSummary, MemberBalanceReport, BalanceReportSummary, PrintSettings } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
 import { exportPayments } from '@/lib/csvExport';
 import * as Print from 'expo-print';
@@ -20,7 +21,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
 
-// Helper to group entries by date and member for combined M/E display
+// Helper to group entries by date and member for combined M/E display insets.bottom
 interface GroupedEntry {
     date: string;
     memberId: string;
@@ -36,6 +37,7 @@ interface GroupedEntry {
 export default function SellingScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
+    const insets = useSafeAreaInsets();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
 
     // Subscription check
@@ -47,9 +49,14 @@ export default function SellingScreen() {
         handleSubscriptionSuccess
     } = useSubscriptionCheck('selling');
 
+    const TAB_ORDER: TabType[] = ['Entry', 'Payment', 'Reports', 'Member'];
     const [activeTab, setActiveTab] = useState<TabType>('Entry');
     const [isLoading, setIsLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [tabRowWidth, setTabRowWidth] = useState(0);
+
+    const activeTabIndexAnim = useRef(new Animated.Value(0)).current;
+    const floatingTabsAnim = useRef(new Animated.Value(0)).current;
 
     // Set active tab from URL params
     useEffect(() => {
@@ -57,6 +64,24 @@ export default function SellingScreen() {
             setActiveTab(tab as TabType);
         }
     }, [tab]);
+
+    // Floating tab animations
+    useEffect(() => {
+        Animated.timing(floatingTabsAnim, {
+            toValue: 1,
+            duration: 220,
+            useNativeDriver: true,
+        }).start();
+    }, [floatingTabsAnim]);
+
+    useEffect(() => {
+        Animated.spring(activeTabIndexAnim, {
+            toValue: TAB_ORDER.indexOf(activeTab),
+            useNativeDriver: false,
+            damping: 16,
+            stiffness: 180,
+        }).start();
+    }, [activeTab, activeTabIndexAnim]);
 
     // Date picker state
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -723,6 +748,88 @@ export default function SellingScreen() {
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const year = d.getFullYear();
         return `${day}/${month}/${year}`;
+    };
+
+    // Print selling payment slip with print settings (same design as register)
+    const handlePrintSellingPaymentSlip = async (p: MemberPayment) => {
+        let ps: PrintSettings | null = null;
+        try {
+            const psRes = await printSettingsApi.get();
+            if (psRes.success && psRes.response) ps = psRes.response;
+        } catch (e) { /* silent */ }
+
+        const dairyName = ps?.dairyName || 'Payment Slip';
+        const showMobile = ps?.showMobileOnReceipt !== false;
+        const mobile = ps?.mobileNumber || '';
+        const ownerName = ps?.ownerName || '';
+        const address = ps?.address || '';
+        const extraInfo = ps?.extraInfo || '';
+
+        const milkQty = (Number(p.totalQuantity) || 0).toFixed(1);
+        const milkRate = (Number(p.milkRate) || 0).toFixed(2);
+
+        const html = `
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
+                    .center { text-align: center; }
+                    .title { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+                    .subtitle { font-size: 12px; color: #666; margin-bottom: 2px; }
+                    .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
+                    .info-row .value { color: #d32f2f; font-weight: 600; }
+                    .info-row .value-black { color: #333; font-weight: 600; }
+                    .separator { text-align: center; margin: 10px 0; color: #999; font-size: 11px; letter-spacing: 1px; }
+                    .amount-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
+                    .amount-row .value { font-weight: 600; text-align: right; min-width: 100px; }
+                    .amount-row .value-black { font-weight: 600; text-align: right; min-width: 100px; color: #333; }
+                    .generated { text-align: center; font-size: 12px; color: #666; margin-top: 8px; }
+                </style>
+            </head>
+            <body>
+                <div class="center title">${dairyName}</div>
+                ${ownerName ? `<div class="center subtitle">${ownerName}</div>` : ''}
+                ${address ? `<div class="center subtitle">${address}</div>` : ''}
+                ${showMobile && mobile ? `<div class="center subtitle">📞 ${mobile}</div>` : ''}
+                ${extraInfo ? `<div class="center subtitle">${extraInfo}</div>` : ''}
+
+                <div class="separator">${'*'.repeat(40)}</div>
+
+                <div class="info-row"><span>From :</span><span class="value">${formatDateDDMMYYYY(p.periodStart || p.date)}</span></div>
+                <div class="info-row"><span>Till :</span><span class="value">${formatDateDDMMYYYY(p.periodEnd || p.date)}</span></div>
+                <div class="info-row"><span>Member :</span><span class="value">${p.member?.name || '—'}</span></div>
+
+                <div class="separator">${'*'.repeat(40)}</div>
+
+                <div class="amount-row"><span>Last Payment :</span><span class="value-black">${(p.previousBalance || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>Milk Quantity :</span><span class="value-black">${milkQty} L</span></div>
+                <div class="amount-row"><span>Milk Rate :</span><span class="value-black">₹${milkRate}/L</span></div>
+                <div class="amount-row"><span>Total Milk Amount :</span><span class="value-black">${(p.totalSellAmount || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>Total Payable :</span><span class="value-black">${(p.netPayable || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>Paid Amount :</span><span class="value-black">${(p.amount || 0).toFixed(0)}</span></div>
+
+                <div class="separator">${'*'.repeat(40)}</div>
+
+                <div class="amount-row"><span><b>Closing Balance :</b></span><span class="value-black" style="color: ${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#333'}"><b>${(p.closingBalance || 0).toFixed(0)}</b></span></div>
+
+                <div class="separator">${'*'.repeat(40)}</div>
+
+                <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
+            </body>
+            </html>
+        `;
+
+        try {
+            const { uri } = await Print.printToFileAsync({ html, width: 380 });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            }
+        } catch (error) {
+            console.error('Print error:', error);
+            showAlert('Error', 'Failed to generate payment slip');
+        }
     };
 
     // Group filtered entries by date and member (like entry table)
@@ -1664,6 +1771,12 @@ export default function SellingScreen() {
                                             <Text style={styles.historyDate}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
                                             <Pressable
                                                 style={styles.editPaymentBtn}
+                                                onPress={() => handlePrintSellingPaymentSlip(p)}
+                                            >
+                                                <Printer size={14} color={colors.primary} />
+                                            </Pressable>
+                                            <Pressable
+                                                style={styles.editPaymentBtn}
                                                 onPress={() => handleEditPayment(p)}
                                             >
                                                 <Edit2 size={14} color={colors.primary} />
@@ -1729,22 +1842,24 @@ export default function SellingScreen() {
                     <View style={styles.paymentTableContainer}>
                         {/* Table Header */}
                         <View style={styles.paymentTableHeader}>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 1.3 }]}>Name</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 1.2 }]}>Name</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Milk</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Paid</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Balance</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 0.9, textAlign: 'center' }]}>Date</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.9, textAlign: 'center' }]}>Till</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.4, textAlign: 'center' }]}></Text>
                         </View>
                         {/* Table Rows */}
                         {filteredPayments.slice(0, 15).map((p, index) => (
                             <View key={p._id} style={[styles.paymentTableRow, index % 2 === 0 && styles.paymentTableRowAlt]}>
-                                <Text style={[styles.paymentTableCell, { flex: 1.3 }]} numberOfLines={1}>{p.member?.name || '-'}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 1.2 }]} numberOfLines={1}>{p.member?.name || '-'}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: colors.success }]}>₹{(p.amount || 0).toFixed(0)}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: (p.closingBalance ?? 0) > 0 ? colors.success : (p.closingBalance ?? 0) < 0 ? colors.destructive : colors.mutedForeground }]}>{(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(0)}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 0.9, textAlign: 'center', fontSize: 9 }]}>{formatDateDDMMYYYY(p.date || p.createdAt || '')}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 0.9, textAlign: 'center', fontSize: 9 }]}>{p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}</Text>
+                                <Pressable style={{ flex: 0.4, alignItems: 'center', justifyContent: 'center' }} onPress={() => handlePrintSellingPaymentSlip(p)}>
+                                    <Printer size={13} color={colors.primary} />
+                                </Pressable>
                             </View>
                         ))}
                     </View>
@@ -2139,25 +2254,6 @@ export default function SellingScreen() {
                 fullScreen={true}
             />
             <TopBar />
-            <View style={styles.tabRow}>
-                {(['Entry', 'Payment', 'Reports', 'Member'] as TabType[]).map((tab) => {
-                    const tabLabels: Record<TabType, string> = {
-                        Entry: t.selling.entry,
-                        Payment: t.selling.payment,
-                        Reports: t.selling.reports,
-                        Member: t.selling.member,
-                    };
-                    return (
-                        <Pressable
-                            key={tab}
-                            style={[styles.tab, activeTab === tab && styles.tabActive]}
-                            onPress={() => setActiveTab(tab)}
-                        >
-                            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tabLabels[tab]}</Text>
-                        </Pressable>
-                    );
-                })}
-            </View>
 
             <ScrollView
                 style={styles.scrollView}
@@ -2181,6 +2277,54 @@ export default function SellingScreen() {
                     </>
                 )}
             </ScrollView>
+
+            {/* Floating Subtabs - just above bottom tab bar */}
+            <Animated.View style={[styles.floatingTabContainer, {
+                opacity: floatingTabsAnim,
+                transform: [{ translateY: floatingTabsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
+                bottom: 0 + insets.bottom + 0,
+            }]}>
+                <View
+                    style={styles.tabRow}
+                    onLayout={(event) => setTabRowWidth(event.nativeEvent.layout.width)}
+                >
+                    {tabRowWidth > 0 && (
+                        <Animated.View
+                            style={[
+                                styles.tabActiveIndicator,
+                                {
+                                    width: (tabRowWidth - 8) / TAB_ORDER.length,
+                                    transform: [{
+                                        translateX: activeTabIndexAnim.interpolate({
+                                            inputRange: TAB_ORDER.map((_, i) => i),
+                                            outputRange: TAB_ORDER.map((_, i) => i * ((tabRowWidth - 8) / TAB_ORDER.length)),
+                                        })
+                                    }],
+                                },
+                            ]}
+                        />
+                    )}
+                    {TAB_ORDER.map((tabItem) => {
+                        const tabLabels: Record<TabType, string> = {
+                            Entry: t.selling.entry,
+                            Payment: t.selling.payment,
+                            Reports: t.selling.reports,
+                            Member: t.selling.member,
+                        };
+                        return (
+                            <Pressable
+                                key={tabItem}
+                                style={styles.tab}
+                                onPress={() => setActiveTab(tabItem)}
+                            >
+                                <Text style={[styles.tabText, activeTab === tabItem && styles.tabTextActive]}>
+                                    {tabLabels[tabItem]}
+                                </Text>
+                            </Pressable>
+                        );
+                    })}
+                </View>
+            </Animated.View>
 
             {/* Date Picker Modal - Bottom Sheet Style */}
             <Modal visible={showDatePicker} animationType="slide" transparent onRequestClose={() => setShowDatePicker(false)}>
@@ -2470,36 +2614,43 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
+    floatingTabContainer: {
+        position: 'absolute',
+        left: 6,
+        right: 6,
+        bottom: 0,
+        zIndex: 20,
+    },
     tabRow: {
         flexDirection: 'row',
-        paddingHorizontal: 6,
         gap: 6,
-        marginTop: 8,
-        marginBottom: 12,
-        backgroundColor: colors.muted,
-        paddingVertical: 6,
+        padding: 4,
         borderRadius: 10,
-        marginHorizontal: 6,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    tabActiveIndicator: {
+        position: 'absolute',
+        left: 4,
+        top: 4,
+        bottom: 4,
+        borderRadius: 7,
+        backgroundColor: colors.primary,
     },
     tab: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 6,
         alignItems: 'center',
-        borderRadius: 8,
-        backgroundColor: 'transparent',
-    },
-    tabActive: {
-        backgroundColor: colors.primary,
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 3,
+        borderRadius: 7,
+        zIndex: 2,
     },
     tabText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.mutedForeground,
+        fontSize: 12,
+        fontWeight: '700',
+        color: colors.foreground,
     },
     tabTextActive: {
         color: colors.white,
@@ -2509,7 +2660,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: 6,
-        paddingBottom: 100,
+        paddingBottom: 150,
     },
     sectionTitle: {
         fontSize: 14,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { ArrowLeft, Printer, Save } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -74,7 +75,7 @@ export default function PrintSettingsScreen() {
 
     if (loading) {
         return (
-            <View style={styles.container}>
+            <SafeAreaView style={styles.container} edges={['top']}>
                 <View style={styles.header}>
                     <Pressable style={styles.backBtn} onPress={() => router.back()}>
                         <ArrowLeft size={22} color={colors.foreground} />
@@ -85,12 +86,12 @@ export default function PrintSettingsScreen() {
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={colors.primary} />
                 </View>
-            </View>
+            </SafeAreaView>
         );
     }
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
                 <Pressable style={styles.backBtn} onPress={() => router.back()}>
                     <ArrowLeft size={22} color={colors.foreground} />
@@ -203,7 +204,7 @@ export default function PrintSettingsScreen() {
                 message={alertMessage}
                 autoClose={alertTitle === 'Success'}
             />
-        </View>
+        </SafeAreaView>
     );
 }
 
