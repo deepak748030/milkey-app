@@ -19,6 +19,7 @@ export interface ApiResponse<T> {
 }
 
 export interface Farmer {
+    currentBalance: number;
     _id: string;
     code: string;
     name: string;

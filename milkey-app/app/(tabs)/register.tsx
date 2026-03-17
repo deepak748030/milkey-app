@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard, KeyboardAvoidingView, Platform, Animated } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Printer, User } from 'lucide-react-native';
@@ -27,6 +28,7 @@ const formatDateDDMMYYYY = (dateStr: string) => {
 };
 
 type TabType = 'Payments' | 'Advances' | 'Farmers';
+const TAB_ORDER: TabType[] = ['Payments', 'Advances', 'Farmers'];
 
 // Custom date range interface
 interface DateRange {
@@ -39,6 +41,7 @@ interface DateRange {
 export default function RegisterScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
+    const insets = useSafeAreaInsets();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
 
     // Subscription check
@@ -53,13 +56,34 @@ export default function RegisterScreen() {
     const [activeTab, setActiveTab] = useState<TabType>('Farmers');
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [tabRowWidth, setTabRowWidth] = useState(0);
+
+    const activeTabIndexAnim = useRef(new Animated.Value(TAB_ORDER.indexOf('Farmers'))).current;
+    const floatingTabsAnim = useRef(new Animated.Value(0)).current;
 
     // Set active tab from URL params
     useEffect(() => {
-        if (tab && ['Payments', 'Advances', 'Farmers'].includes(tab)) {
+        if (tab && TAB_ORDER.includes(tab as TabType)) {
             setActiveTab(tab as TabType);
         }
     }, [tab]);
+
+    useEffect(() => {
+        Animated.timing(floatingTabsAnim, {
+            toValue: 1,
+            duration: 220,
+            useNativeDriver: true,
+        }).start();
+    }, [floatingTabsAnim]);
+
+    useEffect(() => {
+        Animated.spring(activeTabIndexAnim, {
+            toValue: TAB_ORDER.indexOf(activeTab),
+            useNativeDriver: false,
+            damping: 16,
+            stiffness: 180,
+        }).start();
+    }, [activeTab, activeTabIndexAnim]);
 
     // Data state
     const [farmers, setFarmers] = useState<Farmer[]>([]);
@@ -1034,6 +1058,26 @@ export default function RegisterScreen() {
 
     const styles = createStyles(colors, isDark);
 
+    const tabLabels: Record<TabType, string> = {
+        Payments: t.register.payments,
+        Advances: t.register.advances,
+        Farmers: t.register.farmers,
+    };
+    const tabItemWidth = tabRowWidth > 0 ? (tabRowWidth - 20) / 3 : 0;
+    const tabIndicatorTranslateX = activeTabIndexAnim.interpolate({
+        inputRange: [0, 1, 2],
+        outputRange: [0, tabItemWidth + 6, (tabItemWidth + 6) * 2],
+    });
+    const floatingTabsStyle = {
+        opacity: floatingTabsAnim,
+        transform: [{
+            translateY: floatingTabsAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [24, 0],
+            }),
+        }],
+    };
+
     // Show all farmers (removed search filter)
     const filteredFarmers = farmers;
 
@@ -1140,15 +1184,16 @@ export default function RegisterScreen() {
                 }
             } catch (e) { /* silent */ }
 
-            // Filter farmers by balance type
-            const filtered = farmers.filter(f => {
-                const bal = f.pendingAmount || 0;
-                if (balanceType === 'positive') return bal > 0;
-                return bal < 0;
+            // Filter farmers by current balance type
+            const getBalance = (farmer: Farmer) => Number(farmer.currentBalance ?? farmer.pendingAmount ?? 0);
+            const filtered = farmers.filter((farmer) => {
+                const balance = getBalance(farmer);
+                if (balanceType === 'positive') return balance > 0;
+                return balance < 0;
             });
 
             if (filtered.length === 0) {
-                showAlert('Info', `No farmers with ${balanceType} balance found`);
+                showAlert('Info', `No farmers with ${balanceType} current balance found`);
                 setPrintingBalance(false);
                 return;
             }
@@ -1160,15 +1205,18 @@ export default function RegisterScreen() {
                 return cA - cB;
             });
 
-            const totalBalance = sorted.reduce((sum, f) => sum + (f.pendingAmount || 0), 0);
+            const totalBalance = sorted.reduce((sum, farmer) => sum + getBalance(farmer), 0);
 
-            const rows = sorted.map(f => `
+            const rows = sorted.map((farmer) => {
+                const balance = getBalance(farmer);
+                return `
                 <tr>
-                    <td style="text-align:center;">${f.code}</td>
-                    <td>${f.name}</td>
-                    <td style="text-align:right; color: ${(f.pendingAmount || 0) < 0 ? '#d32f2f' : '#333'}; font-weight:600;">₹${(f.pendingAmount || 0).toFixed(0)}</td>
+                    <td style="text-align:center;">${farmer.code}</td>
+                    <td>${farmer.name}</td>
+                    <td style="text-align:right; color: ${balance < 0 ? '#d32f2f' : '#333'}; font-weight:600;">₹${balance.toFixed(2)}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
 
             const dairyName = printSettings?.dairyName || 'Dairy';
             const showMobile = printSettings?.showMobileOnReceipt !== false;
@@ -1212,13 +1260,13 @@ export default function RegisterScreen() {
                     <table>
                         <tr>
                             <th style="width:60px;">Code</th>
-                            <th>Name</th>
-                            <th style="width:90px; text-align:right;">Balance</th>
+                            <th>Farmer Name</th>
+                            <th style="width:110px; text-align:right;">Current Balance</th>
                         </tr>
                         ${rows}
                         <tr class="total-row">
                             <td colspan="2" style="text-align:right;">Total (${sorted.length} farmers):</td>
-                            <td style="text-align:right; color: ${totalBalance < 0 ? '#d32f2f' : '#333'};">₹${totalBalance.toFixed(0)}</td>
+                            <td style="text-align:right; color: ${totalBalance < 0 ? '#d32f2f' : '#333'};">₹${totalBalance.toFixed(2)}</td>
                         </tr>
                     </table>
                     <div class="footer">Generated: ${new Date().toLocaleDateString('en-IN')}</div>
@@ -2212,26 +2260,6 @@ export default function RegisterScreen() {
             />
             <TopBar />
 
-            {/* Tabs */}
-            <View style={styles.tabRow}>
-                {(['Payments', 'Advances', 'Farmers'] as TabType[]).map((tab) => {
-                    const tabLabels: Record<TabType, string> = {
-                        Payments: t.register.payments,
-                        Advances: t.register.advances,
-                        Farmers: t.register.farmers,
-                    };
-                    return (
-                        <Pressable
-                            key={tab}
-                            style={[styles.tab, activeTab === tab && styles.tabActive]}
-                            onPress={() => setActiveTab(tab)}
-                        >
-                            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tabLabels[tab]}</Text>
-                        </Pressable>
-                    );
-                })}
-            </View>
-
             <ScrollView
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
@@ -2243,6 +2271,36 @@ export default function RegisterScreen() {
                 {activeTab === 'Advances' && renderAdvancesTab()}
                 {activeTab === 'Farmers' && renderFarmersTab()}
             </ScrollView>
+
+            <Animated.View style={[styles.floatingTabContainer, floatingTabsStyle, { bottom: 0 + insets.bottom + 0 }]}>
+                <View
+                    style={styles.tabRow}
+                    onLayout={(event) => setTabRowWidth(event.nativeEvent.layout.width)}
+                >
+                    {tabItemWidth > 0 && (
+                        <Animated.View
+                            style={[
+                                styles.tabActiveIndicator,
+                                {
+                                    width: tabItemWidth,
+                                    transform: [{ translateX: tabIndicatorTranslateX }],
+                                },
+                            ]}
+                        />
+                    )}
+                    {TAB_ORDER.map((tab) => (
+                        <Pressable
+                            key={tab}
+                            style={styles.tab}
+                            onPress={() => setActiveTab(tab)}
+                        >
+                            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                                {tabLabels[tab]}
+                            </Text>
+                        </Pressable>
+                    ))}
+                </View>
+            </Animated.View>
 
             <SuccessModal
                 isVisible={alertVisible}
@@ -2463,26 +2521,38 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
+    floatingTabContainer: {
+        position: 'absolute',
+        left: 6,
+        right: 6,
+        bottom: 0,
+        zIndex: 20,
+    },
     tabRow: {
         flexDirection: 'row',
-        paddingHorizontal: 6,
         gap: 6,
-        marginBottom: 12,
-        marginTop: 4,
-        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-        paddingVertical: 6,
+        padding: 4,
         borderRadius: 10,
-        marginHorizontal: 6,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    tabActiveIndicator: {
+        position: 'absolute',
+        left: 4,
+        top: 4,
+        bottom: 4,
+        borderRadius: 7,
+        backgroundColor: colors.primary,
     },
     tab: {
         flex: 1,
-        paddingVertical: 10,
+        paddingVertical: 6,
         alignItems: 'center',
-        borderRadius: 8,
-        backgroundColor: 'transparent',
-    },
-    tabActive: {
-        backgroundColor: colors.primary,
+        borderRadius: 7,
+        zIndex: 2,
     },
     pdfRow: {
         flexDirection: 'row',
@@ -2564,8 +2634,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontWeight: '600',
     },
     tabText: {
-        fontSize: 13,
-        fontWeight: '600',
+        fontSize: 12,
+        fontWeight: '700',
         color: colors.foreground,
     },
     tabTextActive: {
@@ -2576,7 +2646,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: 6,
-        paddingBottom: 80,
+        paddingBottom: 150,
     },
     row: {
         flexDirection: 'row',
