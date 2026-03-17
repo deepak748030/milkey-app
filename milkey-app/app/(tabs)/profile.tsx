@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Image, Linking, Activity
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { AVAILABLE_LANGUAGES, LanguageCode } from '@/lib/translations';
-import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail, ExternalLink, Globe, Check } from 'lucide-react-native';
+import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail, ExternalLink, Globe, Check, Printer } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
@@ -68,13 +68,14 @@ export default function ProfileScreen() {
   const menuItems = [
     { id: '0', icon: Package, label: t.profile.myOrders, action: () => router.push('/orders' as any) },
     { id: '1', icon: CreditCard, label: t.profile.mySubscriptions, action: () => router.push('/subscriptions' as any) },
-    { id: '2', icon: FileEdit, label: t.profile.submitForm, action: () => router.push('/submit-form' as any) },
-    { id: '3', icon: Users, label: t.profile.referralProgram, action: () => router.push('/referral') },
-    { id: '4', icon: Wallet, label: t.profile.withdraw, action: () => router.push('/withdraw' as any) },
-    { id: '5', icon: Bell, label: t.profile.notifications, action: () => router.push('/notifications') },
-    { id: '6', icon: HelpCircle, label: t.profile.helpSupport, action: () => router.push('/help-support' as any) },
-    { id: '7', icon: FileText, label: t.profile.termsConditions, action: () => router.push('/terms-conditions' as any) },
-    { id: '8', icon: Shield, label: t.profile.privacyPolicy, action: () => router.push('/privacy-policy' as any) },
+    { id: '2', icon: Printer, label: 'Print Settings', action: () => router.push('/print-settings' as any) },
+    { id: '3', icon: FileEdit, label: t.profile.submitForm, action: () => router.push('/submit-form' as any) },
+    { id: '4', icon: Users, label: t.profile.referralProgram, action: () => router.push('/referral') },
+    { id: '5', icon: Wallet, label: t.profile.withdraw, action: () => router.push('/withdraw' as any) },
+    { id: '6', icon: Bell, label: t.profile.notifications, action: () => router.push('/notifications') },
+    { id: '7', icon: HelpCircle, label: t.profile.helpSupport, action: () => router.push('/help-support' as any) },
+    { id: '8', icon: FileText, label: t.profile.termsConditions, action: () => router.push('/terms-conditions' as any) },
+    { id: '9', icon: Shield, label: t.profile.privacyPolicy, action: () => router.push('/privacy-policy' as any) },
   ];
 
   return (

@@ -26,6 +26,7 @@ export default function RootLayout() {
           <Stack.Screen name="cart" />
           <Stack.Screen name="feedback" />
           <Stack.Screen name="subscriptions" />
+          <Stack.Screen name="print-settings" />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style={isDark ? 'light' : 'dark'} />

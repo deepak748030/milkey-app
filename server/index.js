@@ -32,6 +32,7 @@ const notificationRoutes = require('./routes/notifications');
 const withdrawalRoutes = require('./routes/withdrawals');
 const zapupiRoutes = require('./routes/zapupi');
 const razorpayRoutes = require('./routes/razorpay');
+const printSettingsRoutes = require('./routes/print-settings');
 
 const app = express();
 
@@ -103,6 +104,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/zapupi', zapupiRoutes);
 app.use('/api/razorpay', razorpayRoutes);
+app.use('/api/print-settings', printSettingsRoutes);
 
 // 404 handler
 app.use((req, res) => {

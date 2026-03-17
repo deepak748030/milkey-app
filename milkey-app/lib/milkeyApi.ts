@@ -1723,3 +1723,27 @@ export const razorpayApi = {
         });
     },
 };
+
+// Print Settings types
+export interface PrintSettings {
+    _id?: string;
+    dairyName: string;
+    ownerName: string;
+    mobileNumber: string;
+    address: string;
+    showMobileOnReceipt: boolean;
+    extraInfo: string;
+}
+
+// Print Settings API
+export const printSettingsApi = {
+    get: async () => {
+        return apiRequest<PrintSettings>('/print-settings');
+    },
+    update: async (data: Partial<PrintSettings>) => {
+        return apiRequest<PrintSettings>('/print-settings', {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+};

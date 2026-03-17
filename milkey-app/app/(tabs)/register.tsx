@@ -6,7 +6,7 @@ import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Pri
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary } from '@/lib/milkeyApi';
+import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary, printSettingsApi, PrintSettings } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
@@ -449,8 +449,22 @@ export default function RegisterScreen() {
         await fetchFarmerPayments(paymentFarmer.farmer.id, nextPage, true);
         setFarmerPaymentsLoadingMore(false);
     };
-    // Print payment slip
+    // Print payment slip with print settings
     const handlePrintPaymentSlip = async (p: Payment) => {
+        // Fetch print settings
+        let ps: PrintSettings | null = null;
+        try {
+            const psRes = await printSettingsApi.get();
+            if (psRes.success && psRes.response) ps = psRes.response;
+        } catch (e) { /* silent */ }
+
+        const dairyName = ps?.dairyName || 'Payment Slip';
+        const showMobile = ps?.showMobileOnReceipt !== false;
+        const mobile = ps?.mobileNumber || '';
+        const ownerName = ps?.ownerName || '';
+        const address = ps?.address || '';
+        const extraInfo = ps?.extraInfo || '';
+
         const html = `
             <html>
             <head>
@@ -459,7 +473,8 @@ export default function RegisterScreen() {
                     * { margin: 0; padding: 0; box-sizing: border-box; }
                     body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
                     .center { text-align: center; }
-                    .title { font-size: 18px; font-weight: bold; margin-bottom: 12px; }
+                    .title { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+                    .subtitle { font-size: 12px; color: #666; margin-bottom: 2px; }
                     .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
                     .info-row .value { color: #d32f2f; font-weight: 600; }
                     .separator { text-align: center; margin: 10px 0; color: #999; font-size: 11px; letter-spacing: 1px; }
@@ -469,7 +484,13 @@ export default function RegisterScreen() {
                 </style>
             </head>
             <body>
-                <div class="center title">Payment Slip</div>
+                <div class="center title">${dairyName}</div>
+                ${ownerName ? `<div class="center subtitle">${ownerName}</div>` : ''}
+                ${address ? `<div class="center subtitle">${address}</div>` : ''}
+                ${showMobile && mobile ? `<div class="center subtitle">📞 ${mobile}</div>` : ''}
+                ${extraInfo ? `<div class="center subtitle">${extraInfo}</div>` : ''}
+
+                <div class="separator">${'*'.repeat(40)}</div>
 
                 <div class="info-row"><span>From :</span><span class="value">${formatDateDDMMYYYY(p.periodStart || p.date)}  To  ${formatDateDDMMYYYY(p.periodEnd || p.date)}</span></div>
                 <div class="info-row"><span>Farmer Code :</span><span class="value">${p.farmer?.code || '—'}</span></div>
@@ -1097,9 +1118,130 @@ export default function RegisterScreen() {
     const netPayable = currentMilkAmount - advanceAmount + previousBalance;
     const closingBalance = netPayable - (parseFloat(paidAmount) || 0);
 
+    // Balance print state
+    const [showBalancePrintModal, setShowBalancePrintModal] = useState(false);
+    const [balanceType, setBalanceType] = useState<'positive' | 'negative' | null>(null);
+    const [printingBalance, setPrintingBalance] = useState(false);
+
+    // Print all farmer balances filtered by type
+    const handlePrintBalances = async () => {
+        if (!balanceType) {
+            showAlert('Error', 'Please select balance type');
+            return;
+        }
+        setPrintingBalance(true);
+        try {
+            // Fetch print settings
+            let printSettings: PrintSettings | null = null;
+            try {
+                const psRes = await printSettingsApi.get();
+                if (psRes.success && psRes.response) {
+                    printSettings = psRes.response;
+                }
+            } catch (e) { /* silent */ }
+
+            // Filter farmers by balance type
+            const filtered = farmers.filter(f => {
+                const bal = f.pendingAmount || 0;
+                if (balanceType === 'positive') return bal > 0;
+                return bal < 0;
+            });
+
+            if (filtered.length === 0) {
+                showAlert('Info', `No farmers with ${balanceType} balance found`);
+                setPrintingBalance(false);
+                return;
+            }
+
+            // Sort by code
+            const sorted = [...filtered].sort((a, b) => {
+                const cA = parseInt(a.code, 10) || 0;
+                const cB = parseInt(b.code, 10) || 0;
+                return cA - cB;
+            });
+
+            const totalBalance = sorted.reduce((sum, f) => sum + (f.pendingAmount || 0), 0);
+
+            const rows = sorted.map(f => `
+                <tr>
+                    <td style="text-align:center;">${f.code}</td>
+                    <td>${f.name}</td>
+                    <td style="text-align:right; color: ${(f.pendingAmount || 0) < 0 ? '#d32f2f' : '#333'}; font-weight:600;">₹${(f.pendingAmount || 0).toFixed(0)}</td>
+                </tr>
+            `).join('');
+
+            const dairyName = printSettings?.dairyName || 'Dairy';
+            const showMobile = printSettings?.showMobileOnReceipt !== false;
+            const mobileNumber = printSettings?.mobileNumber || '';
+            const ownerName = printSettings?.ownerName || '';
+            const address = printSettings?.address || '';
+            const extraInfo = printSettings?.extraInfo || '';
+
+            const html = `
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                        body { font-family: Arial, sans-serif; padding: 16px; }
+                        .header { text-align: center; margin-bottom: 12px; }
+                        .header h1 { font-size: 18px; color: #22C55E; margin-bottom: 4px; }
+                        .header p { font-size: 12px; color: #666; }
+                        .type-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; margin: 8px 0; }
+                        .positive { background: #DCFCE7; color: #16A34A; }
+                        .negative { background: #FEE2E2; color: #DC2626; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+                        th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; }
+                        th { background-color: #22C55E; color: white; }
+                        tr:nth-child(even) { background-color: #f9f9f9; }
+                        .total-row { font-weight: 700; background: #f0fdf4 !important; }
+                        .footer { text-align: center; font-size: 11px; color: #999; margin-top: 12px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>${dairyName}</h1>
+                        ${ownerName ? `<p>${ownerName}</p>` : ''}
+                        ${address ? `<p>${address}</p>` : ''}
+                        ${showMobile && mobileNumber ? `<p>📞 ${mobileNumber}</p>` : ''}
+                        ${extraInfo ? `<p>${extraInfo}</p>` : ''}
+                    </div>
+                    <div style="text-align:center;">
+                        <span class="type-badge ${balanceType}">${balanceType === 'positive' ? 'Positive Balance' : 'Negative Balance'} Report</span>
+                    </div>
+                    <table>
+                        <tr>
+                            <th style="width:60px;">Code</th>
+                            <th>Name</th>
+                            <th style="width:90px; text-align:right;">Balance</th>
+                        </tr>
+                        ${rows}
+                        <tr class="total-row">
+                            <td colspan="2" style="text-align:right;">Total (${sorted.length} farmers):</td>
+                            <td style="text-align:right; color: ${totalBalance < 0 ? '#d32f2f' : '#333'};">₹${totalBalance.toFixed(0)}</td>
+                        </tr>
+                    </table>
+                    <div class="footer">Generated: ${new Date().toLocaleDateString('en-IN')}</div>
+                </body>
+                </html>
+            `;
+
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            }
+            setShowBalancePrintModal(false);
+        } catch (error) {
+            console.error('Balance print error:', error);
+            showAlert('Error', 'Failed to generate balance report');
+        } finally {
+            setPrintingBalance(false);
+        }
+    };
+
     const renderPaymentsTab = () => (
         <View>
-            {/* Code input + Go button */}
+            {/* Code input + Go button + Print button */}
             <View style={styles.searchRow}>
                 <TextInput
                     style={styles.searchInput}
@@ -1122,7 +1264,25 @@ export default function RegisterScreen() {
                     }}
                     disabled={paymentLoading}
                 >
-                    <Text style={styles.goBtnText}>{paymentLoading ? '...' : 'Go'}</Text>
+                    {paymentLoading ? (
+                        <ActivityIndicator size="small" color={colors.white} />
+                    ) : (
+                        <Text style={styles.goBtnText}>Go</Text>
+                    )}
+                </Pressable>
+                <Pressable
+                    style={{
+                        backgroundColor: colors.card,
+                        borderWidth: 1,
+                        borderColor: colors.primary,
+                        borderRadius: 6,
+                        paddingHorizontal: 10,
+                        paddingVertical: 8,
+                        justifyContent: 'center',
+                    }}
+                    onPress={() => setShowBalancePrintModal(true)}
+                >
+                    <Printer size={18} color={colors.primary} />
                 </Pressable>
             </View>
 
@@ -1579,6 +1739,95 @@ export default function RegisterScreen() {
                     </View>
                 );
             })()}
+
+            {/* Balance Print Modal */}
+            <Modal
+                visible={showBalancePrintModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowBalancePrintModal(false)}
+            >
+                <View style={styles.dateModalOverlay}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowBalancePrintModal(false)} />
+                    <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
+                        <View style={styles.dateModalHeader}>
+                            <Text style={[styles.dateModalTitle, { color: colors.foreground }]}>Print Balance Report</Text>
+                            <Pressable onPress={() => setShowBalancePrintModal(false)} style={styles.dateModalClose}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+
+                        <Text style={{ fontSize: 13, color: colors.mutedForeground, marginBottom: 12, textAlign: 'center' }}>
+                            Select balance type to print all farmer balances
+                        </Text>
+
+                        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                            <Pressable
+                                style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 8,
+                                    alignItems: 'center',
+                                    borderWidth: 2,
+                                    borderColor: balanceType === 'positive' ? colors.primary : colors.border,
+                                    backgroundColor: balanceType === 'positive' ? colors.primary + '15' : colors.card,
+                                }}
+                                onPress={() => setBalanceType('positive')}
+                            >
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: balanceType === 'positive' ? colors.primary : colors.foreground }}>
+                                    + Positive
+                                </Text>
+                                <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
+                                    Farmers you owe
+                                </Text>
+                            </Pressable>
+                            <Pressable
+                                style={{
+                                    flex: 1,
+                                    paddingVertical: 14,
+                                    borderRadius: 8,
+                                    alignItems: 'center',
+                                    borderWidth: 2,
+                                    borderColor: balanceType === 'negative' ? colors.destructive : colors.border,
+                                    backgroundColor: balanceType === 'negative' ? colors.destructive + '15' : colors.card,
+                                }}
+                                onPress={() => setBalanceType('negative')}
+                            >
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: balanceType === 'negative' ? colors.destructive : colors.foreground }}>
+                                    − Negative
+                                </Text>
+                                <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
+                                    Farmers owe you
+                                </Text>
+                            </Pressable>
+                        </View>
+
+                        <Pressable
+                            style={{
+                                backgroundColor: colors.primary,
+                                paddingVertical: 14,
+                                borderRadius: 8,
+                                alignItems: 'center',
+                                flexDirection: 'row',
+                                justifyContent: 'center',
+                                gap: 8,
+                                opacity: !balanceType ? 0.5 : 1,
+                            }}
+                            onPress={handlePrintBalances}
+                            disabled={!balanceType || printingBalance}
+                        >
+                            {printingBalance ? (
+                                <ActivityIndicator size="small" color={colors.white} />
+                            ) : (
+                                <>
+                                    <Printer size={18} color={colors.white} />
+                                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.white }}>Print Report</Text>
+                                </>
+                            )}
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 
