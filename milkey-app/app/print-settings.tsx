@@ -119,18 +119,6 @@ export default function PrintSettingsScreen() {
                     />
                 </View>
 
-                {/* Owner Name */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Owner Name</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Enter owner name"
-                        value={settings.ownerName}
-                        onChangeText={(v) => setSettings({ ...settings, ownerName: v })}
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-
                 {/* Mobile Number */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Mobile Number</Text>
@@ -140,32 +128,6 @@ export default function PrintSettingsScreen() {
                         value={settings.mobileNumber}
                         onChangeText={(v) => setSettings({ ...settings, mobileNumber: v })}
                         keyboardType="phone-pad"
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-
-                {/* Address */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Address</Text>
-                    <TextInput
-                        style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
-                        placeholder="Enter address"
-                        value={settings.address}
-                        onChangeText={(v) => setSettings({ ...settings, address: v })}
-                        multiline
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-
-                {/* Extra Info */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Extra Info (shown on receipt)</Text>
-                    <TextInput
-                        style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
-                        placeholder="Any additional info for receipt"
-                        value={settings.extraInfo}
-                        onChangeText={(v) => setSettings({ ...settings, extraInfo: v })}
-                        multiline
                         placeholderTextColor={colors.mutedForeground}
                     />
                 </View>
@@ -183,6 +145,31 @@ export default function PrintSettingsScreen() {
                         <View style={[styles.switchThumb, settings.showMobileOnReceipt && styles.switchThumbActive]} />
                     </View>
                 </Pressable>
+
+                {/* Address / Village Name */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Address / Village Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter address or village name"
+                        value={settings.address}
+                        onChangeText={(v) => setSettings({ ...settings, address: v })}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+
+                {/* Note (shown at last on receipt) */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Note (shown at bottom of receipt)</Text>
+                    <TextInput
+                        style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
+                        placeholder="Any note for receipt"
+                        value={settings.extraInfo}
+                        onChangeText={(v) => setSettings({ ...settings, extraInfo: v })}
+                        multiline
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
 
                 {/* Save Button */}
                 <Pressable style={styles.saveBtn} onPress={handleSave} disabled={saving}>

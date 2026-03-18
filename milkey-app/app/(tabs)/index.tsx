@@ -13,6 +13,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { QuickEntryModal } from '@/components/QuickEntryModal';
 import { QuickAdvanceModal } from '@/components/QuickAdvanceModal';
 import { useSubscriptionStore, shouldShowSubscriptionModal, markSubscriptionModalShown } from '@/lib/subscriptionStore';
+import { SuccessModal } from '@/components/SuccessModal';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
@@ -32,7 +33,11 @@ export default function HomeScreen() {
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
   const bannerScrollRef = useRef<ScrollView>(null);
   const bannerSkeletonOpacity = useRef(new Animated.Value(0.4)).current;
-  const { addToCart, loadCart } = useCartStore();
+  const { addToCart, loadCart, getItemCount } = useCartStore();
+
+  // Cart success notification
+  const [cartSuccessVisible, setCartSuccessVisible] = useState(false);
+  const [cartSuccessMessage, setCartSuccessMessage] = useState('');
 
   // Subscription modal state
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -206,6 +211,9 @@ export default function HomeScreen() {
       { id: product._id, name: product.name, price: product.price, icon: product.icon, image: product.image },
       quantity
     );
+    const totalItems = getItemCount() + quantity;
+    setCartSuccessMessage(`Added ${quantity} ${product.name} to cart (${totalItems} items in cart)`);
+    setCartSuccessVisible(true);
   };
 
   const styles = createStyles(colors, isDark);
@@ -393,6 +401,14 @@ export default function HomeScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Cart Added Success Modal */}
+      <SuccessModal
+        isVisible={cartSuccessVisible}
+        onClose={() => setCartSuccessVisible(false)}
+        title="Added to Cart"
+        message={cartSuccessMessage}
+      />
     </View>
   );
 }

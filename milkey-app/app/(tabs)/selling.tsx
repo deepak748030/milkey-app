@@ -18,6 +18,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
 
@@ -39,6 +40,7 @@ export default function SellingScreen() {
     const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
+    const { isConnected: isPrinterConnected } = useBluetoothPrinter();
 
     // Subscription check
     const {
@@ -488,20 +490,33 @@ export default function SellingScreen() {
         setCalcStartDate(startDateFromLastPayment);
 
         try {
-            // Fetch summary - if we have a start date from last payment, use it
-            const res = await memberPaymentsApi.getMemberSummary(
-                member._id,
-                startDateFromLastPayment
-                    ? { startDate: startDateFromLastPayment, endDate: undefined }
-                    : undefined
-            );
-            if (res.success && res.response) {
-                setMemberSummary(res.response);
+            // Fetch summary and member-specific payments in parallel
+            const [summaryRes, memberPaymentsRes] = await Promise.all([
+                memberPaymentsApi.getMemberSummary(
+                    member._id,
+                    startDateFromLastPayment
+                        ? { startDate: startDateFromLastPayment, endDate: undefined }
+                        : undefined
+                ),
+                memberPaymentsApi.getAll({ memberId: member._id, limit: 20 }),
+            ]);
+
+            if (summaryRes.success && summaryRes.response) {
+                setMemberSummary(summaryRes.response);
                 // Auto-fill milk amount with unpaid amount
-                const unpaidAmount = res.response.selling?.unpaidAmount || 0;
+                const unpaidAmount = summaryRes.response.selling?.unpaidAmount || 0;
                 setMilkAmount(unpaidAmount.toFixed(2));
             } else {
                 setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+            }
+
+            // Update recentPayments with member-specific data so payment history shows correctly
+            if (memberPaymentsRes.success && memberPaymentsRes.response?.data) {
+                setRecentPayments(prev => {
+                    // Remove existing entries for this member and add fresh ones
+                    const otherPayments = prev.filter(p => p.member?._id !== member._id);
+                    return [...memberPaymentsRes.response!.data, ...otherPayments];
+                });
             }
         } catch (error) {
             setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
@@ -568,7 +583,17 @@ export default function SellingScreen() {
             });
 
             if (res.success) {
-                showAlert('Success', 'Payment recorded successfully');
+                // Try to print if printer is connected
+                if (isPrinterConnected && res.response) {
+                    try {
+                        await handlePrintSellingPaymentSlip(res.response, true);
+                    } catch (e) { /* print failed silently */ }
+                    showAlert('Success', 'Payment saved & printed successfully');
+                } else if (!isPrinterConnected) {
+                    showAlert('Success', 'Payment saved successfully. No printer connected.');
+                } else {
+                    showAlert('Success', 'Payment recorded successfully');
+                }
                 setSelectedPaymentMember(null);
                 setPaymentMemberSearch('');
                 setPaymentAmount('');
@@ -751,7 +776,11 @@ export default function SellingScreen() {
     };
 
     // Print selling payment slip with print settings (same design as register)
-    const handlePrintSellingPaymentSlip = async (p: MemberPayment) => {
+    const handlePrintSellingPaymentSlip = async (p: MemberPayment, skipPrinterCheck = false) => {
+        if (!skipPrinterCheck && !isPrinterConnected) {
+            showAlert('Printer Not Connected', 'Please connect a Bluetooth printer from the top bar before printing.');
+            return;
+        }
         let ps: PrintSettings | null = null;
         try {
             const psRes = await printSettingsApi.get();
@@ -761,7 +790,6 @@ export default function SellingScreen() {
         const dairyName = ps?.dairyName || 'Payment Slip';
         const showMobile = ps?.showMobileOnReceipt !== false;
         const mobile = ps?.mobileNumber || '';
-        const ownerName = ps?.ownerName || '';
         const address = ps?.address || '';
         const extraInfo = ps?.extraInfo || '';
 
@@ -786,14 +814,13 @@ export default function SellingScreen() {
                     .amount-row .value { font-weight: 600; text-align: right; min-width: 100px; }
                     .amount-row .value-black { font-weight: 600; text-align: right; min-width: 100px; color: #333; }
                     .generated { text-align: center; font-size: 12px; color: #666; margin-top: 8px; }
+                    .note { text-align: center; font-size: 11px; color: #888; margin-top: 6px; font-style: italic; }
                 </style>
             </head>
             <body>
                 <div class="center title">${dairyName}</div>
-                ${ownerName ? `<div class="center subtitle">${ownerName}</div>` : ''}
                 ${address ? `<div class="center subtitle">${address}</div>` : ''}
                 ${showMobile && mobile ? `<div class="center subtitle">📞 ${mobile}</div>` : ''}
-                ${extraInfo ? `<div class="center subtitle">${extraInfo}</div>` : ''}
 
                 <div class="separator">${'*'.repeat(40)}</div>
 
@@ -817,6 +844,7 @@ export default function SellingScreen() {
                 <div class="separator">${'*'.repeat(40)}</div>
 
                 <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
+                ${extraInfo ? `<div class="note">${extraInfo}</div>` : ''}
             </body>
             </html>
         `;
@@ -1722,9 +1750,11 @@ export default function SellingScreen() {
                     {/* Save & Clear buttons */}
                     <View style={styles.paymentButtonRow}>
                         <Pressable style={styles.saveSettlementBtn} onPress={handleProcessPayment} disabled={savingPayment}>
-                            <Text style={styles.saveSettlementText}>
-                                {savingPayment ? 'Saving...' : 'SAVE PAYMENT'}
-                            </Text>
+                            {savingPayment ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Text style={styles.saveSettlementText}>SAVE PAYMENT & PRINT</Text>
+                            )}
                         </Pressable>
                     </View>
                     <Pressable style={styles.clearPaymentBtn} onPress={clearPaymentForm}>
@@ -1843,20 +1873,22 @@ export default function SellingScreen() {
                         {/* Table Header */}
                         <View style={styles.paymentTableHeader}>
                             <Text style={[styles.paymentTableHeaderText, { flex: 1.2 }]}>Name</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Milk</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Paid</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Balance</Text>
-                            <Text style={[styles.paymentTableHeaderText, { flex: 0.9, textAlign: 'center' }]}>Till</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.6, textAlign: 'center' }]}>Qty(L)</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.7, textAlign: 'center' }]}>Milk</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.7, textAlign: 'center' }]}>Paid</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.7, textAlign: 'center' }]}>Balance</Text>
+                            <Text style={[styles.paymentTableHeaderText, { flex: 0.8, textAlign: 'center' }]}>Till</Text>
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.4, textAlign: 'center' }]}></Text>
                         </View>
                         {/* Table Rows */}
                         {filteredPayments.slice(0, 15).map((p, index) => (
                             <View key={p._id} style={[styles.paymentTableRow, index % 2 === 0 && styles.paymentTableRowAlt]}>
                                 <Text style={[styles.paymentTableCell, { flex: 1.2 }]} numberOfLines={1}>{p.member?.name || '-'}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: colors.success }]}>₹{(p.amount || 0).toFixed(0)}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', color: (p.closingBalance ?? 0) > 0 ? colors.success : (p.closingBalance ?? 0) < 0 ? colors.destructive : colors.mutedForeground }]}>{(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(0)}</Text>
-                                <Text style={[styles.paymentTableCell, { flex: 0.9, textAlign: 'center', fontSize: 9 }]}>{p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.6, textAlign: 'center' }]}>{(Number(p.totalQuantity) || 0).toFixed(1)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.7, textAlign: 'center', color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.7, textAlign: 'center', color: colors.success }]}>₹{(p.amount || 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.7, textAlign: 'center', color: (p.closingBalance ?? 0) > 0 ? colors.success : (p.closingBalance ?? 0) < 0 ? colors.destructive : colors.mutedForeground }]}>{(p.closingBalance ?? 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance ?? 0).toFixed(0)}</Text>
+                                <Text style={[styles.paymentTableCell, { flex: 0.8, textAlign: 'center', fontSize: 9 }]}>{p.periodEnd ? formatDateDDMMYYYY(p.periodEnd) : '-'}</Text>
                                 <Pressable style={{ flex: 0.4, alignItems: 'center', justifyContent: 'center' }} onPress={() => handlePrintSellingPaymentSlip(p)}>
                                     <Printer size={13} color={colors.primary} />
                                 </Pressable>
@@ -2279,10 +2311,8 @@ export default function SellingScreen() {
             </ScrollView>
 
             {/* Floating Subtabs - just above bottom tab bar */}
-            <Animated.View style={[styles.floatingTabContainer, {
-                opacity: floatingTabsAnim,
-                transform: [{ translateY: floatingTabsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
-                bottom: 0 + insets.bottom + 0,
+            <View style={[styles.floatingTabContainer, {
+                bottom: insets.bottom,
             }]}>
                 <View
                     style={styles.tabRow}
@@ -2324,7 +2354,7 @@ export default function SellingScreen() {
                         );
                     })}
                 </View>
-            </Animated.View>
+            </View>
 
             {/* Date Picker Modal - Bottom Sheet Style */}
             <Modal visible={showDatePicker} animationType="slide" transparent onRequestClose={() => setShowDatePicker(false)}>
@@ -2660,6 +2690,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: 6,
+        paddingTop: 10,
         paddingBottom: 150,
     },
     sectionTitle: {

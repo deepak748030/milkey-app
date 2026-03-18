@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "milkey",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
@@ -20,10 +19,34 @@
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#4CAF50"
       },
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_ADVERTISE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM"
+      ]
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Milkey needs Bluetooth access to connect to thermal printers for printing receipts.",
+        "NSBluetoothPeripheralUsageDescription": "Milkey needs Bluetooth access to connect to thermal printers for printing receipts.",
+        "NSLocationWhenInUseUsageDescription": "Milkey needs location access to scan for nearby Bluetooth printers.",
+        "NSCameraUsageDescription": "Milkey needs camera access to scan QR codes and take photos.",
+        "NSPhotoLibraryUsageDescription": "Milkey needs photo library access to upload images."
+      }
     },
     "web": {
       "bundler": "metro",
@@ -42,6 +65,34 @@
           "sounds": [
             "./assets/sounds/notification.mp3"
           ]
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [
+            "central"
+          ]
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Milkey needs camera access to scan QR codes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Milkey needs photo library access to upload images.",
+          "cameraPermission": "Milkey needs camera access to take photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Milkey needs location access to scan for nearby Bluetooth printers."
         }
       ]
     ],

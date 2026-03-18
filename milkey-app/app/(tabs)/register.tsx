@@ -16,6 +16,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 
 // Helper function to format date as dd/mm/yyyy clear
 const formatDateDDMMYYYY = (dateStr: string) => {
@@ -43,6 +44,7 @@ export default function RegisterScreen() {
     const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
+    const { isConnected: isPrinterConnected } = useBluetoothPrinter();
 
     // Subscription check
     const {
@@ -474,7 +476,11 @@ export default function RegisterScreen() {
         setFarmerPaymentsLoadingMore(false);
     };
     // Print payment slip with print settings
-    const handlePrintPaymentSlip = async (p: Payment) => {
+    const handlePrintPaymentSlip = async (p: Payment, skipPrinterCheck = false) => {
+        if (!skipPrinterCheck && !isPrinterConnected) {
+            showAlert('Printer Not Connected', 'Please connect a Bluetooth printer from the top bar before printing.');
+            return;
+        }
         // Fetch print settings
         let ps: PrintSettings | null = null;
         try {
@@ -485,7 +491,6 @@ export default function RegisterScreen() {
         const dairyName = ps?.dairyName || 'Payment Slip';
         const showMobile = ps?.showMobileOnReceipt !== false;
         const mobile = ps?.mobileNumber || '';
-        const ownerName = ps?.ownerName || '';
         const address = ps?.address || '';
         const extraInfo = ps?.extraInfo || '';
 
@@ -505,14 +510,13 @@ export default function RegisterScreen() {
                     .amount-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
                     .amount-row .value { font-weight: 600; text-align: right; min-width: 100px; }
                     .generated { text-align: center; font-size: 12px; color: #666; margin-top: 8px; }
+                    .note { text-align: center; font-size: 11px; color: #888; margin-top: 6px; font-style: italic; }
                 </style>
             </head>
             <body>
                 <div class="center title">${dairyName}</div>
-                ${ownerName ? `<div class="center subtitle">${ownerName}</div>` : ''}
                 ${address ? `<div class="center subtitle">${address}</div>` : ''}
                 ${showMobile && mobile ? `<div class="center subtitle">📞 ${mobile}</div>` : ''}
-                ${extraInfo ? `<div class="center subtitle">${extraInfo}</div>` : ''}
 
                 <div class="separator">${'*'.repeat(40)}</div>
 
@@ -535,6 +539,7 @@ export default function RegisterScreen() {
                 <div class="separator">${'*'.repeat(40)}</div>
 
                 <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
+                ${extraInfo ? `<div class="note">${extraInfo}</div>` : ''}
             </body>
             </html>
         `;
@@ -740,7 +745,17 @@ export default function RegisterScreen() {
             console.log('Payment response:', JSON.stringify(res));
 
             if (res.success) {
-                showAlert('Success', 'Settlement saved successfully');
+                // Try to print if printer is connected
+                if (isPrinterConnected && res.response) {
+                    try {
+                        await handlePrintPaymentSlip(res.response, true);
+                    } catch (e) { /* print failed silently */ }
+                    showAlert('Success', 'Settlement saved & printed successfully');
+                } else if (!isPrinterConnected) {
+                    showAlert('Success', 'Settlement saved successfully. No printer connected.');
+                } else {
+                    showAlert('Success', 'Settlement saved successfully');
+                }
                 setPaymentFarmer(null);
                 setPaymentCode('');
                 setPaidAmount('');
@@ -1174,6 +1189,11 @@ export default function RegisterScreen() {
             return;
         }
         setPrintingBalance(true);
+        if (!isPrinterConnected) {
+            showAlert('Printer Not Connected', 'Please connect a Bluetooth printer from the top bar before printing.');
+            setPrintingBalance(false);
+            return;
+        }
         try {
             // Fetch print settings
             let printSettings: PrintSettings | null = null;
@@ -1221,7 +1241,6 @@ export default function RegisterScreen() {
             const dairyName = printSettings?.dairyName || 'Dairy';
             const showMobile = printSettings?.showMobileOnReceipt !== false;
             const mobileNumber = printSettings?.mobileNumber || '';
-            const ownerName = printSettings?.ownerName || '';
             const address = printSettings?.address || '';
             const extraInfo = printSettings?.extraInfo || '';
 
@@ -1244,15 +1263,14 @@ export default function RegisterScreen() {
                         tr:nth-child(even) { background-color: #f9f9f9; }
                         .total-row { font-weight: 700; background: #f0fdf4 !important; }
                         .footer { text-align: center; font-size: 11px; color: #999; margin-top: 12px; }
+                        .note { text-align: center; font-size: 11px; color: #888; margin-top: 6px; font-style: italic; }
                     </style>
                 </head>
                 <body>
                     <div class="header">
                         <h1>${dairyName}</h1>
-                        ${ownerName ? `<p>${ownerName}</p>` : ''}
                         ${address ? `<p>${address}</p>` : ''}
                         ${showMobile && mobileNumber ? `<p>📞 ${mobileNumber}</p>` : ''}
-                        ${extraInfo ? `<p>${extraInfo}</p>` : ''}
                     </div>
                     <div style="text-align:center;">
                         <span class="type-badge ${balanceType}">${balanceType === 'positive' ? 'Positive Balance' : 'Negative Balance'} Report</span>
@@ -1270,6 +1288,7 @@ export default function RegisterScreen() {
                         </tr>
                     </table>
                     <div class="footer">Generated: ${new Date().toLocaleDateString('en-IN')}</div>
+                    ${extraInfo ? `<div class="note">${extraInfo}</div>` : ''}
                 </body>
                 </html>
             `;
@@ -1562,9 +1581,11 @@ export default function RegisterScreen() {
                     {/* Save & Clear buttons */}
                     <View style={styles.buttonRow}>
                         <Pressable style={styles.saveSettlementBtn} onPress={handleSaveSettlement} disabled={savingPayment}>
-                            <Text style={styles.saveSettlementText}>
-                                {savingPayment ? 'Saving...' : 'SAVE SETTLEMENT'}
-                            </Text>
+                            {savingPayment ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Text style={styles.saveSettlementText}>SAVE SETTLEMENT & PRINT</Text>
+                            )}
                         </Pressable>
                     </View>
                     <Pressable style={styles.clearPaymentBtn} onPress={clearPaymentForm}>
@@ -2272,7 +2293,7 @@ export default function RegisterScreen() {
                 {activeTab === 'Farmers' && renderFarmersTab()}
             </ScrollView>
 
-            <Animated.View style={[styles.floatingTabContainer, floatingTabsStyle, { bottom: 0 + insets.bottom + 0 }]}>
+            <View style={[styles.floatingTabContainer, { bottom: insets.bottom }]}>
                 <View
                     style={styles.tabRow}
                     onLayout={(event) => setTabRowWidth(event.nativeEvent.layout.width)}
@@ -2300,7 +2321,7 @@ export default function RegisterScreen() {
                         </Pressable>
                     ))}
                 </View>
-            </Animated.View>
+            </View>
 
             <SuccessModal
                 isVisible={alertVisible}
@@ -2646,6 +2667,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: 6,
+        paddingTop: 10,
         paddingBottom: 150,
     },
     row: {
@@ -3592,9 +3614,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     settlementStatsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         marginTop: 8,
-        flexWrap: 'wrap',
+        flexWrap: 'nowrap',
     },
     settlementCombinedChip: {
         flexDirection: 'row',
@@ -3609,9 +3631,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     settlementDateBtnCombined: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
+        gap: 3,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
     },
     settlementChipDivider: {
         width: 0,
@@ -3623,9 +3645,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     settlementStatChipCombined: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
+        gap: 3,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
     },
     settlementDateBtn: {
         flexDirection: 'row',
@@ -3640,30 +3662,31 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         backgroundColor: 'transparent',
     },
     settlementDateText: {
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '600',
         color: colors.primary,
     },
     settlementStatChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
+        gap: 3,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
         borderRadius: 6,
         borderWidth: 1,
         borderColor: colors.primary,
         borderStyle: 'dashed',
         backgroundColor: 'transparent',
+        flexShrink: 1,
     },
     settlementStatLabel: {
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: '600',
         color: colors.mutedForeground,
         textTransform: 'uppercase',
     },
     settlementStatValue: {
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '700',
         color: colors.primary,
     },
