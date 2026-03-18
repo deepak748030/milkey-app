@@ -2312,7 +2312,7 @@ export default function SellingScreen() {
 
             {/* Floating Subtabs - just above bottom tab bar */}
             <View style={[styles.floatingTabContainer, {
-                bottom: insets.bottom,
+                bottom: 0 + insets.bottom + 0,
             }]}>
                 <View
                     style={styles.tabRow}

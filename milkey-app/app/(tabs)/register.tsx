@@ -2293,7 +2293,7 @@ export default function RegisterScreen() {
                 {activeTab === 'Farmers' && renderFarmersTab()}
             </ScrollView>
 
-            <View style={[styles.floatingTabContainer, { bottom: insets.bottom }]}>
+            <View style={[styles.floatingTabContainer, { bottom: 0 + insets.bottom }]}>
                 <View
                     style={styles.tabRow}
                     onLayout={(event) => setTabRowWidth(event.nativeEvent.layout.width)}

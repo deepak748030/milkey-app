@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 
 export interface BluetoothDevice {
     id: string;
@@ -78,8 +78,56 @@ export const useBluetoothPrinter = () => {
         }
     }, []);
 
-    const startScan = useCallback(() => {
+    const requestPermissions = useCallback(async (): Promise<boolean> => {
+        if (Platform.OS === 'web') return false;
+        if (Platform.OS === 'ios') return true;
+
+        // Android requires runtime permissions for BLE
+        try {
+            const apiLevel = Platform.Version;
+            if (typeof apiLevel === 'number' && apiLevel >= 31) {
+                // Android 12+ (API 31+)
+                const results = await PermissionsAndroid.requestMultiple([
+                    PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+                    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                ]);
+                const allGranted = Object.values(results).every(
+                    (r) => r === PermissionsAndroid.RESULTS.GRANTED
+                );
+                if (!allGranted) {
+                    setState(prev => ({ ...prev, error: 'Bluetooth permissions denied. Please grant permissions in Settings.' }));
+                    return false;
+                }
+                return true;
+            } else {
+                // Android < 12
+                const granted = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                    {
+                        title: 'Location Permission',
+                        message: 'Bluetooth scanning requires location permission.',
+                        buttonPositive: 'OK',
+                    }
+                );
+                if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+                    setState(prev => ({ ...prev, error: 'Location permission denied. Required for Bluetooth scanning.' }));
+                    return false;
+                }
+                return true;
+            }
+        } catch (e) {
+            setState(prev => ({ ...prev, error: 'Failed to request permissions' }));
+            return false;
+        }
+    }, []);
+
+    const startScan = useCallback(async () => {
         if (!managerRef.current || state.isScanning) return;
+
+        // Request runtime permissions first
+        const hasPermission = await requestPermissions();
+        if (!hasPermission) return;
 
         setState(prev => ({
             ...prev,
@@ -135,7 +183,7 @@ export const useBluetoothPrinter = () => {
         scanTimeoutRef.current = setTimeout(() => {
             stopScan();
         }, 10000);
-    }, [state.isScanning]);
+    }, [state.isScanning, requestPermissions]);
 
     const stopScan = useCallback(() => {
         if (managerRef.current) {
