@@ -11,7 +11,78 @@ const { requireSubscription } = require('../middleware/subscription');
 // GET /api/payments - Get all payments
 router.get('/', auth, async (req, res) => {
     try {
-        const { farmerId, startDate, endDate, limit = 50, page = 1 } = req.query;
+        const { farmerId, startDate, endDate, limit = 50, page = 1, latestPerFarmer } = req.query;
+
+        // If latestPerFarmer is requested, use aggregation to get only the last payment per farmer
+        if (latestPerFarmer === 'true' && !farmerId) {
+            const matchStage = { owner: new mongoose.Types.ObjectId(req.userId) };
+            if (startDate || endDate) {
+                matchStage.date = {};
+                if (startDate) matchStage.date.$gte = new Date(startDate);
+                if (endDate) {
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    matchStage.date.$lte = end;
+                }
+            }
+
+            const pipeline = [
+                { $match: matchStage },
+                { $sort: { date: -1 } },
+                {
+                    $group: {
+                        _id: '$farmer',
+                        paymentId: { $first: '$$ROOT._id' },
+                        doc: { $first: '$$ROOT' }
+                    }
+                },
+                { $replaceRoot: { newRoot: '$doc' } },
+                { $sort: { date: -1 } },
+                { $skip: (parseInt(page) - 1) * parseInt(limit) },
+                { $limit: parseInt(limit) }
+            ];
+
+            const payments = await Payment.aggregate(pipeline);
+            await Payment.populate(payments, [
+                { path: 'farmer', select: 'code name' },
+                { path: 'settledAdvances', select: 'amount date note status farmer' }
+            ]);
+
+            // Populate farmer details in settledAdvances
+            for (const payment of payments) {
+                if (payment.settledAdvances && payment.settledAdvances.length > 0) {
+                    for (let i = 0; i < payment.settledAdvances.length; i++) {
+                        const advance = payment.settledAdvances[i];
+                        if (advance && advance.farmer) {
+                            const farmerDoc = await Farmer.findById(advance.farmer).select('code name').lean();
+                            payment.settledAdvances[i].farmer = farmerDoc;
+                        }
+                    }
+                }
+            }
+
+            // Count unique farmers for pagination
+            const totalAgg = await Payment.aggregate([
+                { $match: matchStage },
+                { $group: { _id: '$farmer' } },
+                { $count: 'total' }
+            ]);
+            const total = totalAgg.length > 0 ? totalAgg[0].total : 0;
+
+            return res.json({
+                success: true,
+                response: {
+                    data: payments,
+                    count: total,
+                    pagination: {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        total,
+                        pages: Math.ceil(total / parseInt(limit))
+                    }
+                }
+            });
+        }
 
         const query = { owner: req.userId };
         if (farmerId) query.farmer = farmerId;

@@ -7,7 +7,7 @@ import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Pri
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary, printSettingsApi, PrintSettings } from '@/lib/milkeyApi';
+import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
@@ -16,7 +16,6 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
-import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 
 // Helper function to format date as dd/mm/yyyy clear
 const formatDateDDMMYYYY = (dateStr: string) => {
@@ -44,7 +43,6 @@ export default function RegisterScreen() {
     const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
-    const { isConnected: isPrinterConnected } = useBluetoothPrinter();
 
     // Subscription check
     const {
@@ -392,7 +390,7 @@ export default function RegisterScreen() {
         try {
             const [farmersRes, paymentsRes] = await Promise.all([
                 farmersApi.getAll(),
-                paymentsApi.getAll({ limit: 1 }),
+                paymentsApi.getAll({ limit: 20, latestPerFarmer: true }),
             ]);
 
             if (!farmersRes.success) {
@@ -475,84 +473,9 @@ export default function RegisterScreen() {
         await fetchFarmerPayments(paymentFarmer.farmer.id, nextPage, true);
         setFarmerPaymentsLoadingMore(false);
     };
-    // Print payment slip with print settings
-    const handlePrintPaymentSlip = async (p: Payment, skipPrinterCheck = false) => {
-        if (!skipPrinterCheck && !isPrinterConnected) {
-            showAlert('Printer Not Connected', 'Please connect a Bluetooth printer from the top bar before printing.');
-            return;
-        }
-        // Fetch print settings
-        let ps: PrintSettings | null = null;
-        try {
-            const psRes = await printSettingsApi.get();
-            if (psRes.success && psRes.response) ps = psRes.response;
-        } catch (e) { /* silent */ }
-
-        const dairyName = ps?.dairyName || 'Payment Slip';
-        const showMobile = ps?.showMobileOnReceipt !== false;
-        const mobile = ps?.mobileNumber || '';
-        const address = ps?.address || '';
-        const extraInfo = ps?.extraInfo || '';
-
-        const html = `
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
-                    .center { text-align: center; }
-                    .title { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
-                    .subtitle { font-size: 12px; color: #666; margin-bottom: 2px; }
-                    .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
-                    .info-row .value { color: #d32f2f; font-weight: 600; }
-                    .separator { text-align: center; margin: 10px 0; color: #999; font-size: 11px; letter-spacing: 1px; }
-                    .amount-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
-                    .amount-row .value { font-weight: 600; text-align: right; min-width: 100px; }
-                    .generated { text-align: center; font-size: 12px; color: #666; margin-top: 8px; }
-                    .note { text-align: center; font-size: 11px; color: #888; margin-top: 6px; font-style: italic; }
-                </style>
-            </head>
-            <body>
-                <div class="center title">${dairyName}</div>
-                ${address ? `<div class="center subtitle">${address}</div>` : ''}
-                ${showMobile && mobile ? `<div class="center subtitle">📞 ${mobile}</div>` : ''}
-
-                <div class="separator">${'*'.repeat(40)}</div>
-
-                <div class="info-row"><span>From :</span><span class="value">${formatDateDDMMYYYY(p.periodStart || p.date)}  To  ${formatDateDDMMYYYY(p.periodEnd || p.date)}</span></div>
-                <div class="info-row"><span>Farmer Code :</span><span class="value">${p.farmer?.code || '—'}</span></div>
-                <div class="info-row"><span>Name :</span><span class="value">${p.farmer?.name || '—'}</span></div>
-
-                <div class="separator">${'*'.repeat(40)}</div>
-
-                <div class="amount-row"><span>Last payment :</span><span class="value">${(p.previousBalance || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Milk Amount :</span><span class="value">${(p.totalMilkAmount || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Advance / Product :</span><span class="value">${(p.totalAdvanceDeduction || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Total Payable :</span><span class="value">${(p.netPayable || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Paid Amount :</span><span class="value">${(p.amount || 0).toFixed(0)}</span></div>
-
-                <div class="separator">${'*'.repeat(40)}</div>
-
-                <div class="amount-row"><span><b>Closing Balance :</b></span><span class="value" style="color: ${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#333'}"><b>${(p.closingBalance || 0).toFixed(0)}</b></span></div>
-
-                <div class="separator">${'*'.repeat(40)}</div>
-
-                <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
-                ${extraInfo ? `<div class="note">${extraInfo}</div>` : ''}
-            </body>
-            </html>
-        `;
-
-        try {
-            const { uri } = await Print.printToFileAsync({ html, width: 380 });
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri);
-            }
-        } catch (error) {
-            console.error('Print error:', error);
-            showAlert('Error', 'Failed to generate payment slip');
-        }
+    // Navigate to register payment slip page
+    const handlePrintPaymentSlip = async (p: Payment, _skipPrinterCheck = false) => {
+        (router as any).push({ pathname: '/register-payment-slip', params: { paymentId: p._id } });
     };
 
 
@@ -561,7 +484,7 @@ export default function RegisterScreen() {
         setPaymentsLoadingMore(true);
         const nextPage = paymentsPage + 1;
         try {
-            const res = await paymentsApi.getAll({ limit: 20, page: nextPage });
+            const res = await paymentsApi.getAll({ limit: 20, page: nextPage, latestPerFarmer: true });
             if (res.success && res.response?.data) {
                 setPayments(prev => [...prev, ...res.response!.data]);
                 setPaymentsPage(nextPage);
@@ -745,17 +668,12 @@ export default function RegisterScreen() {
             console.log('Payment response:', JSON.stringify(res));
 
             if (res.success) {
-                // Try to print if printer is connected
-                if (isPrinterConnected && res.response) {
+                if (res.response) {
                     try {
                         await handlePrintPaymentSlip(res.response, true);
-                    } catch (e) { /* print failed silently */ }
-                    showAlert('Success', 'Settlement saved & printed successfully');
-                } else if (!isPrinterConnected) {
-                    showAlert('Success', 'Settlement saved successfully. No printer connected.');
-                } else {
-                    showAlert('Success', 'Settlement saved successfully');
+                    } catch (e) { /* navigation failed silently */ }
                 }
+                showAlert('Success', 'Settlement saved successfully');
                 setPaymentFarmer(null);
                 setPaymentCode('');
                 setPaidAmount('');

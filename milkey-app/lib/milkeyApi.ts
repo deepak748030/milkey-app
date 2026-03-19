@@ -685,13 +685,14 @@ export const milkCollectionsApi = {
 
 // Payments API
 export const paymentsApi = {
-    getAll: async (params?: { farmerId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
+    getAll: async (params?: { farmerId?: string; startDate?: string; endDate?: string; limit?: number; page?: number; latestPerFarmer?: boolean }) => {
         const queryParams = new URLSearchParams();
         if (params?.farmerId) queryParams.append('farmerId', params.farmerId);
         if (params?.startDate) queryParams.append('startDate', params.startDate);
         if (params?.endDate) queryParams.append('endDate', params.endDate);
         if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.latestPerFarmer) queryParams.append('latestPerFarmer', 'true');
         const query = queryParams.toString();
 
         return apiRequest<{ data: Payment[] }>(`/payments${query ? `?${query}` : ''}`);
