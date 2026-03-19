@@ -14,7 +14,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -583,17 +583,13 @@ export default function SellingScreen() {
             });
 
             if (res.success) {
-                // Try to print if printer is connected
-                if (isPrinterConnected && res.response) {
+                // Generate payment slip
+                if (res.response) {
                     try {
                         await handlePrintSellingPaymentSlip(res.response, true);
                     } catch (e) { /* print failed silently */ }
-                    showAlert('Success', 'Payment saved & printed successfully');
-                } else if (!isPrinterConnected) {
-                    showAlert('Success', 'Payment saved successfully. No printer connected.');
-                } else {
-                    showAlert('Success', 'Payment recorded successfully');
                 }
+                showAlert('Success', 'Payment saved successfully');
                 setSelectedPaymentMember(null);
                 setPaymentMemberSearch('');
                 setPaymentAmount('');
@@ -775,89 +771,9 @@ export default function SellingScreen() {
         return `${day}/${month}/${year}`;
     };
 
-    // Print selling payment slip with print settings (same design as register)
-    const handlePrintSellingPaymentSlip = async (p: MemberPayment, skipPrinterCheck = false) => {
-        if (!skipPrinterCheck && !isPrinterConnected) {
-            showAlert('Printer Not Connected', 'Please connect a Bluetooth printer from the top bar before printing.');
-            return;
-        }
-        let ps: PrintSettings | null = null;
-        try {
-            const psRes = await printSettingsApi.get();
-            if (psRes.success && psRes.response) ps = psRes.response;
-        } catch (e) { /* silent */ }
-
-        const dairyName = ps?.dairyName || 'Payment Slip';
-        const showMobile = ps?.showMobileOnReceipt !== false;
-        const mobile = ps?.mobileNumber || '';
-        const address = ps?.address || '';
-        const extraInfo = ps?.extraInfo || '';
-
-        const milkQty = (Number(p.totalQuantity) || 0).toFixed(1);
-        const milkRate = (Number(p.milkRate) || 0).toFixed(2);
-
-        const html = `
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <style>
-                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
-                    .center { text-align: center; }
-                    .title { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
-                    .subtitle { font-size: 12px; color: #666; margin-bottom: 2px; }
-                    .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
-                    .info-row .value { color: #d32f2f; font-weight: 600; }
-                    .info-row .value-black { color: #333; font-weight: 600; }
-                    .separator { text-align: center; margin: 10px 0; color: #999; font-size: 11px; letter-spacing: 1px; }
-                    .amount-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 14px; }
-                    .amount-row .value { font-weight: 600; text-align: right; min-width: 100px; }
-                    .amount-row .value-black { font-weight: 600; text-align: right; min-width: 100px; color: #333; }
-                    .generated { text-align: center; font-size: 12px; color: #666; margin-top: 8px; }
-                    .note { text-align: center; font-size: 11px; color: #888; margin-top: 6px; font-style: italic; }
-                </style>
-            </head>
-            <body>
-                <div class="center title">${dairyName}</div>
-                ${address ? `<div class="center subtitle">${address}</div>` : ''}
-                ${showMobile && mobile ? `<div class="center subtitle">📞 ${mobile}</div>` : ''}
-
-                <div class="separator">${'*'.repeat(40)}</div>
-
-                <div class="info-row"><span>From :</span><span class="value">${formatDateDDMMYYYY(p.periodStart || p.date)}</span></div>
-                <div class="info-row"><span>Till :</span><span class="value">${formatDateDDMMYYYY(p.periodEnd || p.date)}</span></div>
-                <div class="info-row"><span>Member :</span><span class="value">${p.member?.name || '—'}</span></div>
-
-                <div class="separator">${'*'.repeat(40)}</div>
-
-                <div class="amount-row"><span>Last Payment :</span><span class="value-black">${(p.previousBalance || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Milk Quantity :</span><span class="value-black">${milkQty} L</span></div>
-                <div class="amount-row"><span>Milk Rate :</span><span class="value-black">₹${milkRate}/L</span></div>
-                <div class="amount-row"><span>Total Milk Amount :</span><span class="value-black">${(p.totalSellAmount || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Total Payable :</span><span class="value-black">${(p.netPayable || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Paid Amount :</span><span class="value-black">${(p.amount || 0).toFixed(0)}</span></div>
-
-                <div class="separator">${'*'.repeat(40)}</div>
-
-                <div class="amount-row"><span><b>Closing Balance :</b></span><span class="value-black" style="color: ${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#333'}"><b>${(p.closingBalance || 0).toFixed(0)}</b></span></div>
-
-                <div class="separator">${'*'.repeat(40)}</div>
-
-                <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
-                ${extraInfo ? `<div class="note">${extraInfo}</div>` : ''}
-            </body>
-            </html>
-        `;
-
-        try {
-            const { uri } = await Print.printToFileAsync({ html, width: 380 });
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri);
-            }
-        } catch (error) {
-            console.error('Print error:', error);
-            showAlert('Error', 'Failed to generate payment slip');
-        }
+    // Navigate to selling payment slip page
+    const handlePrintSellingPaymentSlip = async (p: MemberPayment, _skipPrinterCheck = false) => {
+        (router as any).push({ pathname: '/selling-payment-slip', params: { paymentId: p._id } });
     };
 
     // Group filtered entries by date and member (like entry table)
@@ -1124,22 +1040,25 @@ export default function SellingScreen() {
     };
 
     // Handle Report PDF download
+    const [reportDownloading, setReportDownloading] = useState(false);
     const handleReportPDF = async () => {
         if (balanceReportData.length === 0) {
             showAlert('Error', 'No members to export');
             return;
         }
-
+        setReportDownloading(true);
         try {
             const html = generateMemberBalanceReportHTML();
             const { uri } = await Print.printToFileAsync({ html });
             if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri);
+                await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Selling Report' });
             } else {
                 showAlert('PDF Generated', `Saved to: ${uri}`);
             }
         } catch (error) {
             showAlert('Error', 'Failed to generate PDF');
+        } finally {
+            setReportDownloading(false);
         }
     };
 
@@ -1712,6 +1631,12 @@ export default function SellingScreen() {
                     {/* Summary Card */}
                     <View style={styles.paymentSummaryCard}>
                         <View style={styles.summaryRow}>
+                            <Text style={styles.summaryLabel}>Milk Qty (L):</Text>
+                            <Text style={[styles.summaryValue, { color: colors.foreground }]}>
+                                {(memberSummary?.selling?.totalLiters || 0).toFixed(1)} L
+                            </Text>
+                        </View>
+                        <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
                             <Text style={styles.summaryLabel}>Milk Amount (₹):</Text>
                             <View style={styles.milkAmountWrapper}>
                                 <Text style={styles.milkAmountPrefix}>₹</Text>
@@ -1943,9 +1868,15 @@ export default function SellingScreen() {
 
                 {/* Export Buttons */}
                 <View style={styles.exportBtnsRow}>
-                    <Pressable style={styles.pdfBtn} onPress={handleReportPDF}>
-                        <FileText size={16} color={colors.white} />
-                        <Text style={styles.exportText}>Download PDF</Text>
+                    <Pressable style={styles.pdfBtn} onPress={handleReportPDF} disabled={reportDownloading}>
+                        {reportDownloading ? (
+                            <ActivityIndicator size="small" color={colors.white} />
+                        ) : (
+                            <>
+                                <FileText size={16} color={colors.white} />
+                                <Text style={styles.exportText}>Download PDF</Text>
+                            </>
+                        )}
                     </Pressable>
                     <Pressable style={styles.csvBtn} onPress={handleReportPrint}>
                         <Printer size={14} color={colors.primary} />

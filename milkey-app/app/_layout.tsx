@@ -27,6 +27,8 @@ export default function RootLayout() {
           <Stack.Screen name="feedback" />
           <Stack.Screen name="subscriptions" />
           <Stack.Screen name="print-settings" />
+          <Stack.Screen name="balance-report" />
+          <Stack.Screen name="selling-payment-slip" />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style={isDark ? 'light' : 'dark'} />

@@ -40,8 +40,8 @@ export default function TopBar() {
         {
           paddingTop: insets.top + 4,
           backgroundColor: colors.background,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.border,
+          borderBottomWidth: 2,
+          borderBottomColor: colors.primary,
         }
       ]}>
         <View style={styles.leftSection}>

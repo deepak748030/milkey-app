@@ -12,7 +12,7 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
 import { PaymentRangeCalendar, BlockedPeriod } from '@/components/PaymentRangeCalendar';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, router } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -392,7 +392,7 @@ export default function RegisterScreen() {
         try {
             const [farmersRes, paymentsRes] = await Promise.all([
                 farmersApi.getAll(),
-                paymentsApi.getAll({ limit: 20 }),
+                paymentsApi.getAll({ limit: 1 }),
             ]);
 
             if (!farmersRes.success) {
@@ -1183,127 +1183,13 @@ export default function RegisterScreen() {
     const [printingBalance, setPrintingBalance] = useState(false);
 
     // Print all farmer balances filtered by type
-    const handlePrintBalances = async () => {
+    const handlePrintBalances = () => {
         if (!balanceType) {
             showAlert('Error', 'Please select balance type');
             return;
         }
-        setPrintingBalance(true);
-        if (!isPrinterConnected) {
-            showAlert('Printer Not Connected', 'Please connect a Bluetooth printer from the top bar before printing.');
-            setPrintingBalance(false);
-            return;
-        }
-        try {
-            // Fetch print settings
-            let printSettings: PrintSettings | null = null;
-            try {
-                const psRes = await printSettingsApi.get();
-                if (psRes.success && psRes.response) {
-                    printSettings = psRes.response;
-                }
-            } catch (e) { /* silent */ }
-
-            // Filter farmers by current balance type
-            const getBalance = (farmer: Farmer) => Number(farmer.currentBalance ?? farmer.pendingAmount ?? 0);
-            const filtered = farmers.filter((farmer) => {
-                const balance = getBalance(farmer);
-                if (balanceType === 'positive') return balance > 0;
-                return balance < 0;
-            });
-
-            if (filtered.length === 0) {
-                showAlert('Info', `No farmers with ${balanceType} current balance found`);
-                setPrintingBalance(false);
-                return;
-            }
-
-            // Sort by code
-            const sorted = [...filtered].sort((a, b) => {
-                const cA = parseInt(a.code, 10) || 0;
-                const cB = parseInt(b.code, 10) || 0;
-                return cA - cB;
-            });
-
-            const totalBalance = sorted.reduce((sum, farmer) => sum + getBalance(farmer), 0);
-
-            const rows = sorted.map((farmer) => {
-                const balance = getBalance(farmer);
-                return `
-                <tr>
-                    <td style="text-align:center;">${farmer.code}</td>
-                    <td>${farmer.name}</td>
-                    <td style="text-align:right; color: ${balance < 0 ? '#d32f2f' : '#333'}; font-weight:600;">₹${balance.toFixed(2)}</td>
-                </tr>
-            `;
-            }).join('');
-
-            const dairyName = printSettings?.dairyName || 'Dairy';
-            const showMobile = printSettings?.showMobileOnReceipt !== false;
-            const mobileNumber = printSettings?.mobileNumber || '';
-            const address = printSettings?.address || '';
-            const extraInfo = printSettings?.extraInfo || '';
-
-            const html = `
-                <html>
-                <head>
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <style>
-                        * { margin: 0; padding: 0; box-sizing: border-box; }
-                        body { font-family: Arial, sans-serif; padding: 16px; }
-                        .header { text-align: center; margin-bottom: 12px; }
-                        .header h1 { font-size: 18px; color: #22C55E; margin-bottom: 4px; }
-                        .header p { font-size: 12px; color: #666; }
-                        .type-badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; margin: 8px 0; }
-                        .positive { background: #DCFCE7; color: #16A34A; }
-                        .negative { background: #FEE2E2; color: #DC2626; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-                        th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 12px; }
-                        th { background-color: #22C55E; color: white; }
-                        tr:nth-child(even) { background-color: #f9f9f9; }
-                        .total-row { font-weight: 700; background: #f0fdf4 !important; }
-                        .footer { text-align: center; font-size: 11px; color: #999; margin-top: 12px; }
-                        .note { text-align: center; font-size: 11px; color: #888; margin-top: 6px; font-style: italic; }
-                    </style>
-                </head>
-                <body>
-                    <div class="header">
-                        <h1>${dairyName}</h1>
-                        ${address ? `<p>${address}</p>` : ''}
-                        ${showMobile && mobileNumber ? `<p>📞 ${mobileNumber}</p>` : ''}
-                    </div>
-                    <div style="text-align:center;">
-                        <span class="type-badge ${balanceType}">${balanceType === 'positive' ? 'Positive Balance' : 'Negative Balance'} Report</span>
-                    </div>
-                    <table>
-                        <tr>
-                            <th style="width:60px;">Code</th>
-                            <th>Farmer Name</th>
-                            <th style="width:110px; text-align:right;">Current Balance</th>
-                        </tr>
-                        ${rows}
-                        <tr class="total-row">
-                            <td colspan="2" style="text-align:right;">Total (${sorted.length} farmers):</td>
-                            <td style="text-align:right; color: ${totalBalance < 0 ? '#d32f2f' : '#333'};">₹${totalBalance.toFixed(2)}</td>
-                        </tr>
-                    </table>
-                    <div class="footer">Generated: ${new Date().toLocaleDateString('en-IN')}</div>
-                    ${extraInfo ? `<div class="note">${extraInfo}</div>` : ''}
-                </body>
-                </html>
-            `;
-
-            const { uri } = await Print.printToFileAsync({ html });
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri);
-            }
-            setShowBalancePrintModal(false);
-        } catch (error) {
-            console.error('Balance print error:', error);
-            showAlert('Error', 'Failed to generate balance report');
-        } finally {
-            setPrintingBalance(false);
-        }
+        setShowBalancePrintModal(false);
+        (router as any).push({ pathname: '/balance-report', params: { type: balanceType } });
     };
 
     const renderPaymentsTab = () => (
