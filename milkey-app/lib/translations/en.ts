@@ -3,7 +3,7 @@ const en = {
     // Tab Labels
     tabs: {
         home: 'Home',
-        purchase: 'Purchase',
+        purchase: 'Collection',
         selling: 'Selling',
         register: 'Register',
         profile: 'Profile',

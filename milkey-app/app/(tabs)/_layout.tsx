@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Home, BookOpen, Store, ClipboardList, User } from 'lucide-react-native';
+import { Home, Droplets, Store, ClipboardList, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -51,10 +51,11 @@ export default function TabLayout() {
         options={{
           title: t.tabs.purchase,
           tabBarIcon: ({ color, focused }) => (
-            <BookOpen
+            <Droplets
               size={focused ? 26 : 22}
               color={color}
               strokeWidth={focused ? 2.5 : 2}
+              fill={focused ? color : 'transparent'}
             />
           ),
         }}

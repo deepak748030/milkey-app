@@ -4,7 +4,7 @@ import type { TranslationKeys } from './en';
 const hi: TranslationKeys = {
     tabs: {
         home: 'होम',
-        purchase: 'खरीदी',
+        purchase: 'संकलन',
         selling: 'बिक्री',
         register: 'रजिस्टर',
         profile: 'प्रोफाइल',
