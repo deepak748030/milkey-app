@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCartStore } from '@/lib/cartStore';
 import PaymentBottomSheet from '@/components/PaymentBottomSheet';
 import ConfirmBottomSheet from '@/components/ConfirmBottomSheet';
+import { SuccessModal } from '@/components/SuccessModal';
 
 const { width } = Dimensions.get('window');
 
@@ -20,6 +21,8 @@ export default function CartScreen() {
     const [showPayment, setShowPayment] = useState(false);
     const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
     const [itemToRemove, setItemToRemove] = useState<{ id: string; name: string } | null>(null);
+    const [removeSuccessVisible, setRemoveSuccessVisible] = useState(false);
+    const [removeSuccessMessage, setRemoveSuccessMessage] = useState('');
 
     const styles = createStyles(colors, isDark, insets);
 
@@ -40,6 +43,8 @@ export default function CartScreen() {
     const confirmRemove = () => {
         if (itemToRemove) {
             removeFromCart(itemToRemove.id);
+            setRemoveSuccessMessage(`${itemToRemove.name} removed from cart`);
+            setRemoveSuccessVisible(true);
         }
         setShowRemoveConfirm(false);
         setItemToRemove(null);
@@ -146,6 +151,12 @@ export default function CartScreen() {
                 message={`Remove ${itemToRemove?.name || 'this item'} from cart?`}
                 confirmText="Remove"
                 destructive
+            />
+            <SuccessModal
+                isVisible={removeSuccessVisible}
+                onClose={() => setRemoveSuccessVisible(false)}
+                title="Removed from Cart"
+                message={removeSuccessMessage}
             />
         </View>
     );

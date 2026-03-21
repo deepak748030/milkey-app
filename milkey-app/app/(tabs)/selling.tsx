@@ -7,6 +7,7 @@ import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, Dol
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
 import { SellingPaymentCalendar } from '@/components/SellingPaymentCalendar';
+import { PaymentRangeCalendar } from '@/components/PaymentRangeCalendar';
 import { membersApi, sellingEntriesApi, memberPaymentsApi, printSettingsApi, Member, SellingEntry, MemberPayment, MemberPaymentSummary, MemberBalanceReport, BalanceReportSummary, PrintSettings } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
 import { exportPayments } from '@/lib/csvExport';
@@ -110,6 +111,8 @@ export default function SellingScreen() {
     const [recentEntriesMemberFilter, setRecentEntriesMemberFilter] = useState('');
     const [showRecentMemberDropdown, setShowRecentMemberDropdown] = useState(false);
     const [recentMemberSearch, setRecentMemberSearch] = useState('');
+    const [recentDateSelectingType, setRecentDateSelectingType] = useState<'start' | 'end'>('start');
+    const [showRecentCalendarModal, setShowRecentCalendarModal] = useState(false);
 
     // Payment state
     const [selectedPaymentMember, setSelectedPaymentMember] = useState<Member | null>(null);
@@ -1077,6 +1080,96 @@ export default function SellingScreen() {
         }
     };
 
+    // Download milk entries PDF for selected payment member
+    const [paymentEntriesPdfLoading, setPaymentEntriesPdfLoading] = useState(false);
+    const handleDownloadPaymentMemberEntriesPDF = async () => {
+        if (!selectedPaymentMember) {
+            showAlert('Error', 'Please select a member first');
+            return;
+        }
+        setPaymentEntriesPdfLoading(true);
+        try {
+            // Fetch entries for this member within the calc period
+            const params: Record<string, any> = { memberId: selectedPaymentMember._id, limit: 500 };
+            if (calcStartDate) params.startDate = calcStartDate;
+            if (calcEndDate) params.endDate = calcEndDate;
+            const res = await sellingEntriesApi.getAll(params);
+            const entries = res.success ? (res.response?.data || []) : [];
+
+            if (entries.length === 0) {
+                showAlert('Info', 'No milk entries found for this period');
+                setPaymentEntriesPdfLoading(false);
+                return;
+            }
+
+            // Group entries by date
+            const groups: Record<string, { date: string; morningQty: number; eveningQty: number; totalAmount: number; rate: number; entryCount: number }> = {};
+            entries.forEach((entry: any) => {
+                const dateStr = new Date(entry.date).toISOString().split('T')[0];
+                if (!groups[dateStr]) {
+                    groups[dateStr] = { date: dateStr, morningQty: 0, eveningQty: 0, totalAmount: 0, rate: entry.rate, entryCount: 0 };
+                }
+                groups[dateStr].morningQty += entry.morningQuantity || 0;
+                groups[dateStr].eveningQty += entry.eveningQuantity || 0;
+                groups[dateStr].totalAmount += entry.amount || 0;
+                groups[dateStr].entryCount += 1;
+            });
+            const grouped = Object.values(groups).sort((a, b) => a.date.localeCompare(b.date));
+            const totalQty = grouped.reduce((s, e) => s + e.morningQty + e.eveningQty, 0);
+            const totalAmt = grouped.reduce((s, e) => s + e.totalAmount, 0);
+
+            const rows = grouped.map(item => `
+                <tr>
+                    <td>${formatDateDDMMYYYY(item.date)}</td>
+                    <td style="text-align:center;">${item.morningQty > 0 ? item.morningQty : '-'} + ${item.eveningQty > 0 ? item.eveningQty : '-'}</td>
+                    <td style="text-align:right;">₹${item.rate}</td>
+                    <td style="text-align:right;">₹${item.totalAmount.toFixed(0)}</td>
+                </tr>
+            `).join('');
+
+            const periodText = calcStartDate || calcEndDate
+                ? `${calcStartDate ? formatDateDDMMYYYY(calcStartDate) : 'Start'} to ${calcEndDate ? formatDateDDMMYYYY(calcEndDate) : 'End'}`
+                : 'All Entries';
+
+            const html = `
+                <html><head><meta charset="UTF-8"><style>
+                    body{font-family:Arial,sans-serif;padding:20px;color:#333}
+                    h1{color:#22c55e;text-align:center;margin-bottom:5px}
+                    .subtitle{text-align:center;color:#666;margin-bottom:20px;font-size:14px}
+                    table{width:100%;border-collapse:collapse;margin-top:10px}
+                    th{background-color:#22c55e;color:white;padding:10px 8px;text-align:left;font-weight:600;font-size:12px}
+                    td{padding:8px;border-bottom:1px solid #e5e7eb;font-size:12px}
+                    tr:nth-child(even){background-color:#f9fafb}
+                    .summary{margin-top:20px;padding:15px;background-color:#f0fdf4;border-radius:8px}
+                    .summary-text{font-size:14px;color:#333;margin:5px 0}
+                </style></head><body>
+                    <h1>Milk Entries - ${selectedPaymentMember.name}</h1>
+                    <p class="subtitle">Period: ${periodText}</p>
+                    <table>
+                        <tr><th>Date</th><th style="text-align:center;">M/E (L)</th><th style="text-align:right;">Rate</th><th style="text-align:right;">Amount</th></tr>
+                        ${rows}
+                    </table>
+                    <div class="summary">
+                        <p class="summary-text"><strong>Total Days:</strong> ${grouped.length}</p>
+                        <p class="summary-text"><strong>Total Quantity:</strong> ${totalQty.toFixed(2)} L</p>
+                        <p class="summary-text"><strong>Total Amount:</strong> ₹${totalAmt.toFixed(2)}</p>
+                    </div>
+                </body></html>
+            `;
+
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `${selectedPaymentMember.name} - Milk Entries` });
+            } else {
+                showAlert('PDF Generated', `Saved to: ${uri}`);
+            }
+        } catch (error) {
+            showAlert('Error', 'Failed to generate PDF');
+        } finally {
+            setPaymentEntriesPdfLoading(false);
+        }
+    };
+
     // Edit Payment Handler
     const handleEditPayment = (payment: MemberPayment) => {
         setEditingPayment(payment);
@@ -1354,22 +1447,50 @@ export default function SellingScreen() {
 
             {/* Recent Entries Filters */}
             <View style={styles.recentFiltersCard}>
+                {/* Date Range - From/To selectors */}
                 <View style={styles.recentFiltersRow}>
-                    {/* Date Filters */}
-                    <Pressable style={styles.recentDateInput} onPress={() => openDatePicker('recentStart')}>
-                        <CalendarIcon size={14} color={colors.mutedForeground} />
+                    <Pressable
+                        style={[styles.recentDateInput, recentDateSelectingType === 'start' && { borderColor: colors.primary, borderWidth: 2 }]}
+                        onPress={() => { setRecentDateSelectingType('start'); setShowRecentCalendarModal(true); }}
+                    >
+                        <CalendarIcon size={14} color={recentDateSelectingType === 'start' ? colors.primary : colors.mutedForeground} />
                         <Text style={styles.recentDateText}>
                             {recentEntriesStartDate ? formatDate(recentEntriesStartDate) : 'Start Date'}
                         </Text>
                     </Pressable>
                     <Text style={styles.dateSeparator}>→</Text>
-                    <Pressable style={styles.recentDateInput} onPress={() => openDatePicker('recentEnd')}>
-                        <CalendarIcon size={14} color={colors.mutedForeground} />
+                    <Pressable
+                        style={[styles.recentDateInput, recentDateSelectingType === 'end' && { borderColor: colors.primary, borderWidth: 2 }]}
+                        onPress={() => { setRecentDateSelectingType('end'); setShowRecentCalendarModal(true); }}
+                    >
+                        <CalendarIcon size={14} color={recentDateSelectingType === 'end' ? colors.primary : colors.mutedForeground} />
                         <Text style={styles.recentDateText}>
                             {recentEntriesEndDate ? formatDate(recentEntriesEndDate) : 'End Date'}
                         </Text>
                     </Pressable>
                 </View>
+
+                {/* Calendar Modal for recent entries date range */}
+                <Modal visible={showRecentCalendarModal} transparent animationType="fade" onRequestClose={() => setShowRecentCalendarModal(false)}>
+                    <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 16 }} onPress={() => setShowRecentCalendarModal(false)}>
+                        <Pressable onPress={() => { }} style={{ backgroundColor: isDark ? colors.card : '#fff', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: colors.border }}>
+                            <PaymentRangeCalendar
+                                startDate={recentEntriesStartDate || null}
+                                endDate={recentEntriesEndDate || null}
+                                onStartDateSelect={(date) => {
+                                    setRecentEntriesStartDate(date);
+                                    setRecentDateSelectingType('end');
+                                }}
+                                onEndDateSelect={(date) => {
+                                    setRecentEntriesEndDate(date);
+                                    setShowRecentCalendarModal(false);
+                                }}
+                                blockedPeriods={[]}
+                                selectingType={recentDateSelectingType}
+                            />
+                        </Pressable>
+                    </Pressable>
+                </Modal>
 
                 <View style={styles.recentFiltersRow}>
                     {/* Member Filter */}
@@ -1602,6 +1723,33 @@ export default function SellingScreen() {
                             </Text>
                         </View>
                     </View>
+
+                    {/* Download Milk Entries PDF */}
+                    <Pressable
+                        style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            backgroundColor: colors.card,
+                            borderWidth: 1,
+                            borderColor: colors.primary,
+                            borderRadius: 6,
+                            paddingVertical: 8,
+                            marginBottom: 6,
+                        }}
+                        onPress={handleDownloadPaymentMemberEntriesPDF}
+                        disabled={paymentEntriesPdfLoading}
+                    >
+                        {paymentEntriesPdfLoading ? (
+                            <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                            <>
+                                <Download size={14} color={colors.primary} />
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Download Milk Entries PDF</Text>
+                            </>
+                        )}
+                    </Pressable>
 
                     {/* Calculation Period Section - End Date Only */}
                     <View style={styles.calcPeriodCard}>
@@ -1866,23 +2014,7 @@ export default function SellingScreen() {
                 )}
 
 
-                {/* Export Buttons */}
-                <View style={styles.exportBtnsRow}>
-                    <Pressable style={styles.pdfBtn} onPress={handleReportPDF} disabled={reportDownloading}>
-                        {reportDownloading ? (
-                            <ActivityIndicator size="small" color={colors.white} />
-                        ) : (
-                            <>
-                                <FileText size={16} color={colors.white} />
-                                <Text style={styles.exportText}>Download PDF</Text>
-                            </>
-                        )}
-                    </Pressable>
-                    <Pressable style={styles.csvBtn} onPress={handleReportPrint}>
-                        <Printer size={14} color={colors.primary} />
-                        <Text style={styles.csvBtnText}>Print</Text>
-                    </Pressable>
-                </View>
+                {/* Export Buttons - Removed Download PDF & Print */}
 
                 {/* Member Filter Only */}
                 <View style={styles.filterCard}>
@@ -1963,9 +2095,28 @@ export default function SellingScreen() {
 
                 {/* All Members Balance Table */}
                 <View style={styles.memberSummarySection}>
-                    <Text style={styles.memberSummaryTitle}>
-                        {selectedReportMember ? 'Member Details' : 'All Members Balance'}
-                    </Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <Text style={[styles.memberSummaryTitle, { marginBottom: 0 }]}>
+                            {selectedReportMember ? 'Member Details' : 'All Members Balance'}
+                        </Text>
+                        <Pressable
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 4,
+                                paddingHorizontal: 10,
+                                paddingVertical: 6,
+                                backgroundColor: colors.card,
+                                borderRadius: 6,
+                                borderWidth: 1,
+                                borderColor: colors.primary,
+                            }}
+                            onPress={handleReportPrint}
+                        >
+                            <Printer size={14} color={colors.primary} />
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Print</Text>
+                        </Pressable>
+                    </View>
 
                     {balanceReportLoading ? (
                         <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
@@ -1978,11 +2129,10 @@ export default function SellingScreen() {
                                 <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>Name</Text>
                                 <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Date</Text>
                                 <Text style={[styles.tableHeaderCell, { flex: 1, textAlign: 'center' }]}>Till</Text>
-                                <Text style={[styles.tableHeaderCell, { flex: 1.1, textAlign: 'right', paddingRight: 4 }]}>Balance</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 0.9, textAlign: 'right', paddingRight: 4 }]}>Balance</Text>
+                                <Text style={[styles.tableHeaderCell, { flex: 0.4, textAlign: 'center' }]}></Text>
                             </View>
                             {displayData.map((member, index) => {
-                                // totalBalance = currentBalance (after last payment) + unpaidAmount (unpaid entries)
-                                // Positive = member owes money (receivable), Negative = member has credit/overpaid (payable)
                                 const balance = member.totalBalance;
 
                                 return (
@@ -1996,7 +2146,7 @@ export default function SellingScreen() {
                                         <Text style={[
                                             styles.tableCell,
                                             {
-                                                flex: 1.1,
+                                                flex: 0.9,
                                                 textAlign: 'right',
                                                 paddingRight: 4,
                                                 fontWeight: '700',
@@ -2009,6 +2159,43 @@ export default function SellingScreen() {
                                         ]}>
                                             {balance < 0 ? '-' : balance > 0 ? '+' : ''}₹{Math.abs(balance).toFixed(0)}
                                         </Text>
+                                        <Pressable
+                                            style={{ flex: 0.4, alignItems: 'center', justifyContent: 'center' }}
+                                            onPress={async () => {
+                                                // Print single member balance report
+                                                try {
+                                                    const singleHtml = `
+                                                        <html><head><meta charset="UTF-8"><style>
+                                                            body{font-family:Arial,sans-serif;padding:20px;color:#333}
+                                                            h1{color:#22c55e;text-align:center;margin-bottom:5px}
+                                                            .info{text-align:center;color:#666;margin-bottom:20px;font-size:14px}
+                                                            table{width:100%;border-collapse:collapse;margin-top:10px}
+                                                            th{background-color:#22c55e;color:white;padding:10px 8px;font-weight:600}
+                                                            td{padding:10px 8px;border-bottom:1px solid #e5e7eb}
+                                                        </style></head><body>
+                                                            <h1>Member Balance Report</h1>
+                                                            <p class="info">${member.name} | Generated: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
+                                                            <table>
+                                                                <tr><th>Name</th><th>Date</th><th>Till</th><th style="text-align:right;">Balance</th></tr>
+                                                                <tr>
+                                                                    <td>${member.name}</td>
+                                                                    <td style="text-align:center;">${formatDateDDMMYYYY(member.date)}</td>
+                                                                    <td style="text-align:center;">${member.lastPeriodEnd ? formatDateDDMMYYYY(member.lastPeriodEnd) : '-'}</td>
+                                                                    <td style="text-align:right;font-weight:700;color:${balance > 0 ? '#22c55e' : balance < 0 ? '#ef4444' : '#333'};">
+                                                                        ${balance < 0 ? '-' : balance > 0 ? '+' : ''}₹${Math.abs(balance).toFixed(0)}
+                                                                    </td>
+                                                                </tr>
+                                                            </table>
+                                                        </body></html>
+                                                    `;
+                                                    await Print.printAsync({ html: singleHtml });
+                                                } catch (error) {
+                                                    showAlert('Error', 'Failed to print');
+                                                }
+                                            }}
+                                        >
+                                            <Printer size={13} color={colors.primary} />
+                                        </Pressable>
                                     </View>
                                 );
                             })}

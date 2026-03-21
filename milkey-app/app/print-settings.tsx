@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
-import { ArrowLeft, Printer, Save, Eye } from 'lucide-react-native';
+import { ArrowLeft, Printer, Save, Eye, X } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { printSettingsApi, PrintSettings } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
@@ -11,6 +11,7 @@ export default function PrintSettingsScreen() {
     const { colors, isDark } = useTheme();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [showSlipPreview, setShowSlipPreview] = useState(false);
     const [settings, setSettings] = useState<PrintSettings>({
         dairyName: '',
         ownerName: '',
@@ -69,6 +70,20 @@ export default function PrintSettingsScreen() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const mockSlipData = {
+        farmerName: 'Ramesh Kumar',
+        farmerCode: 'F-0012',
+        date: new Date().toLocaleDateString('en-IN'),
+        time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        shift: 'Morning',
+        milkType: 'Buffalo',
+        qty: '12.5 Ltr',
+        fat: '6.2',
+        snf: '8.8',
+        rate: '₹52.00/Ltr',
+        amount: '₹650.00',
     };
 
     const styles = createStyles(colors, isDark);
@@ -131,40 +146,42 @@ export default function PrintSettingsScreen() {
                     />
                 </View>
 
-                {/* Phone Number with Toggle on right */}
-                <View style={styles.phoneRow}>
-                    <View style={styles.phoneInputGroup}>
-                        <Text style={styles.label}>Phone Number</Text>
+                {/* Phone Number with Toggle inline on right */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Phone Number</Text>
+                    <View style={styles.phoneInputRow}>
                         <TextInput
-                            style={styles.input}
+                            style={[
+                                styles.phoneInput,
+                                !settings.showMobileOnReceipt && { color: colors.mutedForeground, opacity: 0.5 },
+                            ]}
                             placeholder="Enter phone number"
                             value={settings.mobileNumber}
                             onChangeText={(v) => setSettings({ ...settings, mobileNumber: v })}
                             keyboardType="phone-pad"
                             placeholderTextColor={colors.mutedForeground}
                         />
+                        <Pressable
+                            onPress={() => setSettings({ ...settings, showMobileOnReceipt: !settings.showMobileOnReceipt })}
+                            style={[
+                                styles.inlineSwitch,
+                                settings.showMobileOnReceipt
+                                    ? { backgroundColor: colors.primary }
+                                    : { backgroundColor: colors.muted },
+                            ]}
+                        >
+                            <View style={[
+                                styles.inlineSwitchThumb,
+                                settings.showMobileOnReceipt
+                                    ? { alignSelf: 'flex-end' as const }
+                                    : { alignSelf: 'flex-start' as const },
+                            ]} />
+                        </Pressable>
                     </View>
+                    <Text style={[styles.phoneHint, { color: settings.showMobileOnReceipt ? colors.success : colors.mutedForeground }]}>
+                        {settings.showMobileOnReceipt ? 'Visible on receipt' : 'Hidden on receipt'}
+                    </Text>
                 </View>
-
-                {/* Show Mobile on Receipt Toggle */}
-                <Pressable
-                    style={styles.toggleRow}
-                    onPress={() => setSettings({ ...settings, showMobileOnReceipt: !settings.showMobileOnReceipt })}
-                >
-                    <View style={styles.toggleInfo}>
-                        <Text style={styles.toggleLabel}>Show Mobile on Receipt</Text>
-                        <Text style={styles.toggleDesc}>Display mobile number on printed receipts</Text>
-                    </View>
-                    <View style={[
-                        styles.switchTrack,
-                        settings.showMobileOnReceipt ? styles.switchTrackActive : styles.switchTrackInactive,
-                    ]}>
-                        <View style={[
-                            styles.switchThumb,
-                            settings.showMobileOnReceipt ? styles.switchThumbActive : styles.switchThumbInactive,
-                        ]} />
-                    </View>
-                </Pressable>
 
                 {/* Note for receipt */}
                 <View style={styles.inputGroup}>
@@ -182,7 +199,7 @@ export default function PrintSettingsScreen() {
                 {/* View Slip Button */}
                 <Pressable
                     style={styles.viewSlipBtn}
-                    onPress={() => router.push('/register-payment-slip' as any)}
+                    onPress={() => setShowSlipPreview(true)}
                 >
                     <Eye size={18} color={colors.primary} />
                     <Text style={styles.viewSlipBtnText}>View Slip (Preview)</Text>
@@ -200,6 +217,91 @@ export default function PrintSettingsScreen() {
                     )}
                 </Pressable>
             </ScrollView>
+
+            {/* Mock Slip Preview Modal */}
+            <Modal visible={showSlipPreview} transparent animationType="slide">
+                <View style={styles.slipOverlay}>
+                    <View style={styles.slipContainer}>
+                        <View style={styles.slipHeader}>
+                            <Text style={styles.slipHeaderTitle}>Slip Preview</Text>
+                            <Pressable onPress={() => setShowSlipPreview(false)} style={styles.slipCloseBtn}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+
+                        <View style={styles.slipPaper}>
+                            {/* Dairy Header */}
+                            <Text style={styles.slipDairyName}>
+                                {settings.dairyName || 'Your Dairy Name'}
+                            </Text>
+                            <Text style={styles.slipAddress}>
+                                {settings.address || 'Village / Address'}
+                            </Text>
+                            {settings.showMobileOnReceipt && settings.mobileNumber ? (
+                                <Text style={styles.slipMobile}>Ph: {settings.mobileNumber}</Text>
+                            ) : null}
+
+                            <View style={styles.slipDivider} />
+
+                            {/* Farmer Info */}
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipLabel}>Farmer</Text>
+                                <Text style={styles.slipValue}>{mockSlipData.farmerName} ({mockSlipData.farmerCode})</Text>
+                            </View>
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipLabel}>Date</Text>
+                                <Text style={styles.slipValue}>{mockSlipData.date} | {mockSlipData.time}</Text>
+                            </View>
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipLabel}>Shift</Text>
+                                <Text style={styles.slipValue}>{mockSlipData.shift}</Text>
+                            </View>
+
+                            <View style={styles.slipDivider} />
+
+                            {/* Milk Details */}
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipLabel}>Milk Type</Text>
+                                <Text style={styles.slipValue}>{mockSlipData.milkType}</Text>
+                            </View>
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipLabel}>Quantity</Text>
+                                <Text style={styles.slipValue}>{mockSlipData.qty}</Text>
+                            </View>
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipLabel}>Fat</Text>
+                                <Text style={styles.slipValue}>{mockSlipData.fat}</Text>
+                            </View>
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipLabel}>SNF</Text>
+                                <Text style={styles.slipValue}>{mockSlipData.snf}</Text>
+                            </View>
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipLabel}>Rate</Text>
+                                <Text style={styles.slipValue}>{mockSlipData.rate}</Text>
+                            </View>
+
+                            <View style={styles.slipDividerBold} />
+
+                            {/* Total */}
+                            <View style={styles.slipRow}>
+                                <Text style={styles.slipTotalLabel}>Total Amount</Text>
+                                <Text style={styles.slipTotalValue}>{mockSlipData.amount}</Text>
+                            </View>
+
+                            {settings.extraInfo ? (
+                                <>
+                                    <View style={styles.slipDivider} />
+                                    <Text style={styles.slipNote}>{settings.extraInfo}</Text>
+                                </>
+                            ) : null}
+
+                            <View style={styles.slipDivider} />
+                            <Text style={styles.slipFooter}>Thank You! Visit Again</Text>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             <SuccessModal
                 isVisible={alertVisible}
@@ -282,64 +384,44 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 14,
         color: colors.foreground,
     },
-    phoneRow: {
-        marginBottom: 6,
-    },
-    phoneInputGroup: {
-        flex: 1,
-    },
-    toggleRow: {
+    phoneInputRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
+    },
+    phoneInput: {
+        flex: 1,
         backgroundColor: colors.card,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 6,
-    },
-    toggleInfo: {
-        flex: 1,
-    },
-    toggleLabel: {
-        fontSize: 15,
-        fontWeight: '600',
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        fontSize: 14,
         color: colors.foreground,
-        marginBottom: 2,
     },
-    toggleDesc: {
-        fontSize: 12,
-        color: colors.mutedForeground,
-    },
-    switchTrack: {
-        width: 52,
-        height: 30,
-        borderRadius: 15,
+    inlineSwitch: {
+        width: 44,
+        height: 26,
+        borderRadius: 13,
         justifyContent: 'center',
         paddingHorizontal: 3,
     },
-    switchTrackActive: {
-        backgroundColor: colors.primary,
-    },
-    switchTrackInactive: {
-        backgroundColor: colors.muted,
-    },
-    switchThumb: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
+    inlineSwitchThumb: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
         backgroundColor: colors.white,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.2,
         shadowRadius: 2,
         elevation: 2,
     },
-    switchThumbActive: {
-        alignSelf: 'flex-end',
-    },
-    switchThumbInactive: {
-        alignSelf: 'flex-start',
+    phoneHint: {
+        fontSize: 11,
+        marginTop: 3,
+        fontWeight: '500',
     },
     viewSlipBtn: {
         flexDirection: 'row',
@@ -372,5 +454,116 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
         color: colors.white,
+    },
+    // Slip Preview styles
+    slipOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    slipContainer: {
+        width: '100%',
+        maxWidth: 340,
+        backgroundColor: colors.card,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: colors.border,
+        overflow: 'hidden',
+    },
+    slipHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    slipHeaderTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: colors.foreground,
+    },
+    slipCloseBtn: {
+        padding: 4,
+    },
+    slipPaper: {
+        backgroundColor: isDark ? colors.card : '#FFFFF8',
+        padding: 16,
+        margin: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderStyle: 'dashed',
+    },
+    slipDairyName: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: isDark ? colors.foreground : '#1a1a1a',
+        textAlign: 'center',
+        textTransform: 'uppercase',
+    },
+    slipAddress: {
+        fontSize: 11,
+        color: isDark ? colors.mutedForeground : '#666',
+        textAlign: 'center',
+        marginTop: 2,
+    },
+    slipMobile: {
+        fontSize: 11,
+        color: isDark ? colors.mutedForeground : '#666',
+        textAlign: 'center',
+        marginTop: 1,
+    },
+    slipDivider: {
+        height: 1,
+        backgroundColor: isDark ? colors.border : '#ddd',
+        marginVertical: 8,
+        borderStyle: 'dashed',
+    },
+    slipDividerBold: {
+        height: 2,
+        backgroundColor: isDark ? colors.foreground : '#333',
+        marginVertical: 8,
+    },
+    slipRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 2,
+    },
+    slipLabel: {
+        fontSize: 12,
+        color: isDark ? colors.mutedForeground : '#555',
+        fontWeight: '500',
+    },
+    slipValue: {
+        fontSize: 12,
+        color: isDark ? colors.foreground : '#1a1a1a',
+        fontWeight: '600',
+    },
+    slipTotalLabel: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: isDark ? colors.foreground : '#1a1a1a',
+    },
+    slipTotalValue: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: colors.primary,
+    },
+    slipNote: {
+        fontSize: 10,
+        color: isDark ? colors.mutedForeground : '#888',
+        textAlign: 'center',
+        fontStyle: 'italic',
+    },
+    slipFooter: {
+        fontSize: 11,
+        color: isDark ? colors.mutedForeground : '#999',
+        textAlign: 'center',
+        fontWeight: '600',
     },
 });

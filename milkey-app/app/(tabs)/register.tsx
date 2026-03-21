@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndic
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Printer, User } from 'lucide-react-native';
+import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Printer, User, TrendingUp, TrendingDown, ClipboardList } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -30,13 +30,6 @@ const formatDateDDMMYYYY = (dateStr: string) => {
 type TabType = 'Payments' | 'Advances' | 'Farmers';
 const TAB_ORDER: TabType[] = ['Payments', 'Advances', 'Farmers'];
 
-// Custom date range interface
-interface DateRange {
-    id: string;
-    startDay: number;
-    endDay: number;
-    label: string;
-}
 
 export default function RegisterScreen() {
     const { colors, isDark } = useTheme();
@@ -144,24 +137,14 @@ export default function RegisterScreen() {
     const [farmerTabSearch, setFarmerTabSearch] = useState('');
     const [farmerSearchLoading, setFarmerSearchLoading] = useState(false);
 
-    // Custom date ranges state
-    const [customRanges, setCustomRanges] = useState<DateRange[]>([
-        { id: '1', startDay: 1, endDay: 10, label: '1-10' },
-        { id: '2', startDay: 11, endDay: 20, label: '11-20' },
-        { id: '3', startDay: 21, endDay: 31, label: '21-End' },
-    ]);
-    const [showAddRange, setShowAddRange] = useState(false);
-    const [newRangeStart, setNewRangeStart] = useState('');
-    const [newRangeEnd, setNewRangeEnd] = useState('');
 
     // Advances search and date picker
     const [advanceSearch, setAdvanceSearch] = useState('');
     const [showAdvDatePicker, setShowAdvDatePicker] = useState(false);
 
     // Payment date pickers
-    const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-    const [showEndDatePicker, setShowEndDatePicker] = useState(false);
     const [dateSelectingType, setDateSelectingType] = useState<'start' | 'end'>('start');
+    const [showCalendarModal, setShowCalendarModal] = useState(false);
 
     // Temp calendar date for confirmation
     const [tempCalendarDate, setTempCalendarDate] = useState<Date | null>(null);
@@ -553,73 +536,6 @@ export default function RegisterScreen() {
         });
     };
 
-    // Set date range from custom range and update upper date display
-    const applyCustomRange = (range: DateRange) => {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
-
-        const start = new Date(year, month, range.startDay);
-        let end: Date;
-        if (range.endDay >= 28) {
-            // If end day is 28 or more, use last day of month
-            end = new Date(year, month + 1, 0);
-        } else {
-            end = new Date(year, month, range.endDay);
-        }
-
-        const startStr = formatLocalDate(start);
-        const endStr = formatLocalDate(end);
-
-        // Check if the range overlaps with existing blocked periods
-        const overlapping = getOverlappingPeriodsForRange(startStr, endStr);
-        if (overlapping.length > 0) {
-            const periodsList = overlapping.map(p => {
-                const s = new Date(p.startDate);
-                const e = new Date(p.endDate);
-                return `${s.getDate()}/${s.getMonth() + 1}/${s.getFullYear()} - ${e.getDate()}/${e.getMonth() + 1}/${e.getFullYear()}`;
-            }).join('\n');
-            showAlert('Date Conflict', `This date range overlaps with existing payment period(s):\n\n${periodsList}\n\nPlease select a different range.`);
-            return;
-        }
-
-        setDateStart(startStr);
-        setDateEnd(endStr);
-
-        // Also update temp calendar date for visual feedback
-        setTempCalendarDate(start);
-    };
-
-    // Add new custom range
-    const handleAddCustomRange = () => {
-        const startDay = parseInt(newRangeStart);
-        const endDay = parseInt(newRangeEnd);
-
-        if (isNaN(startDay) || isNaN(endDay) || startDay < 1 || startDay > 31 || endDay < 1 || endDay > 31) {
-            showAlert('Error', 'Please enter valid day numbers (1-31)');
-            return;
-        }
-        if (startDay > endDay) {
-            showAlert('Error', 'Start day must be less than or equal to end day');
-            return;
-        }
-
-        const newRange: DateRange = {
-            id: Date.now().toString(),
-            startDay,
-            endDay,
-            label: `${startDay}-${endDay >= 28 ? 'End' : endDay}`,
-        };
-        setCustomRanges([...customRanges, newRange]);
-        setNewRangeStart('');
-        setNewRangeEnd('');
-        setShowAddRange(false);
-    };
-
-    // Remove custom range
-    const handleRemoveRange = (id: string) => {
-        setCustomRanges(customRanges.filter(r => r.id !== id));
-    };
 
     // Recalculate when dates change
     const handleRecalculate = async () => {
@@ -1112,7 +1028,7 @@ export default function RegisterScreen() {
 
     const renderPaymentsTab = () => (
         <View>
-            {/* Code input + Go button + Print button */}
+            {/* Code input + Go button + Balance Report button */}
             <View style={styles.searchRow}>
                 <TextInput
                     style={styles.searchInput}
@@ -1128,12 +1044,13 @@ export default function RegisterScreen() {
                     returnKeyType="go"
                 />
                 <Pressable
-                    style={styles.goBtn}
+                    style={({ pressed }) => [styles.goBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] }]}
                     onPress={() => {
                         Keyboard.dismiss();
                         handleFetchFarmerSummary();
                     }}
                     disabled={paymentLoading}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                     {paymentLoading ? (
                         <ActivityIndicator size="small" color={colors.white} />
@@ -1153,7 +1070,7 @@ export default function RegisterScreen() {
                     }}
                     onPress={() => setShowBalancePrintModal(true)}
                 >
-                    <Printer size={18} color={colors.primary} />
+                    <ClipboardList size={18} color={colors.primary} />
                 </Pressable>
             </View>
 
@@ -1173,144 +1090,50 @@ export default function RegisterScreen() {
                         </View>
                     </View>
 
-                    {/* Date Range */}
+                    {/* Calculation Period - Calendar opens as Modal */}
                     <Text style={styles.sectionLabel}>Calculation Period</Text>
                     <View style={styles.dateRow}>
                         <Pressable
-                            style={styles.dateInputWrapper}
-                            onPress={() => {
-                                setDateSelectingType('start');
-                                setShowStartDatePicker(true);
-                            }}
+                            style={[styles.dateInputWrapper, dateSelectingType === 'start' && { borderColor: colors.primary, borderWidth: 2 }]}
+                            onPress={() => { setDateSelectingType('start'); setShowCalendarModal(true); }}
                         >
                             <Text style={[styles.dateInputText, !dateStart && { color: colors.mutedForeground }]}>
                                 {dateStart ? formatDateDDMMYYYY(dateStart) : 'Start Date'}
                             </Text>
-                            <CalendarIcon size={16} color={colors.mutedForeground} />
+                            <CalendarIcon size={16} color={dateSelectingType === 'start' ? colors.primary : colors.mutedForeground} />
                         </Pressable>
                         <Pressable
-                            style={styles.dateInputWrapper}
-                            onPress={() => {
-                                setDateSelectingType('end');
-                                setShowEndDatePicker(true);
-                            }}
+                            style={[styles.dateInputWrapper, dateSelectingType === 'end' && { borderColor: colors.primary, borderWidth: 2 }]}
+                            onPress={() => { setDateSelectingType('end'); setShowCalendarModal(true); }}
                         >
                             <Text style={[styles.dateInputText, !dateEnd && { color: colors.mutedForeground }]}>
                                 {dateEnd ? formatDateDDMMYYYY(dateEnd) : 'End Date'}
                             </Text>
-                            <CalendarIcon size={16} color={colors.mutedForeground} />
+                            <CalendarIcon size={16} color={dateSelectingType === 'end' ? colors.primary : colors.mutedForeground} />
                         </Pressable>
                     </View>
 
-                    {/* Start Date Picker Modal with Range Calendar */}
-                    <Modal
-                        visible={showStartDatePicker}
-                        transparent
-                        animationType="slide"
-                        onRequestClose={() => setShowStartDatePicker(false)}
-                    >
-                        <View style={styles.dateModalOverlay}>
-                            <Pressable style={{ flex: 1 }} onPress={() => setShowStartDatePicker(false)} />
-                            <View style={[styles.dateModalContent, { backgroundColor: isDark ? colors.card : '#fff' }]}>
+                    {/* Calendar Modal */}
+                    <Modal visible={showCalendarModal} transparent animationType="fade" onRequestClose={() => setShowCalendarModal(false)}>
+                        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 16 }} onPress={() => setShowCalendarModal(false)}>
+                            <Pressable onPress={() => { }} style={{ backgroundColor: isDark ? colors.card : '#fff', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: colors.border }}>
                                 <PaymentRangeCalendar
                                     startDate={dateStart}
                                     endDate={dateEnd}
                                     onStartDateSelect={(date) => {
                                         setDateStart(date);
-                                        setShowStartDatePicker(false);
+                                        setDateSelectingType('end');
                                     }}
                                     onEndDateSelect={(date) => {
                                         setDateEnd(date);
+                                        setShowCalendarModal(false);
                                     }}
                                     blockedPeriods={blockedPeriods}
-                                    selectingType="start"
-                                    onClose={() => setShowStartDatePicker(false)}
+                                    selectingType={dateSelectingType}
                                 />
-                            </View>
-                        </View>
-                    </Modal>
-
-                    {/* End Date Picker Modal with Range Calendar */}
-                    <Modal
-                        visible={showEndDatePicker}
-                        transparent
-                        animationType="slide"
-                        onRequestClose={() => setShowEndDatePicker(false)}
-                    >
-                        <View style={styles.dateModalOverlay}>
-                            <Pressable style={{ flex: 1 }} onPress={() => setShowEndDatePicker(false)} />
-                            <View style={[styles.dateModalContent, { backgroundColor: isDark ? colors.card : '#fff' }]}>
-                                <PaymentRangeCalendar
-                                    startDate={dateStart}
-                                    endDate={dateEnd}
-                                    onStartDateSelect={(date) => {
-                                        setDateStart(date);
-                                    }}
-                                    onEndDateSelect={(date) => {
-                                        setDateEnd(date);
-                                        setShowEndDatePicker(false);
-                                    }}
-                                    blockedPeriods={blockedPeriods}
-                                    selectingType="end"
-                                    onClose={() => setShowEndDatePicker(false)}
-                                />
-                            </View>
-                        </View>
-                    </Modal>
-
-                    {/* Custom date ranges */}
-                    <Text style={styles.sectionLabel}>Date Ranges</Text>
-                    <View style={styles.rangesContainer}>
-                        {customRanges.map((range) => (
-                            <View key={range.id} style={styles.rangeChip}>
-                                <Pressable
-                                    style={styles.rangeChipBtn}
-                                    onPress={() => applyCustomRange(range)}
-                                >
-                                    <Text style={styles.rangeChipText}>{range.label}</Text>
-                                </Pressable>
-                                <Pressable
-                                    style={styles.rangeDeleteBtn}
-                                    onPress={() => handleRemoveRange(range.id)}
-                                >
-                                    <Trash2 size={12} color={colors.destructive} />
-                                </Pressable>
-                            </View>
-                        ))}
-
-                        {showAddRange ? (
-                            <View style={styles.addRangeForm}>
-                                <TextInput
-                                    style={styles.rangeInput}
-                                    placeholder="Start"
-                                    value={newRangeStart}
-                                    onChangeText={setNewRangeStart}
-                                    keyboardType="numeric"
-                                    placeholderTextColor={colors.mutedForeground}
-                                />
-                                <Text style={styles.rangeDash}>-</Text>
-                                <TextInput
-                                    style={styles.rangeInput}
-                                    placeholder="End"
-                                    value={newRangeEnd}
-                                    onChangeText={setNewRangeEnd}
-                                    keyboardType="numeric"
-                                    placeholderTextColor={colors.mutedForeground}
-                                />
-                                <Pressable style={styles.rangeAddConfirmBtn} onPress={handleAddCustomRange}>
-                                    <Text style={styles.rangeAddConfirmText}>Add</Text>
-                                </Pressable>
-                                <Pressable style={styles.rangeCancelBtn} onPress={() => setShowAddRange(false)}>
-                                    <Text style={styles.rangeCancelText}>✕</Text>
-                                </Pressable>
-                            </View>
-                        ) : (
-                            <Pressable style={styles.addRangeBtn} onPress={() => setShowAddRange(true)}>
-                                <Plus size={14} color={colors.primary} />
-                                <Text style={styles.addRangeText}>Add Range</Text>
                             </Pressable>
-                        )}
-                    </View>
+                        </Pressable>
+                    </Modal>
 
                     {/* Summary card */}
                     <View style={styles.summaryCard}>
@@ -1427,6 +1250,38 @@ export default function RegisterScreen() {
                                 ₹{settlementTotalBalance.toLocaleString('en-IN')}
                             </Text>
                         </View>
+                        <Pressable
+                            style={{
+                                paddingHorizontal: 6,
+                                paddingVertical: 6,
+                                borderRadius: 6,
+                                borderWidth: 1,
+                                borderColor: colors.primary,
+                                backgroundColor: 'transparent',
+                            }}
+                            onPress={() => {
+                                setBalanceType('positive');
+                                (router as any).push({ pathname: '/balance-report', params: { type: 'positive' } });
+                            }}
+                        >
+                            <TrendingUp size={14} color={colors.primary} />
+                        </Pressable>
+                        <Pressable
+                            style={{
+                                paddingHorizontal: 6,
+                                paddingVertical: 6,
+                                borderRadius: 6,
+                                borderWidth: 1,
+                                borderColor: colors.destructive,
+                                backgroundColor: 'transparent',
+                            }}
+                            onPress={() => {
+                                setBalanceType('negative');
+                                (router as any).push({ pathname: '/balance-report', params: { type: 'negative' } });
+                            }}
+                        >
+                            <TrendingDown size={14} color={colors.destructive} />
+                        </Pressable>
                     </View>
                 )}
             </View>
@@ -2523,15 +2378,18 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     goBtn: {
         backgroundColor: colors.primary,
-        paddingHorizontal: 20,
-        paddingVertical: 8,
+        paddingHorizontal: 24,
+        paddingVertical: 10,
         borderRadius: 6,
         justifyContent: 'center',
+        alignItems: 'center',
+        minWidth: 50,
+        minHeight: 40,
     },
     goBtnText: {
         color: colors.white,
-        fontSize: 14,
-        fontWeight: '600',
+        fontSize: 15,
+        fontWeight: '700',
     },
     pdfBtn: {
         backgroundColor: colors.warning,
