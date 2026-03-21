@@ -4,6 +4,7 @@ const CustomForm = require('../models/CustomForm');
 const auth = require('../middleware/auth');
 const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
+const { uploadToCloudinary } = require('../lib/cloudinary');
 
 // Helper function to verify admin token
 const verifyAdminToken = async (req) => {
@@ -30,6 +31,32 @@ const verifyAdminToken = async (req) => {
     return { success: true, admin };
 };
 
+// Upload attachments endpoint
+router.post('/upload', auth, async (req, res) => {
+    try {
+        const { images } = req.body; // array of base64 strings
+        if (!images || !Array.isArray(images) || images.length === 0) {
+            return res.status(400).json({ success: false, message: 'No images provided' });
+        }
+        if (images.length > 5) {
+            return res.status(400).json({ success: false, message: 'Maximum 5 files allowed' });
+        }
+
+        const uploadedUrls = [];
+        for (const img of images) {
+            const result = await uploadToCloudinary(img, 'milkey/forms');
+            if (result.success && result.url) {
+                uploadedUrls.push(result.url);
+            }
+        }
+
+        res.json({ success: true, response: { urls: uploadedUrls } });
+    } catch (error) {
+        console.error('Upload attachments error:', error);
+        res.status(500).json({ success: false, message: 'Failed to upload files' });
+    }
+});
+
 // Get all forms for current user
 router.get('/', auth, async (req, res) => {
     try {
@@ -55,10 +82,7 @@ router.get('/', auth, async (req, res) => {
         });
     } catch (error) {
         console.error('Get forms error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch forms'
-        });
+        res.status(500).json({ success: false, message: 'Failed to fetch forms' });
     }
 });
 
@@ -67,10 +91,7 @@ router.get('/admin', async (req, res) => {
     try {
         const authResult = await verifyAdminToken(req);
         if (!authResult.success) {
-            return res.status(authResult.status).json({
-                success: false,
-                message: authResult.message
-            });
+            return res.status(authResult.status).json({ success: false, message: authResult.message });
         }
 
         const page = parseInt(req.query.page) || 1;
@@ -92,55 +113,45 @@ router.get('/admin', async (req, res) => {
 
         res.json({
             success: true,
-            response: {
-                data: forms,
-                count,
-                hasMore: skip + forms.length < count
-            }
+            response: { data: forms, count, hasMore: skip + forms.length < count }
         });
     } catch (error) {
         console.error('Get admin forms error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch forms'
-        });
+        res.status(500).json({ success: false, message: 'Failed to fetch forms' });
     }
 });
 
 // Create new form
 router.post('/', auth, async (req, res) => {
     try {
-        const { formName, fields } = req.body;
+        const { formName, description, attachments, fields } = req.body;
 
-        if (!formName || !fields || !Array.isArray(fields) || fields.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Form name and at least one field are required'
-            });
+        if (!formName) {
+            return res.status(400).json({ success: false, message: 'Form title is required' });
         }
 
-        const form = new CustomForm({
+        const formData = {
             user: req.userId,
             formName: formName.trim(),
-            fields: fields.map(f => ({
+            description: (description || '').trim().substring(0, 5000),
+            attachments: Array.isArray(attachments) ? attachments.slice(0, 5) : [],
+        };
+
+        // Support old-style fields too
+        if (fields && Array.isArray(fields) && fields.length > 0) {
+            formData.fields = fields.map(f => ({
                 label: f.label?.trim() || '',
                 value: f.value?.trim() || ''
-            })).filter(f => f.label)
-        });
+            })).filter(f => f.label);
+        }
 
+        const form = new CustomForm(formData);
         await form.save();
 
-        res.status(201).json({
-            success: true,
-            message: 'Form submitted successfully',
-            response: form
-        });
+        res.status(201).json({ success: true, message: 'Form submitted successfully', response: form });
     } catch (error) {
         console.error('Create form error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to submit form'
-        });
+        res.status(500).json({ success: false, message: 'Failed to submit form' });
     }
 });
 
@@ -149,14 +160,10 @@ router.put('/:id/status', async (req, res) => {
     try {
         const authResult = await verifyAdminToken(req);
         if (!authResult.success) {
-            return res.status(authResult.status).json({
-                success: false,
-                message: authResult.message
-            });
+            return res.status(authResult.status).json({ success: false, message: authResult.message });
         }
 
         const { status, adminNotes } = req.body;
-
         const form = await CustomForm.findByIdAndUpdate(
             req.params.id,
             { status, adminNotes },
@@ -164,53 +171,28 @@ router.put('/:id/status', async (req, res) => {
         ).populate('user', 'name email phone');
 
         if (!form) {
-            return res.status(404).json({
-                success: false,
-                message: 'Form not found'
-            });
+            return res.status(404).json({ success: false, message: 'Form not found' });
         }
 
-        res.json({
-            success: true,
-            message: 'Form updated successfully',
-            response: form
-        });
+        res.json({ success: true, message: 'Form updated successfully', response: form });
     } catch (error) {
         console.error('Update form status error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to update form'
-        });
+        res.status(500).json({ success: false, message: 'Failed to update form' });
     }
 });
 
 // Delete form (user)
 router.delete('/:id', auth, async (req, res) => {
     try {
-        const form = await CustomForm.findOne({
-            _id: req.params.id,
-            user: req.userId
-        });
-
+        const form = await CustomForm.findOne({ _id: req.params.id, user: req.userId });
         if (!form) {
-            return res.status(404).json({
-                success: false,
-                message: 'Form not found'
-            });
+            return res.status(404).json({ success: false, message: 'Form not found' });
         }
-
         await CustomForm.findByIdAndDelete(req.params.id);
-
-        res.json({
-            success: true,
-            message: 'Form deleted successfully'
-        });
+        res.json({ success: true, message: 'Form deleted successfully' });
     } catch (error) {
         console.error('Delete form error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to delete form'
-        });
+        res.status(500).json({ success: false, message: 'Failed to delete form' });
     }
 });
 
@@ -219,33 +201,18 @@ router.delete('/admin/:id', async (req, res) => {
     try {
         const authResult = await verifyAdminToken(req);
         if (!authResult.success) {
-            return res.status(authResult.status).json({
-                success: false,
-                message: authResult.message
-            });
+            return res.status(authResult.status).json({ success: false, message: authResult.message });
         }
 
         const form = await CustomForm.findById(req.params.id);
-
         if (!form) {
-            return res.status(404).json({
-                success: false,
-                message: 'Form not found'
-            });
+            return res.status(404).json({ success: false, message: 'Form not found' });
         }
-
         await CustomForm.findByIdAndDelete(req.params.id);
-
-        res.json({
-            success: true,
-            message: 'Form deleted successfully'
-        });
+        res.json({ success: true, message: 'Form deleted successfully' });
     } catch (error) {
         console.error('Admin delete form error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to delete form'
-        });
+        res.status(500).json({ success: false, message: 'Failed to delete form' });
     }
 });
 

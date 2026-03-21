@@ -8,10 +8,21 @@ const customFormSchema = new mongoose.Schema({
     },
     formName: {
         type: String,
-        required: [true, 'Form name is required'],
+        required: [true, 'Form title is required'],
         trim: true,
-        maxlength: [100, 'Form name cannot exceed 100 characters']
+        maxlength: [100, 'Form title cannot exceed 100 characters']
     },
+    description: {
+        type: String,
+        trim: true,
+        default: '',
+        maxlength: [5000, 'Description cannot exceed 5000 characters']
+    },
+    attachments: [{
+        type: String,
+        trim: true
+    }],
+    // Keep fields for backward compatibility with old forms
     fields: [{
         label: {
             type: String,

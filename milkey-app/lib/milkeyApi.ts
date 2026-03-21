@@ -1052,10 +1052,17 @@ export const customFormsApi = {
         );
     },
 
-    create: async (data: { formName: string; fields: { label: string; value: string }[] }) => {
+    create: async (data: { formName: string; description?: string; attachments?: string[]; fields?: { label: string; value: string }[] }) => {
         return apiRequest<CustomForm>('/custom-forms', {
             method: 'POST',
             body: JSON.stringify(data),
+        });
+    },
+
+    uploadAttachments: async (images: string[]) => {
+        return apiRequest<{ urls: string[] }>('/custom-forms/upload', {
+            method: 'POST',
+            body: JSON.stringify({ images }),
         });
     },
 

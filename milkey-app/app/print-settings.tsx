@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
-import { ArrowLeft, Printer, Save } from 'lucide-react-native';
+import { ArrowLeft, Printer, Save, Eye } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { printSettingsApi, PrintSettings } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
@@ -107,6 +107,18 @@ export default function PrintSettingsScreen() {
                     <Text style={styles.iconLabel}>Receipt Configuration</Text>
                 </View>
 
+                {/* Address */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Address / Village Name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter address or village name"
+                        value={settings.address}
+                        onChangeText={(v) => setSettings({ ...settings, address: v })}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+
                 {/* Dairy Name */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Dairy Name</Text>
@@ -119,48 +131,44 @@ export default function PrintSettingsScreen() {
                     />
                 </View>
 
-                {/* Mobile Number */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Mobile Number</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Enter mobile number"
-                        value={settings.mobileNumber}
-                        onChangeText={(v) => setSettings({ ...settings, mobileNumber: v })}
-                        keyboardType="phone-pad"
-                        placeholderTextColor={colors.mutedForeground}
-                    />
+                {/* Phone Number with Toggle on right */}
+                <View style={styles.phoneRow}>
+                    <View style={styles.phoneInputGroup}>
+                        <Text style={styles.label}>Phone Number</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Enter phone number"
+                            value={settings.mobileNumber}
+                            onChangeText={(v) => setSettings({ ...settings, mobileNumber: v })}
+                            keyboardType="phone-pad"
+                            placeholderTextColor={colors.mutedForeground}
+                        />
+                    </View>
                 </View>
 
-                {/* Toggle - Show Mobile on Receipt */}
+                {/* Show Mobile on Receipt Toggle */}
                 <Pressable
                     style={styles.toggleRow}
                     onPress={() => setSettings({ ...settings, showMobileOnReceipt: !settings.showMobileOnReceipt })}
                 >
                     <View style={styles.toggleInfo}>
                         <Text style={styles.toggleLabel}>Show Mobile on Receipt</Text>
-                        <Text style={styles.toggleDesc}>Display your mobile number on printed receipts</Text>
+                        <Text style={styles.toggleDesc}>Display mobile number on printed receipts</Text>
                     </View>
-                    <View style={[styles.switchTrack, settings.showMobileOnReceipt && styles.switchTrackActive]}>
-                        <View style={[styles.switchThumb, settings.showMobileOnReceipt && styles.switchThumbActive]} />
+                    <View style={[
+                        styles.switchTrack,
+                        settings.showMobileOnReceipt ? styles.switchTrackActive : styles.switchTrackInactive,
+                    ]}>
+                        <View style={[
+                            styles.switchThumb,
+                            settings.showMobileOnReceipt ? styles.switchThumbActive : styles.switchThumbInactive,
+                        ]} />
                     </View>
                 </Pressable>
 
-                {/* Address / Village Name */}
+                {/* Note for receipt */}
                 <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Address / Village Name</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Enter address or village name"
-                        value={settings.address}
-                        onChangeText={(v) => setSettings({ ...settings, address: v })}
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-
-                {/* Note (shown at last on receipt) */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Note (shown at bottom of receipt)</Text>
+                    <Text style={styles.label}>Any Note for Receipt</Text>
                     <TextInput
                         style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
                         placeholder="Any note for receipt"
@@ -170,6 +178,15 @@ export default function PrintSettingsScreen() {
                         placeholderTextColor={colors.mutedForeground}
                     />
                 </View>
+
+                {/* View Slip Button */}
+                <Pressable
+                    style={styles.viewSlipBtn}
+                    onPress={() => router.push('/register-payment-slip' as any)}
+                >
+                    <Eye size={18} color={colors.primary} />
+                    <Text style={styles.viewSlipBtnText}>View Slip (Preview)</Text>
+                </Pressable>
 
                 {/* Save Button */}
                 <Pressable style={styles.saveBtn} onPress={handleSave} disabled={saving}>
@@ -265,6 +282,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 14,
         color: colors.foreground,
     },
+    phoneRow: {
+        marginBottom: 6,
+    },
+    phoneInputGroup: {
+        flex: 1,
+    },
     toggleRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -292,12 +315,14 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         width: 52,
         height: 30,
         borderRadius: 15,
-        backgroundColor: colors.muted,
         justifyContent: 'center',
         paddingHorizontal: 3,
     },
     switchTrackActive: {
         backgroundColor: colors.primary,
+    },
+    switchTrackInactive: {
+        backgroundColor: colors.muted,
     },
     switchThumb: {
         width: 24,
@@ -313,6 +338,26 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     switchThumbActive: {
         alignSelf: 'flex-end',
     },
+    switchThumbInactive: {
+        alignSelf: 'flex-start',
+    },
+    viewSlipBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        paddingVertical: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: colors.primary,
+        backgroundColor: colors.primary + '10',
+        marginBottom: 6,
+    },
+    viewSlipBtnText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: colors.primary,
+    },
     saveBtn: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -321,7 +366,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         backgroundColor: colors.primary,
         paddingVertical: 14,
         borderRadius: 10,
-        marginTop: 12,
+        marginTop: 6,
     },
     saveBtnText: {
         fontSize: 16,
