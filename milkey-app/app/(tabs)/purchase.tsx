@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, TextInput, FlatList,
-    ActivityIndicator, RefreshControl, Modal, ScrollView
+    ActivityIndicator, RefreshControl, Modal, ScrollView, Animated, Keyboard, KeyboardAvoidingView, Platform
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import {
     Plus, Edit2, Trash2, Calendar as CalendarIcon, Search, X,
     ChevronDown, FileText, User, Sun, Moon,
-    Droplets, CircleDot, Download, Check
+    Droplets, CircleDot, Download, Check, Printer
 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import {
@@ -20,24 +21,36 @@ import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
+import { PaymentRangeCalendar } from '@/components/PaymentRangeCalendar';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
 
+type TabType = 'Collection' | 'Report' | 'Farmer';
+const TAB_ORDER: TabType[] = ['Collection', 'Report', 'Farmer'];
+
 export default function PurchaseScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
+    const insets = useSafeAreaInsets();
     const {
         hasAccess, loading: subscriptionLoading, showSubscriptionModal,
         handleModalClose, handleSubscriptionSuccess
     } = useSubscriptionCheck('purchase');
 
+    const [activeTab, setActiveTab] = useState<TabType>('Collection');
+    const [tabRowWidth, setTabRowWidth] = useState(0);
+    const activeTabIndexAnim = useRef(new Animated.Value(0)).current;
+    const floatingTabsAnim = useRef(new Animated.Value(0)).current;
+
+    // Customer state
     const [customers, setCustomers] = useState<PurchaseFarmer[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState<PurchaseFarmer | null>(null);
     const [customerSearch, setCustomerSearch] = useState('');
     const debouncedSearch = useDebounce(customerSearch, 400);
 
+    // Entry state
     const [entryDate, setEntryDate] = useState(new Date());
     const [entryShift, setEntryShift] = useState<'morning' | 'evening'>(new Date().getHours() < 12 ? 'morning' : 'evening');
     const [milkType, setMilkType] = useState<'cow' | 'buffalo'>('buffalo');
@@ -47,12 +60,28 @@ export default function PurchaseScreen() {
     const [isZero, setIsZero] = useState(false);
     const [saving, setSaving] = useState(false);
 
+    // History state
     const [collections, setCollections] = useState<MilkCollection[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [historyPage, setHistoryPage] = useState(1);
     const [hasMoreHistory, setHasMoreHistory] = useState(true);
     const [historyTotals, setHistoryTotals] = useState({ quantity: 0, amount: 0 });
 
+    // Report state
+    const [reportStartDate, setReportStartDate] = useState('');
+    const [reportEndDate, setReportEndDate] = useState('');
+    const [reportDateSelectingType, setReportDateSelectingType] = useState<'start' | 'end'>('start');
+    const [showReportCalendarModal, setShowReportCalendarModal] = useState(false);
+    const [reportCollections, setReportCollections] = useState<MilkCollection[]>([]);
+    const [reportLoading, setReportLoading] = useState(false);
+    const [reportTotals, setReportTotals] = useState({ quantity: 0, amount: 0 });
+
+    // Farmer tab state
+    const [farmerTabSearch, setFarmerTabSearch] = useState('');
+    const debouncedFarmerSearch = useDebounce(farmerTabSearch, 400);
+    const [farmerSearchLoading, setFarmerSearchLoading] = useState(false);
+
+    // Modals
     const [showDateModal, setShowDateModal] = useState(false);
     const [showCustomerModal, setShowCustomerModal] = useState(false);
     const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -70,6 +99,25 @@ export default function PurchaseScreen() {
 
     const s = createStyles(colors, isDark);
 
+    // Tab animations
+    useEffect(() => {
+        Animated.timing(floatingTabsAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    }, []);
+
+    useEffect(() => {
+        Animated.spring(activeTabIndexAnim, {
+            toValue: TAB_ORDER.indexOf(activeTab),
+            useNativeDriver: false, damping: 16, stiffness: 180,
+        }).start();
+    }, [activeTab]);
+
+    const tabItemWidth = tabRowWidth > 0 ? (tabRowWidth - 20) / 3 : 0;
+    const tabIndicatorTranslateX = activeTabIndexAnim.interpolate({
+        inputRange: [0, 1, 2],
+        outputRange: [0, tabItemWidth + 6, (tabItemWidth + 6) * 2],
+    });
+
+    // Data fetching
     const fetchCustomers = useCallback(async (search?: string) => {
         try {
             const res = await purchaseFarmersApi.getAll({ search, limit: 100 });
@@ -93,9 +141,37 @@ export default function PurchaseScreen() {
         setHistoryLoading(false);
     }, [entryDate, entryShift]);
 
+    const fetchReportData = useCallback(async () => {
+        if (!reportStartDate || !reportEndDate) return;
+        setReportLoading(true);
+        try {
+            const res = await milkCollectionsApi.getAll({ startDate: reportStartDate, endDate: reportEndDate, limit: 500 });
+            if (res.success) {
+                const data = res.response?.data || [];
+                setReportCollections(data);
+                setReportTotals(res.response?.totals || { quantity: 0, amount: 0 });
+            }
+        } catch { }
+        setReportLoading(false);
+    }, [reportStartDate, reportEndDate]);
+
     useEffect(() => { fetchCustomers(); }, []);
     useEffect(() => { fetchCollections(1); }, [entryDate, entryShift]);
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
+    useEffect(() => { if (reportStartDate && reportEndDate) fetchReportData(); }, [reportStartDate, reportEndDate]);
+
+    // Farmer tab search
+    useEffect(() => {
+        const searchFarmers = async () => {
+            setFarmerSearchLoading(true);
+            try {
+                const res = await purchaseFarmersApi.getAll({ search: debouncedFarmerSearch.trim() || undefined, limit: 100 });
+                if (res.success) setCustomers(res.response?.data || []);
+            } catch { }
+            setFarmerSearchLoading(false);
+        };
+        searchFarmers();
+    }, [debouncedFarmerSearch]);
 
     useEffect(() => {
         if (selectedCustomer) {
@@ -204,25 +280,24 @@ export default function PurchaseScreen() {
     }, [fetchCustomers, fetchCollections]);
 
     const formatDate = (d: Date) => `${String(d.getDate()).padStart(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getFullYear()}`;
+    const formatDateStr = (dateStr: string) => {
+        if (!dateStr) return '';
+        const date = new Date(dateStr);
+        return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
+    };
 
-    const renderCollectionItem = useCallback(({ item, index }: { item: MilkCollection; index: number }) => (
-        <View style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
-            <View style={s.entryCell1}>
-                <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700' }]}>{item.farmerCode || '-'}</Text>
-                <Text style={s.entrySubText} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
-            </View>
-            <Text style={[s.entryCellText, s.entryCell2]}>{item.quantity}</Text>
-            <Text style={[s.entryCellText, s.entryCell2]}>{item.fat || '-'}</Text>
-            <Text style={[s.entryCellText, s.entryCell2]}>{item.rate}</Text>
-            <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text>
-            <Pressable style={s.deleteBtn} onPress={() => handleDeleteCollection(item._id)} disabled={deletingId === item._id}>
-                {deletingId === item._id ? <ActivityIndicator size="small" color="#ef4444" /> : <Trash2 size={12} color="#ef4444" />}
-            </Pressable>
-        </View>
-    ), [deletingId, colors, isDark]);
+    const showCow = selectedCustomer ? selectedCustomer.cowEnabled : true;
+    const showBuffalo = selectedCustomer ? selectedCustomer.buffaloEnabled : true;
+    const isMorning = entryShift === 'morning';
 
-    const handleExportPdf = useCallback(async () => {
-        if (collections.length === 0) { showAlert('Info', 'No data to export'); return; }
+    // Export PDF for report
+    const handleExportReportPdf = useCallback(async () => {
+        const data = reportCollections.length > 0 ? reportCollections : collections;
+        const totals = reportCollections.length > 0 ? reportTotals : historyTotals;
+        if (data.length === 0) { showAlert('Info', 'No data to export'); return; }
+        const dateLabel = reportStartDate && reportEndDate
+            ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
+            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'AM' : 'PM'})`;
         const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
             body{font-family:sans-serif;padding:16px;font-size:12px}
             h2{color:#22c55e;text-align:center}
@@ -231,75 +306,49 @@ export default function PurchaseScreen() {
             td{padding:5px 4px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:10px}
             .total{background:#f0fdf4;font-weight:bold}
         </style></head><body>
-        <h2>Purchase Report - ${formatDate(entryDate)} (${entryShift === 'morning' ? 'AM' : 'PM'})</h2>
+        <h2>Collection Report - ${dateLabel}</h2>
         <table><thead><tr><th>Code</th><th>Name</th><th>Milk(L)</th><th>Fat</th><th>Rate</th><th>Amount</th></tr></thead>
-        <tbody>${collections.map(c => `<tr><td>${c.farmerCode || '-'}</td><td>${c.purchaseFarmer?.name || '-'}</td><td>${c.quantity}</td><td>${c.fat || '-'}</td><td>₹${c.rate}</td><td>₹${c.amount.toFixed(2)}</td></tr>`).join('')}
-        <tr class="total"><td colspan="2">Total (${collections.length})</td><td>${historyTotals.quantity.toFixed(1)}</td><td></td><td></td><td>₹${historyTotals.amount.toFixed(2)}</td></tr>
+        <tbody>${data.map(c => `<tr><td>${c.farmerCode || '-'}</td><td>${c.purchaseFarmer?.name || '-'}</td><td>${c.quantity}</td><td>${c.fat || '-'}</td><td>₹${c.rate}</td><td>₹${c.amount.toFixed(2)}</td></tr>`).join('')}
+        <tr class="total"><td colspan="2">Total (${data.length})</td><td>${totals.quantity.toFixed(1)}</td><td></td><td></td><td>₹${totals.amount.toFixed(2)}</td></tr>
         </tbody></table></body></html>`;
         try {
             const { uri } = await Print.printToFileAsync({ html });
             if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
         } catch { showAlert('Error', 'Failed to export'); }
-    }, [collections, historyTotals, entryDate, entryShift]);
+    }, [reportCollections, collections, reportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate]);
 
-    const showCow = selectedCustomer ? selectedCustomer.cowEnabled : true;
-    const showBuffalo = selectedCustomer ? selectedCustomer.buffaloEnabled : true;
-    const isMorning = entryShift === 'morning';
+    // Export farmers PDF
+    const handleExportFarmersPdf = useCallback(async () => {
+        if (customers.length === 0) { showAlert('Info', 'No farmers to export'); return; }
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body{font-family:sans-serif;padding:16px;font-size:12px}
+            h2{color:#22c55e;text-align:center}
+            .subtitle{text-align:center;color:#666;margin-bottom:20px;font-size:12px}
+            table{width:100%;border-collapse:collapse;margin-top:12px}
+            th{background:#22c55e;color:#fff;padding:6px 4px;font-size:10px}
+            td{padding:5px 4px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:10px}
+        </style></head><body>
+        <h2>Farmers List</h2>
+        <p class="subtitle">Total: ${customers.length}</p>
+        <table><thead><tr><th>Code</th><th>Name</th><th>Mobile</th><th>Milk</th><th>Basis</th></tr></thead>
+        <tbody>${customers.map(c => `<tr><td>${c.code}</td><td>${c.name}</td><td>${c.mobile || '-'}</td><td>${c.defaultMilk || '-'}</td><td>${c.priceBasis || '-'}</td></tr>`).join('')}
+        </tbody></table></body></html>`;
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+        } catch { showAlert('Error', 'Failed to export'); }
+    }, [customers]);
 
-    return (
-        <View style={s.container}>
-            <SubscriptionModal visible={showSubscriptionModal} onClose={handleModalClose} onSubscribe={handleSubscriptionSuccess} filterTab="purchase" title="Subscribe to Access Purchase" fullScreen />
-            <TopBar />
-
-            <ScrollView
-                style={s.scroll}
-                contentContainerStyle={s.scrollContent}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
-                keyboardShouldPersistTaps="handled"
-            >
-                {/* ── Top Controls: Date + Add Customer ── */}
-                <View style={s.topControls}>
-                    <Pressable style={s.dateBtn} onPress={() => setShowDateModal(true)}>
-                        <CalendarIcon size={14} color={colors.primary} />
-                        <Text style={s.dateText}>{formatDate(entryDate)}</Text>
-                        <ChevronDown size={12} color={colors.mutedForeground} />
-                    </Pressable>
-                    <Pressable
-                        style={s.addCustTopBtn}
-                        onPress={() => { setEditingCustomer(null); setShowAddCustomer(true); }}
-                    >
-                        <Plus size={16} color="#fff" />
-                    </Pressable>
-                </View>
-
-                {/* ── Summary Bar ── */}
-                <View style={s.summaryBar}>
-                    <View style={s.summaryCell}>
-                        <Droplets size={14} color={colors.primary} />
-                        <View>
-                            <Text style={s.summaryVal}>{historyTotals.quantity.toFixed(1)} L</Text>
-                            <Text style={s.summaryLbl}>{t.common.quantity}</Text>
-                        </View>
-                    </View>
-                    <View style={s.summaryDivider} />
-                    <View style={s.summaryCell}>
-                        <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
-                        <View>
-                            <Text style={s.summaryVal}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '0'}</Text>
-                            <Text style={s.summaryLbl}>{t.purchase.avgRate}</Text>
-                        </View>
-                    </View>
-                    <View style={s.summaryDivider} />
-                    <View style={s.summaryCell}>
-                        <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
-                        <View>
-                            <Text style={[s.summaryVal, { color: colors.primary }]}>{historyTotals.amount.toFixed(1)}</Text>
-                            <Text style={s.summaryLbl}>{t.common.amount}</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {/* ── AM / PM Shift Toggle ── */}
+    // ── Collection Tab ──
+    const renderCollectionTab = () => (
+        <View>
+            {/* Top Controls: Date + Shift + Add */}
+            <View style={s.topControls}>
+                <Pressable style={s.dateBtn} onPress={() => setShowDateModal(true)}>
+                    <CalendarIcon size={14} color={colors.primary} />
+                    <Text style={s.dateText}>{formatDate(entryDate)}</Text>
+                    <ChevronDown size={12} color={colors.mutedForeground} />
+                </Pressable>
                 <View style={s.shiftRow}>
                     <Pressable
                         onPress={() => setEntryShift('morning')}
@@ -316,169 +365,398 @@ export default function PurchaseScreen() {
                         <Text style={[s.shiftBtnText, !isMorning && s.shiftBtnTextActive]}>{t.common.evening}</Text>
                     </Pressable>
                 </View>
-
-                {/* ── Customer Selector ── */}
-                <Pressable style={s.customerBox} onPress={() => setShowCustomerModal(true)}>
-                    <View style={[s.customerBadge, selectedCustomer && { backgroundColor: colors.primary }]}>
-                        {selectedCustomer ? (
-                            <Text style={s.customerBadgeText}>{selectedCustomer.code}</Text>
-                        ) : (
-                            <User size={16} color={colors.mutedForeground} />
-                        )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={[s.customerName, !selectedCustomer && { color: colors.mutedForeground }]}>
-                            {selectedCustomer ? selectedCustomer.name : t.purchase.selectCustomer}
-                        </Text>
-                        {selectedCustomer && (
-                            <Text style={s.customerMeta}>
-                                {selectedCustomer.priceBasis === 'rate' ? `📊 ${t.purchase.rateBased}` : `📊 ${t.purchase.fatBased}`}
-                                {selectedCustomer.mobile ? ` • ${selectedCustomer.mobile}` : ''}
-                            </Text>
-                        )}
-                    </View>
-                    <ChevronDown size={16} color={colors.mutedForeground} />
+                <Pressable
+                    style={s.addCustTopBtn}
+                    onPress={() => { setEditingCustomer(null); setShowAddCustomer(true); }}
+                >
+                    <Edit2 size={16} color="#fff" />
                 </Pressable>
+            </View>
 
-                {/* ── Milk Type + Inputs ── */}
-                <View style={s.entryCard}>
-                    {/* Milk type toggle */}
-                    <View style={s.milkRow}>
-                        {showCow && (
-                            <Pressable
-                                onPress={() => setMilkType('cow')}
-                                style={[s.milkBtn, milkType === 'cow' && s.milkBtnActive]}
-                            >
-                                <Text style={{ fontSize: 16 }}>🐄</Text>
-                                <Text style={[s.milkBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
-                                {milkType === 'cow' && <Check size={12} color="#fff" />}
-                            </Pressable>
-                        )}
-                        {showBuffalo && (
-                            <Pressable
-                                onPress={() => setMilkType('buffalo')}
-                                style={[s.milkBtn, milkType === 'buffalo' && s.milkBtnActive]}
-                            >
-                                <Text style={{ fontSize: 16 }}>🐃</Text>
-                                <Text style={[s.milkBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
-                                {milkType === 'buffalo' && <Check size={12} color="#fff" />}
-                            </Pressable>
-                        )}
+            {/* Summary Bar */}
+            <View style={s.summaryBar}>
+                <View style={s.summaryCell}>
+                    <Droplets size={14} color={colors.primary} />
+                    <View>
+                        <Text style={s.summaryVal}>{historyTotals.quantity.toFixed(1)} L</Text>
+                        <Text style={s.summaryLbl}>{t.common.quantity}</Text>
                     </View>
-
-                    {/* Input fields inline */}
-                    <View style={s.fieldsRow}>
-                        <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>{t.purchase.milk} (L)</Text>
-                            <TextInput
-                                style={s.fieldInput}
-                                value={milkQty}
-                                onChangeText={setMilkQty}
-                                keyboardType="decimal-pad"
-                                placeholder="0.0"
-                                placeholderTextColor={colors.mutedForeground}
-                                editable={!isZero}
-                            />
-                        </View>
-                        {selectedCustomer?.priceBasis !== 'rate' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
-                                <TextInput
-                                    style={s.fieldInput}
-                                    value={fatValue}
-                                    onChangeText={setFatValue}
-                                    keyboardType="decimal-pad"
-                                    placeholder="0.0"
-                                    placeholderTextColor={colors.mutedForeground}
-                                />
-                            </View>
-                        )}
-                        <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>{t.common.rate} ₹</Text>
-                            <TextInput
-                                style={s.fieldInput}
-                                value={isZero ? '0' : rateValue}
-                                onChangeText={setRateValue}
-                                keyboardType="decimal-pad"
-                                placeholder="0.00"
-                                placeholderTextColor={colors.mutedForeground}
-                                editable={!isZero}
-                            />
-                        </View>
+                </View>
+                <View style={s.summaryDivider} />
+                <View style={s.summaryCell}>
+                    <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
+                    <View>
+                        <Text style={s.summaryVal}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '0'}</Text>
+                        <Text style={s.summaryLbl}>{t.purchase.avgRate}</Text>
                     </View>
+                </View>
+                <View style={s.summaryDivider} />
+                <View style={s.summaryCell}>
+                    <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
+                    <View>
+                        <Text style={[s.summaryVal, { color: colors.primary }]}>{historyTotals.amount.toFixed(1)}</Text>
+                        <Text style={s.summaryLbl}>{t.common.amount}</Text>
+                    </View>
+                </View>
+            </View>
 
-                    {/* Actions */}
-                    <View style={s.actionsRow}>
-                        <Pressable
-                            style={[s.zeroToggle, isZero && { backgroundColor: colors.destructive, borderColor: colors.destructive }]}
-                            onPress={() => setIsZero(!isZero)}
-                        >
-                            <CircleDot size={13} color={isZero ? '#fff' : colors.mutedForeground} />
-                            <Text style={[s.zeroText, isZero && { color: '#fff' }]}>{t.purchase.zeroEntry}</Text>
+            {/* Customer Selector */}
+            <Pressable style={s.customerBox} onPress={() => setShowCustomerModal(true)}>
+                <View style={[s.customerBadge, selectedCustomer && { backgroundColor: colors.primary }]}>
+                    {selectedCustomer ? (
+                        <Text style={s.customerBadgeText}>{selectedCustomer.code}</Text>
+                    ) : (
+                        <User size={16} color={colors.mutedForeground} />
+                    )}
+                </View>
+                <View style={{ flex: 1 }}>
+                    <Text style={[s.customerName, !selectedCustomer && { color: colors.mutedForeground }]}>
+                        {selectedCustomer ? selectedCustomer.name : t.purchase.selectCustomer}
+                    </Text>
+                    {selectedCustomer && (
+                        <Text style={s.customerMeta}>
+                            {selectedCustomer.priceBasis === 'rate' ? `📊 ${t.purchase.rateBased}` : `📊 ${t.purchase.fatBased}`}
+                            {selectedCustomer.mobile ? ` • ${selectedCustomer.mobile}` : ''}
+                        </Text>
+                    )}
+                </View>
+                <ChevronDown size={16} color={colors.mutedForeground} />
+            </Pressable>
+
+            {/* Milk Type + Cow/Buffalo */}
+            <View style={s.entryCard}>
+                <View style={s.milkRow}>
+                    {showCow && (
+                        <Pressable onPress={() => setMilkType('cow')} style={[s.milkBtn, milkType === 'cow' && s.milkBtnActive]}>
+                            <Text style={{ fontSize: 16 }}>🐄</Text>
+                            <Text style={[s.milkBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
+                            {milkType === 'cow' && <Check size={12} color="#fff" />}
                         </Pressable>
-                        <Pressable
-                            style={[s.saveEntryBtn, saving && { opacity: 0.5 }]}
-                            onPress={handleSaveEntry}
-                            disabled={saving}
-                        >
-                            {saving ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : (
-                                <Text style={s.saveEntryText}>✓ {t.common.save}</Text>
-                            )}
+                    )}
+                    {showBuffalo && (
+                        <Pressable onPress={() => setMilkType('buffalo')} style={[s.milkBtn, milkType === 'buffalo' && s.milkBtnActive]}>
+                            <Text style={{ fontSize: 16 }}>🐃</Text>
+                            <Text style={[s.milkBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
+                            {milkType === 'buffalo' && <Check size={12} color="#fff" />}
                         </Pressable>
+                    )}
+                </View>
+
+                {/* Input fields */}
+                <View style={s.fieldsRow}>
+                    <View style={s.fieldBox}>
+                        <Text style={s.fieldLabel}>{t.purchase.milk} (L)</Text>
+                        <TextInput style={s.fieldInput} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                    </View>
+                    {selectedCustomer?.priceBasis !== 'rate' && (
+                        <View style={s.fieldBox}>
+                            <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
+                            <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
+                        </View>
+                    )}
+                    <View style={s.fieldBox}>
+                        <Text style={s.fieldLabel}>{t.common.rate} ₹</Text>
+                        <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                     </View>
                 </View>
 
-                {/* ── Entries Table ── */}
-                <View style={s.tableWrap}>
-                    <View style={s.tableBar}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                            <FileText size={13} color={colors.primary} />
-                            <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
-                            <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
-                        </View>
-                        <Pressable style={s.pdfBtn} onPress={handleExportPdf}>
-                            <Download size={12} color="#fff" />
-                            <Text style={s.pdfBtnText}>PDF</Text>
-                        </Pressable>
-                    </View>
+                {/* Actions */}
+                <View style={s.actionsRow}>
+                    <Pressable style={[s.zeroToggle, isZero && { backgroundColor: colors.destructive, borderColor: colors.destructive }]} onPress={() => setIsZero(!isZero)}>
+                        <CircleDot size={13} color={isZero ? '#fff' : colors.mutedForeground} />
+                        <Text style={[s.zeroText, isZero && { color: '#fff' }]}>{t.purchase.zeroEntry}</Text>
+                    </Pressable>
+                    <Pressable style={[s.saveEntryBtn, saving && { opacity: 0.5 }]} onPress={handleSaveEntry} disabled={saving}>
+                        {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveEntryText}>✓ {t.common.save}</Text>}
+                    </Pressable>
+                </View>
+            </View>
 
+            {/* Sale Entries Table */}
+            <View style={s.tableWrap}>
+                <View style={s.tableBar}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                        <FileText size={13} color={colors.primary} />
+                        <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
+                        <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
+                    </View>
+                    <Pressable style={s.pdfBtn} onPress={handleExportReportPdf}>
+                        <Download size={12} color="#fff" />
+                        <Text style={s.pdfBtnText}>PDF</Text>
+                    </Pressable>
+                </View>
+
+                <View style={s.tHead}>
+                    <Text style={[s.tHeadText, s.entryCell1]}>{t.common.code}</Text>
+                    <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.milk}</Text>
+                    <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
+                    <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
+                    <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
+                    <View style={{ width: 26 }} />
+                </View>
+
+                {historyLoading && collections.length === 0 ? (
+                    <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
+                ) : collections.length === 0 ? (
+                    <View style={s.emptyBox}>
+                        <Droplets size={24} color={colors.border} />
+                        <Text style={s.emptyText}>{t.purchase.noEntries}</Text>
+                    </View>
+                ) : (
+                    <>
+                        {collections.map((item, index) => (
+                            <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
+                                <View style={s.entryCell1}>
+                                    <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700' }]}>{item.farmerCode || '-'}</Text>
+                                    <Text style={s.entrySubText} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
+                                </View>
+                                <Text style={[s.entryCellText, s.entryCell2]}>{item.quantity}</Text>
+                                <Text style={[s.entryCellText, s.entryCell2]}>{item.fat || '-'}</Text>
+                                <Text style={[s.entryCellText, s.entryCell2]}>{item.rate}</Text>
+                                <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text>
+                                <Pressable style={s.deleteBtn} onPress={() => handleDeleteCollection(item._id)} disabled={deletingId === item._id}>
+                                    {deletingId === item._id ? <ActivityIndicator size="small" color="#ef4444" /> : <Trash2 size={12} color="#ef4444" />}
+                                </Pressable>
+                            </View>
+                        ))}
+                        <View style={s.tFootRow}>
+                            <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({collections.length})</Text>
+                            <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity.toFixed(1)}</Text>
+                            <Text style={[s.tFootText, s.entryCell2]}></Text>
+                            <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '-'}</Text>
+                            <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{historyTotals.amount.toFixed(0)}</Text>
+                            <View style={{ width: 26 }} />
+                        </View>
+                    </>
+                )}
+            </View>
+        </View>
+    );
+
+    // ── Report Tab ──
+    const renderReportTab = () => (
+        <View>
+            <Text style={s.sectionTitle}>Collection Report</Text>
+
+            {/* Date Range Selector */}
+            <View style={s.dateRangeRow}>
+                <Pressable
+                    style={[s.dateInputWrapper, reportDateSelectingType === 'start' && { borderColor: colors.primary, borderWidth: 2 }]}
+                    onPress={() => { setReportDateSelectingType('start'); setShowReportCalendarModal(true); }}
+                >
+                    <CalendarIcon size={14} color={reportDateSelectingType === 'start' ? colors.primary : colors.mutedForeground} />
+                    <Text style={[s.dateInputText, !reportStartDate && { color: colors.mutedForeground }]}>
+                        {reportStartDate ? formatDateStr(reportStartDate) : 'Start Date'}
+                    </Text>
+                </Pressable>
+                <Text style={s.dateSeparator}>→</Text>
+                <Pressable
+                    style={[s.dateInputWrapper, reportDateSelectingType === 'end' && { borderColor: colors.primary, borderWidth: 2 }]}
+                    onPress={() => { setReportDateSelectingType('end'); setShowReportCalendarModal(true); }}
+                >
+                    <CalendarIcon size={14} color={reportDateSelectingType === 'end' ? colors.primary : colors.mutedForeground} />
+                    <Text style={[s.dateInputText, !reportEndDate && { color: colors.mutedForeground }]}>
+                        {reportEndDate ? formatDateStr(reportEndDate) : 'End Date'}
+                    </Text>
+                </Pressable>
+            </View>
+
+            {/* Report Calendar Modal */}
+            <Modal visible={showReportCalendarModal} transparent animationType="fade" onRequestClose={() => setShowReportCalendarModal(false)}>
+                <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 16 }} onPress={() => setShowReportCalendarModal(false)}>
+                    <Pressable onPress={() => { }} style={{ backgroundColor: isDark ? colors.card : '#fff', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: colors.border }}>
+                        <PaymentRangeCalendar
+                            startDate={reportStartDate || null}
+                            endDate={reportEndDate || null}
+                            onStartDateSelect={(date) => { setReportStartDate(date); setReportDateSelectingType('end'); }}
+                            onEndDateSelect={(date) => { setReportEndDate(date); setShowReportCalendarModal(false); }}
+                            blockedPeriods={[]}
+                            selectingType={reportDateSelectingType}
+                        />
+                    </Pressable>
+                </Pressable>
+            </Modal>
+
+            {/* Report Summary */}
+            {reportStartDate && reportEndDate && (
+                <View style={s.reportSummaryCard}>
+                    <View style={s.reportSummaryRow}>
+                        <View style={s.reportSummaryItem}>
+                            <Text style={s.reportSummaryLabel}>Total Qty</Text>
+                            <Text style={s.reportSummaryValue}>{reportTotals.quantity.toFixed(1)} L</Text>
+                        </View>
+                        <View style={s.reportSummaryDivider} />
+                        <View style={s.reportSummaryItem}>
+                            <Text style={s.reportSummaryLabel}>Avg Rate</Text>
+                            <Text style={s.reportSummaryValue}>₹{reportTotals.quantity > 0 ? (reportTotals.amount / reportTotals.quantity).toFixed(1) : '0'}</Text>
+                        </View>
+                        <View style={s.reportSummaryDivider} />
+                        <View style={s.reportSummaryItem}>
+                            <Text style={s.reportSummaryLabel}>Total Amt</Text>
+                            <Text style={[s.reportSummaryValue, { color: colors.primary }]}>₹{reportTotals.amount.toFixed(0)}</Text>
+                        </View>
+                    </View>
+                </View>
+            )}
+
+            {/* Export Button */}
+            <Pressable style={s.exportReportBtn} onPress={handleExportReportPdf}>
+                <Download size={16} color="#fff" />
+                <Text style={s.exportReportBtnText}>Download PDF</Text>
+            </Pressable>
+
+            {/* Report Table */}
+            {reportLoading ? (
+                <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
+            ) : reportCollections.length === 0 && reportStartDate && reportEndDate ? (
+                <View style={s.emptyBox}>
+                    <Droplets size={24} color={colors.border} />
+                    <Text style={s.emptyText}>No data for selected period</Text>
+                </View>
+            ) : !reportStartDate || !reportEndDate ? (
+                <View style={s.emptyBox}>
+                    <CalendarIcon size={24} color={colors.border} />
+                    <Text style={s.emptyText}>Select date range to view report</Text>
+                </View>
+            ) : (
+                <View style={s.tableWrap}>
                     <View style={s.tHead}>
                         <Text style={[s.tHeadText, s.entryCell1]}>{t.common.code}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.milk}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
+                        <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.snf}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
                         <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
-                        <View style={{ width: 26 }} />
                     </View>
-
-                    {historyLoading && collections.length === 0 ? (
-                        <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
-                    ) : collections.length === 0 ? (
-                        <View style={s.emptyBox}>
-                            <Droplets size={24} color={colors.border} />
-                            <Text style={s.emptyText}>{t.purchase.noEntries}</Text>
-                        </View>
-                    ) : (
-                        <>
-                            {collections.map((item, index) => (
-                                <View key={item._id}>{renderCollectionItem({ item, index })}</View>
-                            ))}
-                            <View style={s.tFootRow}>
-                                <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({collections.length})</Text>
-                                <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity.toFixed(1)}</Text>
-                                <Text style={[s.tFootText, s.entryCell2]}></Text>
-                                <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '-'}</Text>
-                                <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{historyTotals.amount.toFixed(0)}</Text>
-                                <View style={{ width: 26 }} />
+                    {reportCollections.map((item, index) => (
+                        <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
+                            <View style={s.entryCell1}>
+                                <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700' }]}>{item.farmerCode || '-'}</Text>
+                                <Text style={s.entrySubText} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
                             </View>
-                        </>
+                            <Text style={[s.entryCellText, s.entryCell2]}>{item.quantity}</Text>
+                            <Text style={[s.entryCellText, s.entryCell2]}>{item.fat || '-'}</Text>
+                            <Text style={[s.entryCellText, s.entryCell2]}>{(item as any).snf || '-'}</Text>
+                            <Text style={[s.entryCellText, s.entryCell2]}>{item.rate}</Text>
+                            <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text>
+                        </View>
+                    ))}
+                    <View style={s.tFootRow}>
+                        <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({reportCollections.length})</Text>
+                        <Text style={[s.tFootText, s.entryCell2]}>{reportTotals.quantity.toFixed(1)}</Text>
+                        <Text style={[s.tFootText, s.entryCell2]}></Text>
+                        <Text style={[s.tFootText, s.entryCell2]}></Text>
+                        <Text style={[s.tFootText, s.entryCell2]}></Text>
+                        <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{reportTotals.amount.toFixed(0)}</Text>
+                    </View>
+                </View>
+            )}
+        </View>
+    );
+
+    // ── Farmer Tab ──
+    const renderFarmerTab = () => (
+        <View>
+            {/* Search + Print + Add */}
+            <View style={s.farmerTopRow}>
+                <View style={s.farmerSearchBox}>
+                    <Search size={16} color={colors.mutedForeground} />
+                    <TextInput
+                        style={s.farmerSearchInput}
+                        value={farmerTabSearch}
+                        onChangeText={setFarmerTabSearch}
+                        placeholder="Search farmers..."
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                    {farmerTabSearch.length > 0 && (
+                        <Pressable onPress={() => setFarmerTabSearch('')}><X size={13} color={colors.mutedForeground} /></Pressable>
                     )}
                 </View>
+                <Pressable style={s.farmerActionBtn} onPress={handleExportFarmersPdf}>
+                    <Printer size={14} color="#fff" />
+                </Pressable>
+                <Pressable style={s.farmerActionBtn} onPress={() => { setEditingCustomer(null); setShowAddCustomer(true); }}>
+                    <Plus size={14} color="#fff" />
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>Add</Text>
+                </Pressable>
+            </View>
 
-                <View style={{ height: 16 }} />
+            {/* Farmer Management Title */}
+            <Text style={s.farmerSectionTitle}>Farmer Management</Text>
+            <Text style={[s.farmerSubtitle, { color: colors.mutedForeground }]}>farmer list ({customers.length})</Text>
+
+            {/* Farmer Table */}
+            {farmerSearchLoading ? (
+                <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
+            ) : customers.length === 0 ? (
+                <View style={s.emptyBox}>
+                    <User size={24} color={colors.border} />
+                    <Text style={s.emptyText}>No farmers found</Text>
+                </View>
+            ) : (
+                <View style={s.tableWrap}>
+                    <View style={[s.tHead, { backgroundColor: colors.primary }]}>
+                        <Text style={[s.tHeadText, { flex: 0.5, color: '#fff' }]}>{t.common.code}</Text>
+                        <Text style={[s.tHeadText, { flex: 1.2, color: '#fff' }]}>{t.common.name}</Text>
+                        <Text style={[s.tHeadText, { flex: 0.8, color: '#fff' }]}>Based On</Text>
+                        <Text style={[s.tHeadText, { flex: 0.8, color: '#fff' }]}>Milk</Text>
+                        <View style={{ flex: 0.6 }} />
+                    </View>
+                    {customers.map((item, index) => (
+                        <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
+                            <Text style={[s.entryCellText, { flex: 0.5, color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.code}</Text>
+                            <Text style={[s.entryCellText, { flex: 1.2 }]} numberOfLines={1}>{item.name}</Text>
+                            <Text style={[s.entryCellText, { flex: 0.8, textAlign: 'center', fontSize: 10 }]}>{item.priceBasis || '-'}</Text>
+                            <Text style={[s.entryCellText, { flex: 0.8, textAlign: 'center', fontSize: 10 }]}>{item.defaultMilk || '-'}</Text>
+                            <View style={{ flex: 0.6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                <Pressable style={s.miniIconBtn} onPress={() => handleEditCustomer(item)}>
+                                    <Edit2 size={12} color={colors.primary} />
+                                </Pressable>
+                                <Pressable style={s.miniIconBtn} onPress={() => handleDeleteCustomer(item._id)}>
+                                    <Trash2 size={12} color="#ef4444" />
+                                </Pressable>
+                            </View>
+                        </View>
+                    ))}
+                </View>
+            )}
+        </View>
+    );
+
+    return (
+        <View style={s.container}>
+            <SubscriptionModal visible={showSubscriptionModal} onClose={handleModalClose} onSubscribe={handleSubscriptionSuccess} filterTab="purchase" title="Subscribe to Access Collection" fullScreen />
+            <TopBar />
+
+            <ScrollView
+                style={s.scroll}
+                contentContainerStyle={s.scrollContent}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+                keyboardShouldPersistTaps="handled"
+            >
+                {activeTab === 'Collection' && renderCollectionTab()}
+                {activeTab === 'Report' && renderReportTab()}
+                {activeTab === 'Farmer' && renderFarmerTab()}
             </ScrollView>
+
+            {/* Floating Tabs */}
+            <View style={[s.floatingTabContainer, { bottom: 0 + insets.bottom - 24 }]}>
+                <View
+                    style={s.tabRow}
+                    onLayout={(event) => setTabRowWidth(event.nativeEvent.layout.width)}
+                >
+                    {tabItemWidth > 0 && (
+                        <Animated.View
+                            style={[s.tabActiveIndicator, { width: tabItemWidth, transform: [{ translateX: tabIndicatorTranslateX }] }]}
+                        />
+                    )}
+                    {TAB_ORDER.map((tab) => (
+                        <Pressable key={tab} style={s.tab} onPress={() => setActiveTab(tab)}>
+                            <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>{tab}</Text>
+                        </Pressable>
+                    ))}
+                </View>
+            </View>
 
             {/* ── Modals ── */}
             <Modal visible={showDateModal} animationType="slide" transparent onRequestClose={() => setShowDateModal(false)}>
@@ -512,7 +790,7 @@ export default function PurchaseScreen() {
                         </View>
 
                         <View style={s.searchRow}>
-                            <Search size={14} color={colors.mutedForeground} />
+                            <Search size={16} color={colors.mutedForeground} />
                             <TextInput
                                 style={s.searchInput}
                                 value={customerSearch}
@@ -569,7 +847,7 @@ export default function PurchaseScreen() {
                 isDark={isDark}
             />
 
-            <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} />
+            <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />
             <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
         </View>
     );
@@ -578,20 +856,27 @@ export default function PurchaseScreen() {
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     scroll: { flex: 1 },
-    scrollContent: { paddingHorizontal: 6, gap: 3 },
+    scrollContent: { paddingHorizontal: 6, gap: 3, paddingBottom: 150, paddingTop: 6 },
+
+    // Floating Tabs
+    floatingTabContainer: { position: 'absolute', left: 6, right: 6, bottom: 0, zIndex: 20 },
+    tabRow: { flexDirection: 'row', gap: 6, padding: 4, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, position: 'relative', overflow: 'hidden' },
+    tabActiveIndicator: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 7, backgroundColor: colors.primary },
+    tab: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 7, zIndex: 2 },
+    tabText: { fontSize: 12, fontWeight: '700', color: colors.foreground },
+    tabTextActive: { color: colors.white },
 
     // Top controls
-    topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+    topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, gap: 4 },
     dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
     dateText: { fontSize: 12, fontWeight: '600', color: colors.foreground },
-
     addCustTopBtn: { width: 36, height: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
 
     // Shift
-    shiftRow: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-    shiftBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 8, backgroundColor: colors.card },
+    shiftRow: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, overflow: 'hidden', flex: 1 },
+    shiftBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 6, backgroundColor: colors.card },
     shiftBtnActive: { backgroundColor: colors.primary },
-    shiftBtnText: { fontSize: 12, fontWeight: '700', color: colors.foreground },
+    shiftBtnText: { fontSize: 11, fontWeight: '700', color: colors.foreground },
     shiftBtnTextActive: { color: '#fff' },
 
     // Summary
@@ -662,8 +947,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     modalTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground },
 
     // Search
-    searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: 8, marginHorizontal: 6, marginBottom: 4, gap: 5, borderWidth: 1, borderColor: colors.border },
-    searchInput: { flex: 1, paddingVertical: 6, fontSize: 12, color: colors.foreground },
+    searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: 10, marginHorizontal: 6, marginBottom: 4, gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 6 },
+    searchInput: { flex: 1, paddingVertical: 8, fontSize: 14, color: colors.foreground },
 
     // Customer list
     custListItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: colors.border },
@@ -674,4 +959,27 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
 
     miniIconBtn: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
     addCustBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 8, paddingVertical: 4 },
+
+    // Report tab
+    sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground, marginBottom: 6 },
+    dateRangeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+    dateInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 8 },
+    dateInputText: { flex: 1, fontSize: 12, color: colors.foreground },
+    dateSeparator: { fontSize: 14, color: colors.mutedForeground, fontWeight: '600' },
+    reportSummaryCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, marginBottom: 6 },
+    reportSummaryRow: { flexDirection: 'row', alignItems: 'center' },
+    reportSummaryItem: { flex: 1, alignItems: 'center' },
+    reportSummaryLabel: { fontSize: 10, color: colors.mutedForeground, fontWeight: '500' },
+    reportSummaryValue: { fontSize: 15, fontWeight: '800', color: colors.foreground, marginTop: 2 },
+    reportSummaryDivider: { width: 1, height: 30, backgroundColor: colors.border },
+    exportReportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.primary, paddingVertical: 10, borderRadius: 6, marginBottom: 6 },
+    exportReportBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+
+    // Farmer tab
+    farmerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+    farmerSearchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, gap: 6 },
+    farmerSearchInput: { flex: 1, paddingVertical: 8, fontSize: 14, color: colors.foreground },
+    farmerActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
+    farmerSectionTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
+    farmerSubtitle: { fontSize: 11, marginBottom: 6 },
 });
