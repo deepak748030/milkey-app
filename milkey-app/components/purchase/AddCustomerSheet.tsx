@@ -21,6 +21,19 @@ const PRICE_BASIS_OPTIONS = [
     { value: 'fat_snf', label: 'Fat/SNF' },
 ];
 
+const ALERT_METHOD_OPTIONS = [
+    { value: 'none', label: 'None' },
+    { value: 'sms', label: 'SMS' },
+    { value: 'whatsapp', label: 'WhatsApp' },
+    { value: 'email', label: 'Email' },
+];
+
+const PRINT_SLIP_OPTIONS = [
+    { value: 'default', label: 'Default' },
+    { value: 'yes', label: 'Yes' },
+    { value: 'no', label: 'No' },
+];
+
 function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, colors, isDark }: AddCustomerSheetProps) {
     const [code, setCode] = useState('');
     const [name, setName] = useState('');
@@ -33,10 +46,11 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
     const [cowRate, setCowRate] = useState('');
     const [buffaloFat, setBuffaloFat] = useState('');
     const [cowFat, setCowFat] = useState('');
+    const [alertMethod, setAlertMethod] = useState<'sms' | 'whatsapp' | 'none'>('none');
+    const [printEntrySlip, setPrintEntrySlip] = useState<'default' | 'yes' | 'no'>('default');
     const [saving, setSaving] = useState(false);
     const [codeAvailable, setCodeAvailable] = useState<boolean | null>(null);
     const [checkingCode, setCheckingCode] = useState(false);
-    const [showPriceBasisDropdown, setShowPriceBasisDropdown] = useState(false);
 
     const [alertVisible, setAlertVisible] = useState(false);
     const [alertTitle, setAlertTitle] = useState('');
@@ -58,6 +72,8 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 setCowRate(editingFarmer.cowRate ? String(editingFarmer.cowRate) : '');
                 setBuffaloFat(editingFarmer.buffaloFat ? String(editingFarmer.buffaloFat) : '');
                 setCowFat(editingFarmer.cowFat ? String(editingFarmer.cowFat) : '');
+                setAlertMethod((editingFarmer as any).alertMethod || 'none');
+                setPrintEntrySlip((editingFarmer as any).printEntrySlip || 'default');
                 setCodeAvailable(null);
             } else {
                 resetForm();
@@ -75,6 +91,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
         setCode(''); setName(''); setPhone(''); setDefaultMilk('buffalo');
         setCowEnabled(true); setBuffaloEnabled(true); setPriceBasis('rate');
         setBuffaloRate(''); setCowRate(''); setBuffaloFat(''); setCowFat('');
+        setAlertMethod('none'); setPrintEntrySlip('default');
         setCodeAvailable(null);
     };
 
@@ -99,6 +116,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 cowEnabled, buffaloEnabled, defaultMilk, priceBasis,
                 cowRate: parseFloat(cowRate) || 0, buffaloRate: parseFloat(buffaloRate) || 0,
                 cowFat: parseFloat(cowFat) || 0, buffaloFat: parseFloat(buffaloFat) || 0,
+                alertMethod, printEntrySlip,
             };
             const res = editingFarmer
                 ? await purchaseFarmersApi.update(editingFarmer._id, data)
@@ -135,7 +153,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             <Text style={s.sectionTitle}>Customer Details</Text>
 
                             <View style={s.field}>
-                                <Text style={s.fieldLabel}>Code</Text>
+                                <Text style={s.fieldLabel}>1. Code</Text>
                                 <View style={s.inputRow}>
                                     <TextInput
                                         style={[s.input, { flex: 1 }, editingFarmer && s.inputDisabled]}
@@ -171,29 +189,39 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             </View>
 
                             <View style={s.field}>
-                                <Text style={s.fieldLabel}>Name</Text>
+                                <Text style={s.fieldLabel}>2. Name</Text>
                                 <TextInput style={s.input} value={name} onChangeText={setName} placeholder="Customer name" placeholderTextColor={colors.mutedForeground} />
                             </View>
 
                             <View style={s.field}>
-                                <Text style={s.fieldLabel}>Phone (Optional)</Text>
+                                <Text style={s.fieldLabel}>3. Phone (Optional)</Text>
                                 <TextInput style={s.input} value={phone} onChangeText={setPhone} placeholder="Mobile number" placeholderTextColor={colors.mutedForeground} keyboardType="phone-pad" maxLength={10} />
                             </View>
 
                             <View style={s.field}>
-                                <Text style={s.fieldLabel}>Default Milk</Text>
+                                <Text style={s.fieldLabel}>4. Default Milk</Text>
                                 <View style={s.toggleRow}>
-                                    <Text style={s.toggleLabel}>🐄 Cow</Text>
-                                    <Switch value={defaultMilk === 'cow'} onValueChange={(v) => setDefaultMilk(v ? 'cow' : 'buffalo')} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#fff" />
-                                    <Text style={[s.toggleLabel, { marginLeft: 16 }]}>🐃 Buffalo</Text>
-                                    <Switch value={defaultMilk === 'buffalo'} onValueChange={(v) => setDefaultMilk(v ? 'buffalo' : 'cow')} trackColor={{ false: colors.border, true: colors.primary }} thumbColor="#fff" />
+                                    <Pressable
+                                        style={[s.milkChip, defaultMilk === 'cow' && s.milkChipActive]}
+                                        onPress={() => setDefaultMilk('cow')}
+                                    >
+                                        {defaultMilk === 'cow' && <Check size={12} color="#fff" style={{ marginRight: 3 }} />}
+                                        <Text style={[s.milkChipText, defaultMilk === 'cow' && { color: '#fff' }]}>🐄 Cow</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        style={[s.milkChip, defaultMilk === 'buffalo' && s.milkChipActive]}
+                                        onPress={() => setDefaultMilk('buffalo')}
+                                    >
+                                        {defaultMilk === 'buffalo' && <Check size={12} color="#fff" style={{ marginRight: 3 }} />}
+                                        <Text style={[s.milkChipText, defaultMilk === 'buffalo' && { color: '#fff' }]}>🐃 Buffalo</Text>
+                                    </Pressable>
                                 </View>
                             </View>
                         </View>
 
                         {/* Price Basis Card */}
                         <View style={s.sectionCard}>
-                            <Text style={s.sectionTitle}>Rate Based On</Text>
+                            <Text style={s.sectionTitle}>5. Rate Based On</Text>
                             <View style={s.priceBasisRow}>
                                 {PRICE_BASIS_OPTIONS.map(opt => (
                                     <Pressable
@@ -244,6 +272,40 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             </View>
                         )}
 
+                        {/* Alert Method Card */}
+                        <View style={s.sectionCard}>
+                            <Text style={s.sectionTitle}>6. Alert Method</Text>
+                            <View style={s.priceBasisRow}>
+                                {ALERT_METHOD_OPTIONS.map(opt => (
+                                    <Pressable
+                                        key={opt.value}
+                                        style={[s.priceBasisChip, alertMethod === opt.value && s.priceBasisChipActive]}
+                                        onPress={() => setAlertMethod(opt.value as any)}
+                                    >
+                                        {alertMethod === opt.value && <Check size={14} color="#fff" style={{ marginRight: 4 }} />}
+                                        <Text style={[s.priceBasisText, alertMethod === opt.value && s.priceBasisTextActive]}>{opt.label}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </View>
+
+                        {/* Print Entry Slip Card */}
+                        <View style={s.sectionCard}>
+                            <Text style={s.sectionTitle}>7. Print Entry Slip</Text>
+                            <View style={s.priceBasisRow}>
+                                {PRINT_SLIP_OPTIONS.map(opt => (
+                                    <Pressable
+                                        key={opt.value}
+                                        style={[s.priceBasisChip, printEntrySlip === opt.value && s.priceBasisChipActive]}
+                                        onPress={() => setPrintEntrySlip(opt.value as any)}
+                                    >
+                                        {printEntrySlip === opt.value && <Check size={14} color="#fff" style={{ marginRight: 4 }} />}
+                                        <Text style={[s.priceBasisText, printEntrySlip === opt.value && s.priceBasisTextActive]}>{opt.label}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </View>
+
                         <View style={{ height: 20 }} />
                     </ScrollView>
 
@@ -276,16 +338,19 @@ const createSheetStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     sectionCard: { backgroundColor: colors.card, borderRadius: 12, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: colors.border },
     sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 10 },
     field: { marginBottom: 10 },
-    fieldLabel: { fontSize: 12, fontWeight: '500', color: colors.mutedForeground, marginBottom: 4 },
-    input: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: colors.foreground },
+    fieldLabel: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground, marginBottom: 4 },
+    input: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: colors.foreground },
     inputDisabled: { backgroundColor: colors.muted, opacity: 0.7 },
     inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     codeStatus: { width: 32, alignItems: 'center' },
     codeIcon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
     codeHint: { fontSize: 11, marginTop: 2, fontWeight: '500' },
-    toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     toggleLabel: { fontSize: 13, color: colors.foreground },
-    priceBasisRow: { flexDirection: 'row', gap: 8 },
+    milkChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+    milkChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    milkChipText: { fontSize: 13, fontWeight: '500', color: colors.foreground },
+    priceBasisRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
     priceBasisChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
     priceBasisChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
     priceBasisText: { fontSize: 13, fontWeight: '500', color: colors.foreground },

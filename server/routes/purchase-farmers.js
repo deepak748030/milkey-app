@@ -79,7 +79,7 @@ router.get('/code/:code', auth, async (req, res) => {
 // POST /api/purchase-farmers
 router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
     try {
-        const { code, name, mobile, address, cowEnabled, buffaloEnabled, defaultMilk, priceBasis, cowRate, buffaloRate, cowFat, buffaloFat, cowSnf, buffaloSnf } = req.body;
+        const { code, name, mobile, address, cowEnabled, buffaloEnabled, defaultMilk, priceBasis, cowRate, buffaloRate, cowFat, buffaloFat, cowSnf, buffaloSnf, alertMethod, printEntrySlip } = req.body;
         const normalizedCode = normalizeCode(code);
 
         if (!normalizedCode || !name) {
@@ -105,6 +105,8 @@ router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
             buffaloFat: parseFloat(buffaloFat) || 0,
             cowSnf: parseFloat(cowSnf) || 0,
             buffaloSnf: parseFloat(buffaloSnf) || 0,
+            alertMethod: alertMethod || 'none',
+            printEntrySlip: printEntrySlip || 'default',
         });
 
         res.status(201).json({ success: true, message: 'Customer added successfully', response: farmer });
@@ -117,7 +119,7 @@ router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
 // PUT /api/purchase-farmers/:id
 router.put('/:id', auth, requireSubscription('purchase'), async (req, res) => {
     try {
-        const { name, mobile, address, cowEnabled, buffaloEnabled, defaultMilk, priceBasis, cowRate, buffaloRate, cowFat, buffaloFat, cowSnf, buffaloSnf } = req.body;
+        const { name, mobile, address, cowEnabled, buffaloEnabled, defaultMilk, priceBasis, cowRate, buffaloRate, cowFat, buffaloFat, cowSnf, buffaloSnf, alertMethod, printEntrySlip } = req.body;
 
         const updateData = {};
         if (name !== undefined) updateData.name = name;
@@ -133,6 +135,8 @@ router.put('/:id', auth, requireSubscription('purchase'), async (req, res) => {
         if (buffaloFat !== undefined) updateData.buffaloFat = parseFloat(buffaloFat) || 0;
         if (cowSnf !== undefined) updateData.cowSnf = parseFloat(cowSnf) || 0;
         if (buffaloSnf !== undefined) updateData.buffaloSnf = parseFloat(buffaloSnf) || 0;
+        if (alertMethod !== undefined) updateData.alertMethod = alertMethod;
+        if (printEntrySlip !== undefined) updateData.printEntrySlip = printEntrySlip;
 
         const farmer = await PurchaseFarmer.findOneAndUpdate(
             { _id: req.params.id, owner: req.userId },

@@ -56,6 +56,7 @@ export default function PurchaseScreen() {
     const [milkType, setMilkType] = useState<'cow' | 'buffalo'>('buffalo');
     const [milkQty, setMilkQty] = useState('');
     const [fatValue, setFatValue] = useState('');
+    const [snfValue, setSnfValue] = useState('');
     const [rateValue, setRateValue] = useState('');
     const [isZero, setIsZero] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -220,11 +221,12 @@ export default function PurchaseScreen() {
                 date: dateStr,
                 shift: entryShift,
                 fat: parseFloat(fatValue) || 0,
+                snf: parseFloat(snfValue) || 0,
                 milkType,
             });
             if (res.success) {
                 showAlert('Success', 'Entry saved');
-                setMilkQty(''); setFatValue('');
+                setMilkQty(''); setFatValue(''); setSnfValue('');
                 if (selectedCustomer.priceBasis === 'rate') autoFillRate(selectedCustomer, milkType);
                 setIsZero(false);
                 fetchCollections(1);
@@ -233,7 +235,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, entryDate, entryShift, milkType, isZero]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -307,9 +309,9 @@ export default function PurchaseScreen() {
             .total{background:#f0fdf4;font-weight:bold}
         </style></head><body>
         <h2>Collection Report - ${dateLabel}</h2>
-        <table><thead><tr><th>Code</th><th>Name</th><th>Milk(L)</th><th>Fat</th><th>Rate</th><th>Amount</th></tr></thead>
-        <tbody>${data.map(c => `<tr><td>${c.farmerCode || '-'}</td><td>${c.purchaseFarmer?.name || '-'}</td><td>${c.quantity}</td><td>${c.fat || '-'}</td><td>₹${c.rate}</td><td>₹${c.amount.toFixed(2)}</td></tr>`).join('')}
-        <tr class="total"><td colspan="2">Total (${data.length})</td><td>${totals.quantity.toFixed(1)}</td><td></td><td></td><td>₹${totals.amount.toFixed(2)}</td></tr>
+        <table><thead><tr><th>Code</th><th>Name</th><th>Milk(L)</th><th>Fat</th><th>SNF</th><th>Rate</th><th>Amount</th></tr></thead>
+        <tbody>${data.map(c => `<tr><td>${c.farmerCode || '-'}</td><td>${c.purchaseFarmer?.name || '-'}</td><td>${c.quantity}</td><td>${c.fat || '-'}</td><td>${(c as any).snf || '-'}</td><td>₹${c.rate}</td><td>₹${c.amount.toFixed(2)}</td></tr>`).join('')}
+        <tr class="total"><td colspan="2">Total (${data.length})</td><td>${totals.quantity.toFixed(1)}</td><td></td><td></td><td></td><td>₹${totals.amount.toFixed(2)}</td></tr>
         </tbody></table></body></html>`;
         try {
             const { uri } = await Print.printToFileAsync({ html });
@@ -454,6 +456,12 @@ export default function PurchaseScreen() {
                             <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
                         </View>
                     )}
+                    {selectedCustomer?.priceBasis === 'fat_snf' && (
+                        <View style={s.fieldBox}>
+                            <Text style={s.fieldLabel}>SNF</Text>
+                            <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
+                        </View>
+                    )}
                     <View style={s.fieldBox}>
                         <Text style={s.fieldLabel}>{t.common.rate} ₹</Text>
                         <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
@@ -481,8 +489,7 @@ export default function PurchaseScreen() {
                         <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
                     </View>
                     <Pressable style={s.pdfBtn} onPress={handleExportReportPdf}>
-                        <Download size={12} color="#fff" />
-                        <Text style={s.pdfBtnText}>PDF</Text>
+                        <Printer size={12} color="#fff" />
                     </Pressable>
                 </View>
 
@@ -490,6 +497,7 @@ export default function PurchaseScreen() {
                     <Text style={[s.tHeadText, s.entryCell1]}>{t.common.code}</Text>
                     <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.milk}</Text>
                     <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
+                    <Text style={[s.tHeadText, s.entryCell2]}>SNF</Text>
                     <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
                     <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
                     <View style={{ width: 26 }} />
@@ -512,6 +520,7 @@ export default function PurchaseScreen() {
                                 </View>
                                 <Text style={[s.entryCellText, s.entryCell2]}>{item.quantity}</Text>
                                 <Text style={[s.entryCellText, s.entryCell2]}>{item.fat || '-'}</Text>
+                                <Text style={[s.entryCellText, s.entryCell2]}>{(item as any).snf || '-'}</Text>
                                 <Text style={[s.entryCellText, s.entryCell2]}>{item.rate}</Text>
                                 <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text>
                                 <Pressable style={s.deleteBtn} onPress={() => handleDeleteCollection(item._id)} disabled={deletingId === item._id}>
@@ -522,6 +531,7 @@ export default function PurchaseScreen() {
                         <View style={s.tFootRow}>
                             <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({collections.length})</Text>
                             <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity.toFixed(1)}</Text>
+                            <Text style={[s.tFootText, s.entryCell2]}></Text>
                             <Text style={[s.tFootText, s.entryCell2]}></Text>
                             <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '-'}</Text>
                             <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{historyTotals.amount.toFixed(0)}</Text>
@@ -924,10 +934,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     tHeadText: { fontSize: 9, fontWeight: '700', color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.3, textAlign: 'center' },
 
     entryRow: { flexDirection: 'row', paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: colors.border },
-    entryCell1: { flex: 1.3 },
-    entryCell2: { flex: 0.7, textAlign: 'center' },
-    entryCell3: { flex: 0.9, textAlign: 'right' },
-    entryCellText: { fontSize: 11, color: colors.foreground },
+    entryCell1: { flex: 1.1 },
+    entryCell2: { flex: 0.6, textAlign: 'center' },
+    entryCell3: { flex: 0.8, textAlign: 'right' },
+    entryCellText: { fontSize: 10, color: colors.foreground },
     entrySubText: { fontSize: 8, color: colors.mutedForeground },
 
     tFootRow: { flexDirection: 'row', paddingVertical: 6, paddingHorizontal: 6, alignItems: 'center', backgroundColor: isDark ? colors.secondary : '#ecfdf5', borderTopWidth: 1, borderTopColor: colors.primary + '30' },

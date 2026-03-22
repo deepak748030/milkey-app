@@ -86,6 +86,18 @@ const purchaseFarmerSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    // Alert method for notifications
+    alertMethod: {
+        type: String,
+        enum: ['sms', 'whatsapp', 'email', 'none'],
+        default: 'none'
+    },
+    // Print entry slip preference
+    printEntrySlip: {
+        type: String,
+        enum: ['default', 'yes', 'no'],
+        default: 'default'
+    },
     isActive: {
         type: Boolean,
         default: true
