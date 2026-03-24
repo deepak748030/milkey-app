@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, FlatList } from 'react-native';
-import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi } from 'lucide-react-native';
+import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { BluetoothDevice } from '@/hooks/useBluetoothPrinter';
+import { buildTestPrint } from '@/lib/escpos';
 
 interface PrinterScanSheetProps {
     visible: boolean;
@@ -13,10 +14,12 @@ interface PrinterScanSheetProps {
     availableDevices: BluetoothDevice[];
     error: string | null;
     isBluetoothEnabled: boolean;
+    isPrinting?: boolean;
     onStartScan: () => void;
     onStopScan: () => void;
     onConnect: (device: BluetoothDevice) => void;
     onDisconnect: () => void;
+    onPrintData?: (data: Uint8Array) => Promise<boolean>;
 }
 
 export default function PrinterScanSheet({
@@ -28,12 +31,23 @@ export default function PrinterScanSheet({
     availableDevices,
     error,
     isBluetoothEnabled,
+    isPrinting,
     onStartScan,
     onStopScan,
     onConnect,
     onDisconnect,
+    onPrintData,
 }: PrinterScanSheetProps) {
     const { colors } = useTheme();
+    const [testPrintDone, setTestPrintDone] = useState(false);
+
+    const handleTestPrint = async () => {
+        if (!onPrintData) return;
+        setTestPrintDone(false);
+        const data = buildTestPrint();
+        const success = await onPrintData(data);
+        if (success) setTestPrintDone(true);
+    };
 
     const renderDevice = ({ item }: { item: BluetoothDevice }) => (
         <Pressable
@@ -60,10 +74,8 @@ export default function PrinterScanSheet({
             <View style={styles.overlay}>
                 <Pressable style={styles.overlayBg} onPress={onClose} />
                 <View style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                    {/* Handle */}
                     <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
-                    {/* Header */}
                     <View style={styles.header}>
                         <Text style={[styles.title, { color: colors.foreground }]}>Bluetooth Printer</Text>
                         <Pressable onPress={onClose} style={[styles.closeBtn, { backgroundColor: colors.secondary }]}>
@@ -81,13 +93,34 @@ export default function PrinterScanSheet({
                                     <Text style={[styles.connectedName, { color: colors.foreground }]}>{connectedDevice.name}</Text>
                                 </View>
                             </View>
-                            <Pressable
-                                style={[styles.disconnectBtn, { backgroundColor: colors.destructive }]}
-                                onPress={onDisconnect}
-                            >
-                                <Unplug size={14} color={colors.white} />
-                                <Text style={[styles.disconnectText, { color: colors.white }]}>Disconnect</Text>
-                            </Pressable>
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                <Pressable
+                                    style={[styles.testPrintBtn, { backgroundColor: colors.primary, opacity: isPrinting ? 0.6 : 1 }]}
+                                    onPress={handleTestPrint}
+                                    disabled={isPrinting}
+                                >
+                                    {isPrinting ? (
+                                        <ActivityIndicator size="small" color={colors.white} />
+                                    ) : (
+                                        <Printer size={14} color={colors.white} />
+                                    )}
+                                    <Text style={[styles.disconnectText, { color: colors.white }]}>
+                                        {isPrinting ? 'Printing...' : testPrintDone ? 'Print Again' : 'Test Print'}
+                                    </Text>
+                                </Pressable>
+                                <Pressable
+                                    style={[styles.disconnectBtn, { backgroundColor: colors.destructive }]}
+                                    onPress={onDisconnect}
+                                >
+                                    <Unplug size={14} color={colors.white} />
+                                    <Text style={[styles.disconnectText, { color: colors.white }]}>Disconnect</Text>
+                                </Pressable>
+                            </View>
+                            {testPrintDone && (
+                                <Text style={{ color: colors.success, fontSize: 12, textAlign: 'center', fontWeight: '600' }}>
+                                    ✓ Test print sent successfully!
+                                </Text>
+                            )}
                         </View>
                     )}
 
@@ -147,146 +180,33 @@ export default function PrinterScanSheet({
 }
 
 const styles = StyleSheet.create({
-    overlay: {
-        flex: 1,
-        justifyContent: 'flex-end',
-    },
-    overlayBg: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-    },
+    overlay: { flex: 1, justifyContent: 'flex-end' },
+    overlayBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
     sheet: {
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        paddingHorizontal: 6,
-        paddingBottom: 30,
-        maxHeight: '70%',
-        borderTopWidth: 1,
+        borderTopLeftRadius: 20, borderTopRightRadius: 20,
+        paddingHorizontal: 6, paddingBottom: 30, maxHeight: '70%', borderTopWidth: 1,
     },
-    handle: {
-        width: 40,
-        height: 4,
-        borderRadius: 2,
-        alignSelf: 'center',
-        marginTop: 10,
-        marginBottom: 6,
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 6,
-        paddingHorizontal: 6,
-    },
-    title: {
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    closeBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    connectedCard: {
-        flexDirection: 'column',
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        marginBottom: 6,
-        marginHorizontal: 6,
-        gap: 8,
-    },
-    connectedInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    connectedLabel: {
-        fontSize: 11,
-        fontWeight: '600',
-    },
-    connectedName: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    disconnectBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingVertical: 8,
-        borderRadius: 8,
-    },
-    disconnectText: {
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    errorBox: {
-        padding: 10,
-        borderRadius: 8,
-        borderWidth: 1,
-        marginBottom: 6,
-        marginHorizontal: 6,
-    },
-    errorText: {
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    scanBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        paddingVertical: 12,
-        borderRadius: 10,
-        marginHorizontal: 6,
-    },
-    scanBtnText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    sectionLabel: {
-        fontSize: 12,
-        fontWeight: '600',
-        marginBottom: 6,
-        paddingHorizontal: 6,
-    },
-    deviceItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: 12,
-        borderRadius: 10,
-        borderWidth: 1,
-        marginHorizontal: 6,
-    },
-    deviceInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        flex: 1,
-    },
-    deviceName: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    deviceRssi: {
-        fontSize: 11,
-    },
-    connectText: {
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    emptyState: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 30,
-        gap: 10,
-    },
-    emptyText: {
-        fontSize: 13,
-        textAlign: 'center',
-    }
+    handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 6 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingHorizontal: 6 },
+    title: { fontSize: 18, fontWeight: '700' },
+    closeBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+    connectedCard: { flexDirection: 'column', padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 6, marginHorizontal: 6, gap: 8 },
+    connectedInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    connectedLabel: { fontSize: 11, fontWeight: '600' },
+    connectedName: { fontSize: 14, fontWeight: '600' },
+    testPrintBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 8 },
+    disconnectBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 8 },
+    disconnectText: { fontSize: 13, fontWeight: '600' },
+    errorBox: { padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 6, marginHorizontal: 6 },
+    errorText: { fontSize: 12, fontWeight: '500' },
+    scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10, marginHorizontal: 6 },
+    scanBtnText: { fontSize: 14, fontWeight: '600' },
+    sectionLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, paddingHorizontal: 6 },
+    deviceItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 10, borderWidth: 1, marginHorizontal: 6 },
+    deviceInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+    deviceName: { fontSize: 14, fontWeight: '600' },
+    deviceRssi: { fontSize: 11 },
+    connectText: { fontSize: 13, fontWeight: '600' },
+    emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 30, gap: 10 },
+    emptyText: { fontSize: 13, textAlign: 'center' },
 });

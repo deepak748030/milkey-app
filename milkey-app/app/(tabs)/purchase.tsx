@@ -16,7 +16,9 @@ import {
     milkCollectionsApi, purchaseFarmersApi,
     MilkCollection, PurchaseFarmer
 } from '@/lib/milkeyApi';
-import * as Print from 'expo-print';
+import * as ExpoPrint from 'expo-print';
+import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
+import { buildReceiptBytes, concatBytes, INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, NORMAL_SIZE, BOLD_OFF, ALIGN_LEFT, textToBytes, separator, doubleSeparator, twoColumnLine, threeColumnLine, FEED_3_LINES } from '@/lib/escpos';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -38,6 +40,7 @@ export default function PurchaseScreen() {
         hasAccess, loading: subscriptionLoading, showSubscriptionModal,
         handleModalClose, handleSubscriptionSuccess
     } = useSubscriptionCheck('purchase');
+    const { isConnected, printData, isPrinting } = useBluetoothPrinter();
 
     const [activeTab, setActiveTab] = useState<TabType>('Collection');
     const [tabRowWidth, setTabRowWidth] = useState(0);
@@ -292,6 +295,40 @@ export default function PurchaseScreen() {
     const showBuffalo = selectedCustomer ? selectedCustomer.buffaloEnabled : true;
     const isMorning = entryShift === 'morning';
 
+    // BLE print collection entries on thermal printer
+    const handleBlePrintEntries = useCallback(async () => {
+        const data = collections;
+        const totals = historyTotals;
+        if (data.length === 0) { showAlert('Info', 'No data to print'); return; }
+        if (!isConnected) { showAlert('Info', 'Connect a Bluetooth printer first from TopBar'); return; }
+
+        const dateLabel = `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
+        const parts: Uint8Array[] = [INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, textToBytes('COLLECTION\n'), NORMAL_SIZE, BOLD_OFF, textToBytes(dateLabel + '\n'), ALIGN_LEFT, doubleSeparator()];
+
+        // Header
+        parts.push(textToBytes(threeColumnLine('Code', 'Qty', 'Amt')));
+        parts.push(separator());
+
+        // Rows
+        for (const c of data) {
+            parts.push(textToBytes(threeColumnLine(
+                c.farmerCode || '-',
+                String(c.quantity),
+                '₹' + c.amount.toFixed(0)
+            )));
+        }
+
+        parts.push(doubleSeparator());
+        parts.push(BOLD_ON);
+        parts.push(textToBytes(twoColumnLine('Total Qty:', totals.quantity.toFixed(1))));
+        parts.push(textToBytes(twoColumnLine('Total Amt:', '₹' + totals.amount.toFixed(2))));
+        parts.push(BOLD_OFF, FEED_3_LINES);
+
+        const bytes = concatBytes(...parts);
+        const success = await printData(bytes);
+        if (success) showAlert('Success', 'Printed successfully!');
+    }, [collections, historyTotals, entryDate, entryShift, isConnected, printData]);
+
     // Export PDF for report
     const handleExportReportPdf = useCallback(async () => {
         const data = reportCollections.length > 0 ? reportCollections : collections;
@@ -314,7 +351,7 @@ export default function PurchaseScreen() {
         <tr class="total"><td colspan="2">Total (${data.length})</td><td>${totals.quantity.toFixed(1)}</td><td></td><td></td><td></td><td>₹${totals.amount.toFixed(2)}</td></tr>
         </tbody></table></body></html>`;
         try {
-            const { uri } = await Print.printToFileAsync({ html });
+            const { uri } = await ExpoPrint.printToFileAsync({ html });
             if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
         } catch { showAlert('Error', 'Failed to export'); }
     }, [reportCollections, collections, reportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate]);
@@ -336,7 +373,7 @@ export default function PurchaseScreen() {
         <tbody>${customers.map(c => `<tr><td>${c.code}</td><td>${c.name}</td><td>${c.mobile || '-'}</td><td>${c.defaultMilk || '-'}</td><td>${c.priceBasis || '-'}</td></tr>`).join('')}
         </tbody></table></body></html>`;
         try {
-            const { uri } = await Print.printToFileAsync({ html });
+            const { uri } = await ExpoPrint.printToFileAsync({ html });
             if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
         } catch { showAlert('Error', 'Failed to export'); }
     }, [customers]);
@@ -488,8 +525,8 @@ export default function PurchaseScreen() {
                         <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
                         <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
                     </View>
-                    <Pressable style={s.pdfBtn} onPress={handleExportReportPdf}>
-                        <Printer size={12} color="#fff" />
+                    <Pressable style={[s.pdfBtn, isPrinting && { opacity: 0.5 }]} onPress={handleBlePrintEntries} disabled={isPrinting}>
+                        {isPrinting ? <ActivityIndicator size={12} color="#fff" /> : <Printer size={12} color="#fff" />}
                     </Pressable>
                 </View>
 

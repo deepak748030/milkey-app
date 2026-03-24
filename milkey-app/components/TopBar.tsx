@@ -21,10 +21,12 @@ export default function TopBar() {
     availableDevices,
     error,
     isBluetoothEnabled,
+    isPrinting,
     startScan,
     stopScan,
     connectToDevice,
     disconnectDevice,
+    printData,
   } = useBluetoothPrinter();
 
   useEffect(() => {
@@ -110,10 +112,12 @@ export default function TopBar() {
         availableDevices={availableDevices}
         error={error}
         isBluetoothEnabled={isBluetoothEnabled}
+        isPrinting={isPrinting}
         onStartScan={startScan}
         onStopScan={stopScan}
         onConnect={connectToDevice}
         onDisconnect={disconnectDevice}
+        onPrintData={printData}
       />
     </>
   );
