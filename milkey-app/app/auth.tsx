@@ -10,6 +10,9 @@ import { authApiNew } from '@/lib/milkeyApi';
 import { setAuthUser } from '@/lib/authStore';
 import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
+import * as WebBrowser from 'expo-web-browser';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -104,6 +107,7 @@ export default function AuthScreen() {
     const { expoPushToken } = usePushNotifications();
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
     const [name, setName] = useState('');
@@ -254,6 +258,43 @@ export default function AuthScreen() {
         setShowForgotPassword(false); setShowForgotOtpScreen(false); setShowResetPasswordScreen(false);
         setTempEmail(''); setOtp(''); setResetToken(''); setNewPassword(''); setConfirmPassword('');
     }, []);
+
+
+
+
+    const handleGoogleAuth = useCallback(async () => {
+        setGoogleLoading(true);
+        try {
+            // Use expo-web-browser for Google OAuth
+            const redirectUri = 'https://auth.expo.io/@milkey/milkey';
+            const clientId = '95043026756-placeholder.apps.googleusercontent.com';
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=openid%20email%20profile&nonce=${Math.random().toString(36).substring(7)}`;
+
+            const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+            if (result.type === 'success' && result.url) {
+                // Extract id_token from URL fragment
+                const urlParams = new URLSearchParams(result.url.split('#')[1] || '');
+                const idToken = urlParams.get('id_token');
+
+                if (idToken) {
+                    const authResult = await authApiNew.googleLogin(idToken);
+                    if (authResult.success && authResult.response) {
+                        await setAuthUser(authResult.response.token, authResult.response.user);
+                        if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                        router.replace('/(tabs)');
+                    } else {
+                        showModal('Error', authResult.message || 'Google sign in failed');
+                    }
+                } else {
+                    showModal('Error', 'Failed to get Google token');
+                }
+            }
+        } catch {
+            showModal('Error', 'Google sign in failed. Please try again.');
+        }
+        setGoogleLoading(false);
+    }, [expoPushToken, showModal]);
 
     // ─── Shared wrapper for all screens ───
     const ScreenWrapper = useCallback(({ children }: { children: React.ReactNode }) => (
@@ -453,6 +494,46 @@ export default function AuthScreen() {
                     loading={loading}
                     colors={colors}
                 />
+
+                {/* Divider */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14, marginBottom: 6 }}>
+                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                    <Text style={{ fontSize: 11, color: colors.mutedForeground, paddingHorizontal: 10, fontWeight: '500' }}>OR</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                </View>
+
+                {/* Google Sign In Button */}
+                <Pressable
+                    style={({ pressed }) => ({
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: colors.background,
+                        borderRadius: 12,
+                        paddingVertical: 12,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        gap: 8,
+                        opacity: googleLoading ? 0.6 : pressed ? 0.85 : 1,
+                    })}
+                    onPress={handleGoogleAuth}
+                    disabled={googleLoading || loading}
+                >
+                    {googleLoading ? (
+                        <ActivityIndicator size="small" color={colors.foreground} />
+                    ) : (
+                        <>
+                            <Image
+                                source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
+                                style={{ width: 20, height: 20 }}
+                                resizeMode="contain"
+                            />
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>
+                                Continue with Google
+                            </Text>
+                        </>
+                    )}
+                </Pressable>
 
                 <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 14 }}>
                     <Text style={{ fontSize: 13, color: colors.mutedForeground }}>

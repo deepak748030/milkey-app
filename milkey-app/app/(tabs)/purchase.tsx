@@ -915,56 +915,56 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
 
     // Top controls
     topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, gap: 4 },
-    dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
     dateText: { fontSize: 12, fontWeight: '600', color: colors.foreground },
-    addCustTopBtn: { width: 36, height: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+    addCustTopBtn: { width: 36, height: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
 
     // Shift
-    shiftRow: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, overflow: 'hidden', flex: 1 },
+    shiftRow: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, overflow: 'hidden', flex: 1, borderRadius: 10 },
     shiftBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 6, backgroundColor: colors.card },
     shiftBtnActive: { backgroundColor: colors.primary },
     shiftBtnText: { fontSize: 11, fontWeight: '700', color: colors.foreground },
     shiftBtnTextActive: { color: '#fff' },
 
     // Summary
-    summaryBar: { flexDirection: 'row', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingVertical: 8 },
+    summaryBar: { flexDirection: 'row', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingVertical: 8, borderRadius: 10 },
     summaryCell: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
     summaryVal: { fontSize: 14, fontWeight: '800', color: colors.foreground },
     summaryLbl: { fontSize: 9, color: colors.mutedForeground, fontWeight: '500' },
     summaryDivider: { width: 1, backgroundColor: colors.border, marginVertical: 2 },
 
     // Customer
-    customerBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 8, gap: 8 },
-    customerBadge: { width: 34, height: 34, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border },
+    customerBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 8, gap: 8, borderRadius: 10 },
+    customerBadge: { width: 34, height: 34, backgroundColor: colors.muted, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8 },
     customerBadgeText: { fontSize: 12, fontWeight: '800', color: '#fff' },
     customerName: { fontSize: 13, fontWeight: '700', color: colors.foreground },
     customerMeta: { fontSize: 10, color: colors.mutedForeground, marginTop: 1 },
 
     // Entry card
-    entryCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 8 },
+    entryCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 8, borderRadius: 10 },
     milkRow: { flexDirection: 'row', gap: 4, marginBottom: 6 },
-    milkBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+    milkBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, borderRadius: 8 },
     milkBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
     milkBtnText: { fontSize: 12, fontWeight: '700', color: colors.foreground },
 
     fieldsRow: { flexDirection: 'row', gap: 5 },
     fieldBox: { flex: 1 },
     fieldLabel: { fontSize: 9, fontWeight: '600', color: colors.mutedForeground, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
-    fieldInput: { borderWidth: 1, borderColor: colors.border, paddingHorizontal: 6, paddingVertical: 5, fontSize: 15, fontWeight: '700', color: colors.foreground, backgroundColor: colors.background, textAlign: 'center' },
+    fieldInput: { borderWidth: 1, borderColor: colors.border, paddingHorizontal: 6, paddingVertical: 5, fontSize: 15, fontWeight: '700', color: colors.foreground, backgroundColor: colors.background, textAlign: 'center', borderRadius: 8 },
 
     actionsRow: { flexDirection: 'row', gap: 5, marginTop: 6 },
-    zeroToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+    zeroToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, borderRadius: 8 },
     zeroText: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground },
-    saveEntryBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, backgroundColor: colors.primary },
+    saveEntryBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, backgroundColor: colors.primary, borderRadius: 8 },
     saveEntryText: { fontSize: 13, fontWeight: '800', color: '#fff' },
 
     // Table
-    tableWrap: { borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+    tableWrap: { borderWidth: 1, borderColor: colors.border, overflow: 'hidden', borderRadius: 10 },
     tableBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 5, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
     tableBarTitle: { fontSize: 12, fontWeight: '700', color: colors.foreground },
-    badge: { backgroundColor: colors.primary, paddingHorizontal: 5, paddingVertical: 0 },
+    badge: { backgroundColor: colors.primary, paddingHorizontal: 5, paddingVertical: 0, borderRadius: 4 },
     badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
-    pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 8, paddingVertical: 4 },
+    pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
     pdfBtnText: { fontSize: 10, fontWeight: '700', color: '#fff' },
 
     tHead: { flexDirection: 'row', backgroundColor: isDark ? colors.muted : '#eef2f7', paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center' },
@@ -994,39 +994,39 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     modalTitle: { fontSize: 14, fontWeight: '700', color: colors.foreground },
 
     // Search
-    searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: 10, marginHorizontal: 6, marginBottom: 4, gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 6 },
+    searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: 10, marginHorizontal: 6, marginBottom: 4, gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
     searchInput: { flex: 1, paddingVertical: 8, fontSize: 14, color: colors.foreground },
 
     // Customer list
     custListItem: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: colors.border },
-    custListAvatar: { width: 30, height: 30, backgroundColor: colors.primary + '18', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.primary + '30' },
+    custListAvatar: { width: 30, height: 30, backgroundColor: colors.primary + '18', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.primary + '30', borderRadius: 8 },
     custListAvatarText: { fontSize: 11, fontWeight: '800', color: colors.primary },
     custListName: { fontSize: 12, fontWeight: '600', color: colors.foreground },
     custListSub: { fontSize: 10, color: colors.mutedForeground },
 
-    miniIconBtn: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
-    addCustBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 8, paddingVertical: 4 },
+    miniIconBtn: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
+    addCustBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
 
     // Report tab
     sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.foreground, marginBottom: 6 },
     dateRangeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-    dateInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 8 },
+    dateInputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 8 },
     dateInputText: { flex: 1, fontSize: 12, color: colors.foreground },
     dateSeparator: { fontSize: 14, color: colors.mutedForeground, fontWeight: '600' },
-    reportSummaryCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, marginBottom: 6 },
+    reportSummaryCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, marginBottom: 6 },
     reportSummaryRow: { flexDirection: 'row', alignItems: 'center' },
     reportSummaryItem: { flex: 1, alignItems: 'center' },
     reportSummaryLabel: { fontSize: 10, color: colors.mutedForeground, fontWeight: '500' },
     reportSummaryValue: { fontSize: 15, fontWeight: '800', color: colors.foreground, marginTop: 2 },
     reportSummaryDivider: { width: 1, height: 30, backgroundColor: colors.border },
-    exportReportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.primary, paddingVertical: 10, borderRadius: 6, marginBottom: 6 },
+    exportReportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.primary, paddingVertical: 10, borderRadius: 10, marginBottom: 6 },
     exportReportBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 
     // Farmer tab
     farmerTopRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
-    farmerSearchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10, gap: 6 },
+    farmerSearchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 10, gap: 6 },
     farmerSearchInput: { flex: 1, paddingVertical: 8, fontSize: 14, color: colors.foreground },
-    farmerActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6 },
+    farmerActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10 },
     farmerSectionTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
     farmerSubtitle: { fontSize: 11, marginBottom: 6 },
 });

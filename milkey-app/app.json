@@ -4,7 +4,7 @@
     "slug": "milkey",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.png",
     "scheme": "milkey",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -16,7 +16,7 @@
       "package": "com.milkey.app",
       "versionCode": 3,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#FFFFFF"
       },
       "googleServicesFile": "./google-services.json",

@@ -1017,6 +1017,13 @@ export const authApiNew = {
             body: JSON.stringify(data),
         });
     },
+
+    googleLogin: async (idToken: string) => {
+        return apiRequest<{ token: string; user: any }>('/auth/google', {
+            method: 'POST',
+            body: JSON.stringify({ idToken }),
+        });
+    },
 };
 
 // Custom Forms API
