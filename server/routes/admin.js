@@ -1405,7 +1405,133 @@ router.delete('/milk-collections/:id', adminAuth, async (req, res) => {
     }
 });
 
-// GET /api/admin/users-list - Get all users for dropdown (simple list)
+// ==================== PURCHASE FARMERS (ADMIN) ROUTES ====================
+
+// GET /api/admin/purchase-farmers - Get all purchase farmers across all users
+router.get('/purchase-farmers', adminAuth, async (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 10));
+        const skip = (page - 1) * limit;
+        const search = req.query.search?.trim() || '';
+        const userId = req.query.userId || '';
+
+        const query = { isActive: true };
+        if (userId) query.owner = userId;
+        if (search) {
+            query.$or = [
+                { code: { $regex: search, $options: 'i' } },
+                { name: { $regex: search, $options: 'i' } },
+                { mobile: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const [total, farmers] = await Promise.all([
+            PurchaseFarmer.countDocuments(query),
+            PurchaseFarmer.find(query)
+                .populate('owner', 'name email phone')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                farmers,
+                pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+            }
+        });
+    } catch (error) {
+        console.error('Admin get purchase farmers error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch purchase farmers' });
+    }
+});
+
+// GET /api/admin/milk-collections/report - Collection report with aggregation
+router.get('/milk-collections/report', adminAuth, async (req, res) => {
+    try {
+        const { startDate, endDate, userId, groupBy = 'date' } = req.query;
+
+        const match = {};
+        if (userId) match.owner = require('mongoose').Types.ObjectId(userId);
+        if (startDate || endDate) {
+            match.date = {};
+            if (startDate) match.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                match.date.$lte = end;
+            }
+        }
+
+        let groupId;
+        if (groupBy === 'farmer') {
+            groupId = '$purchaseFarmer';
+        } else if (groupBy === 'shift') {
+            groupId = { date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, shift: '$shift' };
+        } else {
+            groupId = { $dateToString: { format: '%Y-%m-%d', date: '$date' } };
+        }
+
+        const report = await MilkCollection.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: groupId,
+                    totalQuantity: { $sum: '$quantity' },
+                    totalAmount: { $sum: '$amount' },
+                    avgRate: { $avg: '$rate' },
+                    avgFat: { $avg: '$fat' },
+                    avgSnf: { $avg: '$snf' },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: -1 } }
+        ]);
+
+        // If grouped by farmer, populate farmer names
+        if (groupBy === 'farmer') {
+            const farmerIds = report.map(r => r._id).filter(Boolean);
+            const farmers = await PurchaseFarmer.find({ _id: { $in: farmerIds } }).select('code name mobile').lean();
+            const farmerMap = {};
+            farmers.forEach(f => { farmerMap[f._id.toString()] = f; });
+            report.forEach(r => {
+                r.farmer = r._id ? farmerMap[r._id.toString()] || null : null;
+            });
+        }
+
+        // Overall totals
+        const totals = await MilkCollection.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: null,
+                    totalQuantity: { $sum: '$quantity' },
+                    totalAmount: { $sum: '$amount' },
+                    avgRate: { $avg: '$rate' },
+                    avgFat: { $avg: '$fat' },
+                    avgSnf: { $avg: '$snf' },
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                report,
+                totals: totals[0] || { totalQuantity: 0, totalAmount: 0, avgRate: 0, avgFat: 0, avgSnf: 0, count: 0 }
+            }
+        });
+    } catch (error) {
+        console.error('Admin collection report error:', error);
+        res.status(500).json({ success: false, message: 'Failed to generate report' });
+    }
+});
+
+
 router.get('/users-list', adminAuth, async (req, res) => {
     try {
         const users = await User.find({ isBlocked: false })

@@ -26,6 +26,8 @@ import { CustomFormsPage } from './pages/CustomFormsPage'
 import { ActiveSubscriptionsPage } from './pages/ActiveSubscriptionsPage'
 import { WithdrawalsPage } from './pages/WithdrawalsPage'
 import { SocialLinksPage } from './pages/SocialLinksPage'
+import { CollectionReportPage } from './pages/CollectionReportPage'
+import { CollectionFarmersPage } from './pages/CollectionFarmersPage'
 
 function App() {
     return (
@@ -52,6 +54,9 @@ function App() {
                         <Route path="banners" element={<BannersPage />} />
                         <Route path="admin-orders" element={<AdminOrdersPage />} />
                         <Route path="purchase" element={<Purchase />} />
+                        <Route path="collection-data" element={<Purchase />} />
+                        <Route path="collection-report" element={<CollectionReportPage />} />
+                        <Route path="collection-farmers" element={<CollectionFarmersPage />} />
                         <Route path="selling-members" element={<SellingMembersPage />} />
                         <Route path="selling-entries" element={<SellingEntriesPage />} />
                         <Route path="selling-payments" element={<SellingPaymentsPage />} />

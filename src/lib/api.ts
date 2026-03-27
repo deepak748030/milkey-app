@@ -1126,6 +1126,44 @@ export interface AdminMilkCollection {
     updatedAt: string
 }
 
+// Admin Purchase Farmers
+export interface AdminPurchaseFarmer {
+    _id: string
+    code: string
+    name: string
+    mobile: string
+    address: string
+    owner: { _id: string; name: string; email: string; phone: string }
+    totalQuantity: number
+    totalAmount: number
+    defaultMilk: string
+    priceBasis: string
+    cowRate: number
+    buffaloRate: number
+    lastPurchaseDate: string
+    createdAt: string
+}
+
+export const getAdminPurchaseFarmers = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    userId?: string
+}) => {
+    const response = await api.get('/admin/purchase-farmers', { params })
+    return response.data
+}
+
+export const getAdminCollectionReport = async (params: {
+    startDate?: string
+    endDate?: string
+    userId?: string
+    groupBy?: string
+}) => {
+    const response = await api.get('/admin/milk-collections/report', { params })
+    return response.data
+}
+
 // Get list of users for dropdowns
 export const getAdminUsersList = async () => {
     const response = await api.get('/admin/users/list')

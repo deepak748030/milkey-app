@@ -32,7 +32,7 @@ import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 
 type TabType = PurchaseTab;
-const TAB_ORDER: TabType[] = ['Collection', 'Report', 'Farmer'];
+const TAB_ORDER: TabType[] = ['Purchase', 'Report', 'Farmer'];
 
 export default function PurchaseScreen() {
     const { colors, isDark } = useTheme();
@@ -313,10 +313,45 @@ export default function PurchaseScreen() {
         if (success) showAlert('Success', 'Printed successfully!');
     }, [collections, historyTotals, entryDate, entryShift, isConnected, printData]);
 
+    // Print report via Bluetooth printer
+    const handlePrintReport = useCallback(async () => {
+        const data = filteredReportCollections.length > 0 ? filteredReportCollections : collections;
+        const totals = filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals;
+        if (data.length === 0) { showAlert('Info', 'No data to print'); return; }
+        if (!isConnected) { showAlert('Info', 'Connect a Bluetooth printer first from TopBar'); return; }
+
+        const dateLabel = reportStartDate && reportEndDate
+            ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
+            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'AM' : 'PM'})`;
+        const farmerLabel = selectedReportFarmer ? `Farmer: ${selectedReportFarmer.name}` : 'All Farmers';
+
+        const parts: Uint8Array[] = [INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, textToBytes('COLLECTION REPORT\n'), NORMAL_SIZE, BOLD_OFF, textToBytes(dateLabel + '\n'), textToBytes(farmerLabel + '\n'), ALIGN_LEFT, doubleSeparator()];
+        parts.push(textToBytes(threeColumnLine('Code', 'Qty', 'Amt')));
+        parts.push(separator());
+
+        for (const c of data) {
+            parts.push(textToBytes(threeColumnLine(
+                c.farmerCode || '-',
+                String(c.quantity),
+                '₹' + c.amount.toFixed(0)
+            )));
+        }
+
+        parts.push(doubleSeparator());
+        parts.push(BOLD_ON);
+        parts.push(textToBytes(twoColumnLine('Total Qty:', totals.quantity.toFixed(1))));
+        parts.push(textToBytes(twoColumnLine('Total Amt:', '₹' + totals.amount.toFixed(2))));
+        parts.push(BOLD_OFF, FEED_3_LINES);
+
+        const bytes = concatBytes(...parts);
+        const success = await printData(bytes);
+        if (success) showAlert('Success', 'Printed successfully!');
+    }, [filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, isConnected, printData, selectedReportFarmer]);
+
     // Export PDF for report
     const handleExportReportPdf = useCallback(async () => {
-        const data = reportCollections.length > 0 ? reportCollections : collections;
-        const totals = reportCollections.length > 0 ? reportTotals : historyTotals;
+        const data = filteredReportCollections.length > 0 ? filteredReportCollections : collections;
+        const totals = filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals;
         if (data.length === 0) { showAlert('Info', 'No data to export'); return; }
         const dateLabel = reportStartDate && reportEndDate
             ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
@@ -338,7 +373,7 @@ export default function PurchaseScreen() {
             const { uri } = await ExpoPrint.printToFileAsync({ html });
             if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
         } catch { showAlert('Error', 'Failed to export'); }
-    }, [reportCollections, collections, reportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate]);
+    }, [filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate]);
 
     // Export farmers PDF
     const handleExportFarmersPdf = useCallback(async () => {
@@ -564,10 +599,54 @@ export default function PurchaseScreen() {
         </View>
     );
 
+    // Report state for farmer filter
+    const [reportFarmerFilter, setReportFarmerFilter] = useState<string>('');
+    const [showReportFarmerModal, setShowReportFarmerModal] = useState(false);
+
+    const filteredReportCollections = useMemo(() => {
+        if (!reportFarmerFilter) return reportCollections;
+        return reportCollections.filter(c => c.purchaseFarmer?._id === reportFarmerFilter || c.farmerCode === reportFarmerFilter);
+    }, [reportCollections, reportFarmerFilter]);
+
+    const filteredReportTotals = useMemo(() => {
+        if (!reportFarmerFilter) return reportTotals;
+        const filtered = filteredReportCollections;
+        return {
+            quantity: filtered.reduce((sum, c) => sum + c.quantity, 0),
+            amount: filtered.reduce((sum, c) => sum + c.amount, 0),
+        };
+    }, [filteredReportCollections, reportFarmerFilter, reportTotals]);
+
+    const selectedReportFarmer = useMemo(() => {
+        if (!reportFarmerFilter) return null;
+        return customers.find(c => c._id === reportFarmerFilter || c.code === reportFarmerFilter) || null;
+    }, [reportFarmerFilter, customers]);
+
     // ── Report Tab ──
     const renderReportTab = () => (
         <View>
             <Text style={s.sectionTitle}>Collection Report</Text>
+
+            {/* Farmer Select */}
+            <Pressable
+                style={[s.customerBox, { marginBottom: 6 }]}
+                onPress={() => setShowReportFarmerModal(true)}
+            >
+                <View style={[s.customerBadge, { backgroundColor: selectedReportFarmer ? colors.primary : colors.muted }]}>
+                    <User size={16} color={selectedReportFarmer ? '#fff' : colors.mutedForeground} />
+                </View>
+                <View style={{ flex: 1 }}>
+                    <Text style={s.customerName}>{selectedReportFarmer ? selectedReportFarmer.name : 'All Farmers'}</Text>
+                    <Text style={s.customerMeta}>{selectedReportFarmer ? `Code: ${selectedReportFarmer.code}` : 'Tap to select a specific farmer'}</Text>
+                </View>
+                {reportFarmerFilter ? (
+                    <Pressable onPress={() => setReportFarmerFilter('')} hitSlop={8}>
+                        <X size={16} color={colors.mutedForeground} />
+                    </Pressable>
+                ) : (
+                    <ChevronDown size={16} color={colors.mutedForeground} />
+                )}
+            </Pressable>
 
             {/* Date Range Selector */}
             <DateRangePicker
@@ -583,32 +662,32 @@ export default function PurchaseScreen() {
                     <View style={s.reportSummaryRow}>
                         <View style={s.reportSummaryItem}>
                             <Text style={s.reportSummaryLabel}>Total Qty</Text>
-                            <Text style={s.reportSummaryValue}>{reportTotals.quantity.toFixed(1)} L</Text>
+                            <Text style={s.reportSummaryValue}>{filteredReportTotals.quantity.toFixed(1)} L</Text>
                         </View>
                         <View style={s.reportSummaryDivider} />
                         <View style={s.reportSummaryItem}>
                             <Text style={s.reportSummaryLabel}>Avg Rate</Text>
-                            <Text style={s.reportSummaryValue}>₹{reportTotals.quantity > 0 ? (reportTotals.amount / reportTotals.quantity).toFixed(1) : '0'}</Text>
+                            <Text style={s.reportSummaryValue}>₹{filteredReportTotals.quantity > 0 ? (filteredReportTotals.amount / filteredReportTotals.quantity).toFixed(1) : '0'}</Text>
                         </View>
                         <View style={s.reportSummaryDivider} />
                         <View style={s.reportSummaryItem}>
                             <Text style={s.reportSummaryLabel}>Total Amt</Text>
-                            <Text style={[s.reportSummaryValue, { color: colors.primary }]}>₹{reportTotals.amount.toFixed(0)}</Text>
+                            <Text style={[s.reportSummaryValue, { color: colors.primary }]}>₹{filteredReportTotals.amount.toFixed(0)}</Text>
                         </View>
                     </View>
                 </View>
             )}
 
-            {/* Export Button */}
-            <Pressable style={s.exportReportBtn} onPress={handleExportReportPdf}>
-                <Download size={16} color="#fff" />
-                <Text style={s.exportReportBtnText}>Download PDF</Text>
+            {/* Print Button */}
+            <Pressable style={s.exportReportBtn} onPress={handlePrintReport}>
+                <Printer size={16} color="#fff" />
+                <Text style={s.exportReportBtnText}>Print Report</Text>
             </Pressable>
 
             {/* Report Table */}
             {reportLoading ? (
                 <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
-            ) : reportCollections.length === 0 && reportStartDate && reportEndDate ? (
+            ) : filteredReportCollections.length === 0 && reportStartDate && reportEndDate ? (
                 <View style={s.emptyBox}>
                     <Droplets size={24} color={colors.border} />
                     <Text style={s.emptyText}>No data for selected period</Text>
@@ -628,7 +707,7 @@ export default function PurchaseScreen() {
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
                         <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
                     </View>
-                    {reportCollections.map((item, index) => (
+                    {filteredReportCollections.map((item, index) => (
                         <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
                             <View style={s.entryCell1}>
                                 <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700' }]}>{item.farmerCode || '-'}</Text>
@@ -642,15 +721,60 @@ export default function PurchaseScreen() {
                         </View>
                     ))}
                     <View style={s.tFootRow}>
-                        <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({reportCollections.length})</Text>
-                        <Text style={[s.tFootText, s.entryCell2]}>{reportTotals.quantity.toFixed(1)}</Text>
+                        <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({filteredReportCollections.length})</Text>
+                        <Text style={[s.tFootText, s.entryCell2]}>{filteredReportTotals.quantity.toFixed(1)}</Text>
                         <Text style={[s.tFootText, s.entryCell2]}></Text>
                         <Text style={[s.tFootText, s.entryCell2]}></Text>
                         <Text style={[s.tFootText, s.entryCell2]}></Text>
-                        <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{reportTotals.amount.toFixed(0)}</Text>
+                        <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{filteredReportTotals.amount.toFixed(0)}</Text>
                     </View>
                 </View>
             )}
+
+            {/* Report Farmer Select Modal */}
+            <Modal visible={showReportFarmerModal} animationType="slide" transparent onRequestClose={() => setShowReportFarmerModal(false)}>
+                <View style={s.modalOverlay}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowReportFarmerModal(false)} />
+                    <View style={[s.modalSheet, { maxHeight: '70%' }]}>
+                        <View style={s.modalHandle} />
+                        <View style={s.modalHeader}>
+                            <Text style={s.modalTitle}>Select Farmer for Report</Text>
+                            <Pressable onPress={() => setShowReportFarmerModal(false)}><X size={18} color={colors.foreground} /></Pressable>
+                        </View>
+                        <Pressable
+                            style={[s.custListItem, { paddingHorizontal: 12 }]}
+                            onPress={() => { setReportFarmerFilter(''); setShowReportFarmerModal(false); }}
+                        >
+                            <View style={[s.custListAvatar, { backgroundColor: !reportFarmerFilter ? colors.primary : colors.muted }]}>
+                                <User size={14} color={!reportFarmerFilter ? '#fff' : colors.mutedForeground} />
+                            </View>
+                            <Text style={[s.custListName, !reportFarmerFilter && { color: colors.primary }]}>All Farmers</Text>
+                            {!reportFarmerFilter && <Check size={16} color={colors.primary} />}
+                        </Pressable>
+                        <FlatList
+                            data={customers}
+                            keyExtractor={item => item._id}
+                            renderItem={({ item }) => (
+                                <Pressable
+                                    style={[s.custListItem, { paddingHorizontal: 12 }]}
+                                    onPress={() => { setReportFarmerFilter(item._id); setShowReportFarmerModal(false); }}
+                                >
+                                    <View style={s.custListAvatar}>
+                                        <Text style={s.custListAvatarText}>{item.code}</Text>
+                                    </View>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={s.custListName}>{item.name}</Text>
+                                        {item.mobile ? <Text style={s.custListSub}>{item.mobile}</Text> : null}
+                                    </View>
+                                    {(reportFarmerFilter === item._id || reportFarmerFilter === item.code) && <Check size={16} color={colors.primary} />}
+                                </Pressable>
+                            )}
+                            contentContainerStyle={{ paddingHorizontal: 6, paddingBottom: 16 }}
+                            showsVerticalScrollIndicator={false}
+                        />
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 
@@ -696,16 +820,16 @@ export default function PurchaseScreen() {
             ) : (
                 <View style={s.tableWrap}>
                     <View style={[s.tHead, { backgroundColor: colors.primary }]}>
-                        <Text style={[s.tHeadText, { flex: 0.5, color: '#fff' }]}>{t.common.code}</Text>
-                        <Text style={[s.tHeadText, { flex: 1.2, color: '#fff' }]}>{t.common.name}</Text>
-                        <Text style={[s.tHeadText, { flex: 0.8, color: '#fff' }]}>Based On</Text>
-                        <Text style={[s.tHeadText, { flex: 0.8, color: '#fff' }]}>Milk</Text>
+                        <Text style={[s.tHeadText, { flex: 0.5, color: '#fff', textAlign: 'center' }]}>{t.common.code}</Text>
+                        <Text style={[s.tHeadText, { flex: 1.2, color: '#fff', textAlign: 'center' }]}>{t.common.name}</Text>
+                        <Text style={[s.tHeadText, { flex: 0.8, color: '#fff', textAlign: 'center' }]}>Based On</Text>
+                        <Text style={[s.tHeadText, { flex: 0.8, color: '#fff', textAlign: 'center' }]}>Milk</Text>
                         <View style={{ flex: 0.6 }} />
                     </View>
                     {customers.map((item, index) => (
                         <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
                             <Text style={[s.entryCellText, { flex: 0.5, color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.code}</Text>
-                            <Text style={[s.entryCellText, { flex: 1.2 }]} numberOfLines={1}>{item.name}</Text>
+                            <Text style={[s.entryCellText, { flex: 1.2, textAlign: 'center' }]} numberOfLines={1}>{item.name}</Text>
                             <Text style={[s.entryCellText, { flex: 0.8, textAlign: 'center', fontSize: 10 }]}>{item.priceBasis || '-'}</Text>
                             <Text style={[s.entryCellText, { flex: 0.8, textAlign: 'center', fontSize: 10 }]}>{item.defaultMilk || '-'}</Text>
                             <View style={{ flex: 0.6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
@@ -734,7 +858,7 @@ export default function PurchaseScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
                 keyboardShouldPersistTaps="handled"
             >
-                {activeTab === 'Collection' && renderCollectionTab()}
+                {activeTab === 'Purchase' && renderCollectionTab()}
                 {activeTab === 'Report' && renderReportTab()}
                 {activeTab === 'Farmer' && renderFarmerTab()}
             </ScrollView>

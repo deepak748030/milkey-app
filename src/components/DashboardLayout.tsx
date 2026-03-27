@@ -15,7 +15,6 @@ import {
     Package,
     Milk,
     ClipboardList,
-    ShoppingCart,
     UserCheck,
     FileText,
     CreditCard,
@@ -47,8 +46,10 @@ const mainNavItems = [
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
-const purchaseSubItems = [
-    { to: '/purchase', icon: ShoppingCart, label: 'Purchase Data' },
+const collectionSubItems = [
+    { to: '/collection-data', icon: Milk, label: 'Purchase' },
+    { to: '/collection-report', icon: BarChart3, label: 'Report' },
+    { to: '/collection-farmers', icon: UserPlus, label: 'Farmers' },
 ]
 
 const registerSubItems = [
@@ -259,9 +260,9 @@ export function DashboardLayout() {
                     {/* Purchase, Register & Selling collapsible groups at bottom */}
                     <div className="space-y-1 border-t border-border/30 pt-2 mt-2">
                         <CollapsibleGroup
-                            label="Purchase"
-                            icon={ShoppingCart}
-                            items={purchaseSubItems}
+                            label="Collection"
+                            icon={Milk}
+                            items={collectionSubItems}
                             sidebarOpen={sidebarOpen}
                             pathname={location.pathname}
                             onNavigate={closeMobile}

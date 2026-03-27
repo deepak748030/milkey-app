@@ -8,7 +8,7 @@ type SubTabBarProps = {
     screen: 'purchase' | 'selling' | 'register';
 };
 
-const PURCHASE_TABS: PurchaseTab[] = ['Collection', 'Report', 'Farmer'];
+const PURCHASE_TABS: PurchaseTab[] = ['Purchase', 'Report', 'Farmer'];
 const SELLING_TABS: SellingTab[] = ['Entry', 'Payment', 'Reports', 'Member'];
 const REGISTER_TABS: RegisterTab[] = ['Payments', 'Advances', 'Farmers'];
 
@@ -31,7 +31,7 @@ export default function SubTabBar({ screen }: SubTabBarProps) {
         tabs = PURCHASE_TABS;
         activeTab = purchaseTab;
         setActiveTab = (tab) => setPurchaseTab(tab as PurchaseTab);
-        labels = { Collection: 'Collection', Report: 'Report', Farmer: 'Farmer' };
+        labels = { Purchase: 'Purchase', Report: 'Report', Farmer: 'Farmer' };
     } else if (screen === 'selling') {
         tabs = SELLING_TABS;
         activeTab = sellingTab;
