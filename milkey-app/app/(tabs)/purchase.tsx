@@ -279,6 +279,29 @@ export default function PurchaseScreen() {
     const showBuffalo = selectedCustomer ? selectedCustomer.buffaloEnabled : true;
     const isMorning = entryShift === 'morning';
 
+    // Report state for farmer filter
+    const [reportFarmerFilter, setReportFarmerFilter] = useState<string>('');
+    const [showReportFarmerModal, setShowReportFarmerModal] = useState(false);
+
+    const filteredReportCollections = useMemo(() => {
+        if (!reportFarmerFilter) return reportCollections;
+        return reportCollections.filter(c => c.purchaseFarmer?._id === reportFarmerFilter || c.farmerCode === reportFarmerFilter);
+    }, [reportCollections, reportFarmerFilter]);
+
+    const filteredReportTotals = useMemo(() => {
+        if (!reportFarmerFilter) return reportTotals;
+        const filtered = filteredReportCollections;
+        return {
+            quantity: filtered.reduce((sum, c) => sum + c.quantity, 0),
+            amount: filtered.reduce((sum, c) => sum + c.amount, 0),
+        };
+    }, [filteredReportCollections, reportFarmerFilter, reportTotals]);
+
+    const selectedReportFarmer = useMemo(() => {
+        if (!reportFarmerFilter) return null;
+        return customers.find(c => c._id === reportFarmerFilter || c.code === reportFarmerFilter) || null;
+    }, [reportFarmerFilter, customers]);
+
     // BLE print collection entries on thermal printer
     const handleBlePrintEntries = useCallback(async () => {
         const data = collections;
@@ -599,28 +622,6 @@ export default function PurchaseScreen() {
         </View>
     );
 
-    // Report state for farmer filter
-    const [reportFarmerFilter, setReportFarmerFilter] = useState<string>('');
-    const [showReportFarmerModal, setShowReportFarmerModal] = useState(false);
-
-    const filteredReportCollections = useMemo(() => {
-        if (!reportFarmerFilter) return reportCollections;
-        return reportCollections.filter(c => c.purchaseFarmer?._id === reportFarmerFilter || c.farmerCode === reportFarmerFilter);
-    }, [reportCollections, reportFarmerFilter]);
-
-    const filteredReportTotals = useMemo(() => {
-        if (!reportFarmerFilter) return reportTotals;
-        const filtered = filteredReportCollections;
-        return {
-            quantity: filtered.reduce((sum, c) => sum + c.quantity, 0),
-            amount: filtered.reduce((sum, c) => sum + c.amount, 0),
-        };
-    }, [filteredReportCollections, reportFarmerFilter, reportTotals]);
-
-    const selectedReportFarmer = useMemo(() => {
-        if (!reportFarmerFilter) return null;
-        return customers.find(c => c._id === reportFarmerFilter || c.code === reportFarmerFilter) || null;
-    }, [reportFarmerFilter, customers]);
 
     // ── Report Tab ──
     const renderReportTab = () => (
