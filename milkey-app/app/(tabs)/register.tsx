@@ -12,6 +12,7 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
 import { PaymentRangeCalendar, BlockedPeriod } from '@/components/PaymentRangeCalendar';
+import { DateRangePicker } from '@/components/DateRangePicker';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -1092,48 +1093,15 @@ export default function RegisterScreen() {
 
                     {/* Calculation Period - Calendar opens as Modal */}
                     <Text style={styles.sectionLabel}>Calculation Period</Text>
-                    <View style={styles.dateRow}>
-                        <Pressable
-                            style={[styles.dateInputWrapper, dateSelectingType === 'start' && { borderColor: colors.primary, borderWidth: 2 }]}
-                            onPress={() => { setDateSelectingType('start'); setShowCalendarModal(true); }}
-                        >
-                            <Text style={[styles.dateInputText, !dateStart && { color: colors.mutedForeground }]}>
-                                {dateStart ? formatDateDDMMYYYY(dateStart) : 'Start Date'}
-                            </Text>
-                            <CalendarIcon size={16} color={dateSelectingType === 'start' ? colors.primary : colors.mutedForeground} />
-                        </Pressable>
-                        <Pressable
-                            style={[styles.dateInputWrapper, dateSelectingType === 'end' && { borderColor: colors.primary, borderWidth: 2 }]}
-                            onPress={() => { setDateSelectingType('end'); setShowCalendarModal(true); }}
-                        >
-                            <Text style={[styles.dateInputText, !dateEnd && { color: colors.mutedForeground }]}>
-                                {dateEnd ? formatDateDDMMYYYY(dateEnd) : 'End Date'}
-                            </Text>
-                            <CalendarIcon size={16} color={dateSelectingType === 'end' ? colors.primary : colors.mutedForeground} />
-                        </Pressable>
-                    </View>
-
-                    {/* Calendar Modal */}
-                    <Modal visible={showCalendarModal} transparent animationType="fade" onRequestClose={() => setShowCalendarModal(false)}>
-                        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 16 }} onPress={() => setShowCalendarModal(false)}>
-                            <Pressable onPress={() => { }} style={{ backgroundColor: isDark ? colors.card : '#fff', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: colors.border }}>
-                                <PaymentRangeCalendar
-                                    startDate={dateStart}
-                                    endDate={dateEnd}
-                                    onStartDateSelect={(date) => {
-                                        setDateStart(date);
-                                        setDateSelectingType('end');
-                                    }}
-                                    onEndDateSelect={(date) => {
-                                        setDateEnd(date);
-                                        setShowCalendarModal(false);
-                                    }}
-                                    blockedPeriods={blockedPeriods}
-                                    selectingType={dateSelectingType}
-                                />
-                            </Pressable>
-                        </Pressable>
-                    </Modal>
+                    <DateRangePicker
+                        startDate={dateStart}
+                        endDate={dateEnd}
+                        onStartDateChange={(date) => setDateStart(date)}
+                        onEndDateChange={(date) => {
+                            setDateEnd(date);
+                        }}
+                        blockedPeriods={blockedPeriods}
+                    />
 
                     {/* Summary card */}
                     <View style={styles.summaryCard}>

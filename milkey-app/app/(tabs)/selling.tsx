@@ -8,6 +8,7 @@ import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
 import { SellingPaymentCalendar } from '@/components/SellingPaymentCalendar';
 import { PaymentRangeCalendar } from '@/components/PaymentRangeCalendar';
+import { DateRangePicker } from '@/components/DateRangePicker';
 import { membersApi, sellingEntriesApi, memberPaymentsApi, printSettingsApi, Member, SellingEntry, MemberPayment, MemberPaymentSummary, MemberBalanceReport, BalanceReportSummary, PrintSettings } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
 import { exportPayments } from '@/lib/csvExport';
@@ -23,7 +24,7 @@ import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 
 type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
 
-// Helper to group entries by date and member for combined M/E display insets.bottom
+// Helper to group entries by date and member for combined M/E display insets.bottom milk amount
 interface GroupedEntry {
     date: string;
     memberId: string;
@@ -1448,49 +1449,13 @@ export default function SellingScreen() {
             {/* Recent Entries Filters */}
             <View style={styles.recentFiltersCard}>
                 {/* Date Range - From/To selectors */}
-                <View style={styles.recentFiltersRow}>
-                    <Pressable
-                        style={[styles.recentDateInput, recentDateSelectingType === 'start' && { borderColor: colors.primary, borderWidth: 2 }]}
-                        onPress={() => { setRecentDateSelectingType('start'); setShowRecentCalendarModal(true); }}
-                    >
-                        <CalendarIcon size={14} color={recentDateSelectingType === 'start' ? colors.primary : colors.mutedForeground} />
-                        <Text style={styles.recentDateText}>
-                            {recentEntriesStartDate ? formatDate(recentEntriesStartDate) : 'Start Date'}
-                        </Text>
-                    </Pressable>
-                    <Text style={styles.dateSeparator}>→</Text>
-                    <Pressable
-                        style={[styles.recentDateInput, recentDateSelectingType === 'end' && { borderColor: colors.primary, borderWidth: 2 }]}
-                        onPress={() => { setRecentDateSelectingType('end'); setShowRecentCalendarModal(true); }}
-                    >
-                        <CalendarIcon size={14} color={recentDateSelectingType === 'end' ? colors.primary : colors.mutedForeground} />
-                        <Text style={styles.recentDateText}>
-                            {recentEntriesEndDate ? formatDate(recentEntriesEndDate) : 'End Date'}
-                        </Text>
-                    </Pressable>
-                </View>
-
-                {/* Calendar Modal for recent entries date range */}
-                <Modal visible={showRecentCalendarModal} transparent animationType="fade" onRequestClose={() => setShowRecentCalendarModal(false)}>
-                    <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 16 }} onPress={() => setShowRecentCalendarModal(false)}>
-                        <Pressable onPress={() => { }} style={{ backgroundColor: isDark ? colors.card : '#fff', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: colors.border }}>
-                            <PaymentRangeCalendar
-                                startDate={recentEntriesStartDate || null}
-                                endDate={recentEntriesEndDate || null}
-                                onStartDateSelect={(date) => {
-                                    setRecentEntriesStartDate(date);
-                                    setRecentDateSelectingType('end');
-                                }}
-                                onEndDateSelect={(date) => {
-                                    setRecentEntriesEndDate(date);
-                                    setShowRecentCalendarModal(false);
-                                }}
-                                blockedPeriods={[]}
-                                selectingType={recentDateSelectingType}
-                            />
-                        </Pressable>
-                    </Pressable>
-                </Modal>
+                <DateRangePicker
+                    startDate={recentEntriesStartDate || null}
+                    endDate={recentEntriesEndDate || null}
+                    onStartDateChange={setRecentEntriesStartDate}
+                    onEndDateChange={setRecentEntriesEndDate}
+                    formatDate={formatDate}
+                />
 
                 <View style={styles.recentFiltersRow}>
                     {/* Member Filter */}
@@ -1780,24 +1745,27 @@ export default function SellingScreen() {
                     <View style={styles.paymentSummaryCard}>
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Milk Qty (L):</Text>
-                            <Text style={[styles.summaryValue, { color: colors.foreground }]}>
-                                {(memberSummary?.selling?.totalLiters || 0).toFixed(1)} L
-                            </Text>
+                            <View style={styles.summaryValueBox}>
+                                <Text style={[styles.summaryValueBoxText, { color: colors.foreground }]}>
+                                    {(memberSummary?.selling?.totalLiters || 0).toFixed(1)} L
+                                </Text>
+                            </View>
                         </View>
-                        <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
+                        <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, opacity: 0.7 }]}>
                             <Text style={styles.summaryLabel}>Milk Amount (₹):</Text>
-                            <View style={styles.milkAmountWrapper}>
-                                <Text style={styles.milkAmountPrefix}>₹</Text>
-                                <Text style={[styles.milkAmountInput, { minWidth: Math.max(40, (milkAmount.length || 1) * 12) }]}>
-                                    {milkAmount}
+                            <View style={styles.summaryValueBox}>
+                                <Text style={[styles.summaryValueBoxText, { color: colors.foreground }]}>
+                                    ₹ {milkAmount}
                                 </Text>
                             </View>
                         </View>
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
                             <Text style={[styles.summaryLabel, { fontWeight: '700' }]}>Total Payable:</Text>
-                            <Text style={[styles.summaryValue, { fontWeight: '700', color: netPayable >= 0 ? colors.primary : colors.destructive }]}>
-                                ₹{netPayable.toFixed(2)}
-                            </Text>
+                            <View style={styles.summaryValueBox}>
+                                <Text style={[styles.summaryValueBoxText, { fontWeight: '700', color: netPayable >= 0 ? colors.primary : colors.destructive }]}>
+                                    ₹{netPayable.toFixed(2)}
+                                </Text>
+                            </View>
                         </View>
                     </View>
 
@@ -3124,6 +3092,20 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     summaryLabel: {
         fontSize: 13,
         color: colors.mutedForeground,
+    },
+    summaryValueBox: {
+        backgroundColor: isDark ? colors.muted : '#F3F4F6',
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        minWidth: 90,
+        alignItems: 'flex-end' as const,
+    },
+    summaryValueBoxText: {
+        fontSize: 13,
+        fontWeight: '600',
     },
     summaryValue: {
         fontSize: 13,

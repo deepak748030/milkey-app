@@ -24,6 +24,7 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
 import { PaymentRangeCalendar } from '@/components/PaymentRangeCalendar';
+import { DateRangePicker } from '@/components/DateRangePicker';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -586,43 +587,12 @@ export default function PurchaseScreen() {
             <Text style={s.sectionTitle}>Collection Report</Text>
 
             {/* Date Range Selector */}
-            <View style={s.dateRangeRow}>
-                <Pressable
-                    style={[s.dateInputWrapper, reportDateSelectingType === 'start' && { borderColor: colors.primary, borderWidth: 2 }]}
-                    onPress={() => { setReportDateSelectingType('start'); setShowReportCalendarModal(true); }}
-                >
-                    <CalendarIcon size={14} color={reportDateSelectingType === 'start' ? colors.primary : colors.mutedForeground} />
-                    <Text style={[s.dateInputText, !reportStartDate && { color: colors.mutedForeground }]}>
-                        {reportStartDate ? formatDateStr(reportStartDate) : 'Start Date'}
-                    </Text>
-                </Pressable>
-                <Text style={s.dateSeparator}>→</Text>
-                <Pressable
-                    style={[s.dateInputWrapper, reportDateSelectingType === 'end' && { borderColor: colors.primary, borderWidth: 2 }]}
-                    onPress={() => { setReportDateSelectingType('end'); setShowReportCalendarModal(true); }}
-                >
-                    <CalendarIcon size={14} color={reportDateSelectingType === 'end' ? colors.primary : colors.mutedForeground} />
-                    <Text style={[s.dateInputText, !reportEndDate && { color: colors.mutedForeground }]}>
-                        {reportEndDate ? formatDateStr(reportEndDate) : 'End Date'}
-                    </Text>
-                </Pressable>
-            </View>
-
-            {/* Report Calendar Modal */}
-            <Modal visible={showReportCalendarModal} transparent animationType="fade" onRequestClose={() => setShowReportCalendarModal(false)}>
-                <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', paddingHorizontal: 16 }} onPress={() => setShowReportCalendarModal(false)}>
-                    <Pressable onPress={() => { }} style={{ backgroundColor: isDark ? colors.card : '#fff', borderRadius: 16, padding: 12, borderWidth: 1, borderColor: colors.border }}>
-                        <PaymentRangeCalendar
-                            startDate={reportStartDate || null}
-                            endDate={reportEndDate || null}
-                            onStartDateSelect={(date) => { setReportStartDate(date); setReportDateSelectingType('end'); }}
-                            onEndDateSelect={(date) => { setReportEndDate(date); setShowReportCalendarModal(false); }}
-                            blockedPeriods={[]}
-                            selectingType={reportDateSelectingType}
-                        />
-                    </Pressable>
-                </Pressable>
-            </Modal>
+            <DateRangePicker
+                startDate={reportStartDate || null}
+                endDate={reportEndDate || null}
+                onStartDateChange={setReportStartDate}
+                onEndDateChange={setReportEndDate}
+            />
 
             {/* Report Summary */}
             {reportStartDate && reportEndDate && (
