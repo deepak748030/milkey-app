@@ -1024,6 +1024,34 @@ export const authApiNew = {
             body: JSON.stringify({ idToken }),
         });
     },
+
+    sendPhoneOtp: async (phone: string) => {
+        return apiRequest<{ message: string }>('/auth/send-phone-otp', {
+            method: 'POST',
+            body: JSON.stringify({ phone }),
+        });
+    },
+
+    verifyPhoneOtp: async (phone: string, otp: string) => {
+        return apiRequest<{ verified: boolean }>('/auth/verify-phone-otp', {
+            method: 'POST',
+            body: JSON.stringify({ phone, otp }),
+        });
+    },
+
+    phoneLogin: async (phone: string, otp: string) => {
+        return apiRequest<{ token: string; user: any }>('/auth/phone-login', {
+            method: 'POST',
+            body: JSON.stringify({ phone, otp }),
+        });
+    },
+
+    googleSignupRegister: async (data: { googleEmail: string; phone: string; name: string; address?: string; referralCode?: string }) => {
+        return apiRequest<{ token: string; user: any }>('/auth/google-signup-register', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
 };
 
 // Custom Forms API
@@ -1762,4 +1790,17 @@ export const printSettingsApi = {
             body: JSON.stringify(data),
         });
     },
+};
+
+// App Version Check (public endpoint)
+export const checkAppVersion = async () => {
+    return apiRequest<{
+        latestVersion: string;
+        minVersion: string;
+        playStoreLink: string;
+        appStoreLink: string;
+        forceUpdate: boolean;
+        updateMessage: string;
+        forceUpdateMessage: string;
+    }>('/admin/app-version');
 };

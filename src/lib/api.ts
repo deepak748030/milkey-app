@@ -1899,4 +1899,15 @@ export const toggleSocialLinkStatus = async (id: string) => {
     return response.data
 }
 
+// App Version
+export const getAppVersion = async () => {
+    const response = await api.get('/admin/app-version')
+    return response.data
+}
+
+export const updateAppVersion = async (data: any) => {
+    const response = await api.put('/admin/app-version', data)
+    return response.data
+}
+
 export default api

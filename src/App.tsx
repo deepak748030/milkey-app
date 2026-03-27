@@ -28,6 +28,7 @@ import { WithdrawalsPage } from './pages/WithdrawalsPage'
 import { SocialLinksPage } from './pages/SocialLinksPage'
 import { CollectionReportPage } from './pages/CollectionReportPage'
 import { CollectionFarmersPage } from './pages/CollectionFarmersPage'
+import { AppVersionPage } from './pages/AppVersionPage'
 
 function App() {
     return (
@@ -70,6 +71,7 @@ function App() {
                         <Route path="custom-forms" element={<CustomFormsPage />} />
                         <Route path="settings" element={<SettingsPage />} />
                         <Route path="social-links" element={<SocialLinksPage />} />
+                        <Route path="app-version" element={<AppVersionPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const Admin = require('../models/Admin');
 const User = require('../models/User');
 const SocialLink = require('../models/SocialLink');
+const AppVersion = require('../models/AppVersion');
 const Order = require('../models/Order');
 const MilkCollection = require('../models/MilkCollection');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
@@ -3670,6 +3671,45 @@ router.delete('/social-links/:id', adminAuth, async (req, res) => {
     } catch (error) {
         console.error('Delete social link error:', error);
         res.status(500).json({ success: false, message: 'Failed to delete social link' });
+    }
+});
+
+// ── App Version Management ──
+
+// GET app version (public - no auth needed for app to check)
+router.get('/app-version', async (req, res) => {
+    try {
+        let version = await AppVersion.findOne({ isActive: true }).sort({ updatedAt: -1 });
+        if (!version) {
+            version = await AppVersion.create({});
+        }
+        res.json({ success: true, response: version });
+    } catch (error) {
+        console.error('Get app version error:', error);
+        res.status(500).json({ success: false, message: 'Failed to get app version' });
+    }
+});
+
+// PUT update app version (admin only)
+router.put('/app-version', adminAuth, async (req, res) => {
+    try {
+        const { latestVersion, minVersion, playStoreLink, appStoreLink, forceUpdate, updateMessage, forceUpdateMessage } = req.body;
+        let version = await AppVersion.findOne({ isActive: true }).sort({ updatedAt: -1 });
+        if (!version) {
+            version = new AppVersion({});
+        }
+        if (latestVersion !== undefined) version.latestVersion = latestVersion;
+        if (minVersion !== undefined) version.minVersion = minVersion;
+        if (playStoreLink !== undefined) version.playStoreLink = playStoreLink;
+        if (appStoreLink !== undefined) version.appStoreLink = appStoreLink;
+        if (forceUpdate !== undefined) version.forceUpdate = forceUpdate;
+        if (updateMessage !== undefined) version.updateMessage = updateMessage;
+        if (forceUpdateMessage !== undefined) version.forceUpdateMessage = forceUpdateMessage;
+        await version.save();
+        res.json({ success: true, response: version, message: 'App version updated' });
+    } catch (error) {
+        console.error('Update app version error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update app version' });
     }
 });
 

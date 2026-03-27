@@ -28,6 +28,7 @@ import {
     Share2,
     BookOpen,
     Store,
+    Smartphone,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -43,6 +44,7 @@ const mainNavItems = [
     { to: '/withdrawals', icon: Wallet, label: 'Withdrawals' },
     { to: '/custom-forms', icon: FileText, label: 'Custom Forms' },
     { to: '/social-links', icon: Share2, label: 'Social Links' },
+    { to: '/app-version', icon: Smartphone, label: 'App Version' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
