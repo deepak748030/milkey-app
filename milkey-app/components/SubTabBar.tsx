@@ -114,7 +114,7 @@ export default function SubTabBar({ screen }: SubTabBarProps) {
 const createStyles = (colors: any) => StyleSheet.create({
     container: {
         paddingHorizontal: 6,
-        paddingBottom: 4,
+        paddingBottom: 0,
         backgroundColor: colors.background,
     },
     tabRow: {

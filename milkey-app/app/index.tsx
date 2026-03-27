@@ -178,7 +178,7 @@ export default function SplashScreen() {
               <Image
                 source={require('@/assets/images/icon.png')}
                 style={styles.logoImage}
-                resizeMode="contain"
+                resizeMode="cover"
               />
             </View>
           </View>
@@ -260,6 +260,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   bgCircle: {
     position: 'absolute',
@@ -304,17 +305,17 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   logoBg: {
-    width: 120,
-    height: 120,
-    borderRadius: 28,
+    width: 140,
+    height: 140,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: 0,
     overflow: 'hidden',
   },
   logoImage: {
-    width: 110,
-    height: 110,
+    width: 140,
+    height: 140,
   },
   appName: {
     fontSize: 44,
