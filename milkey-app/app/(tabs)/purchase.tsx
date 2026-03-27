@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View, Text, StyleSheet, Pressable, TextInput, FlatList,
-    ActivityIndicator, RefreshControl, Modal, ScrollView, Animated, Keyboard, KeyboardAvoidingView, Platform
+    ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Platform
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -29,8 +29,9 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
+import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 
-type TabType = 'Collection' | 'Report' | 'Farmer';
+type TabType = PurchaseTab;
 const TAB_ORDER: TabType[] = ['Collection', 'Report', 'Farmer'];
 
 export default function PurchaseScreen() {
@@ -43,10 +44,7 @@ export default function PurchaseScreen() {
     } = useSubscriptionCheck('purchase');
     const { isConnected, printData, isPrinting } = useBluetoothPrinter();
 
-    const [activeTab, setActiveTab] = useState<TabType>('Collection');
-    const [tabRowWidth, setTabRowWidth] = useState(0);
-    const activeTabIndexAnim = useRef(new Animated.Value(0)).current;
-    const floatingTabsAnim = useRef(new Animated.Value(0)).current;
+    const { purchaseTab: activeTab, setPurchaseTab: setActiveTab } = useSubTabStore();
 
     // Customer state
     const [customers, setCustomers] = useState<PurchaseFarmer[]>([]);
@@ -104,23 +102,8 @@ export default function PurchaseScreen() {
 
     const s = createStyles(colors, isDark);
 
-    // Tab animations
-    useEffect(() => {
-        Animated.timing(floatingTabsAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
-    }, []);
 
-    useEffect(() => {
-        Animated.spring(activeTabIndexAnim, {
-            toValue: TAB_ORDER.indexOf(activeTab),
-            useNativeDriver: false, damping: 16, stiffness: 180,
-        }).start();
-    }, [activeTab]);
 
-    const tabItemWidth = tabRowWidth > 0 ? (tabRowWidth - 20) / 3 : 0;
-    const tabIndicatorTranslateX = activeTabIndexAnim.interpolate({
-        inputRange: [0, 1, 2],
-        outputRange: [0, tabItemWidth + 6, (tabItemWidth + 6) * 2],
-    });
 
     // Data fetching
     const fetchCustomers = useCallback(async (search?: string) => {
@@ -756,24 +739,6 @@ export default function PurchaseScreen() {
                 {activeTab === 'Farmer' && renderFarmerTab()}
             </ScrollView>
 
-            {/* Floating Tabs */}
-            <View style={[s.floatingTabContainer, { bottom: 0 + insets.bottom - 24 }]}>
-                <View
-                    style={s.tabRow}
-                    onLayout={(event) => setTabRowWidth(event.nativeEvent.layout.width)}
-                >
-                    {tabItemWidth > 0 && (
-                        <Animated.View
-                            style={[s.tabActiveIndicator, { width: tabItemWidth, transform: [{ translateX: tabIndicatorTranslateX }] }]}
-                        />
-                    )}
-                    {TAB_ORDER.map((tab) => (
-                        <Pressable key={tab} style={s.tab} onPress={() => setActiveTab(tab)}>
-                            <Text style={[s.tabText, activeTab === tab && s.tabTextActive]}>{tab}</Text>
-                        </Pressable>
-                    ))}
-                </View>
-            </View>
 
             {/* ── Modals ── */}
             <Modal visible={showDateModal} animationType="slide" transparent onRequestClose={() => setShowDateModal(false)}>
@@ -875,13 +840,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     scroll: { flex: 1 },
     scrollContent: { paddingHorizontal: 6, gap: 3, paddingBottom: 150, paddingTop: 6 },
 
-    // Floating Tabs
-    floatingTabContainer: { position: 'absolute', left: 6, right: 6, bottom: 0, zIndex: 20 },
-    tabRow: { flexDirection: 'row', gap: 6, padding: 4, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, position: 'relative', overflow: 'hidden' },
-    tabActiveIndicator: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 7, backgroundColor: colors.primary },
-    tab: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 7, zIndex: 2 },
-    tabText: { fontSize: 12, fontWeight: '700', color: colors.foreground },
-    tabTextActive: { color: colors.white },
+
+
 
     // Top controls
     topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, gap: 4 },

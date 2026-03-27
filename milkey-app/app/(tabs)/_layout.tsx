@@ -1,9 +1,29 @@
 import React from 'react';
+import { View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Home, Droplets, Store, ClipboardList, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
+import SubTabBar from '@/components/SubTabBar';
+import { BottomTabBar } from '@react-navigation/bottom-tabs';
+
+const SUB_TAB_SCREENS = ['purchase', 'selling', 'register'] as const;
+type SubTabScreen = typeof SUB_TAB_SCREENS[number];
+
+function CustomTabBar(props: any) {
+  const routeName = props.state.routes[props.state.index]?.name;
+  const isSubTabScreen = SUB_TAB_SCREENS.includes(routeName as SubTabScreen);
+
+  return (
+    <View>
+      {isSubTabScreen && (
+        <SubTabBar screen={routeName as SubTabScreen} />
+      )}
+      <BottomTabBar {...props} />
+    </View>
+  );
+}
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -12,6 +32,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {

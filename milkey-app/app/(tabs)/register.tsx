@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard, KeyboardAvoidingView, Platform, Animated } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -17,6 +17,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useSubTabStore, RegisterTab } from '@/lib/subTabStore';
 
 // Helper function to format date as dd/mm/yyyy clear
 const formatDateDDMMYYYY = (dateStr: string) => {
@@ -28,7 +29,7 @@ const formatDateDDMMYYYY = (dateStr: string) => {
     return `${day}/${month}/${year}`;
 };
 
-type TabType = 'Payments' | 'Advances' | 'Farmers';
+type TabType = RegisterTab;
 const TAB_ORDER: TabType[] = ['Payments', 'Advances', 'Farmers'];
 
 
@@ -47,13 +48,9 @@ export default function RegisterScreen() {
         handleSubscriptionSuccess
     } = useSubscriptionCheck('register');
 
-    const [activeTab, setActiveTab] = useState<TabType>('Farmers');
+    const { registerTab: activeTab, setRegisterTab: setActiveTab } = useSubTabStore();
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [tabRowWidth, setTabRowWidth] = useState(0);
-
-    const activeTabIndexAnim = useRef(new Animated.Value(TAB_ORDER.indexOf('Farmers'))).current;
-    const floatingTabsAnim = useRef(new Animated.Value(0)).current;
 
     // Set active tab from URL params
     useEffect(() => {
@@ -61,23 +58,6 @@ export default function RegisterScreen() {
             setActiveTab(tab as TabType);
         }
     }, [tab]);
-
-    useEffect(() => {
-        Animated.timing(floatingTabsAnim, {
-            toValue: 1,
-            duration: 220,
-            useNativeDriver: true,
-        }).start();
-    }, [floatingTabsAnim]);
-
-    useEffect(() => {
-        Animated.spring(activeTabIndexAnim, {
-            toValue: TAB_ORDER.indexOf(activeTab),
-            useNativeDriver: false,
-            damping: 16,
-            stiffness: 180,
-        }).start();
-    }, [activeTab, activeTabIndexAnim]);
 
     // Data state
     const [farmers, setFarmers] = useState<Farmer[]>([]);
@@ -908,25 +888,7 @@ export default function RegisterScreen() {
 
     const styles = createStyles(colors, isDark);
 
-    const tabLabels: Record<TabType, string> = {
-        Payments: t.register.payments,
-        Advances: t.register.advances,
-        Farmers: t.register.farmers,
-    };
-    const tabItemWidth = tabRowWidth > 0 ? (tabRowWidth - 20) / 3 : 0;
-    const tabIndicatorTranslateX = activeTabIndexAnim.interpolate({
-        inputRange: [0, 1, 2],
-        outputRange: [0, tabItemWidth + 6, (tabItemWidth + 6) * 2],
-    });
-    const floatingTabsStyle = {
-        opacity: floatingTabsAnim,
-        transform: [{
-            translateY: floatingTabsAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [24, 0],
-            }),
-        }],
-    };
+
 
     // Show all farmers (removed search filter)
     const filteredFarmers = farmers;
@@ -1920,35 +1882,6 @@ export default function RegisterScreen() {
                 {activeTab === 'Farmers' && renderFarmersTab()}
             </ScrollView>
 
-            <View style={[styles.floatingTabContainer, { bottom: 0 + insets.bottom - 24 }]}>
-                <View
-                    style={styles.tabRow}
-                    onLayout={(event) => setTabRowWidth(event.nativeEvent.layout.width)}
-                >
-                    {tabItemWidth > 0 && (
-                        <Animated.View
-                            style={[
-                                styles.tabActiveIndicator,
-                                {
-                                    width: tabItemWidth,
-                                    transform: [{ translateX: tabIndicatorTranslateX }],
-                                },
-                            ]}
-                        />
-                    )}
-                    {TAB_ORDER.map((tab) => (
-                        <Pressable
-                            key={tab}
-                            style={styles.tab}
-                            onPress={() => setActiveTab(tab)}
-                        >
-                            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                                {tabLabels[tab]}
-                            </Text>
-                        </Pressable>
-                    ))}
-                </View>
-            </View>
 
             <SuccessModal
                 isVisible={alertVisible}
@@ -2169,39 +2102,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
-    floatingTabContainer: {
-        position: 'absolute',
-        left: 6,
-        right: 6,
-        bottom: 0,
-        zIndex: 20,
-    },
-    tabRow: {
-        flexDirection: 'row',
-        gap: 6,
-        padding: 4,
-        borderRadius: 10,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        position: 'relative',
-        overflow: 'hidden',
-    },
-    tabActiveIndicator: {
-        position: 'absolute',
-        left: 4,
-        top: 4,
-        bottom: 4,
-        borderRadius: 7,
-        backgroundColor: colors.primary,
-    },
-    tab: {
-        flex: 1,
-        paddingVertical: 6,
-        alignItems: 'center',
-        borderRadius: 7,
-        zIndex: 2,
-    },
+
+
     pdfRow: {
         flexDirection: 'row',
         justifyContent: 'flex-end',
@@ -2281,14 +2183,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
     },
-    tabText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: colors.foreground,
-    },
-    tabTextActive: {
-        color: colors.white,
-    },
+
+
     scrollView: {
         flex: 1,
     },

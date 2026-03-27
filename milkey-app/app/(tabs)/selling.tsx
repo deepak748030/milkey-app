@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, Animated } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -21,8 +21,9 @@ import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
+import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
 
-type TabType = 'Entry' | 'Payment' | 'Reports' | 'Member';
+type TabType = SellingTab;
 
 // Helper to group entries by date and member for combined M/E display insets.bottom milk amount
 interface GroupedEntry {
@@ -54,13 +55,9 @@ export default function SellingScreen() {
     } = useSubscriptionCheck('selling');
 
     const TAB_ORDER: TabType[] = ['Entry', 'Payment', 'Reports', 'Member'];
-    const [activeTab, setActiveTab] = useState<TabType>('Entry');
+    const { sellingTab: activeTab, setSellingTab: setActiveTab } = useSubTabStore();
     const [isLoading, setIsLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [tabRowWidth, setTabRowWidth] = useState(0);
-
-    const activeTabIndexAnim = useRef(new Animated.Value(0)).current;
-    const floatingTabsAnim = useRef(new Animated.Value(0)).current;
 
     // Set active tab from URL params
     useEffect(() => {
@@ -68,24 +65,6 @@ export default function SellingScreen() {
             setActiveTab(tab as TabType);
         }
     }, [tab]);
-
-    // Floating tab animations
-    useEffect(() => {
-        Animated.timing(floatingTabsAnim, {
-            toValue: 1,
-            duration: 220,
-            useNativeDriver: true,
-        }).start();
-    }, [floatingTabsAnim]);
-
-    useEffect(() => {
-        Animated.spring(activeTabIndexAnim, {
-            toValue: TAB_ORDER.indexOf(activeTab),
-            useNativeDriver: false,
-            damping: 16,
-            stiffness: 180,
-        }).start();
-    }, [activeTab, activeTabIndexAnim]);
 
     // Date picker state
     const [showDatePicker, setShowDatePicker] = useState(false);
@@ -2396,51 +2375,6 @@ export default function SellingScreen() {
                 )}
             </ScrollView>
 
-            {/* Floating Subtabs - just above bottom tab bar */}
-            <View style={[styles.floatingTabContainer, {
-                bottom: 0 + insets.bottom + -24,
-            }]}>
-                <View
-                    style={styles.tabRow}
-                    onLayout={(event) => setTabRowWidth(event.nativeEvent.layout.width)}
-                >
-                    {tabRowWidth > 0 && (
-                        <Animated.View
-                            style={[
-                                styles.tabActiveIndicator,
-                                {
-                                    width: (tabRowWidth - 8) / TAB_ORDER.length,
-                                    transform: [{
-                                        translateX: activeTabIndexAnim.interpolate({
-                                            inputRange: TAB_ORDER.map((_, i) => i),
-                                            outputRange: TAB_ORDER.map((_, i) => i * ((tabRowWidth - 8) / TAB_ORDER.length)),
-                                        })
-                                    }],
-                                },
-                            ]}
-                        />
-                    )}
-                    {TAB_ORDER.map((tabItem) => {
-                        const tabLabels: Record<TabType, string> = {
-                            Entry: t.selling.entry,
-                            Payment: t.selling.payment,
-                            Reports: t.selling.reports,
-                            Member: t.selling.member,
-                        };
-                        return (
-                            <Pressable
-                                key={tabItem}
-                                style={styles.tab}
-                                onPress={() => setActiveTab(tabItem)}
-                            >
-                                <Text style={[styles.tabText, activeTab === tabItem && styles.tabTextActive]}>
-                                    {tabLabels[tabItem]}
-                                </Text>
-                            </Pressable>
-                        );
-                    })}
-                </View>
-            </View>
 
             {/* Date Picker Modal - Bottom Sheet Style */}
             <Modal visible={showDatePicker} animationType="slide" transparent onRequestClose={() => setShowDatePicker(false)}>
@@ -2730,47 +2664,8 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
-    floatingTabContainer: {
-        position: 'absolute',
-        left: 6,
-        right: 6,
-        bottom: 0,
-        zIndex: 20,
-    },
-    tabRow: {
-        flexDirection: 'row',
-        gap: 6,
-        padding: 4,
-        borderRadius: 10,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        position: 'relative',
-        overflow: 'hidden',
-    },
-    tabActiveIndicator: {
-        position: 'absolute',
-        left: 4,
-        top: 4,
-        bottom: 4,
-        borderRadius: 7,
-        backgroundColor: colors.primary,
-    },
-    tab: {
-        flex: 1,
-        paddingVertical: 6,
-        alignItems: 'center',
-        borderRadius: 7,
-        zIndex: 2,
-    },
-    tabText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: colors.foreground,
-    },
-    tabTextActive: {
-        color: colors.white,
-    },
+
+
     scrollView: {
         flex: 1,
     },

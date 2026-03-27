@@ -4,7 +4,7 @@
     "slug": "milkey",
     "version": "1.0.2",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "milkey",
     "userInterfaceStyle": "automatic",
     "splash": {
