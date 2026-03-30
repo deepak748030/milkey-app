@@ -11,6 +11,8 @@ interface FormField {
 interface CustomForm {
     _id: string
     formName: string
+    description?: string
+    attachments?: string[]
     fields: FormField[]
     status: 'pending' | 'reviewed' | 'approved' | 'rejected'
     adminNotes: string
@@ -261,7 +263,12 @@ export function CustomFormsPage() {
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
                                                 <FileText className="w-4 h-4 text-primary" />
-                                                <span className="font-medium text-foreground">{form.formName}</span>
+                                                <div>
+                                                    <span className="font-medium text-foreground">{form.formName}</span>
+                                                    {form.description && (
+                                                        <p className="text-xs text-muted-foreground truncate max-w-[200px]">{form.description}</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">
@@ -271,7 +278,14 @@ export function CustomFormsPage() {
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className="text-sm text-muted-foreground">{form.fields.length} fields</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-muted-foreground">{form.fields.length} fields</span>
+                                                {form.attachments && form.attachments.length > 0 && (
+                                                    <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                                                        {form.attachments.length} img
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(form.status)}`}>
@@ -281,7 +295,7 @@ export function CustomFormsPage() {
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className="text-sm text-muted-foreground">
-                                                {new Date(form.createdAt).toLocaleDateString()}
+                                                {new Date(form.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
@@ -339,8 +353,11 @@ export function CustomFormsPage() {
                             <div className="mb-4">
                                 <h3 className="text-xl font-bold text-foreground">{selectedForm.formName}</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    Submitted on {new Date(selectedForm.createdAt).toLocaleString()}
+                                    Submitted on {new Date(selectedForm.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                 </p>
+                                {selectedForm.description && (
+                                    <p className="text-sm text-foreground mt-2 whitespace-pre-wrap">{selectedForm.description}</p>
+                                )}
                             </div>
 
                             {/* User Info */}
@@ -373,11 +390,33 @@ export function CustomFormsPage() {
                                     {selectedForm.fields.map((field, index) => (
                                         <div key={index} className="bg-muted/30 rounded-lg p-3">
                                             <div className="text-sm font-medium text-muted-foreground">{field.label}</div>
-                                            <div className="text-foreground mt-1">{field.value || '-'}</div>
+                                            <div className="text-foreground mt-1 break-words">{field.value || '-'}</div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
+
+                            {/* Attachments / Images */}
+                            {selectedForm.attachments && selectedForm.attachments.length > 0 && (
+                                <div className="mb-4">
+                                    <h4 className="font-medium text-foreground mb-3">Attachments ({selectedForm.attachments.length})</h4>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                        {selectedForm.attachments.map((url, index) => (
+                                            <a key={index} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                                                <img
+                                                    src={url}
+                                                    alt={`Attachment ${index + 1}`}
+                                                    className="w-full h-32 object-cover rounded-lg border border-border hover:opacity-80 transition-opacity cursor-pointer"
+                                                    onError={(e) => {
+                                                        const target = e.target as HTMLImageElement;
+                                                        target.style.display = 'none';
+                                                    }}
+                                                />
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Status Update */}
                             <div className="border-t border-border pt-4">
@@ -388,8 +427,8 @@ export function CustomFormsPage() {
                                             key={status}
                                             onClick={() => setNewStatus(status)}
                                             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${newStatus === status
-                                                    ? getStatusBadge(status)
-                                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                                ? getStatusBadge(status)
+                                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
                                                 }`}
                                         >
                                             {status.charAt(0).toUpperCase() + status.slice(1)}
