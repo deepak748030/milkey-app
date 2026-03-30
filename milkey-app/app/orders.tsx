@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import { ArrowLeft, Package, Clock, CheckCircle, XCircle, Truck } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ordersApi, Order } from '@/lib/milkeyApi';
+import { SuccessModal } from '@/components/SuccessModal';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 export default function OrdersScreen() {
     const { colors, isDark } = useTheme();
@@ -14,6 +16,42 @@ export default function OrdersScreen() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
+    const [alertVisible, setAlertVisible] = useState(false);
+    const [alertTitle, setAlertTitle] = useState('');
+    const [alertMessage, setAlertMessage] = useState('');
+    const [confirmVisible, setConfirmVisible] = useState(false);
+    const [confirmData, setConfirmData] = useState({ title: '', message: '', onConfirm: () => { } });
+
+    const showAlert = useCallback((title: string, message: string) => {
+        setAlertTitle(title);
+        setAlertMessage(message);
+        setAlertVisible(true);
+    }, []);
+
+    const handleCancelOrder = useCallback((order: Order) => {
+        setConfirmData({
+            title: 'Cancel Order',
+            message: `Are you sure you want to cancel order #${order.orderNumber}?`,
+            onConfirm: async () => {
+                setConfirmVisible(false);
+                setCancellingId(order._id);
+                try {
+                    const res = await ordersApi.cancel(order._id);
+                    if (res.success) {
+                        showAlert('Success', `Order #${order.orderNumber} has been cancelled successfully.`);
+                        fetchOrders();
+                    } else {
+                        showAlert('Error', res.message || 'Failed to cancel order');
+                    }
+                } catch {
+                    showAlert('Error', 'Failed to cancel order');
+                }
+                setCancellingId(null);
+            },
+        });
+        setConfirmVisible(true);
+    }, []);
 
     const styles = createStyles(colors, isDark, insets);
 
@@ -165,10 +203,30 @@ export default function OrdersScreen() {
                                     <Text style={styles.totalAmount}>₹{order.totalAmount}</Text>
                                 </View>
                             </View>
+
+                            {['pending', 'confirmed'].includes(order.status) && (
+                                <Pressable
+                                    style={[styles.cancelBtn, cancellingId === order._id && { opacity: 0.5 }]}
+                                    onPress={() => handleCancelOrder(order)}
+                                    disabled={cancellingId === order._id}
+                                >
+                                    {cancellingId === order._id ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <>
+                                            <XCircle size={14} color="#fff" />
+                                            <Text style={styles.cancelBtnText}>Cancel Order</Text>
+                                        </>
+                                    )}
+                                </Pressable>
+                            )}
                         </View>
                     ))
                 )}
             </ScrollView>
+
+            <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />
+            <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
         </View>
     );
 }
@@ -342,5 +400,20 @@ const createStyles = (colors: any, isDark: boolean, insets: any) => StyleSheet.c
         fontSize: 16,
         fontWeight: '700',
         color: colors.primary,
+    },
+    cancelBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        backgroundColor: colors.destructive,
+        paddingVertical: 8,
+        borderRadius: 8,
+        marginTop: 10,
+    },
+    cancelBtnText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#fff',
     },
 });

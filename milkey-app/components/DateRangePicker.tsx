@@ -51,22 +51,22 @@ export function DateRangePicker({
 
     return (
         <>
-            <View style={styles.row}>
+            <View style={[styles.outerBorder, { borderColor: isDark ? colors.foreground : '#000' }]}>
                 <Pressable
                     style={[
                         styles.dateInput,
                         {
                             backgroundColor: isDark ? colors.muted : colors.background,
-                            borderColor: colors.border,
+                            borderColor: 'transparent',
                         },
                         selectingType === 'start' && visible && { borderColor: colors.primary, borderWidth: 2 },
                     ]}
                     onPress={openStart}
                 >
-                    <CalendarIcon size={14} color={selectingType === 'start' && visible ? colors.primary : colors.mutedForeground} />
                     <Text style={[styles.dateText, { color: startDate ? colors.foreground : colors.mutedForeground }]}>
                         {startDate ? formatDate(startDate) : startPlaceholder}
                     </Text>
+                    <CalendarIcon size={14} color={selectingType === 'start' && visible ? colors.primary : colors.mutedForeground} />
                 </Pressable>
 
                 <Text style={[styles.arrow, { color: colors.mutedForeground }]}>→</Text>
@@ -76,16 +76,16 @@ export function DateRangePicker({
                         styles.dateInput,
                         {
                             backgroundColor: isDark ? colors.muted : colors.background,
-                            borderColor: colors.border,
+                            borderColor: 'transparent',
                         },
                         selectingType === 'end' && visible && { borderColor: colors.primary, borderWidth: 2 },
                     ]}
                     onPress={openEnd}
                 >
-                    <CalendarIcon size={14} color={selectingType === 'end' && visible ? colors.primary : colors.mutedForeground} />
                     <Text style={[styles.dateText, { color: endDate ? colors.foreground : colors.mutedForeground }]}>
                         {endDate ? formatDate(endDate) : endPlaceholder}
                     </Text>
+                    <CalendarIcon size={14} color={selectingType === 'end' && visible ? colors.primary : colors.mutedForeground} />
                 </Pressable>
             </View>
 
@@ -120,17 +120,21 @@ export function DateRangePicker({
 }
 
 const styles = StyleSheet.create({
-    row: {
+    outerBorder: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        borderWidth: 1.5,
+        borderRadius: 10,
+        paddingHorizontal: 4,
+        paddingVertical: 2,
         marginBottom: 6,
+        gap: 4,
     },
     dateInput: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 4,
         borderWidth: 1,
         borderRadius: 8,
         paddingHorizontal: 10,
@@ -141,8 +145,8 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     arrow: {
-        fontSize: 14,
-        fontWeight: '600',
+        fontSize: 16,
+        fontWeight: '700',
     },
     overlay: {
         flex: 1,

@@ -30,7 +30,7 @@ const formatDateDDMMYYYY = (dateStr: string) => {
 };
 
 type TabType = RegisterTab;
-const TAB_ORDER: TabType[] = ['Payments', 'Advances', 'Farmers'];
+const TAB_ORDER: TabType[] = ['Payments', 'Advances', 'R-Farmer'];
 
 
 export default function RegisterScreen() {
@@ -1879,7 +1879,7 @@ export default function RegisterScreen() {
             >
                 {activeTab === 'Payments' && renderPaymentsTab()}
                 {activeTab === 'Advances' && renderAdvancesTab()}
-                {activeTab === 'Farmers' && renderFarmersTab()}
+                {activeTab === 'R-Farmer' && renderFarmersTab()}
             </ScrollView>
 
 

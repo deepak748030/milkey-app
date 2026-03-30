@@ -32,7 +32,7 @@ import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 
 type TabType = PurchaseTab;
-const TAB_ORDER: TabType[] = ['Purchase', 'Report', 'Farmer'];
+const TAB_ORDER: TabType[] = ['Purchase', 'Report', 'C-Farmer'];
 
 export default function PurchaseScreen() {
     const { colors, isDark } = useTheme();
@@ -446,12 +446,14 @@ export default function PurchaseScreen() {
                         <Text style={[s.shiftBtnText, !isMorning && s.shiftBtnTextActive]}>{t.common.evening}</Text>
                     </Pressable>
                 </View>
-                <Pressable
-                    style={s.addCustTopBtn}
-                    onPress={() => { setEditingCustomer(null); setShowAddCustomer(true); }}
-                >
-                    <Edit2 size={16} color="#fff" />
-                </Pressable>
+                {selectedCustomer && (
+                    <Pressable
+                        style={s.addCustTopBtn}
+                        onPress={() => { setEditingCustomer(selectedCustomer); setShowAddCustomer(true); }}
+                    >
+                        <Edit2 size={16} color="#fff" />
+                    </Pressable>
+                )}
             </View>
 
             {/* Summary Bar */}
@@ -861,7 +863,7 @@ export default function PurchaseScreen() {
             >
                 {activeTab === 'Purchase' && renderCollectionTab()}
                 {activeTab === 'Report' && renderReportTab()}
-                {activeTab === 'Farmer' && renderFarmerTab()}
+                {activeTab === 'C-Farmer' && renderFarmerTab()}
             </ScrollView>
 
 

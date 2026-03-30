@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
-export type PurchaseTab = 'Purchase' | 'Report' | 'Farmer';
+export type PurchaseTab = 'Purchase' | 'Report' | 'C-Farmer';
 export type SellingTab = 'Entry' | 'Payment' | 'Reports' | 'Member';
-export type RegisterTab = 'Payments' | 'Advances' | 'Farmers';
+export type RegisterTab = 'Payments' | 'Advances' | 'R-Farmer';
 
 interface SubTabState {
     purchaseTab: PurchaseTab;
@@ -16,7 +16,7 @@ interface SubTabState {
 export const useSubTabStore = create<SubTabState>((set) => ({
     purchaseTab: 'Purchase',
     sellingTab: 'Entry',
-    registerTab: 'Farmers',
+    registerTab: 'R-Farmer',
     setPurchaseTab: (tab) => set({ purchaseTab: tab }),
     setSellingTab: (tab) => set({ sellingTab: tab }),
     setRegisterTab: (tab) => set({ registerTab: tab }),
