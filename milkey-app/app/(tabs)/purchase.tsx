@@ -96,6 +96,8 @@ export default function PurchaseScreen() {
     const [confirmData, setConfirmData] = useState({ title: '', message: '', onConfirm: () => { } });
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [showPrintTypeModal, setShowPrintTypeModal] = useState(false);
+    const [printSource, setPrintSource] = useState<'purchase' | 'report'>('purchase');
 
     const showAlert = useCallback((t: string, m: string) => { setAlertTitle(t); setAlertMessage(m); setAlertVisible(true); }, []);
     const showConfirm = useCallback((t: string, m: string, onConfirm: () => void) => { setConfirmData({ title: t, message: m, onConfirm }); setConfirmVisible(true); }, []);
@@ -323,74 +325,106 @@ export default function PurchaseScreen() {
         return customers.find(c => c._id === reportFarmerFilter || c.code === reportFarmerFilter) || null;
     }, [reportFarmerFilter, customers]);
 
-    // BLE print collection entries on thermal printer
-    const handleBlePrintEntries = useCallback(async () => {
-        const data = collections;
-        const totals = historyTotals;
+    // Handle print button press - show type selection
+    const handlePrintPress = useCallback((source: 'purchase' | 'report') => {
+        const data = source === 'report'
+            ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
+            : collections;
         if (data.length === 0) { showAlert('Info', 'No data to print'); return; }
         if (!isConnected) { showAlert('Info', 'Connect a Bluetooth printer first from TopBar'); return; }
+        setPrintSource(source);
+        setShowPrintTypeModal(true);
+    }, [filteredReportCollections, collections, isConnected]);
 
-        const dateLabel = `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
-        const parts: Uint8Array[] = [INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, textToBytes('COLLECTION\n'), NORMAL_SIZE, BOLD_OFF, textToBytes(dateLabel + '\n'), ALIGN_LEFT, doubleSeparator()];
+    // Full Summary Print
+    const handleFullSummaryPrint = useCallback(async () => {
+        setShowPrintTypeModal(false);
+        const isReport = printSource === 'report';
+        const data = isReport
+            ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
+            : collections;
+        const totals = isReport
+            ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
+            : historyTotals;
 
-        // Header
-        parts.push(textToBytes(threeColumnLine('Code', 'Qty', 'Amt')));
-        parts.push(separator());
-
-        // Rows
-        for (const c of data) {
-            parts.push(textToBytes(threeColumnLine(
-                c.farmerCode || '-',
-                String(c.quantity),
-                '₹' + c.amount.toFixed(0)
-            )));
-        }
-
-        parts.push(doubleSeparator());
-        parts.push(BOLD_ON);
-        parts.push(textToBytes(twoColumnLine('Total Qty:', totals.quantity.toFixed(1))));
-        parts.push(textToBytes(twoColumnLine('Total Amt:', '₹' + totals.amount.toFixed(2))));
-        parts.push(BOLD_OFF, FEED_3_LINES);
-
-        const bytes = concatBytes(...parts);
-        const success = await printData(bytes);
-        if (success) showAlert('Success', 'Printed successfully!');
-    }, [collections, historyTotals, entryDate, entryShift, isConnected, printData]);
-
-    // Print report via Bluetooth printer
-    const handlePrintReport = useCallback(async () => {
-        const data = filteredReportCollections.length > 0 ? filteredReportCollections : collections;
-        const totals = filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals;
-        if (data.length === 0) { showAlert('Info', 'No data to print'); return; }
-        if (!isConnected) { showAlert('Info', 'Connect a Bluetooth printer first from TopBar'); return; }
-
-        const dateLabel = reportStartDate && reportEndDate
+        const title = isReport ? 'COLLECTION REPORT' : 'COLLECTION';
+        const dateLabel = isReport && reportStartDate && reportEndDate
             ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
-            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'AM' : 'PM'})`;
-        const farmerLabel = selectedReportFarmer ? `Farmer: ${selectedReportFarmer.name}` : 'All Farmers';
+            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
+        const farmerLabel = isReport && selectedReportFarmer ? `Farmer: ${selectedReportFarmer.name}` : '';
 
-        const parts: Uint8Array[] = [INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, textToBytes('COLLECTION REPORT\n'), NORMAL_SIZE, BOLD_OFF, textToBytes(dateLabel + '\n'), textToBytes(farmerLabel + '\n'), ALIGN_LEFT, doubleSeparator()];
+        const parts: Uint8Array[] = [INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, textToBytes(title + '\n'), NORMAL_SIZE, BOLD_OFF, textToBytes(dateLabel + '\n')];
+        if (farmerLabel) parts.push(textToBytes(farmerLabel + '\n'));
+        parts.push(ALIGN_LEFT, doubleSeparator());
+
+        // Table header
         parts.push(textToBytes(threeColumnLine('Code', 'Qty', 'Amt')));
         parts.push(separator());
 
+        // Table rows with full details
         for (const c of data) {
-            parts.push(textToBytes(threeColumnLine(
-                c.farmerCode || '-',
-                String(c.quantity),
-                '₹' + c.amount.toFixed(0)
-            )));
+            const code = c.farmerCode || '-';
+            const name = c.purchaseFarmer?.name || '';
+            parts.push(textToBytes(twoColumnLine(code + (name ? ` ${name}` : ''), '')));
+            parts.push(textToBytes(twoColumnLine('  Milk: ' + String(c.quantity), 'Fat: ' + (c.fat || '-'))));
+            parts.push(textToBytes(twoColumnLine('  SNF: ' + ((c as any).snf || '-'), 'Rate: ' + String(c.rate))));
+            parts.push(BOLD_ON);
+            parts.push(textToBytes(twoColumnLine('  Amount:', '₹' + c.amount.toFixed(0))));
+            parts.push(BOLD_OFF);
+            parts.push(separator());
         }
 
         parts.push(doubleSeparator());
         parts.push(BOLD_ON);
-        parts.push(textToBytes(twoColumnLine('Total Qty:', totals.quantity.toFixed(1))));
+        parts.push(textToBytes(twoColumnLine('Total Qty:', totals.quantity.toFixed(2) + ' L')));
         parts.push(textToBytes(twoColumnLine('Total Amt:', '₹' + totals.amount.toFixed(2))));
+        const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
+        parts.push(textToBytes(twoColumnLine('Grand Avg Rate:', avgRate)));
+        const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
+        parts.push(textToBytes(twoColumnLine('Total Farmers:', String(uniqueFarmers))));
+        parts.push(textToBytes(twoColumnLine('Total Net Qty:', totals.quantity.toFixed(2))));
         parts.push(BOLD_OFF, FEED_3_LINES);
 
         const bytes = concatBytes(...parts);
         const success = await printData(bytes);
-        if (success) showAlert('Success', 'Printed successfully!');
-    }, [filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, isConnected, printData, selectedReportFarmer]);
+        if (success) showAlert('Success', 'Full summary printed!');
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, isConnected, printData, selectedReportFarmer]);
+
+    // Short Summary Print
+    const handleShortSummaryPrint = useCallback(async () => {
+        setShowPrintTypeModal(false);
+        const isReport = printSource === 'report';
+        const data = isReport
+            ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
+            : collections;
+        const totals = isReport
+            ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
+            : historyTotals;
+
+        const title = 'Provisional Short Shift Summary';
+        const dateLabel = isReport && reportStartDate && reportEndDate
+            ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
+            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
+
+        const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
+        const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
+
+        const parts: Uint8Array[] = [INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, textToBytes(title + '\n'), NORMAL_SIZE, BOLD_OFF, textToBytes(dateLabel + '\n')];
+        parts.push(ALIGN_LEFT, doubleSeparator());
+        parts.push(BOLD_ON);
+        parts.push(textToBytes(twoColumnLine('Total Qty:', totals.quantity.toFixed(2) + ' L')));
+        parts.push(textToBytes(twoColumnLine('Total Amt:', '₹' + totals.amount.toFixed(2))));
+        parts.push(textToBytes(twoColumnLine('Average Rate:', avgRate)));
+        parts.push(textToBytes(twoColumnLine('Number of Samples:', String(data.length))));
+        parts.push(textToBytes(twoColumnLine('Number of Farmers:', String(uniqueFarmers))));
+        parts.push(BOLD_OFF, doubleSeparator());
+        parts.push(ALIGN_CENTER, textToBytes('--- Short Summary ---\n'));
+        parts.push(FEED_3_LINES);
+
+        const bytes = concatBytes(...parts);
+        const success = await printData(bytes);
+        if (success) showAlert('Success', 'Short summary printed!');
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printData]);
 
     // Export PDF for report
     const handleExportReportPdf = useCallback(async () => {
@@ -585,7 +619,7 @@ export default function PurchaseScreen() {
                         <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
                         <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
                     </View>
-                    <Pressable style={[s.pdfBtn, isPrinting && { opacity: 0.5 }]} onPress={handleBlePrintEntries} disabled={isPrinting}>
+                    <Pressable style={[s.pdfBtn, isPrinting && { opacity: 0.5 }]} onPress={() => handlePrintPress('purchase')} disabled={isPrinting}>
                         {isPrinting ? <ActivityIndicator size={12} color="#fff" /> : <Printer size={12} color="#fff" />}
                     </Pressable>
                 </View>
@@ -698,7 +732,7 @@ export default function PurchaseScreen() {
             )}
 
             {/* Print Button */}
-            <Pressable style={s.exportReportBtn} onPress={handlePrintReport}>
+            <Pressable style={s.exportReportBtn} onPress={() => handlePrintPress('report')}>
                 <Printer size={16} color="#fff" />
                 <Text style={s.exportReportBtnText}>Print Report</Text>
             </Pressable>
@@ -728,15 +762,15 @@ export default function PurchaseScreen() {
                     </View>
                     {filteredReportCollections.map((item, index) => (
                         <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
-                            <View style={s.entryCell1}>
-                                <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700' }]}>{item.farmerCode || '-'}</Text>
-                                <Text style={s.entrySubText} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
+                            <View style={[s.entryCell1, { alignItems: 'center' }]}>
+                                <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
+                                <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
                             </View>
-                            <Text style={[s.entryCellText, s.entryCell2]}>{item.quantity}</Text>
-                            <Text style={[s.entryCellText, s.entryCell2]}>{item.fat || '-'}</Text>
-                            <Text style={[s.entryCellText, s.entryCell2]}>{(item as any).snf || '-'}</Text>
-                            <Text style={[s.entryCellText, s.entryCell2]}>{item.rate}</Text>
-                            <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text>
+                            <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.quantity}</Text>
+                            <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.fat || '-'}</Text>
+                            <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text>
+                            <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.rate}</Text>
+                            <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>₹{item.amount.toFixed(0)}</Text>
                         </View>
                     ))}
                     <View style={s.tFootRow}>
@@ -971,6 +1005,36 @@ export default function PurchaseScreen() {
                 colors={colors}
                 isDark={isDark}
             />
+
+            {/* Print Type Selection Modal */}
+            <Modal visible={showPrintTypeModal} transparent animationType="fade" onRequestClose={() => setShowPrintTypeModal(false)}>
+                <View style={s.modalOverlay}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowPrintTypeModal(false)} />
+                    <View style={[s.modalSheet, { paddingBottom: 30 }]}>
+                        <View style={s.modalHandle} />
+                        <View style={s.modalHeader}>
+                            <Text style={s.modalTitle}>Select Print Type</Text>
+                            <Pressable onPress={() => setShowPrintTypeModal(false)}><X size={18} color={colors.foreground} /></Pressable>
+                        </View>
+                        <View style={{ paddingHorizontal: 16, gap: 10, marginTop: 8 }}>
+                            <Pressable
+                                style={[s.exportReportBtn, { backgroundColor: colors.primary }]}
+                                onPress={handleFullSummaryPrint}
+                            >
+                                <Printer size={18} color="#fff" />
+                                <Text style={s.exportReportBtnText}>Full Summary</Text>
+                            </Pressable>
+                            <Pressable
+                                style={[s.exportReportBtn, { backgroundColor: '#f59e0b' }]}
+                                onPress={handleShortSummaryPrint}
+                            >
+                                <Printer size={18} color="#fff" />
+                                <Text style={s.exportReportBtnText}>Short Summary</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />
             <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
