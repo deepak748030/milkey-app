@@ -13,7 +13,7 @@ import {
 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import {
-    milkCollectionsApi, purchaseFarmersApi,
+    milkCollectionsApi, purchaseFarmersApi, rateChartsApi,
     MilkCollection, PurchaseFarmer
 } from '@/lib/milkeyApi';
 import * as ExpoPrint from 'expo-print';
@@ -181,6 +181,27 @@ export default function PurchaseScreen() {
             setRateValue('');
         }
     };
+
+    // Auto-calculate rate from fat using rate chart API
+    const calculateRateFromFat = useCallback(async (fat: number, snf: number = 0) => {
+        if (!fat || fat <= 0) { setRateValue(''); return; }
+        try {
+            const res = await rateChartsApi.calculate(fat, snf);
+            if (res.success && res.response?.rate) {
+                setRateValue(String(res.response.rate.toFixed(2)));
+            }
+        } catch { }
+    }, []);
+
+    // Debounced fat/snf change handler for auto rate calculation
+    useEffect(() => {
+        if (!selectedCustomer || selectedCustomer.priceBasis === 'rate') return;
+        const fat = parseFloat(fatValue) || 0;
+        const snf = parseFloat(snfValue) || 0;
+        if (fat <= 0) { setRateValue(''); return; }
+        const timer = setTimeout(() => calculateRateFromFat(fat, snf), 500);
+        return () => clearTimeout(timer);
+    }, [fatValue, snfValue, selectedCustomer]);
 
     const computeAmount = (): number => {
         if (isZero) return 0;
@@ -483,83 +504,78 @@ export default function PurchaseScreen() {
                 </View>
             </View>
 
-            {/* Customer Selector */}
-            <Pressable style={s.customerBox} onPress={() => setShowCustomerModal(true)}>
-                <View style={[s.customerBadge, selectedCustomer && { backgroundColor: colors.primary }]}>
-                    {selectedCustomer ? (
-                        <Text style={s.customerBadgeText}>{selectedCustomer.code}</Text>
-                    ) : (
-                        <User size={16} color={colors.mutedForeground} />
-                    )}
-                </View>
-                <View style={{ flex: 1 }}>
-                    <Text style={[s.customerName, !selectedCustomer && { color: colors.mutedForeground }]}>
-                        {selectedCustomer ? selectedCustomer.name : t.purchase.selectCustomer}
+            {/* Enter Code + Cow/Buffalo Row */}
+            <View style={s.codeRow}>
+                <Pressable style={s.codeInputBox} onPress={() => setShowCustomerModal(true)}>
+                    <Text style={[s.codeInputText, !selectedCustomer && { color: colors.mutedForeground }]}>
+                        {selectedCustomer ? `${selectedCustomer.code} - ${selectedCustomer.name}` : t.purchase.enterCode}
                     </Text>
-                    {selectedCustomer && (
-                        <Text style={s.customerMeta}>
-                            {selectedCustomer.priceBasis === 'rate' ? `📊 ${t.purchase.rateBased}` : `📊 ${t.purchase.fatBased}`}
-                            {selectedCustomer.mobile ? ` • ${selectedCustomer.mobile}` : ''}
-                        </Text>
-                    )}
-                </View>
-                <ChevronDown size={16} color={colors.mutedForeground} />
-            </Pressable>
-
-            {/* Milk Type + Cow/Buffalo */}
-            <View style={s.entryCard}>
-                <View style={s.milkRow}>
-                    {showCow && (
-                        <Pressable onPress={() => setMilkType('cow')} style={[s.milkBtn, milkType === 'cow' && s.milkBtnActive]}>
-                            <Text style={{ fontSize: 16 }}>🐄</Text>
-                            <Text style={[s.milkBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
-                            {milkType === 'cow' && <Check size={12} color="#fff" />}
-                        </Pressable>
-                    )}
-                    {showBuffalo && (
-                        <Pressable onPress={() => setMilkType('buffalo')} style={[s.milkBtn, milkType === 'buffalo' && s.milkBtnActive]}>
-                            <Text style={{ fontSize: 16 }}>🐃</Text>
-                            <Text style={[s.milkBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
-                            {milkType === 'buffalo' && <Check size={12} color="#fff" />}
-                        </Pressable>
-                    )}
-                </View>
-
-                {/* Input fields */}
-                <View style={s.fieldsRow}>
-                    <View style={s.fieldBox}>
-                        <Text style={s.fieldLabel}>{t.purchase.milk} (L)</Text>
-                        <TextInput style={s.fieldInput} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                    </View>
-                    {selectedCustomer?.priceBasis !== 'rate' && (
-                        <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
-                            <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
-                        </View>
-                    )}
-                    {selectedCustomer?.priceBasis === 'fat_snf' && (
-                        <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>SNF</Text>
-                            <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
-                        </View>
-                    )}
-                    <View style={s.fieldBox}>
-                        <Text style={s.fieldLabel}>{t.common.rate} ₹</Text>
-                        <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                    </View>
-                </View>
-
-                {/* Actions */}
-                <View style={s.actionsRow}>
-                    <Pressable style={[s.zeroToggle, isZero && { backgroundColor: colors.destructive, borderColor: colors.destructive }]} onPress={() => setIsZero(!isZero)}>
-                        <CircleDot size={13} color={isZero ? '#fff' : colors.mutedForeground} />
-                        <Text style={[s.zeroText, isZero && { color: '#fff' }]}>{t.purchase.zeroEntry}</Text>
+                </Pressable>
+                {showCow && (
+                    <Pressable onPress={() => setMilkType('cow')} style={[s.milkToggleBtn, milkType === 'cow' && s.milkToggleBtnActive]}>
+                        <Text style={[s.milkToggleBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
                     </Pressable>
-                    <Pressable style={[s.saveEntryBtn, saving && { opacity: 0.5 }]} onPress={handleSaveEntry} disabled={saving}>
-                        {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveEntryText}>✓ {t.common.save}</Text>}
+                )}
+                {showBuffalo && (
+                    <Pressable onPress={() => setMilkType('buffalo')} style={[s.milkToggleBtn, milkType === 'buffalo' && s.milkToggleBtnActive]}>
+                        <Text style={[s.milkToggleBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
                     </Pressable>
-                </View>
+                )}
             </View>
+
+            {/* Entry Fields */}
+            {selectedCustomer && (
+                <View style={s.entryCard}>
+                    {/* Price Basis Label */}
+                    <Text style={s.priceBasisLabel}>
+                        {selectedCustomer.priceBasis === 'rate' ? t.purchase.rateBased : selectedCustomer.priceBasis === 'fat_snf' ? 'Fat + SNF based' : t.purchase.fatBased}
+                    </Text>
+
+                    {/* Input Row */}
+                    <View style={s.fieldsRow}>
+                        <View style={s.fieldBox}>
+                            <Text style={s.fieldLabel}>{t.purchase.qty}</Text>
+                            <TextInput style={s.fieldInput} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                        </View>
+                        {selectedCustomer.priceBasis !== 'rate' && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
+                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
+                            </View>
+                        )}
+                        {selectedCustomer.priceBasis === 'fat_snf' && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>SNF</Text>
+                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
+                            </View>
+                        )}
+                        {selectedCustomer.priceBasis === 'rate' && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>{t.common.rate}</Text>
+                                <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                            </View>
+                        )}
+                    </View>
+
+                    {/* Computed Values Display */}
+                    <View style={s.computedRow}>
+                        {selectedCustomer.priceBasis !== 'rate' && (
+                            <Text style={s.computedText}>{t.common.rate}: <Text style={s.computedValue}>{rateValue || '0'}</Text></Text>
+                        )}
+                        <Text style={s.computedText}>{t.common.amount}: <Text style={[s.computedValue, { color: colors.primary }]}>₹{computeAmount().toFixed(1)}</Text></Text>
+                    </View>
+
+                    {/* Actions */}
+                    <View style={s.actionsRow}>
+                        <Pressable style={[s.zeroToggle, isZero && { backgroundColor: colors.destructive, borderColor: colors.destructive }]} onPress={() => setIsZero(!isZero)}>
+                            <Text style={[s.zeroText, isZero && { color: '#fff' }]}>{t.purchase.zeroEntry}</Text>
+                        </Pressable>
+                        <Pressable style={[s.saveEntryBtn, saving && { opacity: 0.5 }]} onPress={handleSaveEntry} disabled={saving}>
+                            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveEntryText}>✓ {t.common.save}</Text>}
+                        </Pressable>
+                    </View>
+                </View>
+            )}
 
             {/* Sale Entries Table */}
             <View style={s.tableWrap}>
@@ -575,12 +591,12 @@ export default function PurchaseScreen() {
                 </View>
 
                 <View style={s.tHead}>
-                    <Text style={[s.tHeadText, s.entryCell1]}>{t.common.code}</Text>
-                    <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.milk}</Text>
-                    <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
-                    <Text style={[s.tHeadText, s.entryCell2]}>SNF</Text>
-                    <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
-                    <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
+                    <View style={s.entryCell1}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.common.code}</Text></View>
+                    <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.milk}</Text></View>
+                    <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.fat}</Text></View>
+                    <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>SNF</Text></View>
+                    <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.common.rate}</Text></View>
+                    <View style={s.entryCellAmt}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.amt}</Text></View>
                     <View style={{ width: 26 }} />
                 </View>
 
@@ -596,26 +612,26 @@ export default function PurchaseScreen() {
                         {collections.map((item, index) => (
                             <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
                                 <View style={s.entryCell1}>
-                                    <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700' }]}>{item.farmerCode || '-'}</Text>
-                                    <Text style={s.entrySubText} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
+                                    <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
+                                    <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
                                 </View>
-                                <Text style={[s.entryCellText, s.entryCell2]}>{item.quantity}</Text>
-                                <Text style={[s.entryCellText, s.entryCell2]}>{item.fat || '-'}</Text>
-                                <Text style={[s.entryCellText, s.entryCell2]}>{(item as any).snf || '-'}</Text>
-                                <Text style={[s.entryCellText, s.entryCell2]}>{item.rate}</Text>
-                                <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text>
+                                <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
+                                <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.fat || '-'}</Text></View>
+                                <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text></View>
+                                <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.rate}</Text></View>
+                                <View style={s.entryCellAmt}><Text style={[s.entryCellText, { textAlign: 'center', color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text></View>
                                 <Pressable style={s.deleteBtn} onPress={() => handleDeleteCollection(item._id)} disabled={deletingId === item._id}>
                                     {deletingId === item._id ? <ActivityIndicator size="small" color="#ef4444" /> : <Trash2 size={12} color="#ef4444" />}
                                 </Pressable>
                             </View>
                         ))}
                         <View style={s.tFootRow}>
-                            <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({collections.length})</Text>
-                            <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity.toFixed(1)}</Text>
-                            <Text style={[s.tFootText, s.entryCell2]}></Text>
-                            <Text style={[s.tFootText, s.entryCell2]}></Text>
-                            <Text style={[s.tFootText, s.entryCell2]}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '-'}</Text>
-                            <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{historyTotals.amount.toFixed(0)}</Text>
+                            <View style={s.entryCell1}><Text style={[s.tFootText, { textAlign: 'center' }]}>{t.common.total} ({collections.length})</Text></View>
+                            <View style={s.entryCellFlex}><Text style={[s.tFootText, { textAlign: 'center' }]}>{historyTotals.quantity.toFixed(1)}</Text></View>
+                            <View style={s.entryCellFlex}><Text style={[s.tFootText, { textAlign: 'center' }]}></Text></View>
+                            <View style={s.entryCellFlex}><Text style={[s.tFootText, { textAlign: 'center' }]}></Text></View>
+                            <View style={s.entryCellFlex}><Text style={[s.tFootText, { textAlign: 'center' }]}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '-'}</Text></View>
+                            <View style={s.entryCellAmt}><Text style={[s.tFootText, { textAlign: 'center', color: colors.primary }]}>₹{historyTotals.amount.toFixed(0)}</Text></View>
                             <View style={{ width: 26 }} />
                         </View>
                     </>
@@ -997,23 +1013,36 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     customerName: { fontSize: 13, fontWeight: '700', color: colors.foreground },
     customerMeta: { fontSize: 10, color: colors.mutedForeground, marginTop: 1 },
 
+    // Code row (Enter code + Cow/Buffalo)
+    codeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    codeInputBox: { flex: 1, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 10, borderRadius: 8, backgroundColor: colors.card },
+    codeInputText: { fontSize: 14, fontWeight: '700', color: colors.foreground },
+    milkToggleBtn: { paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1.5, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.card },
+    milkToggleBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    milkToggleBtnText: { fontSize: 14, fontWeight: '800', color: colors.foreground },
+
     // Entry card
-    entryCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 8, borderRadius: 10 },
+    entryCard: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, padding: 10, borderRadius: 10 },
+    priceBasisLabel: { fontSize: 14, fontWeight: '700', color: colors.foreground, marginBottom: 6 },
     milkRow: { flexDirection: 'row', gap: 4, marginBottom: 6 },
     milkBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, borderRadius: 8 },
     milkBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
     milkBtnText: { fontSize: 12, fontWeight: '700', color: colors.foreground },
 
-    fieldsRow: { flexDirection: 'row', gap: 5 },
+    fieldsRow: { flexDirection: 'row', gap: 8 },
     fieldBox: { flex: 1 },
-    fieldLabel: { fontSize: 9, fontWeight: '600', color: colors.mutedForeground, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
-    fieldInput: { borderWidth: 1, borderColor: colors.border, paddingHorizontal: 6, paddingVertical: 5, fontSize: 15, fontWeight: '700', color: colors.foreground, backgroundColor: colors.background, textAlign: 'center', borderRadius: 8 },
+    fieldLabel: { fontSize: 10, fontWeight: '700', color: colors.mutedForeground, marginBottom: 3, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center' },
+    fieldInput: { borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: 8, paddingVertical: 8, fontSize: 18, fontWeight: '800', color: colors.foreground, backgroundColor: colors.background, textAlign: 'center', borderRadius: 8 },
 
-    actionsRow: { flexDirection: 'row', gap: 5, marginTop: 6 },
-    zeroToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, borderRadius: 8 },
-    zeroText: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground },
-    saveEntryBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8, backgroundColor: colors.primary, borderRadius: 8 },
-    saveEntryText: { fontSize: 13, fontWeight: '800', color: '#fff' },
+    computedRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8, paddingVertical: 4 },
+    computedText: { fontSize: 16, fontWeight: '600', color: colors.mutedForeground },
+    computedValue: { fontSize: 18, fontWeight: '800', color: colors.foreground },
+
+    actionsRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
+    zeroToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 16, paddingVertical: 10, borderWidth: 1.5, borderColor: colors.destructive, backgroundColor: colors.destructive, borderRadius: 8 },
+    zeroText: { fontSize: 14, fontWeight: '800', color: '#fff' },
+    saveEntryBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, backgroundColor: '#c8e600', borderRadius: 8, borderWidth: 1.5, borderColor: '#a0b800' },
+    saveEntryText: { fontSize: 16, fontWeight: '900', color: '#000' },
 
     // Table
     tableWrap: { borderWidth: 1, borderColor: colors.border, overflow: 'hidden', borderRadius: 10 },
@@ -1028,9 +1057,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     tHeadText: { fontSize: 9, fontWeight: '700', color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.3, textAlign: 'center' },
 
     entryRow: { flexDirection: 'row', paddingVertical: 5, paddingHorizontal: 6, alignItems: 'center', borderBottomWidth: 0.5, borderBottomColor: colors.border },
-    entryCell1: { flex: 1.1 },
-    entryCell2: { flex: 0.6, textAlign: 'center' },
-    entryCell3: { flex: 0.8, textAlign: 'right' },
+    entryCell1: { flex: 1.1, alignItems: 'center', justifyContent: 'center' },
+    entryCell2: { flex: 0.8, alignItems: 'center', justifyContent: 'center' },
+    entryCell3: { flex: 0.6, alignItems: 'center', justifyContent: 'center' },
+    entryCellFlex: { flex: 0.6, alignItems: 'center', justifyContent: 'center' },
+    entryCellAmt: { flex: 0.8, alignItems: 'center', justifyContent: 'center' },
     entryCellText: { fontSize: 10, color: colors.foreground },
     entrySubText: { fontSize: 8, color: colors.mutedForeground },
 
