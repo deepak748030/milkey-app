@@ -5,6 +5,7 @@ const Payment = require('../models/Payment');
 const Farmer = require('../models/Farmer');
 const Member = require('../models/Member');
 const SellingEntry = require('../models/SellingEntry');
+const PurchaseFarmer = require('../models/PurchaseFarmer');
 const auth = require('../middleware/auth');
 
 // Get milk collection report
@@ -394,7 +395,9 @@ router.get('/home-stats', auth, async (req, res) => {
             todayCollections,
             todaySelling,
             totalFarmers,
-            totalMembers
+            totalMembers,
+            totalCollectionFarmers,
+            todayCollectionQty
         ] = await Promise.all([
             // Today's milk collections (purchase)
             MilkCollection.aggregate([
@@ -417,7 +420,14 @@ router.get('/home-stats', auth, async (req, res) => {
             // Total farmers from Farmer model with type 'farmer'
             Farmer.countDocuments({ owner: req.user._id, isActive: true, type: 'farmer' }),
             // Total members from Member model
-            Member.countDocuments({ owner: req.user._id, isActive: true })
+            Member.countDocuments({ owner: req.user._id, isActive: true }),
+            // Total collection (purchase) farmers
+            PurchaseFarmer.countDocuments({ owner: req.user._id }),
+            // Today's total collection quantity from MilkCollection
+            MilkCollection.aggregate([
+                { $match: { owner: req.user._id, date: { $gte: today, $lte: todayEnd } } },
+                { $group: { _id: null, quantity: { $sum: '$quantity' } } }
+            ])
         ]);
 
         const sellingData = todaySelling[0] || { morningQty: 0, eveningQty: 0, amount: 0, count: 0 };
@@ -433,7 +443,9 @@ router.get('/home-stats', auth, async (req, res) => {
                     count: sellingData.count || 0
                 },
                 totalFarmers,
-                totalMembers
+                totalMembers,
+                totalCollectionFarmers,
+                todayCollectionQty: (todayCollectionQty[0]?.quantity || 0)
             }
         });
     } catch (error) {

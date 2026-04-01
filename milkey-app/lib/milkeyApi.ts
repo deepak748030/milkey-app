@@ -286,6 +286,8 @@ export interface HomeStats {
     todaySell: { quantity: number; amount: number; count: number };
     totalFarmers: number;
     totalMembers: number;
+    totalCollectionFarmers: number;
+    todayCollectionQty: number;
 }
 
 export interface ReferralData {

@@ -308,8 +308,13 @@ export default function HomeScreen() {
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
-              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{homeStats?.totalFarmers || 0}</Text>
-              <Text style={styles.overviewStatLabel}>{t.home.farmers}</Text>
+              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{homeStats?.totalCollectionFarmers || 0}</Text>
+              <Text style={styles.overviewStatLabel}>{t.home.cFarmer}</Text>
+            </View>
+            <View style={styles.overviewDivider} />
+            <View style={styles.overviewStat}>
+              <Text style={[styles.overviewStatValue, { color: colors.destructive }]}>{homeStats?.totalFarmers || 0}</Text>
+              <Text style={styles.overviewStatLabel}>{t.home.rFarmer}</Text>
             </View>
           </View>
         </View>
