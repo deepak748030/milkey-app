@@ -1806,3 +1806,8 @@ export const checkAppVersion = async () => {
         forceUpdateMessage: string;
     }>('/admin/app-version');
 };
+
+// Payment Settings (public endpoint)
+export const getPaymentSettings = async () => {
+    return apiRequest<{ codEnabled: boolean; onlineEnabled: boolean }>('/admin/payment-settings/public');
+};

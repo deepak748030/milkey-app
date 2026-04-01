@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Dimensions, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, CreditCard, Banknote, Wallet, Check } from 'lucide-react-native';
-import { ordersApi } from '@/lib/milkeyApi';
+import { ordersApi, getPaymentSettings } from '@/lib/milkeyApi';
 import { useCartStore } from '@/lib/cartStore';
 import RazorpayOrderPaymentModal from './RazorpayOrderPaymentModal';
 
@@ -26,11 +26,37 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
     const [error, setError] = useState<string | null>(null);
     const [showRazorpay, setShowRazorpay] = useState(false);
     const [pendingOrderId, setPendingOrderId] = useState<string>('');
+    const [codEnabled, setCodEnabled] = useState(false);
+    const [onlineEnabled, setOnlineEnabled] = useState(true);
+    const [settingsLoading, setSettingsLoading] = useState(true);
 
-    const paymentMethods = [
-        { id: 'upi', label: 'UPI Payment', icon: Wallet, description: 'Pay with UPI - GPay, PhonePe, Paytm' },
-        { id: 'cash', label: 'Cash on Delivery', icon: Banknote, description: 'Pay when you receive' },
+    useEffect(() => {
+        if (visible) {
+            fetchPaymentSettings();
+        }
+    }, [visible]);
+
+    const fetchPaymentSettings = async () => {
+        setSettingsLoading(true);
+        try {
+            const res = await getPaymentSettings();
+            if (res.success && res.response) {
+                setCodEnabled(res.response.codEnabled);
+                setOnlineEnabled(res.response.onlineEnabled);
+            }
+        } catch (err) {
+            // Default: online only
+        } finally {
+            setSettingsLoading(false);
+        }
+    };
+
+    const allMethods = [
+        { id: 'upi', label: 'UPI Payment', icon: Wallet, description: 'Pay with UPI - GPay, PhonePe, Paytm', enabled: onlineEnabled },
+        { id: 'cash', label: 'Cash on Delivery', icon: Banknote, description: 'Pay when you receive', enabled: codEnabled },
     ];
+
+    const paymentMethods = allMethods.filter(m => m.enabled);
 
     const styles = createStyles(colors, isDark, insets);
 
@@ -165,6 +191,16 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
                                 </View>
                                 <Text style={styles.successTitle}>Order Placed!</Text>
                                 <Text style={styles.successSubtitle}>Your order has been placed successfully</Text>
+                            </View>
+                        ) : settingsLoading ? (
+                            <View style={styles.successContainer}>
+                                <ActivityIndicator size="large" color={colors.primary} />
+                                <Text style={[styles.successSubtitle, { marginTop: 12 }]}>Loading payment methods...</Text>
+                            </View>
+                        ) : paymentMethods.length === 0 ? (
+                            <View style={styles.successContainer}>
+                                <Text style={styles.successTitle}>No Payment Methods</Text>
+                                <Text style={styles.successSubtitle}>No payment methods are currently available. Please try again later.</Text>
                             </View>
                         ) : (
                             <>

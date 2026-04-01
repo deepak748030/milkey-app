@@ -45,6 +45,7 @@ const mainNavItems = [
     { to: '/custom-forms', icon: FileText, label: 'Custom Forms' },
     { to: '/social-links', icon: Share2, label: 'Social Links' },
     { to: '/app-version', icon: Smartphone, label: 'App Version' },
+    { to: '/payment-settings', icon: CreditCard, label: 'Payment Settings' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 

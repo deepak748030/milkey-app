@@ -1915,4 +1915,15 @@ export const updateAppVersion = async (data: any) => {
     return response.data
 }
 
+// Payment Settings
+export const getPaymentSettings = async () => {
+    const response = await api.get('/admin/payment-settings')
+    return response.data
+}
+
+export const updatePaymentSettings = async (data: { codEnabled?: boolean; onlineEnabled?: boolean }) => {
+    const response = await api.put('/admin/payment-settings', data)
+    return response.data
+}
+
 export default api

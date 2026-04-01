@@ -6,6 +6,7 @@ const Admin = require('../models/Admin');
 const User = require('../models/User');
 const SocialLink = require('../models/SocialLink');
 const AppVersion = require('../models/AppVersion');
+const PaymentSettings = require('../models/PaymentSettings');
 const Order = require('../models/Order');
 const MilkCollection = require('../models/MilkCollection');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
@@ -3740,6 +3741,53 @@ router.put('/app-version', adminAuth, async (req, res) => {
     } catch (error) {
         console.error('Update app version error:', error);
         res.status(500).json({ success: false, message: 'Failed to update app version' });
+    }
+});
+
+// ============ Payment Settings ============
+
+// GET /api/admin/payment-settings
+router.get('/payment-settings', adminAuth, async (req, res) => {
+    try {
+        let settings = await PaymentSettings.findOne();
+        if (!settings) {
+            settings = await PaymentSettings.create({ codEnabled: false, onlineEnabled: true });
+        }
+        res.json({ success: true, response: settings });
+    } catch (error) {
+        console.error('Get payment settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to get payment settings' });
+    }
+});
+
+// PUT /api/admin/payment-settings
+router.put('/payment-settings', adminAuth, async (req, res) => {
+    try {
+        const { codEnabled, onlineEnabled } = req.body;
+        let settings = await PaymentSettings.findOne();
+        if (!settings) {
+            settings = new PaymentSettings();
+        }
+        if (codEnabled !== undefined) settings.codEnabled = codEnabled;
+        if (onlineEnabled !== undefined) settings.onlineEnabled = onlineEnabled;
+        await settings.save();
+        res.json({ success: true, response: settings, message: 'Payment settings updated' });
+    } catch (error) {
+        console.error('Update payment settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update payment settings' });
+    }
+});
+
+// Public route (no auth) - for app to fetch payment settings
+router.get('/payment-settings/public', async (req, res) => {
+    try {
+        let settings = await PaymentSettings.findOne();
+        if (!settings) {
+            settings = await PaymentSettings.create({ codEnabled: false, onlineEnabled: true });
+        }
+        res.json({ success: true, response: { codEnabled: settings.codEnabled, onlineEnabled: settings.onlineEnabled } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to get payment settings' });
     }
 });
 

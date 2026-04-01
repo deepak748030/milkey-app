@@ -29,6 +29,7 @@ import { SocialLinksPage } from './pages/SocialLinksPage'
 import { CollectionReportPage } from './pages/CollectionReportPage'
 import { CollectionFarmersPage } from './pages/CollectionFarmersPage'
 import { AppVersionPage } from './pages/AppVersionPage'
+import { PaymentSettingsPage } from './pages/PaymentSettingsPage'
 
 function App() {
     return (
@@ -72,6 +73,7 @@ function App() {
                         <Route path="settings" element={<SettingsPage />} />
                         <Route path="social-links" element={<SocialLinksPage />} />
                         <Route path="app-version" element={<AppVersionPage />} />
+                        <Route path="payment-settings" element={<PaymentSettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
