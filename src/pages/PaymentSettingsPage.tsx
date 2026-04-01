@@ -90,10 +90,10 @@ export function PaymentSettingsPage() {
                     <button
                         onClick={() => handleToggle('online')}
                         disabled={saving}
-                        className={`relative w-14 h-7 rounded-full transition-colors duration-200 ${onlineEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
+                        className={`relative w-[52px] h-[28px] rounded-full transition-all duration-300 ease-in-out ${onlineEnabled ? 'bg-accent shadow-[0_0_12px_hsl(var(--accent)/0.4)]' : 'bg-muted-foreground/20'
                             }`}
                     >
-                        <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform duration-200 ${onlineEnabled ? 'translate-x-7' : 'translate-x-0.5'
+                        <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] rounded-full bg-white shadow-md transition-all duration-300 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] ${onlineEnabled ? 'translate-x-[24px] scale-110' : 'translate-x-0 scale-100'
                             }`} />
                     </button>
                 </div>
@@ -115,10 +115,10 @@ export function PaymentSettingsPage() {
                     <button
                         onClick={() => handleToggle('cod')}
                         disabled={saving}
-                        className={`relative w-14 h-7 rounded-full transition-colors duration-200 ${codEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
+                        className={`relative w-[52px] h-[28px] rounded-full transition-all duration-300 ease-in-out ${codEnabled ? 'bg-accent shadow-[0_0_12px_hsl(var(--accent)/0.4)]' : 'bg-muted-foreground/20'
                             }`}
                     >
-                        <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform duration-200 ${codEnabled ? 'translate-x-7' : 'translate-x-0.5'
+                        <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] rounded-full bg-white shadow-md transition-all duration-300 ease-[cubic-bezier(0.68,-0.55,0.27,1.55)] ${codEnabled ? 'translate-x-[24px] scale-110' : 'translate-x-0 scale-100'
                             }`} />
                     </button>
                 </div>
