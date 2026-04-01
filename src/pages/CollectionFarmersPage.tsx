@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, RefreshCw, UserPlus } from 'lucide-react'
+import { Search, RefreshCw, UserPlus, Trash2 } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
-import { getAdminPurchaseFarmers, getAdminUsersList, type AdminPurchaseFarmer } from '@/lib/api'
+import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, type AdminPurchaseFarmer } from '@/lib/api'
 
 export function CollectionFarmersPage() {
     const [farmers, setFarmers] = useState<AdminPurchaseFarmer[]>([])
@@ -11,6 +11,7 @@ export function CollectionFarmersPage() {
     const [users, setUsers] = useState<{ _id: string; name: string; phone: string }[]>([])
     const [page, setPage] = useState(1)
     const [pagination, setPagination] = useState({ total: 0, pages: 1 })
+    const [actionLoading, setActionLoading] = useState(false)
 
     const fetchUsers = useCallback(async () => {
         try {
@@ -41,13 +42,25 @@ export function CollectionFarmersPage() {
         return () => clearTimeout(t)
     }, [fetchFarmers])
 
+    const handleDelete = async (id: string) => {
+        if (!confirm('Are you sure you want to permanently delete this farmer?')) return
+        setActionLoading(true)
+        try {
+            const res = await deleteAdminPurchaseFarmer(id)
+            if (res.success) {
+                fetchFarmers()
+            }
+        } catch (e) { console.error(e) }
+        finally { setActionLoading(false) }
+    }
+
     const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
     return (
         <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground">Collection Farmers</h1>
+                    <h1 className="text-2xl font-bold text-foreground">Collection Farmers (C-Farmer)</h1>
                     <p className="text-muted-foreground">All purchase farmers across users</p>
                 </div>
                 <button onClick={fetchFarmers} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
@@ -108,7 +121,12 @@ export function CollectionFarmersPage() {
                                     <p className="font-semibold text-foreground">{f.name}</p>
                                     <p className="text-xs text-muted-foreground">Code: {f.code}</p>
                                 </div>
-                                <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{f.defaultMilk}</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{f.defaultMilk}</span>
+                                    <button onClick={() => handleDelete(f._id)} disabled={actionLoading} className="p-1.5 hover:bg-destructive/10 rounded-lg transition-colors">
+                                        <Trash2 className="w-4 h-4 text-destructive" />
+                                    </button>
+                                </div>
                             </div>
                             <p className="text-xs text-muted-foreground mb-2">{f.mobile} • Owner: {typeof f.owner === 'object' ? f.owner.name : ''}</p>
                             <div className="grid grid-cols-2 gap-2 text-sm">
@@ -141,20 +159,21 @@ export function CollectionFarmersPage() {
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Total Qty</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Total Amount</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Last Purchase</th>
+                                <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                             {loading ? (
                                 Array.from({ length: 5 }).map((_, i) => (
                                     <tr key={i} className="animate-pulse">
-                                        {Array.from({ length: 9 }).map((_, j) => (
+                                        {Array.from({ length: 10 }).map((_, j) => (
                                             <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-20"></div></td>
                                         ))}
                                     </tr>
                                 ))
                             ) : farmers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
                                         <UserPlus className="w-12 h-12 mx-auto mb-2 opacity-50" />
                                         No farmers found
                                     </td>
@@ -178,6 +197,16 @@ export function CollectionFarmersPage() {
                                         <td className="px-4 py-3 text-sm font-medium text-primary">{(f.totalQuantity || 0).toFixed(1)} L</td>
                                         <td className="px-4 py-3 text-sm font-semibold text-green-600">₹{(f.totalAmount || 0).toFixed(2)}</td>
                                         <td className="px-4 py-3 text-sm">{formatDate(f.lastPurchaseDate)}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            <button
+                                                onClick={() => handleDelete(f._id)}
+                                                disabled={actionLoading}
+                                                className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
+                                                title="Delete farmer permanently"
+                                            >
+                                                <Trash2 className="w-4 h-4 text-destructive" />
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))
                             )}

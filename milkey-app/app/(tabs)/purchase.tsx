@@ -889,9 +889,6 @@ export default function PurchaseScreen() {
                                 <Pressable style={s.miniIconBtn} onPress={() => handleEditCustomer(item)}>
                                     <Edit2 size={12} color={colors.primary} />
                                 </Pressable>
-                                <Pressable style={s.miniIconBtn} onPress={() => handleDeleteCustomer(item._id)}>
-                                    <Trash2 size={12} color="#ef4444" />
-                                </Pressable>
                             </View>
                         </View>
                     ))}
@@ -977,9 +974,6 @@ export default function PurchaseScreen() {
                                     <View style={{ flexDirection: 'row', gap: 3 }}>
                                         <Pressable style={[s.miniIconBtn, { backgroundColor: colors.primary + '14' }]} onPress={() => handleEditCustomer(item)}>
                                             <Edit2 size={12} color={colors.primary} />
-                                        </Pressable>
-                                        <Pressable style={[s.miniIconBtn, { backgroundColor: '#ef444414' }]} onPress={() => handleDeleteCustomer(item._id)}>
-                                            <Trash2 size={12} color="#ef4444" />
                                         </Pressable>
                                     </View>
                                 </Pressable>

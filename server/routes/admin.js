@@ -1284,6 +1284,89 @@ router.get('/milk-collections', adminAuth, async (req, res) => {
     }
 });
 
+// GET /api/admin/milk-collections/report - Collection report with aggregation
+// IMPORTANT: This route MUST be before /milk-collections/:id to avoid "report" being treated as an ID
+router.get('/milk-collections/report', adminAuth, async (req, res) => {
+    try {
+        const { startDate, endDate, userId, groupBy = 'date' } = req.query;
+
+        const match = {};
+        if (userId) match.owner = require('mongoose').Types.ObjectId(userId);
+        if (startDate || endDate) {
+            match.date = {};
+            if (startDate) match.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                match.date.$lte = end;
+            }
+        }
+
+        let groupId;
+        if (groupBy === 'farmer') {
+            groupId = '$purchaseFarmer';
+        } else if (groupBy === 'shift') {
+            groupId = { date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, shift: '$shift' };
+        } else {
+            groupId = { $dateToString: { format: '%Y-%m-%d', date: '$date' } };
+        }
+
+        const report = await MilkCollection.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: groupId,
+                    totalQuantity: { $sum: '$quantity' },
+                    totalAmount: { $sum: '$amount' },
+                    avgRate: { $avg: '$rate' },
+                    avgFat: { $avg: '$fat' },
+                    avgSnf: { $avg: '$snf' },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: -1 } }
+        ]);
+
+        // If grouped by farmer, populate farmer names
+        if (groupBy === 'farmer') {
+            const farmerIds = report.map(r => r._id).filter(Boolean);
+            const farmers = await PurchaseFarmer.find({ _id: { $in: farmerIds } }).select('code name mobile').lean();
+            const farmerMap = {};
+            farmers.forEach(f => { farmerMap[f._id.toString()] = f; });
+            report.forEach(r => {
+                r.farmer = r._id ? farmerMap[r._id.toString()] || null : null;
+            });
+        }
+
+        // Overall totals
+        const totals = await MilkCollection.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: null,
+                    totalQuantity: { $sum: '$quantity' },
+                    totalAmount: { $sum: '$amount' },
+                    avgRate: { $avg: '$rate' },
+                    avgFat: { $avg: '$fat' },
+                    avgSnf: { $avg: '$snf' },
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                report,
+                totals: totals[0] || { totalQuantity: 0, totalAmount: 0, avgRate: 0, avgFat: 0, avgSnf: 0, count: 0 }
+            }
+        });
+    } catch (error) {
+        console.error('Admin collection report error:', error);
+        res.status(500).json({ success: false, message: 'Failed to generate report' });
+    }
+});
+
 // GET /api/admin/milk-collections/:id
 router.get('/milk-collections/:id', adminAuth, async (req, res) => {
     try {
@@ -1450,85 +1533,32 @@ router.get('/purchase-farmers', adminAuth, async (req, res) => {
     }
 });
 
-// GET /api/admin/milk-collections/report - Collection report with aggregation
-router.get('/milk-collections/report', adminAuth, async (req, res) => {
+// DELETE /api/admin/purchase-farmers/:id - Permanent delete (admin only)
+router.delete('/purchase-farmers/:id', adminAuth, async (req, res) => {
     try {
-        const { startDate, endDate, userId, groupBy = 'date' } = req.query;
+        const MilkCollection = require('../models/MilkCollection');
 
-        const match = {};
-        if (userId) match.owner = require('mongoose').Types.ObjectId(userId);
-        if (startDate || endDate) {
-            match.date = {};
-            if (startDate) match.date.$gte = new Date(startDate);
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                match.date.$lte = end;
-            }
-        }
+        // Check if farmer has any milk collections
+        const collectionsCount = await MilkCollection.countDocuments({ purchaseFarmer: req.params.id });
 
-        let groupId;
-        if (groupBy === 'farmer') {
-            groupId = '$purchaseFarmer';
-        } else if (groupBy === 'shift') {
-            groupId = { date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, shift: '$shift' };
+        // Delete or soft-delete based on collections
+        if (collectionsCount > 0) {
+            // Soft delete if has collections (to preserve history)
+            await PurchaseFarmer.findByIdAndUpdate(req.params.id, { isActive: false });
         } else {
-            groupId = { $dateToString: { format: '%Y-%m-%d', date: '$date' } };
+            // Permanent delete if no collections
+            await PurchaseFarmer.findByIdAndDelete(req.params.id);
         }
-
-        const report = await MilkCollection.aggregate([
-            { $match: match },
-            {
-                $group: {
-                    _id: groupId,
-                    totalQuantity: { $sum: '$quantity' },
-                    totalAmount: { $sum: '$amount' },
-                    avgRate: { $avg: '$rate' },
-                    avgFat: { $avg: '$fat' },
-                    avgSnf: { $avg: '$snf' },
-                    count: { $sum: 1 }
-                }
-            },
-            { $sort: { _id: -1 } }
-        ]);
-
-        // If grouped by farmer, populate farmer names
-        if (groupBy === 'farmer') {
-            const farmerIds = report.map(r => r._id).filter(Boolean);
-            const farmers = await PurchaseFarmer.find({ _id: { $in: farmerIds } }).select('code name mobile').lean();
-            const farmerMap = {};
-            farmers.forEach(f => { farmerMap[f._id.toString()] = f; });
-            report.forEach(r => {
-                r.farmer = r._id ? farmerMap[r._id.toString()] || null : null;
-            });
-        }
-
-        // Overall totals
-        const totals = await MilkCollection.aggregate([
-            { $match: match },
-            {
-                $group: {
-                    _id: null,
-                    totalQuantity: { $sum: '$quantity' },
-                    totalAmount: { $sum: '$amount' },
-                    avgRate: { $avg: '$rate' },
-                    avgFat: { $avg: '$fat' },
-                    avgSnf: { $avg: '$snf' },
-                    count: { $sum: 1 }
-                }
-            }
-        ]);
 
         res.json({
             success: true,
-            response: {
-                report,
-                totals: totals[0] || { totalQuantity: 0, totalAmount: 0, avgRate: 0, avgFat: 0, avgSnf: 0, count: 0 }
-            }
+            message: collectionsCount > 0
+                ? 'Farmer deactivated (has collection history)'
+                : 'Farmer permanently deleted'
         });
     } catch (error) {
-        console.error('Admin collection report error:', error);
-        res.status(500).json({ success: false, message: 'Failed to generate report' });
+        console.error('Admin delete purchase farmer error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete farmer' });
     }
 });
 
