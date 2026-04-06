@@ -883,10 +883,47 @@ export default function PurchaseScreen() {
                 </View>
             )}
 
-            {/* Print Button */}
-            <Pressable style={s.exportReportBtn} onPress={() => handlePrintPress('report')}>
-                <Printer size={16} color="#fff" />
-                <Text style={s.exportReportBtnText}>Print Report</Text>
+            {/* Print & Export Buttons */}
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable
+                    style={[s.exportReportBtn, { flex: 1, backgroundColor: colors.primary }]}
+                    onPress={() => {
+                        setPrintSource('report');
+                        if (isConnected) {
+                            // Bluetooth print full summary
+                            handleFullSummaryPrint();
+                        } else {
+                            handleExportReportPdf();
+                        }
+                    }}
+                >
+                    <FileText size={16} color="#fff" />
+                    <Text style={s.exportReportBtnText}>Full Summary</Text>
+                </Pressable>
+                <Pressable
+                    style={[s.exportReportBtn, { flex: 1, backgroundColor: '#f59e0b' }]}
+                    onPress={() => {
+                        setPrintSource('report');
+                        if (isConnected) {
+                            handleShortSummaryPrint();
+                        } else {
+                            // Short summary as alert info when no printer
+                            const data = filteredReportCollections.length > 0 ? filteredReportCollections : collections;
+                            const totals = filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals;
+                            if (data.length === 0) { showAlert('Info', 'No data'); return; }
+                            const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
+                            const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
+                            showAlert('Short Summary', `Total Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ₹${avgRate}\nSamples: ${data.length}\nFarmers: ${uniqueFarmers}`);
+                        }
+                    }}
+                >
+                    <Printer size={16} color="#fff" />
+                    <Text style={s.exportReportBtnText}>Short Summary</Text>
+                </Pressable>
+            </View>
+            <Pressable style={[s.exportReportBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]} onPress={handleExportReportPdf}>
+                <Download size={16} color={colors.primary} />
+                <Text style={[s.exportReportBtnText, { color: colors.foreground }]}>Download PDF</Text>
             </Pressable>
 
             {/* Report Table */}
