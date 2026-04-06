@@ -42,8 +42,8 @@ router.post('/calculate', auth, async (req, res) => {
     try {
         const { fat, snf } = req.body;
 
-        if (fat === undefined || snf === undefined) {
-            return res.status(400).json({ success: false, message: 'FAT and SNF are required' });
+        if (fat === undefined) {
+            return res.status(400).json({ success: false, message: 'FAT is required' });
         }
 
         let chart = await RateChart.findOne({ owner: req.user._id, isActive: true });

@@ -412,11 +412,12 @@ export const farmersApi = {
 
 // Purchase Farmers API (for Purchase tab only)
 export const purchaseFarmersApi = {
-    getAll: async (params?: { search?: string; page?: number; limit?: number }) => {
+    getAll: async (params?: { search?: string; page?: number; limit?: number; includeInactive?: boolean }) => {
         const queryParams = new URLSearchParams();
         if (params?.search) queryParams.append('search', params.search);
         if (params?.page) queryParams.append('page', params.page.toString());
         if (params?.limit) queryParams.append('limit', params.limit.toString());
+        if (params?.includeInactive) queryParams.append('includeInactive', 'true');
         const query = queryParams.toString();
         return apiRequest<{ data: PurchaseFarmer[]; count: number; pagination?: { page: number; limit: number; total: number; pages: number } }>(`/purchase-farmers${query ? `?${query}` : ''}`);
     },

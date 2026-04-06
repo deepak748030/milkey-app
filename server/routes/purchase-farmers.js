@@ -11,8 +11,15 @@ const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`,
 // GET /api/purchase-farmers
 router.get('/', auth, async (req, res) => {
     try {
-        const { search, page = 1, limit = 50 } = req.query;
-        const query = { owner: req.userId, isActive: true };
+        const { search, page = 1, limit = 50, includeInactive } = req.query;
+        const query = { owner: req.userId };
+
+        // By default only show active, but allow including inactive
+        if (includeInactive === 'true') {
+            // Show all farmers (active + inactive)
+        } else {
+            query.isActive = true;
+        }
 
         if (search) {
             query.$or = [
@@ -24,7 +31,7 @@ router.get('/', auth, async (req, res) => {
 
         const total = await PurchaseFarmer.countDocuments(query);
         const farmers = await PurchaseFarmer.find(query)
-            .sort({ code: 1 })
+            .sort({ isActive: -1, code: 1 })
             .limit(parseInt(limit))
             .skip((parseInt(page) - 1) * parseInt(limit))
             .lean();
