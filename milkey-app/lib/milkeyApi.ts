@@ -377,10 +377,11 @@ const apiRequest = async <T>(
 
 // Farmers API
 export const farmersApi = {
-    getAll: async (params?: { type?: 'farmer' | 'member'; search?: string }) => {
+    getAll: async (params?: { type?: 'farmer' | 'member'; search?: string; includeInactive?: boolean }) => {
         const queryParams = new URLSearchParams();
         if (params?.type) queryParams.append('type', params.type);
         if (params?.search) queryParams.append('search', params.search);
+        if (params?.includeInactive) queryParams.append('includeInactive', 'true');
         const query = queryParams.toString();
         return apiRequest<{ data: Farmer[]; count: number }>(`/farmers${query ? `?${query}` : ''}`);
     },
@@ -1145,9 +1146,10 @@ export interface BalanceReportSummary {
 
 // Members API (for Selling tab)
 export const membersApi = {
-    getAll: async (params?: { search?: string }) => {
+    getAll: async (params?: { search?: string; includeInactive?: boolean }) => {
         const queryParams = new URLSearchParams();
         if (params?.search) queryParams.append('search', params.search);
+        if (params?.includeInactive) queryParams.append('includeInactive', 'true');
         const query = queryParams.toString();
         return apiRequest<{ data: Member[]; count: number }>(`/members${query ? `?${query}` : ''}`);
     },

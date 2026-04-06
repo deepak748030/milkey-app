@@ -135,8 +135,13 @@ router.get('/balance-report', auth, async (req, res) => {
 // GET /api/members - Get all members for current user
 router.get('/', auth, async (req, res) => {
     try {
-        const { search } = req.query;
-        const query = { owner: req.userId, isActive: true };
+        const { search, includeInactive } = req.query;
+        const query = { owner: req.userId };
+
+        // Only filter active unless includeInactive is requested
+        if (includeInactive !== 'true') {
+            query.isActive = true;
+        }
 
         if (search) {
             // Search by both name and mobile number
@@ -147,7 +152,7 @@ router.get('/', auth, async (req, res) => {
         }
 
         const members = await Member.find(query)
-            .sort({ name: 1 })
+            .sort({ isActive: -1, name: 1 })
             .lean();
 
         res.json({

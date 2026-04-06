@@ -353,7 +353,7 @@ export default function RegisterScreen() {
         setLoading(true);
         try {
             const [farmersRes, paymentsRes] = await Promise.all([
-                farmersApi.getAll(),
+                farmersApi.getAll({ includeInactive: true }),
                 paymentsApi.getAll({ limit: 20, latestPerFarmer: true }),
             ]);
 
@@ -790,13 +790,13 @@ export default function RegisterScreen() {
 
     // Delete farmer
     const handleDeleteFarmer = async (id: string, name: string) => {
-        showConfirm('Delete Farmer', `Are you sure you want to delete ${name}?`, async () => {
+        showConfirm('Deactivate Farmer', `Are you sure you want to deactivate ${name}? The farmer will be hidden from active lists but data will be preserved.`, async () => {
             setConfirmVisible(false);
             const res = await farmersApi.delete(id);
             if (res.success) {
                 fetchData();
             } else {
-                showAlert('Error', res.message || 'Failed to delete');
+                showAlert('Error', res.message || 'Failed to deactivate');
             }
         });
     };
@@ -1715,7 +1715,7 @@ export default function RegisterScreen() {
             </View>
 
             <Text style={styles.farmerManagementTitle}>Farmer Management</Text>
-            <Text style={[styles.sectionTitle, { marginTop: 4, fontSize: 13 }]}>Farmers List ({farmers.length})</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 4, fontSize: 13 }]}>Farmers List ({farmers.filter(f => f.isActive !== false).length} active, {farmers.filter(f => f.isActive === false).length} inactive)</Text>
 
             {/* Farmers Table */}
             {loading ? (
@@ -1728,21 +1728,33 @@ export default function RegisterScreen() {
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Mobile</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.7 }]}>Actions</Text>
                     </View>
-                    {farmers.map((item) => (
-                        <View key={item._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.code}</Text>
-                            <Text style={[styles.tableCell, { flex: 1.3, textAlign: 'center' }]}>{item.name}</Text>
-                            <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{item.mobile}</Text>
-                            <View style={{ flex: 0.7, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                                <Pressable style={styles.editBtn} onPress={() => handleEditFarmer(item)}>
-                                    <Edit2 size={14} color={colors.primary} />
-                                </Pressable>
-                                <Pressable style={styles.deleteBtn} onPress={() => handleDeleteFarmer(item._id, item.name)}>
-                                    <Trash2 size={14} color={colors.destructive} />
-                                </Pressable>
+                    {farmers.map((item) => {
+                        const isInactive = item.isActive === false;
+                        return (
+                            <View key={item._id} style={[styles.tableRow, isInactive && { opacity: 0.45 }]}>
+                                <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.code}</Text>
+                                <View style={{ flex: 1.3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                    <Text style={[styles.tableCell, { textAlign: 'center' }]}>{item.name}</Text>
+                                    {isInactive && (
+                                        <View style={{ backgroundColor: colors.mutedForeground, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                                            <Text style={{ fontSize: 8, color: colors.white, fontWeight: '700' }}>Off</Text>
+                                        </View>
+                                    )}
+                                </View>
+                                <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{item.mobile}</Text>
+                                <View style={{ flex: 0.7, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                                    <Pressable style={styles.editBtn} onPress={() => handleEditFarmer(item)}>
+                                        <Edit2 size={14} color={colors.primary} />
+                                    </Pressable>
+                                    {!isInactive && (
+                                        <Pressable style={styles.deleteBtn} onPress={() => handleDeleteFarmer(item._id, item.name)}>
+                                            <Trash2 size={14} color={colors.destructive} />
+                                        </Pressable>
+                                    )}
+                                </View>
                             </View>
-                        </View>
-                    ))}
+                        );
+                    })}
                 </View>
             ) : (
                 <Text style={styles.infoTextMuted}>No farmers found. Add your first farmer.</Text>

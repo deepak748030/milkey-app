@@ -285,7 +285,7 @@ export default function SellingScreen() {
         try {
             setIsLoading(true);
             const [membersRes, entriesRes, paymentsRes, balanceReportRes] = await Promise.all([
-                membersApi.getAll(),
+                membersApi.getAll({ includeInactive: true }),
                 sellingEntriesApi.getAll({ limit: 50 }),
                 memberPaymentsApi.getAll({ limit: 10 }),
                 membersApi.getBalanceReport()
@@ -670,17 +670,17 @@ export default function SellingScreen() {
     };
 
     const handleDeleteMember = async (id: string) => {
-        showConfirm('Delete Member', 'Are you sure you want to delete this member?', async () => {
+        showConfirm('Deactivate Member', 'Are you sure you want to deactivate this member? The member will be hidden from active lists but data will be preserved.', async () => {
             setConfirmVisible(false);
             try {
                 const res = await membersApi.delete(id);
                 if (res.success) {
                     fetchData();
                 } else {
-                    showAlert('Error', 'Failed to delete member');
+                    showAlert('Error', 'Failed to deactivate member');
                 }
             } catch (error) {
-                showAlert('Error', 'Failed to delete member');
+                showAlert('Error', 'Failed to deactivate member');
             }
         });
     };
@@ -2158,7 +2158,7 @@ export default function SellingScreen() {
         setMemberTabSearch(searchText);
         setMemberSearchLoading(true);
         try {
-            const res = await membersApi.getAll({ search: searchText.trim() || undefined });
+            const res = await membersApi.getAll({ search: searchText.trim() || undefined, includeInactive: true });
             if (res.success) {
                 setMembers(res.response?.data || []);
             }
@@ -2203,8 +2203,7 @@ export default function SellingScreen() {
                 </View>
             </View>
 
-            <Text style={styles.memberManagementTitle}>Member Management</Text>
-            <Text style={[styles.sectionTitle, { marginTop: 4, fontSize: 13 }]}>Members List ({members.length})</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 4, fontSize: 13 }]}>Members List ({members.filter(m => m.isActive !== false).length} active, {members.filter(m => m.isActive === false).length} inactive)</Text>
 
             {members.length === 0 ? (
                 <Text style={styles.emptyText}>No members yet. Add your first member.</Text>
@@ -2216,21 +2215,33 @@ export default function SellingScreen() {
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Mobile</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Actions</Text>
                     </View>
-                    {members.map((item) => (
-                        <View key={item._id} style={styles.tableRow}>
-                            <Text style={[styles.tableCell, { flex: 0.6 }]}>₹{item.ratePerLiter}</Text>
-                            <Text style={[styles.tableCell, { flex: 1.2 }]}>{item.name}</Text>
-                            <Text style={[styles.tableCell, { flex: 1 }]}>{item.mobile}</Text>
-                            <View style={{ flex: 0.6, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
-                                <Pressable style={styles.editBtn} onPress={() => handleEditMember(item)}>
-                                    <Edit2 size={12} color={colors.primary} />
-                                </Pressable>
-                                <Pressable style={styles.deleteBtn} onPress={() => handleDeleteMember(item._id)}>
-                                    <Trash2 size={12} color={colors.destructive} />
-                                </Pressable>
+                    {members.map((item) => {
+                        const isInactive = item.isActive === false;
+                        return (
+                            <View key={item._id} style={[styles.tableRow, isInactive && { opacity: 0.45 }]}>
+                                <Text style={[styles.tableCell, { flex: 0.6 }]}>₹{item.ratePerLiter}</Text>
+                                <View style={{ flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                    <Text style={[styles.tableCell]}>{item.name}</Text>
+                                    {isInactive && (
+                                        <View style={{ backgroundColor: colors.mutedForeground, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                                            <Text style={{ fontSize: 8, color: colors.white, fontWeight: '700' }}>Off</Text>
+                                        </View>
+                                    )}
+                                </View>
+                                <Text style={[styles.tableCell, { flex: 1 }]}>{item.mobile}</Text>
+                                <View style={{ flex: 0.6, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
+                                    <Pressable style={styles.editBtn} onPress={() => handleEditMember(item)}>
+                                        <Edit2 size={12} color={colors.primary} />
+                                    </Pressable>
+                                    {!isInactive && (
+                                        <Pressable style={styles.deleteBtn} onPress={() => handleDeleteMember(item._id)}>
+                                            <Trash2 size={12} color={colors.destructive} />
+                                        </Pressable>
+                                    )}
+                                </View>
                             </View>
-                        </View>
-                    ))}
+                        );
+                    })}
                 </View>
             )}
         </View>

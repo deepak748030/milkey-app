@@ -11,8 +11,13 @@ const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`,
 // GET /api/farmers - Get all farmers for current user (optionally filter by type and search)
 router.get('/', auth, async (req, res) => {
     try {
-        const { type, search } = req.query;
-        const query = { owner: req.userId, isActive: true };
+        const { type, search, includeInactive } = req.query;
+        const query = { owner: req.userId };
+
+        // Only filter active unless includeInactive is requested
+        if (includeInactive !== 'true') {
+            query.isActive = true;
+        }
 
         if (type && ['farmer', 'member'].includes(type)) {
             query.type = type;
@@ -24,7 +29,7 @@ router.get('/', auth, async (req, res) => {
         }
 
         const farmers = await Farmer.find(query)
-            .sort({ code: 1 })
+            .sort({ isActive: -1, code: 1 })
             .lean();
 
         res.json({
