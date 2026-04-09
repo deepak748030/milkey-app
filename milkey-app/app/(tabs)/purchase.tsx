@@ -155,7 +155,13 @@ export default function PurchaseScreen() {
         setReportLoading(false);
     }, [reportStartDate, reportEndDate]);
 
-    useEffect(() => { fetchCustomers(); }, []);
+    useEffect(() => {
+        if (activeTab === 'C-Farmer') {
+            fetchCustomersWithInactive();
+        } else {
+            fetchCustomers();
+        }
+    }, [activeTab]);
     useEffect(() => { fetchCollections(1); }, [entryDate, entryShift]);
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
     useEffect(() => { if (reportStartDate && reportEndDate) fetchReportData(); }, [reportStartDate, reportEndDate]);
@@ -202,41 +208,27 @@ export default function PurchaseScreen() {
             setFatValue('');
             setSnfValue('');
         } else if (customer.priceBasis === 'fat') {
-            setFatValue(type === 'cow' ? String(customer.cowFat || '') : String(customer.buffaloFat || ''));
+            // For fat-based, cowFat/buffaloFat is the fatRate (price per unit fat)
+            setFatValue('');
             setRateValue('');
             setSnfValue('');
         } else {
-            // fat_snf
-            setFatValue(type === 'cow' ? String(customer.cowFat || '') : String(customer.buffaloFat || ''));
+            // fat_snf - clear all, user enters fat, snf, and rate manually
+            setFatValue('');
             setSnfValue('');
             setRateValue('');
         }
     };
 
-    // Auto-calculate rate from fat using rate chart API
-    const calculateRateFromFat = useCallback(async (fat: number, snf: number = 0) => {
-        if (!fat || fat <= 0) { setRateValue(''); return; }
-        try {
-            const res = await rateChartsApi.calculate(fat, snf);
-            if (res.success && res.response?.rate) {
-                setRateValue(String(res.response.rate.toFixed(2)));
-            }
-        } catch { }
-    }, []);
-
-    // Debounced fat/snf change handler for auto rate calculation
+    // For fat-based pricing: rate = fat × farmer's fatRate (cowFat/buffaloFat)
     useEffect(() => {
-        if (!selectedCustomer || selectedCustomer.priceBasis === 'rate') return;
+        if (!selectedCustomer || selectedCustomer.priceBasis !== 'fat') return;
         const fat = parseFloat(fatValue) || 0;
-        const snf = parseFloat(snfValue) || 0;
         if (fat <= 0) { setRateValue(''); return; }
-
-        // For fat-only basis, pass snf as 0 to the API (will use fat_only calculation)
-        const snfToSend = selectedCustomer.priceBasis === 'fat' ? 0 : snf;
-
-        const timer = setTimeout(() => calculateRateFromFat(fat, snfToSend), 500);
-        return () => clearTimeout(timer);
-    }, [fatValue, snfValue, selectedCustomer]);
+        const fatRate = milkType === 'cow' ? (selectedCustomer.cowFat || 0) : (selectedCustomer.buffaloFat || 0);
+        const rate = fat * fatRate;
+        setRateValue(rate > 0 ? rate.toFixed(2) : '');
+    }, [fatValue, selectedCustomer, milkType]);
 
     const computeAmount = (): number => {
         if (isZero) return 0;
@@ -311,7 +303,7 @@ export default function PurchaseScreen() {
                 // Open SMS/WhatsApp if configured
                 openAlertApp(selectedCustomer, qty, fat, snf, rate, amount);
 
-                setMilkQty(''); setFatValue(''); setSnfValue('');
+                setMilkQty(''); setFatValue(''); setSnfValue(''); setRateValue('');
                 if (selectedCustomer.priceBasis === 'rate') autoFillRate(selectedCustomer, milkType);
                 setIsZero(false);
                 fetchCollections(1);
@@ -411,16 +403,15 @@ export default function PurchaseScreen() {
         return customers.find(c => c._id === reportFarmerFilter || c.code === reportFarmerFilter) || null;
     }, [reportFarmerFilter, customers]);
 
-    // Handle print button press - show type selection
+    // Handle print button press - show type selection popup
     const handlePrintPress = useCallback((source: 'purchase' | 'report') => {
         const data = source === 'report'
             ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
             : collections;
         if (data.length === 0) { showAlert('Info', 'No data to print'); return; }
-        if (!isConnected) { showAlert('Info', 'Connect a Bluetooth printer first from TopBar'); return; }
         setPrintSource(source);
         setShowPrintTypeModal(true);
-    }, [filteredReportCollections, collections, isConnected]);
+    }, [filteredReportCollections, collections]);
 
     // Full Summary Print
     const handleFullSummaryPrint = useCallback(async () => {
@@ -470,8 +461,19 @@ export default function PurchaseScreen() {
         parts.push(BOLD_OFF, FEED_3_LINES);
 
         const bytes = concatBytes(...parts);
-        const success = await printData(bytes);
-        if (success) showAlert('Success', 'Full summary printed!');
+        if (isConnected) {
+            const success = await printData(bytes);
+            if (success) showAlert('Success', 'Full summary printed!');
+        } else {
+            // Show as alert when no printer connected
+            const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
+            const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
+            let details = '';
+            for (const c of data) {
+                details += `${c.farmerCode || '-'} | Qty: ${c.quantity} | Fat: ${c.fat || '-'} | Rate: ${c.rate} | ₹${c.amount.toFixed(0)}\n`;
+            }
+            showAlert('Full Summary', `${details}\nTotal Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ₹${avgRate}\nFarmers: ${uniqueFarmers}`);
+        }
     }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, isConnected, printData, selectedReportFarmer]);
 
     // Short Summary Print
@@ -506,9 +508,13 @@ export default function PurchaseScreen() {
         parts.push(FEED_3_LINES);
 
         const bytes = concatBytes(...parts);
-        const success = await printData(bytes);
-        if (success) showAlert('Success', 'Short summary printed!');
-    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printData]);
+        if (isConnected) {
+            const success = await printData(bytes);
+            if (success) showAlert('Success', 'Short summary printed!');
+        } else {
+            showAlert('Short Summary', `Total Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ${avgRate}\nSamples: ${data.length}\nFarmers: ${uniqueFarmers}`);
+        }
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printData, isConnected]);
 
     // Export PDF for report
     const handleExportReportPdf = useCallback(async () => {
@@ -732,7 +738,7 @@ export default function PurchaseScreen() {
                                 <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
                             </View>
                         )}
-                        {selectedCustomer.priceBasis === 'rate' && (
+                        {(selectedCustomer.priceBasis === 'rate' || selectedCustomer.priceBasis === 'fat_snf') && (
                             <View style={s.fieldBox}>
                                 <Text style={s.fieldLabel}>{t.common.rate}</Text>
                                 <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
@@ -742,7 +748,7 @@ export default function PurchaseScreen() {
 
                     {/* Computed Values Display */}
                     <View style={s.computedRow}>
-                        {selectedCustomer.priceBasis !== 'rate' && (
+                        {selectedCustomer.priceBasis === 'fat' && (
                             <Text style={s.computedText}>{t.common.rate}: <Text style={s.computedValue}>{rateValue || '0'}</Text></Text>
                         )}
                         <Text style={s.computedText}>{t.common.amount}: <Text style={[s.computedValue, { color: colors.primary }]}>₹{computeAmount().toFixed(1)}</Text></Text>
@@ -766,7 +772,7 @@ export default function PurchaseScreen() {
                 </View>
             )}
 
-            {/* Sale Entries Table */}
+            {/* Sale Entries Table - Fixed at bottom */}
             <View style={s.tableWrap}>
                 <View style={s.tableBar}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -798,26 +804,28 @@ export default function PurchaseScreen() {
                     </View>
                 ) : (
                     <>
-                        {collections.map((item, index) => (
-                            <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
-                                <View style={s.entryCell1}>
-                                    <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
-                                    <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
+                        <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled showsVerticalScrollIndicator>
+                            {collections.map((item, index) => (
+                                <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
+                                    <View style={s.entryCell1}>
+                                        <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
+                                        <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
+                                    </View>
+                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
+                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.fat || '-'}</Text></View>
+                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text></View>
+                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.rate}</Text></View>
+                                    <View style={s.entryCellAmt}><Text style={[s.entryCellText, { textAlign: 'center', color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text></View>
+                                    <Pressable
+                                        style={s.deleteBtn}
+                                        onPress={() => handleDeleteCollection(item._id)}
+                                        disabled={deletingId === item._id}
+                                    >
+                                        {deletingId === item._id ? <ActivityIndicator size={10} color={colors.destructive} /> : <Trash2 size={12} color={colors.destructive} />}
+                                    </Pressable>
                                 </View>
-                                <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
-                                <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.fat || '-'}</Text></View>
-                                <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text></View>
-                                <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.rate}</Text></View>
-                                <View style={s.entryCellAmt}><Text style={[s.entryCellText, { textAlign: 'center', color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text></View>
-                                <Pressable
-                                    style={s.deleteBtn}
-                                    onPress={() => handleDeleteCollection(item._id)}
-                                    disabled={deletingId === item._id}
-                                >
-                                    {deletingId === item._id ? <ActivityIndicator size={10} color={colors.destructive} /> : <Trash2 size={12} color={colors.destructive} />}
-                                </Pressable>
-                            </View>
-                        ))}
+                            ))}
+                        </ScrollView>
 
                         {/* Totals Row */}
                         <View style={s.tFootRow}>
@@ -1252,10 +1260,10 @@ export default function PurchaseScreen() {
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     scroll: { flex: 1 },
-    scrollContent: { paddingHorizontal: 10, gap: 8, paddingBottom: 150, paddingTop: 8 },
+    scrollContent: { paddingHorizontal: 10, gap: 10, paddingBottom: 150, paddingTop: 10 },
 
     // Top controls
-    topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, gap: 6 },
+    topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, gap: 8 },
     dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
     dateText: { fontSize: 12, fontWeight: '600', color: colors.foreground },
     addCustTopBtn: { width: 36, height: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
