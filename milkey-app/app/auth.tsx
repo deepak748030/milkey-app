@@ -1,9 +1,9 @@
 import React, { useState, useCallback, memo } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Dimensions, StyleSheet } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
-import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin, ArrowLeft, CheckCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApiNew } from '@/lib/milkeyApi';
@@ -14,27 +14,26 @@ import * as WebBrowser from 'expo-web-browser';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// ─── Extracted & memoized sub-components (prevents keyboard dismiss) ───
+// ─── Sub-components ───
 
 const InputField = memo(({ icon: Icon, placeholder, value, onChangeText, secureTextEntry, keyboardType, maxLength, autoCapitalize, multiline, showToggle, toggleValue, onToggle, colors }: any) => (
     <View style={{
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: colors.input,
-        borderRadius: 12,
-        marginBottom: 10,
+        borderRadius: 10,
+        marginBottom: 6,
         borderWidth: 1,
         borderColor: colors.border,
+        height: multiline ? undefined : 44,
     }}>
-        <Icon size={18} color={colors.mutedForeground} style={{ marginLeft: 12 }} />
+        <Icon size={16} color={colors.mutedForeground} style={{ marginLeft: 10 }} />
         <TextInput
             style={{
                 flex: 1,
-                paddingVertical: Platform.OS === 'ios' ? 13 : 10,
-                paddingHorizontal: 10,
-                fontSize: 14,
+                paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+                paddingHorizontal: 8,
+                fontSize: 13,
                 color: colors.foreground,
             }}
             placeholder={placeholder}
@@ -44,50 +43,56 @@ const InputField = memo(({ icon: Icon, placeholder, value, onChangeText, secureT
             keyboardType={keyboardType}
             maxLength={maxLength}
             autoCapitalize={autoCapitalize || 'none'}
-            placeholderTextColor={colors.mutedForeground + '99'}
+            placeholderTextColor={colors.mutedForeground + '88'}
             multiline={multiline}
         />
         {showToggle && (
-            <Pressable onPress={onToggle} hitSlop={8} style={{ padding: 12 }}>
-                {toggleValue ? <EyeOff size={18} color={colors.mutedForeground} /> : <Eye size={18} color={colors.mutedForeground} />}
+            <Pressable onPress={onToggle} hitSlop={8} style={{ padding: 10 }}>
+                {toggleValue ? <EyeOff size={16} color={colors.mutedForeground} /> : <Eye size={16} color={colors.mutedForeground} />}
             </Pressable>
         )}
     </View>
 ));
 
-const AuthButton = memo(({ onPress, label, disabled, loading, colors }: any) => (
-    <Pressable
-        style={({ pressed }) => ({
-            backgroundColor: colors.primary,
-            borderRadius: 12,
-            paddingVertical: 14,
-            alignItems: 'center' as const,
-            marginTop: 8,
-            opacity: (loading || disabled) ? 0.6 : pressed ? 0.85 : 1,
-        })}
-        onPress={onPress}
-        disabled={loading || disabled}
-    >
-        {loading
-            ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 }}>{label}</Text>
-        }
-    </Pressable>
-));
+const PrimaryButton = memo(({ onPress, label, disabled, loading, colors, style, variant }: any) => {
+    const isMuted = variant === 'muted';
+    return (
+        <Pressable
+            style={({ pressed }) => ({
+                backgroundColor: isMuted ? colors.muted : colors.primary,
+                borderRadius: 10,
+                height: 44,
+                alignItems: 'center' as const,
+                justifyContent: 'center' as const,
+                opacity: (loading || disabled) ? 0.6 : pressed ? 0.85 : 1,
+                borderWidth: isMuted ? 1 : 0,
+                borderColor: isMuted ? colors.border : 'transparent',
+                ...style,
+            })}
+            onPress={onPress}
+            disabled={loading || disabled}
+        >
+            {loading
+                ? <ActivityIndicator size="small" color={isMuted ? colors.foreground : '#fff'} />
+                : <Text style={{ color: isMuted ? colors.foreground : '#fff', fontSize: 14, fontWeight: '700' }}>{label}</Text>
+            }
+        </Pressable>
+    );
+});
 
 const LogoHeader = memo(({ title, subtitle, colors, compact }: any) => (
-    <View style={{ alignItems: 'center', marginBottom: compact ? 14 : 20 }}>
+    <View style={{ alignItems: 'center', marginBottom: compact ? 12 : 18 }}>
         <View style={{
-            width: compact ? 70 : 88,
-            height: compact ? 70 : 88,
-            borderRadius: compact ? 18 : 22,
+            width: compact ? 60 : 76,
+            height: compact ? 60 : 76,
+            borderRadius: compact ? 16 : 20,
             overflow: 'hidden',
             marginBottom: 8,
             shadowColor: colors.primary,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 12,
-            elevation: 6,
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.12,
+            shadowRadius: 8,
+            elevation: 4,
         }}>
             <Image
                 source={require('@/assets/images/icon.png')}
@@ -95,8 +100,36 @@ const LogoHeader = memo(({ title, subtitle, colors, compact }: any) => (
                 resizeMode="cover"
             />
         </View>
-        <Text style={{ fontSize: compact ? 24 : 28, fontWeight: '800', letterSpacing: 1.5, color: colors.foreground }}>{title}</Text>
-        <Text style={{ fontSize: 13, marginTop: 3, textAlign: 'center', color: colors.mutedForeground, paddingHorizontal: 20 }}>{subtitle}</Text>
+        <Text style={{ fontSize: compact ? 22 : 26, fontWeight: '800', letterSpacing: 1, color: colors.foreground }}>{title}</Text>
+        <Text style={{ fontSize: 12, marginTop: 2, textAlign: 'center', color: colors.mutedForeground, paddingHorizontal: 16 }}>{subtitle}</Text>
+    </View>
+));
+
+const StepIndicator = memo(({ currentStep, colors }: { currentStep: number; colors: any }) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 6 }}>
+        {[1, 2, 3].map((step) => (
+            <View key={step} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 13,
+                    backgroundColor: step <= currentStep ? colors.primary : colors.muted,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: step > currentStep ? 1 : 0,
+                    borderColor: colors.border,
+                }}>
+                    {step < currentStep ? (
+                        <CheckCircle size={14} color="#fff" />
+                    ) : (
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: step <= currentStep ? '#fff' : colors.mutedForeground }}>{step}</Text>
+                    )}
+                </View>
+                {step < 3 && (
+                    <View style={{ width: 24, height: 2, backgroundColor: step < currentStep ? colors.primary : colors.border, borderRadius: 1 }} />
+                )}
+            </View>
+        ))}
     </View>
 ));
 
@@ -105,29 +138,24 @@ export default function AuthScreen() {
     const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { expoPushToken } = usePushNotifications();
-    const [isLogin, setIsLogin] = useState(true);
+
+    const [screen, setScreen] = useState<'login' | 'signup' | 'login-otp' | 'signup-step2' | 'signup-step3' | 'forgot' | 'forgot-otp' | 'reset-password'>('login');
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
 
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
+    const [otp, setOtp] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [name, setName] = useState('');
     const [address, setAddress] = useState('');
     const [referralCode, setReferralCode] = useState('');
-
-    const [showOtpScreen, setShowOtpScreen] = useState(false);
-    const [otp, setOtp] = useState('');
-    const [tempEmail, setTempEmail] = useState('');
-
-    const [showForgotPassword, setShowForgotPassword] = useState(false);
-    const [showForgotOtpScreen, setShowForgotOtpScreen] = useState(false);
-    const [showResetPasswordScreen, setShowResetPasswordScreen] = useState(false);
-    const [resetToken, setResetToken] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showNewPassword, setShowNewPassword] = useState(false);
+    const [resetToken, setResetToken] = useState('');
+    const [googleUser, setGoogleUser] = useState<{ name: string; email: string; avatar: string } | null>(null);
 
     const [modalVisible, setModalVisible] = useState(false);
     const [modalTitle, setModalTitle] = useState('');
@@ -139,78 +167,124 @@ export default function AuthScreen() {
         setModalVisible(true);
     }, []);
 
-    // ─── Stable callbacks to prevent re-renders ───
     const togglePassword = useCallback(() => setShowPassword(v => !v), []);
     const toggleNewPassword = useCallback(() => setShowNewPassword(v => !v), []);
     const handleReferralChange = useCallback((t: string) => setReferralCode(t.toUpperCase()), []);
 
-    const handleAuth = useCallback(async () => {
-        if (isLogin) {
-            if (!email || !password) { showModal('Error', 'Please enter email and password'); return; }
-        } else {
-            if (!name || !email || !phone || !password) { showModal('Error', 'Please fill all required fields'); return; }
-            if (password.length < 6) { showModal('Error', 'Password must be at least 6 characters'); return; }
-            if (phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
-        }
+    // ─── Handlers ───
+
+    const handleSendLoginOtp = useCallback(async () => {
+        if (!phone || phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
         setLoading(true);
         try {
-            if (isLogin) {
-                const result = await authApiNew.login(email, password);
-                if (result.success && result.response) {
-                    await setAuthUser(result.response.token, result.response.user);
-                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                    router.replace('/(tabs)');
-                } else showModal('Error', result.message || 'Invalid email or password');
-            } else {
-                const otpResult = await authApiNew.sendOtp(email);
-                if (otpResult.success) {
-                    setTempEmail(email);
-                    setShowOtpScreen(true);
-                    showModal('OTP Sent', 'Please check your email for the verification code');
-                } else showModal('Error', otpResult.message || 'Failed to send OTP');
-            }
-        } catch { showModal('Error', 'Network error. Please check your connection.'); }
+            const result = await authApiNew.sendPhoneOtp(phone);
+            if (result.success) {
+                setScreen('login-otp');
+                showModal('OTP Sent', 'Enter OTP 123456 to login');
+            } else showModal('Error', result.message || 'Failed to send OTP');
+        } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    }, [isLogin, email, password, name, phone, expoPushToken, showModal]);
+    }, [phone, showModal]);
 
-    const handleVerifyOtp = useCallback(async () => {
+    const handleOtpLogin = useCallback(async () => {
         if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
         setLoading(true);
         try {
-            const verifyResult = await authApiNew.verifyOtp(tempEmail, otp);
-            if (verifyResult.success) {
-                const result = await authApiNew.register({ name, email: tempEmail, phone, password, address: address || undefined, referralCode: referralCode || undefined });
-                if (result.success && result.response) {
-                    await setAuthUser(result.response.token, result.response.user);
-                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                    router.replace('/(tabs)');
-                } else showModal('Error', result.message || 'Registration failed');
-            } else showModal('Error', verifyResult.message || 'Invalid OTP');
-        } catch { showModal('Error', 'Network error. Please check your connection.'); }
-        finally { setLoading(false); }
-    }, [otp, tempEmail, name, phone, password, address, referralCode, expoPushToken, showModal]);
-
-    const handleResendOtp = useCallback(async () => {
-        setLoading(true);
-        try {
-            const result = await authApiNew.sendOtp(tempEmail);
-            if (result.success) showModal('Success', 'OTP resent to your email');
-            else showModal('Error', result.message || 'Failed to resend OTP');
+            const result = await authApiNew.phoneLogin(phone, otp);
+            if (result.success && result.response) {
+                await setAuthUser(result.response.token, result.response.user);
+                if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                router.replace('/(tabs)');
+            } else showModal('Error', result.message || 'Login failed');
         } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    }, [tempEmail, showModal]);
+    }, [phone, otp, expoPushToken, showModal]);
+
+    const handleGoogleAuth = useCallback(async (forSignup = false) => {
+        setGoogleLoading(true);
+        try {
+            const redirectUri = 'https://auth.expo.io/@milkey/milkey';
+            const clientId = '95043026756-placeholder.apps.googleusercontent.com';
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=openid%20email%20profile&nonce=${Math.random().toString(36).substring(7)}`;
+            const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+            if (result.type === 'success' && result.url) {
+                const urlParams = new URLSearchParams(result.url.split('#')[1] || '');
+                const idToken = urlParams.get('id_token');
+                if (idToken) {
+                    if (forSignup) {
+                        try {
+                            const parts = idToken.split('.');
+                            if (parts.length === 3) {
+                                const decoded = JSON.parse(atob(parts[1]));
+                                setGoogleUser({ name: decoded.name || '', email: decoded.email || '', avatar: decoded.picture || '' });
+                                setName(decoded.name || '');
+                                setEmail(decoded.email || '');
+                                setScreen('signup-step2');
+                            }
+                        } catch { showModal('Error', 'Failed to parse Google data'); }
+                    } else {
+                        const authResult = await authApiNew.googleLogin(idToken);
+                        if (authResult.success && authResult.response) {
+                            await setAuthUser(authResult.response.token, authResult.response.user);
+                            if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                            router.replace('/(tabs)');
+                        } else showModal('Error', authResult.message || 'Google sign in failed');
+                    }
+                } else showModal('Error', 'Failed to get Google token');
+            }
+        } catch { showModal('Error', 'Google sign in failed. Please try again.'); }
+        setGoogleLoading(false);
+    }, [expoPushToken, showModal]);
+
+    const handleSignupSendOtp = useCallback(async () => {
+        if (!phone || phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
+        setLoading(true);
+        try {
+            const result = await authApiNew.sendPhoneOtp(phone);
+            if (result.success) showModal('OTP Sent', 'Enter OTP 123456 to verify');
+            else showModal('Error', result.message || 'Failed to send OTP');
+        } catch { showModal('Error', 'Network error.'); }
+        finally { setLoading(false); }
+    }, [phone, showModal]);
+
+    const handleSignupVerifyOtp = useCallback(async () => {
+        if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
+        setLoading(true);
+        try {
+            const result = await authApiNew.verifyPhoneOtp(phone, otp);
+            if (result.success) { setOtp(''); setScreen('signup-step3'); }
+            else showModal('Error', result.message || 'Invalid OTP');
+        } catch { showModal('Error', 'Network error.'); }
+        finally { setLoading(false); }
+    }, [phone, otp, showModal]);
+
+    const handleCompleteSignup = useCallback(async () => {
+        if (!name) { showModal('Error', 'Please enter your name'); return; }
+        if (!email) { showModal('Error', 'Please enter your email'); return; }
+        if (!password || password.length < 6) { showModal('Error', 'Password must be at least 6 characters'); return; }
+        setLoading(true);
+        try {
+            const result = await authApiNew.register({
+                name, email, phone, password,
+                address: address || undefined,
+                referralCode: referralCode || undefined,
+            });
+            if (result.success && result.response) {
+                await setAuthUser(result.response.token, result.response.user);
+                if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                router.replace('/(tabs)');
+            } else showModal('Error', result.message || 'Registration failed');
+        } catch { showModal('Error', 'Network error.'); }
+        finally { setLoading(false); }
+    }, [name, email, phone, password, address, referralCode, expoPushToken, showModal]);
 
     const handleForgotPassword = useCallback(async () => {
         if (!email) { showModal('Error', 'Please enter your email address'); return; }
         setLoading(true);
         try {
             const result = await authApiNew.forgotPassword(email);
-            if (result.success) {
-                setTempEmail(email);
-                setShowForgotPassword(false);
-                setShowForgotOtpScreen(true);
-                showModal('OTP Sent', 'Password reset OTP sent to your email');
-            } else showModal('Error', result.message || 'Failed to send OTP');
+            if (result.success) { setScreen('forgot-otp'); showModal('OTP Sent', 'Password reset OTP sent to your email'); }
+            else showModal('Error', result.message || 'Failed to send OTP');
         } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
     }, [email, showModal]);
@@ -219,92 +293,37 @@ export default function AuthScreen() {
         if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
         setLoading(true);
         try {
-            const result = await authApiNew.verifyForgotPasswordOtp(tempEmail, otp);
-            if (result.success && result.response) {
-                setResetToken(result.response.resetToken);
-                setShowForgotOtpScreen(false);
-                setShowResetPasswordScreen(true);
-                setOtp('');
-            } else showModal('Error', result.message || 'Invalid OTP');
+            const result = await authApiNew.verifyForgotPasswordOtp(email, otp);
+            if (result.success && result.response) { setResetToken(result.response.resetToken); setScreen('reset-password'); setOtp(''); }
+            else showModal('Error', result.message || 'Invalid OTP');
         } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    }, [otp, tempEmail, showModal]);
+    }, [otp, email, showModal]);
 
     const handleResetPassword = useCallback(async () => {
         if (!newPassword || newPassword.length < 6) { showModal('Error', 'Password must be at least 6 characters'); return; }
         if (newPassword !== confirmPassword) { showModal('Error', 'Passwords do not match'); return; }
         setLoading(true);
         try {
-            const result = await authApiNew.resetPassword(tempEmail, resetToken, newPassword);
+            const result = await authApiNew.resetPassword(email, resetToken, newPassword);
             if (result.success) {
-                showModal('Success', 'Password reset successfully! You can now login.');
-                setShowResetPasswordScreen(false); setTempEmail(''); setResetToken(''); setNewPassword(''); setConfirmPassword(''); setIsLogin(true);
+                showModal('Success', 'Password reset successfully!');
+                setScreen('login'); setNewPassword(''); setConfirmPassword(''); setResetToken('');
             } else showModal('Error', result.message || 'Failed to reset password');
         } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    }, [newPassword, confirmPassword, tempEmail, resetToken, showModal]);
+    }, [newPassword, confirmPassword, email, resetToken, showModal]);
 
-    const handleResendForgotOtp = useCallback(async () => {
-        setLoading(true);
-        try {
-            const result = await authApiNew.forgotPassword(tempEmail);
-            if (result.success) showModal('Success', 'OTP resent to your email');
-            else showModal('Error', result.message || 'Failed to resend OTP');
-        } catch { showModal('Error', 'Network error.'); }
-        finally { setLoading(false); }
-    }, [tempEmail, showModal]);
+    // ─── Shared UI pieces ───
 
-    const resetForgotPasswordFlow = useCallback(() => {
-        setShowForgotPassword(false); setShowForgotOtpScreen(false); setShowResetPasswordScreen(false);
-        setTempEmail(''); setOtp(''); setResetToken(''); setNewPassword(''); setConfirmPassword('');
-    }, []);
-
-
-
-
-    const handleGoogleAuth = useCallback(async () => {
-        setGoogleLoading(true);
-        try {
-            // Use expo-web-browser for Google OAuth
-            const redirectUri = 'https://auth.expo.io/@milkey/milkey';
-            const clientId = '95043026756-placeholder.apps.googleusercontent.com';
-            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=openid%20email%20profile&nonce=${Math.random().toString(36).substring(7)}`;
-
-            const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-
-            if (result.type === 'success' && result.url) {
-                // Extract id_token from URL fragment
-                const urlParams = new URLSearchParams(result.url.split('#')[1] || '');
-                const idToken = urlParams.get('id_token');
-
-                if (idToken) {
-                    const authResult = await authApiNew.googleLogin(idToken);
-                    if (authResult.success && authResult.response) {
-                        await setAuthUser(authResult.response.token, authResult.response.user);
-                        if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                        router.replace('/(tabs)');
-                    } else {
-                        showModal('Error', authResult.message || 'Google sign in failed');
-                    }
-                } else {
-                    showModal('Error', 'Failed to get Google token');
-                }
-            }
-        } catch {
-            showModal('Error', 'Google sign in failed. Please try again.');
-        }
-        setGoogleLoading(false);
-    }, [expoPushToken, showModal]);
-
-    // ─── Shared wrapper for all screens ───
     const ScreenWrapper = useCallback(({ children }: { children: React.ReactNode }) => (
         <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
             <LinearGradient
-                colors={[colors.primary + '18', colors.primary + '08', colors.background]}
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 300 }}
+                colors={[colors.primary + '14', colors.primary + '06', colors.background]}
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 260 }}
             />
             <ScrollView
-                contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 6, paddingTop: insets.top + 20, paddingBottom: 24 }}
+                contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 6, paddingTop: insets.top + 12, paddingBottom: 20 }}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
@@ -319,8 +338,8 @@ export default function AuthScreen() {
     const FormCard = useCallback(({ children }: { children: React.ReactNode }) => (
         <View style={{
             backgroundColor: colors.card,
-            borderRadius: 18,
-            padding: 14,
+            borderRadius: 14,
+            padding: 12,
             borderWidth: 1,
             borderColor: colors.border,
         }}>
@@ -328,224 +347,241 @@ export default function AuthScreen() {
         </View>
     ), [colors]);
 
-    // ─── Forgot Password - Enter Email ───
-    if (showForgotPassword) {
+    const BackButton = useCallback(({ onPress }: { onPress: () => void }) => (
+        <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 4 }}>
+            <ArrowLeft size={16} color={colors.primary} />
+            <Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>Back</Text>
+        </Pressable>
+    ), [colors]);
+
+    const Divider = useCallback(() => (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 10 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+            <Text style={{ fontSize: 10, color: colors.mutedForeground, paddingHorizontal: 10, fontWeight: '500' }}>OR</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+        </View>
+    ), [colors]);
+
+    const GoogleButton = useCallback(({ label, onPress }: { label: string; onPress: () => void }) => (
+        <Pressable
+            style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: colors.background,
+                borderRadius: 10,
+                height: 44,
+                borderWidth: 1,
+                borderColor: colors.border,
+                gap: 8,
+                opacity: googleLoading ? 0.6 : pressed ? 0.85 : 1,
+            })}
+            onPress={onPress}
+            disabled={googleLoading || loading}
+        >
+            {googleLoading ? (
+                <ActivityIndicator size="small" color={colors.foreground} />
+            ) : (
+                <>
+                    <Image
+                        source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
+                        style={{ width: 18, height: 18 }}
+                        resizeMode="contain"
+                    />
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: colors.foreground }}>{label}</Text>
+                </>
+            )}
+        </Pressable>
+    ), [colors, googleLoading, loading]);
+
+    const LinkRow = useCallback(({ text, linkText, onPress }: { text: string; linkText: string; onPress: () => void }) => (
+        <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 12 }}>
+            <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{text}</Text>
+            <Pressable onPress={onPress}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>{linkText}</Text>
+            </Pressable>
+        </View>
+    ), [colors]);
+
+    // ═══════════════════════════════════════
+    // SCREENS
+    // ═══════════════════════════════════════
+
+    if (screen === 'forgot') {
         return (
             <ScreenWrapper>
+                <BackButton onPress={() => setScreen('login')} />
                 <LogoHeader title="Forgot Password" subtitle="Enter your email to reset password" colors={colors} compact />
                 <FormCard>
-                    <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.foreground }}>Reset Password</Text>
-                    <Text style={{ fontSize: 12, textAlign: 'center', color: colors.mutedForeground, marginTop: 2, marginBottom: 14 }}>We'll send you a verification code</Text>
                     <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" colors={colors} />
-                    <AuthButton onPress={handleForgotPassword} label="Send OTP" loading={loading} colors={colors} />
-                    <Pressable style={{ marginTop: 14, alignItems: 'center' }} onPress={() => { setShowForgotPassword(false); setEmail(''); }}>
-                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>← Back to Login</Text>
-                    </Pressable>
+                    <View style={{ height: 6 }} />
+                    <PrimaryButton onPress={handleForgotPassword} label="Send OTP" loading={loading} colors={colors} />
                 </FormCard>
             </ScreenWrapper>
         );
     }
 
-    // ─── Forgot Password - OTP ───
-    if (showForgotOtpScreen) {
+    if (screen === 'forgot-otp') {
         return (
             <ScreenWrapper>
-                <LogoHeader title="Verify OTP" subtitle={`Code sent to ${tempEmail}`} colors={colors} compact />
+                <BackButton onPress={() => setScreen('forgot')} />
+                <LogoHeader title="Verify OTP" subtitle={`Code sent to ${email}`} colors={colors} compact />
                 <FormCard>
-                    <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.foreground }}>Enter OTP</Text>
-                    <Text style={{ fontSize: 12, textAlign: 'center', color: colors.mutedForeground, marginTop: 2, marginBottom: 14 }}>Check your email inbox</Text>
                     <InputField icon={Mail} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
-                    <AuthButton onPress={handleVerifyForgotOtp} label="Verify OTP" loading={loading} colors={colors} />
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 14 }}>
-                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>Didn't receive? </Text>
-                        <Pressable onPress={handleResendForgotOtp} disabled={loading}><Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>Resend</Text></Pressable>
-                    </View>
-                    <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={resetForgotPasswordFlow}>
-                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>← Back to Login</Text>
+                    <View style={{ height: 6 }} />
+                    <PrimaryButton onPress={handleVerifyForgotOtp} label="Verify OTP" loading={loading} colors={colors} />
+                    <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={handleForgotPassword}>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Resend OTP</Text>
                     </Pressable>
                 </FormCard>
             </ScreenWrapper>
         );
     }
 
-    // ─── Reset Password ───
-    if (showResetPasswordScreen) {
+    if (screen === 'reset-password') {
         return (
             <ScreenWrapper>
+                <BackButton onPress={() => setScreen('login')} />
                 <LogoHeader title="New Password" subtitle="Create a strong password" colors={colors} compact />
                 <FormCard>
-                    <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.foreground }}>Set New Password</Text>
-                    <Text style={{ fontSize: 12, textAlign: 'center', color: colors.mutedForeground, marginTop: 2, marginBottom: 14 }}>Minimum 6 characters</Text>
                     <InputField icon={Lock} placeholder="New Password" value={newPassword} onChangeText={setNewPassword} secureTextEntry={!showNewPassword} showToggle onToggle={toggleNewPassword} toggleValue={showNewPassword} colors={colors} />
                     <InputField icon={Lock} placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry={!showNewPassword} colors={colors} />
-                    <AuthButton onPress={handleResetPassword} label="Reset Password" loading={loading} colors={colors} />
-                    <Pressable style={{ marginTop: 14, alignItems: 'center' }} onPress={resetForgotPasswordFlow}>
-                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>← Cancel</Text>
-                    </Pressable>
+                    <View style={{ height: 6 }} />
+                    <PrimaryButton onPress={handleResetPassword} label="Reset Password" loading={loading} colors={colors} />
                 </FormCard>
             </ScreenWrapper>
         );
     }
 
-    // ─── OTP Screen ───
-    if (showOtpScreen) {
+    if (screen === 'login-otp') {
         return (
             <ScreenWrapper>
-                <LogoHeader title="Verify Email" subtitle={`Code sent to ${tempEmail}`} colors={colors} compact />
+                <BackButton onPress={() => { setScreen('login'); setOtp(''); }} />
+                <LogoHeader title="Verify OTP" subtitle={`OTP sent to +91 ${phone}`} colors={colors} compact />
                 <FormCard>
-                    <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', color: colors.foreground }}>Enter OTP</Text>
-                    <Text style={{ fontSize: 12, textAlign: 'center', color: colors.mutedForeground, marginTop: 2, marginBottom: 14 }}>Check your email inbox</Text>
-                    <InputField icon={Mail} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
-                    <AuthButton onPress={handleVerifyOtp} label="Verify & Create Account" loading={loading} colors={colors} />
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 14 }}>
-                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>Didn't receive? </Text>
-                        <Pressable onPress={handleResendOtp} disabled={loading}><Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>Resend</Text></Pressable>
-                    </View>
-                    <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={() => { setShowOtpScreen(false); setOtp(''); }}>
-                        <Text style={{ fontSize: 13, color: colors.mutedForeground }}>← Back to Sign Up</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 2 }}>Enter OTP</Text>
+                    <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Use OTP: 123456</Text>
+                    <InputField icon={Lock} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
+                    <View style={{ height: 6 }} />
+                    <PrimaryButton onPress={handleOtpLogin} label="Verify & Login" loading={loading} colors={colors} />
+                    <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={handleSendLoginOtp}>
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Resend OTP</Text>
                     </Pressable>
                 </FormCard>
             </ScreenWrapper>
         );
     }
 
-    // ─── Main Login / Sign Up ───
-    return (
-        <ScreenWrapper>
-            <LogoHeader
-                title="Milkey"
-                subtitle={isLogin ? 'Welcome back! Sign in to continue' : 'Create your account to get started'}
-                colors={colors}
-            />
-
-            <FormCard>
-                {/* Tab Switcher */}
-                <View style={{
-                    flexDirection: 'row',
-                    backgroundColor: colors.muted,
-                    borderRadius: 12,
-                    padding: 3,
-                    marginBottom: 14,
-                }}>
-                    <Pressable
-                        style={{
-                            flex: 1,
-                            paddingVertical: 10,
-                            alignItems: 'center',
-                            borderRadius: 10,
-                            backgroundColor: isLogin ? colors.primary : 'transparent',
-                        }}
-                        onPress={() => setIsLogin(true)}
-                    >
-                        <Text style={{ fontSize: 14, fontWeight: isLogin ? '700' : '600', color: isLogin ? '#fff' : colors.mutedForeground }}>{t.auth.login}</Text>
-                    </Pressable>
-                    <Pressable
-                        style={{
-                            flex: 1,
-                            paddingVertical: 10,
-                            alignItems: 'center',
-                            borderRadius: 10,
-                            backgroundColor: !isLogin ? colors.primary : 'transparent',
-                        }}
-                        onPress={() => setIsLogin(false)}
-                    >
-                        <Text style={{ fontSize: 14, fontWeight: !isLogin ? '700' : '600', color: !isLogin ? '#fff' : colors.mutedForeground }}>{t.auth.signup}</Text>
-                    </Pressable>
-                </View>
-
-                {!isLogin && (
-                    <InputField icon={User} placeholder="Full Name" value={name} onChangeText={setName} colors={colors} />
-                )}
-
-                <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" colors={colors} />
-
-                {!isLogin && (
+    // ─── Signup Step 2: Phone OTP Verify ───
+    if (screen === 'signup-step2') {
+        return (
+            <ScreenWrapper>
+                <BackButton onPress={() => setScreen('signup')} />
+                <LogoHeader title="Verify Phone" subtitle="We need to verify your phone number" colors={colors} compact />
+                <StepIndicator currentStep={2} colors={colors} />
+                <FormCard>
+                    {googleUser && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, padding: 8, backgroundColor: colors.primary + '10', borderRadius: 8, borderWidth: 1, borderColor: colors.primary + '20' }}>
+                            <CheckCircle size={16} color={colors.primary} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>{googleUser.name}</Text>
+                                <Text style={{ fontSize: 10, color: colors.mutedForeground }}>{googleUser.email}</Text>
+                            </View>
+                        </View>
+                    )}
                     <InputField icon={Phone} placeholder="Phone Number (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} colors={colors} />
-                )}
-
-                <InputField
-                    icon={Lock}
-                    placeholder="Password"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    showToggle
-                    onToggle={togglePassword}
-                    toggleValue={showPassword}
-                    colors={colors}
-                />
-
-                {!isLogin && (
-                    <>
-                        <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline colors={colors} />
-                        <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={handleReferralChange} autoCapitalize="characters" colors={colors} />
-                    </>
-                )}
-
-                {isLogin && (
-                    <Pressable style={{ alignSelf: 'flex-end', marginTop: -4, marginBottom: 4 }} onPress={() => setShowForgotPassword(true)}>
-                        <Text style={{ fontSize: 12, fontWeight: '500', color: colors.primary }}>{t.auth.forgotPassword}</Text>
-                    </Pressable>
-                )}
-
-                <AuthButton
-                    onPress={handleAuth}
-                    label={isLogin ? t.auth.login : t.auth.createAccount}
-                    loading={loading}
-                    colors={colors}
-                />
-
-                {/* Divider */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14, marginBottom: 6 }}>
-                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-                    <Text style={{ fontSize: 11, color: colors.mutedForeground, paddingHorizontal: 10, fontWeight: '500' }}>OR</Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-                </View>
-
-                {/* Google Sign In Button */}
-                <Pressable
-                    style={({ pressed }) => ({
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: colors.background,
-                        borderRadius: 12,
-                        paddingVertical: 12,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        gap: 8,
-                        opacity: googleLoading ? 0.6 : pressed ? 0.85 : 1,
-                    })}
-                    onPress={handleGoogleAuth}
-                    disabled={googleLoading || loading}
-                >
-                    {googleLoading ? (
-                        <ActivityIndicator size="small" color={colors.foreground} />
+                    {otp === '' ? (
+                        <PrimaryButton onPress={handleSignupSendOtp} label="Send OTP" loading={loading} colors={colors} />
                     ) : (
                         <>
-                            <Image
-                                source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
-                                style={{ width: 20, height: 20 }}
-                                resizeMode="contain"
-                            />
-                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.foreground }}>
-                                Continue with Google
-                            </Text>
+                            <InputField icon={Lock} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
+                            <View style={{ height: 6 }} />
+                            <PrimaryButton onPress={handleSignupVerifyOtp} label="Verify & Continue" loading={loading} colors={colors} />
+                            <Pressable style={{ marginTop: 8, alignItems: 'center' }} onPress={handleSignupSendOtp}>
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Resend OTP</Text>
+                            </Pressable>
                         </>
                     )}
+                    {otp === '' && phone.length === 10 && (
+                        <Pressable style={{ marginTop: 8, alignItems: 'center' }} onPress={() => { setOtp(' '); setTimeout(() => setOtp(''), 0); }}>
+                            <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Already have OTP? Enter it</Text>
+                        </Pressable>
+                    )}
+                </FormCard>
+            </ScreenWrapper>
+        );
+    }
+
+    // ─── Signup Step 3: Details ───
+    if (screen === 'signup-step3') {
+        return (
+            <ScreenWrapper>
+                <BackButton onPress={() => setScreen('signup-step2')} />
+                <LogoHeader title="Almost Done!" subtitle="Fill in your details to complete signup" colors={colors} compact />
+                <StepIndicator currentStep={3} colors={colors} />
+                <FormCard>
+                    <InputField icon={User} placeholder="Full Name" value={name} onChangeText={setName} colors={colors} />
+                    <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" colors={colors} />
+                    <InputField icon={Lock} placeholder="Create Password (min 6 chars)" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} showToggle onToggle={togglePassword} toggleValue={showPassword} colors={colors} />
+                    <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline colors={colors} />
+                    <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={handleReferralChange} autoCapitalize="characters" colors={colors} />
+                    <View style={{ height: 6 }} />
+                    <PrimaryButton onPress={handleCompleteSignup} label="Create Account" loading={loading} colors={colors} />
+                </FormCard>
+            </ScreenWrapper>
+        );
+    }
+
+    // ─── Signup Step 1 ───
+    if (screen === 'signup') {
+        return (
+            <ScreenWrapper>
+                <BackButton onPress={() => setScreen('login')} />
+                <LogoHeader title="Create Account" subtitle="Join Milkey in 3 easy steps" colors={colors} />
+                <StepIndicator currentStep={1} colors={colors} />
+                <FormCard>
+                    <Text style={{ fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 2 }}>Step 1: Get Started</Text>
+                    <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Quick & secure way to create your account</Text>
+
+                    <GoogleButton label="Continue with Google" onPress={() => handleGoogleAuth(true)} />
+
+                    <Divider />
+
+                    <PrimaryButton onPress={() => setScreen('signup-step2')} label="Continue with Phone" colors={colors} variant="muted" />
+
+                    <LinkRow text="Already have an account? " linkText="Login" onPress={() => setScreen('login')} />
+                </FormCard>
+            </ScreenWrapper>
+        );
+    }
+
+    // ═══════════════════════════════════════
+    // ─── MAIN LOGIN SCREEN ───
+    // ═══════════════════════════════════════
+    return (
+        <ScreenWrapper>
+            <LogoHeader title="Milkey" subtitle="Welcome back! Sign in to continue" colors={colors} />
+
+            <FormCard>
+                <Text style={{ fontSize: 16, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 10 }}>Login</Text>
+
+                <Text style={{ fontSize: 10, fontWeight: '600', color: colors.mutedForeground, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Login with Phone OTP</Text>
+                <InputField icon={Phone} placeholder="Phone Number (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} colors={colors} />
+                <View style={{ height: 6 }} />
+                <PrimaryButton onPress={handleSendLoginOtp} label="Send OTP & Login" loading={loading && !googleLoading} colors={colors} />
+
+                <Divider />
+
+                <GoogleButton label="Sign in with Google" onPress={() => handleGoogleAuth(false)} />
+
+                <Pressable style={{ alignSelf: 'center', marginTop: 10 }} onPress={() => setScreen('forgot')}>
+                    <Text style={{ fontSize: 11, fontWeight: '500', color: colors.primary }}>Forgot Password?</Text>
                 </Pressable>
 
-                <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 14 }}>
-                    <Text style={{ fontSize: 13, color: colors.mutedForeground }}>
-                        {isLogin ? t.auth.dontHaveAccount + ' ' : t.auth.alreadyHaveAccount + ' '}
-                    </Text>
-                    <Pressable onPress={() => setIsLogin(!isLogin)}>
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: colors.primary }}>{isLogin ? t.auth.signup : t.auth.login}</Text>
-                    </Pressable>
-                </View>
+                <LinkRow text="Don't have an account? " linkText="Sign Up" onPress={() => setScreen('signup')} />
             </FormCard>
 
-            <Text style={{ fontSize: 11, textAlign: 'center', marginTop: 14, color: colors.mutedForeground, paddingHorizontal: 20 }}>
+            <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 12, color: colors.mutedForeground, paddingHorizontal: 16 }}>
                 By continuing, you agree to our Terms & Privacy Policy
             </Text>
         </ScreenWrapper>

@@ -567,7 +567,7 @@ export default function PurchaseScreen() {
 
     // ── Collection Tab ──
     const renderCollectionTab = () => (
-        <View>
+        <View style={{ flex: 1 }}>
             {/* Top Controls: Date + Shift + Add */}
             <View style={s.topControls}>
                 <Pressable style={s.dateBtn} onPress={() => setShowDateModal(true)}>
@@ -640,8 +640,7 @@ export default function PurchaseScreen() {
                             placeholder="Search by code..."
                             placeholderTextColor={colors.mutedForeground}
                             autoFocus
-                            keyboardType="default"
-                            autoCapitalize="characters"
+                            keyboardType="number-pad"
                         />
                         <Pressable onPress={() => {
                             setShowInlineSearch(false);
@@ -772,7 +771,12 @@ export default function PurchaseScreen() {
                 </View>
             )}
 
-            {/* Sale Entries Table - Fixed at bottom */}
+        </View>
+    );
+
+    // ── Sale Entries Table (fixed bottom) ──
+    const renderSaleEntriesTable = () => (
+        <View style={s.tableBottomWrap}>
             <View style={s.tableWrap}>
                 <View style={s.tableBar}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
@@ -804,7 +808,7 @@ export default function PurchaseScreen() {
                     </View>
                 ) : (
                     <>
-                        <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled showsVerticalScrollIndicator>
+                        <ScrollView style={{ maxHeight: 90 }} nestedScrollEnabled showsVerticalScrollIndicator>
                             {collections.map((item, index) => (
                                 <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
                                     <View style={s.entryCell1}>
@@ -1128,6 +1132,8 @@ export default function PurchaseScreen() {
                 {activeTab === 'C-Farmer' && renderFarmerTab()}
             </ScrollView>
 
+            {activeTab === 'Purchase' && renderSaleEntriesTable()}
+
 
             {/* ── Modals ── */}
             <Modal visible={showDateModal} animationType="slide" transparent onRequestClose={() => setShowDateModal(false)}>
@@ -1263,7 +1269,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     scrollContent: { paddingHorizontal: 10, gap: 10, paddingBottom: 150, paddingTop: 10 },
 
     // Top controls
-    topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, gap: 8 },
+    topControls: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 6 },
     dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
     dateText: { fontSize: 12, fontWeight: '600', color: colors.foreground },
     addCustTopBtn: { width: 36, height: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
@@ -1276,7 +1282,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     shiftBtnTextActive: { color: '#fff' },
 
     // Summary
-    summaryBar: { flexDirection: 'row', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingVertical: 10, borderRadius: 12 },
+    summaryBar: { flexDirection: 'row', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingVertical: 8, borderRadius: 10, marginTop: 6, },
     summaryCell: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
     summaryVal: { fontSize: 14, fontWeight: '800', color: colors.foreground },
     summaryLbl: { fontSize: 9, color: colors.mutedForeground, fontWeight: '500' },
@@ -1329,7 +1335,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderWidth: 1,
         borderColor: colors.border,
         borderRadius: 10,
-        marginTop: -4,
+        marginTop: 0,
         overflow: 'hidden',
         elevation: 5,
         shadowColor: '#000',
@@ -1361,7 +1367,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     inlineDropdownSub: { fontSize: 10, color: colors.mutedForeground },
 
     // Code row (Enter code + Cow/Buffalo)
-    codeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    codeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
     codeInputBox: {
         flex: 1,
         flexDirection: 'row',
@@ -1431,6 +1437,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     saveEntryText: { fontSize: 16, fontWeight: '900', color: '#fff' },
 
     // Table
+    tableBottomWrap: { paddingHorizontal: 10, paddingBottom: 8, paddingTop: 2 },
     tableWrap: { borderWidth: 1, borderColor: colors.border, overflow: 'hidden', borderRadius: 12 },
     tableBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
     tableBarTitle: { fontSize: 12, fontWeight: '700', color: colors.foreground },
