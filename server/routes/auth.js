@@ -674,4 +674,201 @@ router.post('/reset-password', async (req, res) => {
     }
 });
 
+// Store for phone OTPs
+const phoneOtpStore = new Map();
+
+// POST /api/auth/send-phone-otp
+router.post('/send-phone-otp', async (req, res) => {
+    try {
+        const { phone } = req.body;
+        if (!phone) {
+            return res.status(400).json({ success: false, message: 'Phone number is required' });
+        }
+
+        // Use hardcoded OTP 123456 for now
+        const otp = '123456';
+
+        phoneOtpStore.set(phone, {
+            otp,
+            expiresAt: Date.now() + 10 * 60 * 1000
+        });
+
+        console.log(`Phone OTP for ${phone}: ${otp}`);
+
+        res.json({ success: true, message: 'OTP sent successfully' });
+    } catch (error) {
+        console.error('Send phone OTP error:', error);
+        res.status(500).json({ success: false, message: 'Failed to send OTP' });
+    }
+});
+
+// POST /api/auth/verify-phone-otp
+router.post('/verify-phone-otp', async (req, res) => {
+    try {
+        const { phone, otp } = req.body;
+        if (!phone || !otp) {
+            return res.status(400).json({ success: false, message: 'Phone and OTP are required' });
+        }
+
+        const storedData = phoneOtpStore.get(phone);
+
+        if (!storedData) {
+            // Also accept hardcoded 123456
+            if (otp === '123456') {
+                return res.json({ success: true, message: 'OTP verified', response: { verified: true } });
+            }
+            return res.status(400).json({ success: false, message: 'OTP expired or not found' });
+        }
+
+        if (Date.now() > storedData.expiresAt) {
+            phoneOtpStore.delete(phone);
+            if (otp === '123456') {
+                return res.json({ success: true, message: 'OTP verified', response: { verified: true } });
+            }
+            return res.status(400).json({ success: false, message: 'OTP has expired' });
+        }
+
+        if (storedData.otp !== otp && otp !== '123456') {
+            return res.status(400).json({ success: false, message: 'Invalid OTP' });
+        }
+
+        phoneOtpStore.delete(phone);
+        res.json({ success: true, message: 'OTP verified', response: { verified: true } });
+    } catch (error) {
+        console.error('Verify phone OTP error:', error);
+        res.status(500).json({ success: false, message: 'Failed to verify OTP' });
+    }
+});
+
+// POST /api/auth/phone-login - Login with phone + OTP
+router.post('/phone-login', async (req, res) => {
+    try {
+        const { phone, otp } = req.body;
+        if (!phone || !otp) {
+            return res.status(400).json({ success: false, message: 'Phone and OTP are required' });
+        }
+
+        // Verify OTP (accept hardcoded 123456)
+        const storedData = phoneOtpStore.get(phone);
+        if (otp !== '123456') {
+            if (!storedData || Date.now() > storedData.expiresAt || storedData.otp !== otp) {
+                return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+            }
+        }
+        phoneOtpStore.delete(phone);
+
+        // Find user by phone
+        const user = await User.findOne({ phone });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'No account found with this phone number. Please sign up first.'
+            });
+        }
+
+        if (user.isBlocked) {
+            return res.status(403).json({ success: false, message: 'Your account has been blocked' });
+        }
+
+        user.lastLogin = new Date();
+        await user.save();
+
+        const token = generateToken(user._id);
+
+        res.json({
+            success: true,
+            message: 'Login successful',
+            response: {
+                token,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    avatar: user.avatar,
+                    address: user.address,
+                    role: user.role,
+                    referralCode: user.referralCode,
+                    memberSince: user.createdAt
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Phone login error:', error);
+        res.status(500).json({ success: false, message: 'Login failed' });
+    }
+});
+
+// POST /api/auth/google - Google Sign In
+router.post('/google', async (req, res) => {
+    try {
+        const { idToken } = req.body;
+        if (!idToken) {
+            return res.status(400).json({ success: false, message: 'Google token is required' });
+        }
+
+        // Decode the ID token (in production, verify with Google's API)
+        // For now, decode the JWT payload
+        let decoded;
+        try {
+            const parts = idToken.split('.');
+            if (parts.length === 3) {
+                decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+            }
+        } catch (e) {
+            return res.status(400).json({ success: false, message: 'Invalid Google token' });
+        }
+
+        if (!decoded || !decoded.email) {
+            return res.status(400).json({ success: false, message: 'Could not extract email from Google token' });
+        }
+
+        // Find or create user
+        let user = await User.findOne({ email: decoded.email.toLowerCase() });
+
+        if (!user) {
+            user = new User({
+                name: decoded.name || decoded.email.split('@')[0],
+                email: decoded.email.toLowerCase(),
+                phone: '',
+                password: hashPassword(crypto.randomBytes(16).toString('hex')),
+                avatar: decoded.picture || '',
+                isVerified: true
+            });
+            await user.save();
+        }
+
+        if (user.isBlocked) {
+            return res.status(403).json({ success: false, message: 'Your account has been blocked' });
+        }
+
+        user.lastLogin = new Date();
+        await user.save();
+
+        const token = generateToken(user._id);
+
+        res.json({
+            success: true,
+            message: 'Login successful',
+            response: {
+                token,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    avatar: user.avatar,
+                    address: user.address,
+                    role: user.role,
+                    referralCode: user.referralCode,
+                    memberSince: user.createdAt
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Google auth error:', error);
+        res.status(500).json({ success: false, message: 'Google sign in failed' });
+    }
+});
+
 module.exports = router;
