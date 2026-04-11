@@ -92,7 +92,7 @@ const en = {
         today: 'Today',
         milkCollection: 'Milk Collection',
         sellQty: 'Sell Qty',
-        members: 'Members',
+        members: 'S-Members',
         farmers: 'Farmers',
         cFarmer: 'C-Farmer',
         rFarmer: 'R-Farmer',

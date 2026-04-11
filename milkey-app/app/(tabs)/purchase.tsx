@@ -242,7 +242,11 @@ export default function PurchaseScreen() {
         const alertMethod = (customer as any).alertMethod || 'none';
         if (alertMethod === 'none' || !customer.mobile) return;
 
-        const message = `Milk Collection\nCode: ${customer.code}\nName: ${customer.name}\nQty: ${qty} L\nFat: ${fat || '-'}\nSNF: ${snf || '-'}\nRate: ₹${rate}\nAmount: ₹${amount.toFixed(2)}\nDate: ${formatDate(entryDate)}\nShift: ${entryShift === 'morning' ? 'Morning' : 'Evening'}`;
+        const dateObj = entryDate;
+        const dateStr = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getFullYear()).slice(-2)}`;
+        const shiftStr = entryShift === 'morning' ? 'Morning' : 'Evening';
+
+        const message = `Digital Milk Slip\n\n----------------------------------------------------\n\nDairy - Amul\n\nCode - ${customer.code}\n\nName - ${customer.name}\n\nDate - ${dateStr}   shift - ${shiftStr}\n\n----------------------------------------------------\n\nFat - ${fat || '-'}                    SNF -  ${snf || '-'}\n\nRate(Rs.) - ${rate}      Qty -  ${qty}\n\nAmount - ${amount.toFixed(2)}`;
 
         const phone = customer.mobile.replace(/\D/g, '');
 
@@ -253,7 +257,6 @@ export default function PurchaseScreen() {
             const encoded = encodeURIComponent(message);
             const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
             Linking.openURL(`whatsapp://send?phone=${whatsappPhone}&text=${encoded}`).catch(() => {
-                // Fallback to web whatsapp
                 Linking.openURL(`https://wa.me/${whatsappPhone}?text=${encoded}`).catch(() => { });
             });
         }
@@ -831,16 +834,6 @@ export default function PurchaseScreen() {
                             ))}
                         </ScrollView>
 
-                        {/* Totals Row */}
-                        <View style={s.tFootRow}>
-                            <View style={s.entryCell1}><Text style={s.tFootText}>{t.common.total} ({collections.length})</Text></View>
-                            <View style={s.entryCellFlex}><Text style={s.tFootText}>{historyTotals.quantity.toFixed(1)}</Text></View>
-                            <View style={s.entryCellFlex} />
-                            <View style={s.entryCellFlex} />
-                            <View style={s.entryCellFlex} />
-                            <View style={s.entryCellAmt}><Text style={[s.tFootText, { color: colors.primary }]}>₹{historyTotals.amount.toFixed(0)}</Text></View>
-                            <View style={{ width: 26 }} />
-                        </View>
                     </>
                 )}
             </View>

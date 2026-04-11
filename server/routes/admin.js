@@ -1500,8 +1500,13 @@ router.get('/purchase-farmers', adminAuth, async (req, res) => {
         const skip = (page - 1) * limit;
         const search = req.query.search?.trim() || '';
         const userId = req.query.userId || '';
+        const status = req.query.status || 'active'; // active | deleted | all
 
-        const query = { isActive: true };
+        const query = {};
+        if (status === 'active') query.isActive = true;
+        else if (status === 'deleted') query.isActive = false;
+        // 'all' = no isActive filter
+
         if (userId) query.owner = userId;
         if (search) {
             query.$or = [
@@ -1531,6 +1536,24 @@ router.get('/purchase-farmers', adminAuth, async (req, res) => {
     } catch (error) {
         console.error('Admin get purchase farmers error:', error);
         res.status(500).json({ success: false, message: 'Failed to fetch purchase farmers' });
+    }
+});
+
+// PUT /api/admin/purchase-farmers/:id/restore - Restore a deleted farmer
+router.put('/purchase-farmers/:id/restore', adminAuth, async (req, res) => {
+    try {
+        const farmer = await PurchaseFarmer.findByIdAndUpdate(
+            req.params.id,
+            { isActive: true },
+            { new: true }
+        );
+        if (!farmer) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
+        res.json({ success: true, message: 'Farmer restored successfully', response: farmer });
+    } catch (error) {
+        console.error('Admin restore purchase farmer error:', error);
+        res.status(500).json({ success: false, message: 'Failed to restore farmer' });
     }
 });
 

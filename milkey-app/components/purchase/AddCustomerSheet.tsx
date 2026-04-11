@@ -25,7 +25,6 @@ const ALERT_METHOD_OPTIONS = [
     { value: 'none', label: 'None' },
     { value: 'sms', label: 'SMS' },
     { value: 'whatsapp', label: 'WhatsApp' },
-    { value: 'email', label: 'Email' },
 ];
 
 const PRINT_SLIP_OPTIONS = [

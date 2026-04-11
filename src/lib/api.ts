@@ -1142,6 +1142,7 @@ export interface AdminPurchaseFarmer {
     buffaloRate: number
     lastPurchaseDate: string
     createdAt: string
+    isActive?: boolean
 }
 
 export const getAdminPurchaseFarmers = async (params: {
@@ -1149,6 +1150,7 @@ export const getAdminPurchaseFarmers = async (params: {
     limit?: number
     search?: string
     userId?: string
+    status?: string
 }) => {
     const response = await api.get('/admin/purchase-farmers', { params })
     return response.data
@@ -1156,6 +1158,11 @@ export const getAdminPurchaseFarmers = async (params: {
 
 export const deleteAdminPurchaseFarmer = async (id: string) => {
     const response = await api.delete(`/admin/purchase-farmers/${id}`)
+    return response.data
+}
+
+export const restoreAdminPurchaseFarmer = async (id: string) => {
+    const response = await api.put(`/admin/purchase-farmers/${id}/restore`)
     return response.data
 }
 

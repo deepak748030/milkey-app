@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, RefreshCw, UserPlus, Trash2 } from 'lucide-react'
+import { Search, RefreshCw, UserPlus, Trash2, RotateCcw } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
-import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, type AdminPurchaseFarmer } from '@/lib/api'
+import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, restoreAdminPurchaseFarmer, type AdminPurchaseFarmer } from '@/lib/api'
 
 export function CollectionFarmersPage() {
     const [farmers, setFarmers] = useState<AdminPurchaseFarmer[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
     const [userId, setUserId] = useState('')
+    const [status, setStatus] = useState('active')
     const [users, setUsers] = useState<{ _id: string; name: string; phone: string }[]>([])
     const [page, setPage] = useState(1)
     const [pagination, setPagination] = useState({ total: 0, pages: 1 })
@@ -26,7 +27,8 @@ export function CollectionFarmersPage() {
             const res = await getAdminPurchaseFarmers({
                 page, limit: 10,
                 search: search || undefined,
-                userId: userId || undefined
+                userId: userId || undefined,
+                status
             })
             if (res.success) {
                 setFarmers(res.response.farmers)
@@ -34,7 +36,7 @@ export function CollectionFarmersPage() {
             }
         } catch (e) { console.error(e) }
         finally { setLoading(false) }
-    }, [page, search, userId])
+    }, [page, search, userId, status])
 
     useEffect(() => { fetchUsers() }, [fetchUsers])
     useEffect(() => {
@@ -43,13 +45,21 @@ export function CollectionFarmersPage() {
     }, [fetchFarmers])
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to permanently delete this farmer?')) return
+        if (!confirm('Are you sure you want to delete this farmer?')) return
         setActionLoading(true)
         try {
             const res = await deleteAdminPurchaseFarmer(id)
-            if (res.success) {
-                fetchFarmers()
-            }
+            if (res.success) fetchFarmers()
+        } catch (e) { console.error(e) }
+        finally { setActionLoading(false) }
+    }
+
+    const handleRestore = async (id: string) => {
+        if (!confirm('Restore this farmer?')) return
+        setActionLoading(true)
+        try {
+            const res = await restoreAdminPurchaseFarmer(id)
+            if (res.success) fetchFarmers()
         } catch (e) { console.error(e) }
         finally { setActionLoading(false) }
     }
@@ -92,6 +102,11 @@ export function CollectionFarmersPage() {
                         <option value="">All Owners</option>
                         {users.map(u => <option key={u._id} value={u._id}>{u.name} - {u.phone}</option>)}
                     </select>
+                    <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} className="px-4 py-2 bg-background border border-border rounded-lg focus:ring-2 focus:ring-primary text-sm">
+                        <option value="active">Active</option>
+                        <option value="deleted">Deleted</option>
+                        <option value="all">All</option>
+                    </select>
                 </div>
             </div>
 
@@ -115,7 +130,7 @@ export function CollectionFarmersPage() {
                     </div>
                 ) : (
                     farmers.map((f) => (
-                        <div key={f._id} className="bg-card border border-border rounded-xl p-4">
+                        <div key={f._id} className={`bg-card border rounded-xl p-4 ${f.isActive === false ? 'border-destructive/30 opacity-75' : 'border-border'}`}>
                             <div className="flex justify-between items-start mb-1">
                                 <div>
                                     <p className="font-semibold text-foreground">{f.name}</p>
@@ -123,9 +138,18 @@ export function CollectionFarmersPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{f.defaultMilk}</span>
-                                    <button onClick={() => handleDelete(f._id)} disabled={actionLoading} className="p-1.5 hover:bg-destructive/10 rounded-lg transition-colors">
-                                        <Trash2 className="w-4 h-4 text-destructive" />
-                                    </button>
+                                    {f.isActive === false && (
+                                        <span className="px-2 py-0.5 bg-destructive/10 text-destructive rounded-full text-xs font-medium">Deleted</span>
+                                    )}
+                                    {f.isActive === false ? (
+                                        <button onClick={() => handleRestore(f._id)} disabled={actionLoading} className="p-1.5 hover:bg-green-500/10 rounded-lg transition-colors" title="Restore">
+                                            <RotateCcw className="w-4 h-4 text-green-600" />
+                                        </button>
+                                    ) : (
+                                        <button onClick={() => handleDelete(f._id)} disabled={actionLoading} className="p-1.5 hover:bg-destructive/10 rounded-lg transition-colors">
+                                            <Trash2 className="w-4 h-4 text-destructive" />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                             <p className="text-xs text-muted-foreground mb-2">{f.mobile} • Owner: {typeof f.owner === 'object' ? f.owner.name : ''}</p>
@@ -159,6 +183,7 @@ export function CollectionFarmersPage() {
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Total Qty</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Total Amount</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Last Purchase</th>
+                                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Status</th>
                                 <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Actions</th>
                             </tr>
                         </thead>
@@ -166,21 +191,21 @@ export function CollectionFarmersPage() {
                             {loading ? (
                                 Array.from({ length: 5 }).map((_, i) => (
                                     <tr key={i} className="animate-pulse">
-                                        {Array.from({ length: 10 }).map((_, j) => (
+                                        {Array.from({ length: 11 }).map((_, j) => (
                                             <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-20"></div></td>
                                         ))}
                                     </tr>
                                 ))
                             ) : farmers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={10} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
                                         <UserPlus className="w-12 h-12 mx-auto mb-2 opacity-50" />
                                         No farmers found
                                     </td>
                                 </tr>
                             ) : (
                                 farmers.map((f) => (
-                                    <tr key={f._id} className="hover:bg-muted/30 transition-colors">
+                                    <tr key={f._id} className={`hover:bg-muted/30 transition-colors ${f.isActive === false ? 'opacity-60' : ''}`}>
                                         <td className="px-4 py-3 text-sm font-mono font-medium">{f.code}</td>
                                         <td className="px-4 py-3 text-sm font-medium">{f.name}</td>
                                         <td className="px-4 py-3 text-sm">{f.mobile || '-'}</td>
@@ -197,15 +222,31 @@ export function CollectionFarmersPage() {
                                         <td className="px-4 py-3 text-sm font-medium text-primary">{(f.totalQuantity || 0).toFixed(1)} L</td>
                                         <td className="px-4 py-3 text-sm font-semibold text-green-600">₹{(f.totalAmount || 0).toFixed(2)}</td>
                                         <td className="px-4 py-3 text-sm">{formatDate(f.lastPurchaseDate)}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${f.isActive === false ? 'bg-destructive/10 text-destructive' : 'bg-green-500/10 text-green-700 dark:text-green-300'}`}>
+                                                {f.isActive === false ? 'Deleted' : 'Active'}
+                                            </span>
+                                        </td>
                                         <td className="px-4 py-3 text-center">
-                                            <button
-                                                onClick={() => handleDelete(f._id)}
-                                                disabled={actionLoading}
-                                                className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
-                                                title="Delete farmer permanently"
-                                            >
-                                                <Trash2 className="w-4 h-4 text-destructive" />
-                                            </button>
+                                            {f.isActive === false ? (
+                                                <button
+                                                    onClick={() => handleRestore(f._id)}
+                                                    disabled={actionLoading}
+                                                    className="p-2 hover:bg-green-500/10 rounded-lg transition-colors"
+                                                    title="Restore farmer"
+                                                >
+                                                    <RotateCcw className="w-4 h-4 text-green-600" />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleDelete(f._id)}
+                                                    disabled={actionLoading}
+                                                    className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
+                                                    title="Delete farmer"
+                                                >
+                                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
