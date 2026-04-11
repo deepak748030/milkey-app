@@ -299,22 +299,22 @@ export default function HomeScreen() {
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
               <Text style={styles.overviewStatValue}>{homeStats?.todaySell.quantity.toFixed(1) || '0'}L</Text>
-              <Text style={styles.overviewStatLabel}>{t.home.sellQty}</Text>
+              <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.sellQty}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
               <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{homeStats?.totalMembers || 0}</Text>
-              <Text style={styles.overviewStatLabel}>{t.home.members}</Text>
+              <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.members}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
               <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{homeStats?.totalCollectionFarmers || 0}</Text>
-              <Text style={styles.overviewStatLabel}>{t.home.cFarmer}</Text>
+              <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.cFarmer}</Text>
             </View>
             <View style={styles.overviewDivider} />
             <View style={styles.overviewStat}>
               <Text style={[styles.overviewStatValue, { color: colors.destructive }]}>{homeStats?.totalFarmers || 0}</Text>
-              <Text style={styles.overviewStatLabel}>{t.home.rFarmer}</Text>
+              <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.rFarmer}</Text>
             </View>
           </View>
         </View>
@@ -556,11 +556,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     width: 1,
     height: 40,
     backgroundColor: colors.border,
-    marginHorizontal: 10,
+    marginHorizontal: 6,
   },
   overviewStat: {
     alignItems: 'center',
     flex: 1,
+    minWidth: 0,
   },
   overviewStatValue: {
     fontSize: 16,
