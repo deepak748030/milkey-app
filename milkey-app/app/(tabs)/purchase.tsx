@@ -20,6 +20,7 @@ import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { buildReceiptBytes, concatBytes, INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, NORMAL_SIZE, BOLD_OFF, ALIGN_LEFT, textToBytes, separator, doubleSeparator, twoColumnLine, threeColumnLine, FEED_3_LINES } from '@/lib/escpos';
 import * as Sharing from 'expo-sharing';
+import { buildBluetoothPrintReceipt, buildBluetoothPrintSummary, printViaBluetoothPrintApp } from '@/lib/bluetoothPrintApp';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
@@ -467,15 +468,39 @@ export default function PurchaseScreen() {
         if (isConnected) {
             const success = await printData(bytes);
             if (success) showAlert('Success', 'Full summary printed!');
-        } else {
-            // Show as alert when no printer connected
+        } else if (Platform.OS === 'android') {
+            // Fallback: Print via Bluetooth Print app
+            const details = data.map(c => ({
+                code: c.farmerCode || '-',
+                qty: String(c.quantity),
+                fat: String(c.fat || '-'),
+                rate: String(c.rate),
+                amount: '₹' + c.amount.toFixed(0),
+            }));
             const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
             const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
-            let details = '';
+            const printStr = buildBluetoothPrintSummary({
+                title: 'Full Shift Summary',
+                dateLabel: isReport && reportStartDate && reportEndDate
+                    ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
+                    : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`,
+                lines: [
+                    { label: 'Total Qty', value: totals.quantity.toFixed(2) + ' L' },
+                    { label: 'Total Amt', value: '₹' + totals.amount.toFixed(2) },
+                    { label: 'Avg Rate', value: avgRate },
+                    { label: 'Farmers', value: String(uniqueFarmers) },
+                ],
+                details,
+            });
+            await printViaBluetoothPrintApp(printStr);
+        } else {
+            const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
+            const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
+            let detailStr = '';
             for (const c of data) {
-                details += `${c.farmerCode || '-'} | Qty: ${c.quantity} | Fat: ${c.fat || '-'} | Rate: ${c.rate} | ₹${c.amount.toFixed(0)}\n`;
+                detailStr += `${c.farmerCode || '-'} | Qty: ${c.quantity} | Fat: ${c.fat || '-'} | Rate: ${c.rate} | ₹${c.amount.toFixed(0)}\n`;
             }
-            showAlert('Full Summary', `${details}\nTotal Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ₹${avgRate}\nFarmers: ${uniqueFarmers}`);
+            showAlert('Full Summary', `${detailStr}\nTotal Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ₹${avgRate}\nFarmers: ${uniqueFarmers}`);
         }
     }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, isConnected, printData, selectedReportFarmer]);
 
@@ -514,6 +539,19 @@ export default function PurchaseScreen() {
         if (isConnected) {
             const success = await printData(bytes);
             if (success) showAlert('Success', 'Short summary printed!');
+        } else if (Platform.OS === 'android') {
+            const printStr = buildBluetoothPrintSummary({
+                title,
+                dateLabel,
+                lines: [
+                    { label: 'Total Qty', value: totals.quantity.toFixed(2) + ' L' },
+                    { label: 'Total Amt', value: '₹' + totals.amount.toFixed(2) },
+                    { label: 'Avg Rate', value: avgRate },
+                    { label: 'Samples', value: String(data.length) },
+                    { label: 'Farmers', value: String(uniqueFarmers) },
+                ],
+            });
+            await printViaBluetoothPrintApp(printStr);
         } else {
             showAlert('Short Summary', `Total Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ${avgRate}\nSamples: ${data.length}\nFarmers: ${uniqueFarmers}`);
         }
