@@ -1044,9 +1044,16 @@ export const authApiNew = {
     },
 
     phoneLogin: async (phone: string, otp: string) => {
-        return apiRequest<{ token: string; user: any }>('/auth/phone-login', {
+        return apiRequest<{ token: string; user: any; needsRegistration?: boolean; phone?: string }>('/auth/phone-login', {
             method: 'POST',
             body: JSON.stringify({ phone, otp }),
+        });
+    },
+
+    phoneRegister: async (data: { phone: string; name: string; email: string; password: string; address?: string; referralCode?: string }) => {
+        return apiRequest<{ token: string; user: any }>('/auth/phone-register', {
+            method: 'POST',
+            body: JSON.stringify(data),
         });
     },
 

@@ -740,7 +740,7 @@ router.post('/verify-phone-otp', async (req, res) => {
     }
 });
 
-// POST /api/auth/phone-login - Login with phone + OTP
+// POST /api/auth/phone-login - Login with phone + OTP (auto-detect new user)
 router.post('/phone-login', async (req, res) => {
     try {
         const { phone, otp } = req.body;
@@ -760,9 +760,12 @@ router.post('/phone-login', async (req, res) => {
         // Find user by phone
         const user = await User.findOne({ phone });
         if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: 'No account found with this phone number. Please sign up first.'
+            // Return special code so app can show registration form
+            return res.json({
+                success: true,
+                code: 'USER_NOT_FOUND',
+                message: 'Phone verified. Please complete registration.',
+                response: { needsRegistration: true, phone }
             });
         }
 
@@ -796,6 +799,102 @@ router.post('/phone-login', async (req, res) => {
     } catch (error) {
         console.error('Phone login error:', error);
         res.status(500).json({ success: false, message: 'Login failed' });
+    }
+});
+
+// POST /api/auth/phone-register - Register after phone OTP verification
+router.post('/phone-register', async (req, res) => {
+    try {
+        const { phone, name, email, password, address, referralCode } = req.body;
+
+        if (!phone || !name || !email || !password) {
+            return res.status(400).json({ success: false, message: 'Phone, name, email, and password are required' });
+        }
+
+        if (password.length < 6) {
+            return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+        }
+
+        // Check if user already exists
+        const existingUser = await User.findOne({
+            $or: [{ email: email.toLowerCase() }, { phone }]
+        });
+
+        if (existingUser) {
+            return res.status(400).json({
+                success: false,
+                message: existingUser.email === email.toLowerCase()
+                    ? 'Email already registered'
+                    : 'Phone number already registered'
+            });
+        }
+
+        // Handle referral
+        let referrer = null;
+        if (referralCode) {
+            referrer = await User.findOne({ referralCode: referralCode.toUpperCase() });
+            if (!referrer) {
+                return res.status(400).json({ success: false, message: 'Invalid referral code' });
+            }
+        }
+
+        const user = new User({
+            name: name.trim(),
+            email: email.toLowerCase().trim(),
+            phone: phone.trim(),
+            password: hashPassword(password),
+            address: address ? address.trim() : '',
+            referredBy: referrer?._id,
+            isVerified: true
+        });
+
+        await user.save();
+
+        // Create referral record if referred
+        if (referrer) {
+            const ReferralConfig = require('../models/ReferralConfig');
+            const cfg = await ReferralConfig.findOneAndUpdate(
+                {},
+                { $setOnInsert: { defaultCommissionRate: 5 } },
+                { new: true, upsert: true }
+            );
+            const commissionRate = typeof cfg?.defaultCommissionRate === 'number' ? cfg.defaultCommissionRate : 5;
+
+            await Referral.create({
+                referrer: referrer._id,
+                referred: user._id,
+                code: referralCode.toUpperCase(),
+                status: 'active',
+                commissionRate
+            });
+
+            notifyReferralSignup(referrer._id.toString(), user.name)
+                .catch(err => console.error('Error sending referral signup notification:', err));
+        }
+
+        const token = generateToken(user._id);
+
+        res.status(201).json({
+            success: true,
+            message: 'Registration successful',
+            response: {
+                token,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    avatar: user.avatar,
+                    address: user.address,
+                    role: user.role,
+                    referralCode: user.referralCode,
+                    memberSince: user.createdAt
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Phone register error:', error);
+        res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
     }
 });
 

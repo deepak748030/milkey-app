@@ -1,5 +1,5 @@
 import React, { useState, useCallback, memo } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Dimensions, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, StyleSheet } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
@@ -105,41 +105,14 @@ const LogoHeader = memo(({ title, subtitle, colors, compact }: any) => (
     </View>
 ));
 
-const StepIndicator = memo(({ currentStep, colors }: { currentStep: number; colors: any }) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 6 }}>
-        {[1, 2, 3].map((step) => (
-            <View key={step} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <View style={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: 13,
-                    backgroundColor: step <= currentStep ? colors.primary : colors.muted,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderWidth: step > currentStep ? 1 : 0,
-                    borderColor: colors.border,
-                }}>
-                    {step < currentStep ? (
-                        <CheckCircle size={14} color="#fff" />
-                    ) : (
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: step <= currentStep ? '#fff' : colors.mutedForeground }}>{step}</Text>
-                    )}
-                </View>
-                {step < 3 && (
-                    <View style={{ width: 24, height: 2, backgroundColor: step < currentStep ? colors.primary : colors.border, borderRadius: 1 }} />
-                )}
-            </View>
-        ))}
-    </View>
-));
-
 export default function AuthScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { expoPushToken } = usePushNotifications();
 
-    const [screen, setScreen] = useState<'login' | 'signup' | 'login-otp' | 'signup-step2' | 'signup-step3' | 'forgot' | 'forgot-otp' | 'reset-password'>('login');
+    // Screens: 'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'
+    const [screen, setScreen] = useState<'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'>('login');
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -155,7 +128,6 @@ export default function AuthScreen() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [resetToken, setResetToken] = useState('');
-    const [googleUser, setGoogleUser] = useState<{ name: string; email: string; avatar: string } | null>(null);
 
     const [modalVisible, setModalVisible] = useState(false);
     const [modalTitle, setModalTitle] = useState('');
@@ -180,7 +152,7 @@ export default function AuthScreen() {
             const result = await authApiNew.sendPhoneOtp(phone);
             if (result.success) {
                 setScreen('login-otp');
-                showModal('OTP Sent', 'Enter OTP 123456 to login');
+                showModal('OTP Sent', 'OTP sent to your phone number');
             } else showModal('Error', result.message || 'Failed to send OTP');
         } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
@@ -192,6 +164,14 @@ export default function AuthScreen() {
         try {
             const result = await authApiNew.phoneLogin(phone, otp);
             if (result.success && result.response) {
+                // Check if user needs registration
+                if (result.response.needsRegistration || result.code === 'USER_NOT_FOUND') {
+                    // Phone verified but no account - show registration form
+                    setOtp('');
+                    setScreen('register-details');
+                    return;
+                }
+                // User exists - login
                 await setAuthUser(result.response.token, result.response.user);
                 if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                 router.replace('/(tabs)');
@@ -200,72 +180,17 @@ export default function AuthScreen() {
         finally { setLoading(false); }
     }, [phone, otp, expoPushToken, showModal]);
 
-    const handleGoogleAuth = useCallback(async (forSignup = false) => {
-        setGoogleLoading(true);
-        try {
-            const redirectUri = 'https://auth.expo.io/@milkey/milkey';
-            const clientId = '95043026756-placeholder.apps.googleusercontent.com';
-            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=openid%20email%20profile&nonce=${Math.random().toString(36).substring(7)}`;
-            const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-            if (result.type === 'success' && result.url) {
-                const urlParams = new URLSearchParams(result.url.split('#')[1] || '');
-                const idToken = urlParams.get('id_token');
-                if (idToken) {
-                    if (forSignup) {
-                        try {
-                            const parts = idToken.split('.');
-                            if (parts.length === 3) {
-                                const decoded = JSON.parse(atob(parts[1]));
-                                setGoogleUser({ name: decoded.name || '', email: decoded.email || '', avatar: decoded.picture || '' });
-                                setName(decoded.name || '');
-                                setEmail(decoded.email || '');
-                                setScreen('signup-step2');
-                            }
-                        } catch { showModal('Error', 'Failed to parse Google data'); }
-                    } else {
-                        const authResult = await authApiNew.googleLogin(idToken);
-                        if (authResult.success && authResult.response) {
-                            await setAuthUser(authResult.response.token, authResult.response.user);
-                            if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                            router.replace('/(tabs)');
-                        } else showModal('Error', authResult.message || 'Google sign in failed');
-                    }
-                } else showModal('Error', 'Failed to get Google token');
-            }
-        } catch { showModal('Error', 'Google sign in failed. Please try again.'); }
-        setGoogleLoading(false);
-    }, [expoPushToken, showModal]);
-
-    const handleSignupSendOtp = useCallback(async () => {
-        if (!phone || phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
-        setLoading(true);
-        try {
-            const result = await authApiNew.sendPhoneOtp(phone);
-            if (result.success) showModal('OTP Sent', 'Enter OTP 123456 to verify');
-            else showModal('Error', result.message || 'Failed to send OTP');
-        } catch { showModal('Error', 'Network error.'); }
-        finally { setLoading(false); }
-    }, [phone, showModal]);
-
-    const handleSignupVerifyOtp = useCallback(async () => {
-        if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
-        setLoading(true);
-        try {
-            const result = await authApiNew.verifyPhoneOtp(phone, otp);
-            if (result.success) { setOtp(''); setScreen('signup-step3'); }
-            else showModal('Error', result.message || 'Invalid OTP');
-        } catch { showModal('Error', 'Network error.'); }
-        finally { setLoading(false); }
-    }, [phone, otp, showModal]);
-
-    const handleCompleteSignup = useCallback(async () => {
+    const handleCompleteRegistration = useCallback(async () => {
         if (!name) { showModal('Error', 'Please enter your name'); return; }
         if (!email) { showModal('Error', 'Please enter your email'); return; }
         if (!password || password.length < 6) { showModal('Error', 'Password must be at least 6 characters'); return; }
         setLoading(true);
         try {
-            const result = await authApiNew.register({
-                name, email, phone, password,
+            const result = await authApiNew.phoneRegister({
+                phone,
+                name,
+                email,
+                password,
                 address: address || undefined,
                 referralCode: referralCode || undefined,
             });
@@ -277,6 +202,29 @@ export default function AuthScreen() {
         } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
     }, [name, email, phone, password, address, referralCode, expoPushToken, showModal]);
+
+    const handleGoogleAuth = useCallback(async () => {
+        setGoogleLoading(true);
+        try {
+            const redirectUri = 'https://auth.expo.io/@milkey/milkey';
+            const clientId = '835983322060-placeholder.apps.googleusercontent.com';
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=id_token&scope=openid%20email%20profile&nonce=${Math.random().toString(36).substring(7)}`;
+            const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+            if (result.type === 'success' && result.url) {
+                const urlParams = new URLSearchParams(result.url.split('#')[1] || '');
+                const idToken = urlParams.get('id_token');
+                if (idToken) {
+                    const authResult = await authApiNew.googleLogin(idToken);
+                    if (authResult.success && authResult.response) {
+                        await setAuthUser(authResult.response.token, authResult.response.user);
+                        if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                        router.replace('/(tabs)');
+                    } else showModal('Error', authResult.message || 'Google sign in failed');
+                } else showModal('Error', 'Failed to get Google token');
+            }
+        } catch { showModal('Error', 'Google sign in failed. Please try again.'); }
+        setGoogleLoading(false);
+    }, [expoPushToken, showModal]);
 
     const handleForgotPassword = useCallback(async () => {
         if (!email) { showModal('Error', 'Please enter your email address'); return; }
@@ -394,15 +342,6 @@ export default function AuthScreen() {
         </Pressable>
     ), [colors, googleLoading, loading]);
 
-    const LinkRow = useCallback(({ text, linkText, onPress }: { text: string; linkText: string; onPress: () => void }) => (
-        <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 12 }}>
-            <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{text}</Text>
-            <Pressable onPress={onPress}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>{linkText}</Text>
-            </Pressable>
-        </View>
-    ), [colors]);
-
     // ═══════════════════════════════════════
     // SCREENS
     // ═══════════════════════════════════════
@@ -460,10 +399,10 @@ export default function AuthScreen() {
                 <LogoHeader title="Verify OTP" subtitle={`OTP sent to +91 ${phone}`} colors={colors} compact />
                 <FormCard>
                     <Text style={{ fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 2 }}>Enter OTP</Text>
-                    <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Use OTP: 123456</Text>
+                    <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Enter the OTP sent to your phone</Text>
                     <InputField icon={Lock} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
                     <View style={{ height: 6 }} />
-                    <PrimaryButton onPress={handleOtpLogin} label="Verify & Login" loading={loading} colors={colors} />
+                    <PrimaryButton onPress={handleOtpLogin} label="Verify & Continue" loading={loading} colors={colors} />
                     <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={handleSendLoginOtp}>
                         <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Resend OTP</Text>
                     </Pressable>
@@ -472,84 +411,28 @@ export default function AuthScreen() {
         );
     }
 
-    // ─── Signup Step 2: Phone OTP Verify ───
-    if (screen === 'signup-step2') {
+    // ─── Register Details (shown when phone verified but no account) ───
+    if (screen === 'register-details') {
         return (
             <ScreenWrapper>
-                <BackButton onPress={() => setScreen('signup')} />
-                <LogoHeader title="Verify Phone" subtitle="We need to verify your phone number" colors={colors} compact />
-                <StepIndicator currentStep={2} colors={colors} />
+                <BackButton onPress={() => { setScreen('login'); setOtp(''); }} />
+                <LogoHeader title="Complete Profile" subtitle={`Phone +91 ${phone} verified ✓\nPlease fill your details to continue`} colors={colors} compact />
                 <FormCard>
-                    {googleUser && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, padding: 8, backgroundColor: colors.primary + '10', borderRadius: 8, borderWidth: 1, borderColor: colors.primary + '20' }}>
-                            <CheckCircle size={16} color={colors.primary} />
-                            <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>{googleUser.name}</Text>
-                                <Text style={{ fontSize: 10, color: colors.mutedForeground }}>{googleUser.email}</Text>
-                            </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, padding: 8, backgroundColor: colors.primary + '10', borderRadius: 8, borderWidth: 1, borderColor: colors.primary + '20' }}>
+                        <CheckCircle size={16} color={colors.primary} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.foreground }}>Phone Verified</Text>
+                            <Text style={{ fontSize: 10, color: colors.mutedForeground }}>+91 {phone}</Text>
                         </View>
-                    )}
-                    <InputField icon={Phone} placeholder="Phone Number (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} colors={colors} />
-                    {otp === '' ? (
-                        <PrimaryButton onPress={handleSignupSendOtp} label="Send OTP" loading={loading} colors={colors} />
-                    ) : (
-                        <>
-                            <InputField icon={Lock} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
-                            <View style={{ height: 6 }} />
-                            <PrimaryButton onPress={handleSignupVerifyOtp} label="Verify & Continue" loading={loading} colors={colors} />
-                            <Pressable style={{ marginTop: 8, alignItems: 'center' }} onPress={handleSignupSendOtp}>
-                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Resend OTP</Text>
-                            </Pressable>
-                        </>
-                    )}
-                    {otp === '' && phone.length === 10 && (
-                        <Pressable style={{ marginTop: 8, alignItems: 'center' }} onPress={() => { setOtp(' '); setTimeout(() => setOtp(''), 0); }}>
-                            <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Already have OTP? Enter it</Text>
-                        </Pressable>
-                    )}
-                </FormCard>
-            </ScreenWrapper>
-        );
-    }
+                    </View>
 
-    // ─── Signup Step 3: Details ───
-    if (screen === 'signup-step3') {
-        return (
-            <ScreenWrapper>
-                <BackButton onPress={() => setScreen('signup-step2')} />
-                <LogoHeader title="Almost Done!" subtitle="Fill in your details to complete signup" colors={colors} compact />
-                <StepIndicator currentStep={3} colors={colors} />
-                <FormCard>
-                    <InputField icon={User} placeholder="Full Name" value={name} onChangeText={setName} colors={colors} />
-                    <InputField icon={Mail} placeholder="Email Address" value={email} onChangeText={setEmail} keyboardType="email-address" colors={colors} />
-                    <InputField icon={Lock} placeholder="Create Password (min 6 chars)" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} showToggle onToggle={togglePassword} toggleValue={showPassword} colors={colors} />
+                    <InputField icon={User} placeholder="Full Name *" value={name} onChangeText={setName} colors={colors} />
+                    <InputField icon={Mail} placeholder="Email Address *" value={email} onChangeText={setEmail} keyboardType="email-address" colors={colors} />
+                    <InputField icon={Lock} placeholder="Create Password (min 6 chars) *" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} showToggle onToggle={togglePassword} toggleValue={showPassword} colors={colors} />
                     <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline colors={colors} />
                     <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={handleReferralChange} autoCapitalize="characters" colors={colors} />
                     <View style={{ height: 6 }} />
-                    <PrimaryButton onPress={handleCompleteSignup} label="Create Account" loading={loading} colors={colors} />
-                </FormCard>
-            </ScreenWrapper>
-        );
-    }
-
-    // ─── Signup Step 1 ───
-    if (screen === 'signup') {
-        return (
-            <ScreenWrapper>
-                <BackButton onPress={() => setScreen('login')} />
-                <LogoHeader title="Create Account" subtitle="Join Milkey in 3 easy steps" colors={colors} />
-                <StepIndicator currentStep={1} colors={colors} />
-                <FormCard>
-                    <Text style={{ fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 2 }}>Step 1: Get Started</Text>
-                    <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Quick & secure way to create your account</Text>
-
-                    <GoogleButton label="Continue with Google" onPress={() => handleGoogleAuth(true)} />
-
-                    <Divider />
-
-                    <PrimaryButton onPress={() => setScreen('signup-step2')} label="Continue with Phone" colors={colors} variant="muted" />
-
-                    <LinkRow text="Already have an account? " linkText="Login" onPress={() => setScreen('login')} />
+                    <PrimaryButton onPress={handleCompleteRegistration} label="Create Account & Continue" loading={loading} colors={colors} />
                 </FormCard>
             </ScreenWrapper>
         );
@@ -560,25 +443,26 @@ export default function AuthScreen() {
     // ═══════════════════════════════════════
     return (
         <ScreenWrapper>
-            <LogoHeader title="Milkey" subtitle="Welcome back! Sign in to continue" colors={colors} />
+            <LogoHeader title="Milkey" subtitle="Welcome! Sign in or create your account" colors={colors} />
 
             <FormCard>
-                <Text style={{ fontSize: 16, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 10 }}>Login</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 10 }}>Login / Register</Text>
 
-                <Text style={{ fontSize: 10, fontWeight: '600', color: colors.mutedForeground, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Login with Phone OTP</Text>
+                <Text style={{ fontSize: 10, fontWeight: '600', color: colors.mutedForeground, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Enter your Mobile Number</Text>
                 <InputField icon={Phone} placeholder="Phone Number (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} colors={colors} />
                 <View style={{ height: 6 }} />
-                <PrimaryButton onPress={handleSendLoginOtp} label="Send OTP & Login" loading={loading && !googleLoading} colors={colors} />
+                <PrimaryButton onPress={handleSendLoginOtp} label="Send OTP" loading={loading && !googleLoading} colors={colors} />
+                <Text style={{ fontSize: 10, textAlign: 'center', color: colors.mutedForeground, marginTop: 4 }}>
+                    If registered → Login, If new → Create Account
+                </Text>
 
                 <Divider />
 
-                <GoogleButton label="Sign in with Google" onPress={() => handleGoogleAuth(false)} />
+                <GoogleButton label="Continue with Google" onPress={handleGoogleAuth} />
 
                 <Pressable style={{ alignSelf: 'center', marginTop: 10 }} onPress={() => setScreen('forgot')}>
                     <Text style={{ fontSize: 11, fontWeight: '500', color: colors.primary }}>Forgot Password?</Text>
                 </Pressable>
-
-                <LinkRow text="Don't have an account? " linkText="Sign Up" onPress={() => setScreen('signup')} />
             </FormCard>
 
             <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 12, color: colors.mutedForeground, paddingHorizontal: 16 }}>
