@@ -55,7 +55,10 @@ export default function NotificationsScreen() {
   }, []);
 
   useEffect(() => {
-    loadNotifications();
+    loadNotifications().then(() => {
+      // Auto-mark all notifications as read when screen opens
+      notificationsApiNew.markAllAsRead().catch(() => {});
+    });
   }, [loadNotifications]);
 
   const onRefresh = useCallback(() => {
@@ -64,38 +67,7 @@ export default function NotificationsScreen() {
   }, [loadNotifications]);
 
   const handleNotificationPress = async (notification: Notification) => {
-    if (!notification.read) {
-      try {
-        await notificationsApiNew.markAsRead(notification._id);
-        setNotifications(prev =>
-          prev.map(n => n._id === notification._id ? { ...n, read: true } : n)
-        );
-        setUnreadCount(prev => Math.max(0, prev - 1));
-      } catch (error) {
-        console.error('Error marking notification as read:', error);
-      }
-    }
-  };
-
-  const handleMarkAllRead = async () => {
-    try {
-      await notificationsApiNew.markAllAsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
-    } catch (error) {
-      console.error('Error marking all as read:', error);
-    }
-  };
-
-  const handleClearAll = async () => {
-    try {
-      await notificationsApiNew.clearAll();
-      // Clear notifications locally regardless of response
-      setNotifications([]);
-      setUnreadCount(0);
-    } catch (error) {
-      console.error('Error clearing notifications:', error);
-    }
+    // No action needed, all marked as read on open
   };
 
   const getNotificationIcon = (type: string) => {
@@ -182,20 +154,6 @@ export default function NotificationsScreen() {
         }
       >
         <View style={styles.content}>
-          {notifications.length > 0 && (
-            <View style={styles.actionButtons}>
-              {unreadCount > 0 && (
-                <Pressable style={styles.actionButton} onPress={handleMarkAllRead}>
-                  <CheckCheck size={16} color={colors.primary} />
-                  <Text style={styles.actionButtonText}>{t.notifications.markAllRead}</Text>
-                </Pressable>
-              )}
-              <Pressable style={[styles.actionButton, styles.deleteButton]} onPress={handleClearAll}>
-                <Trash2 size={16} color={colors.destructive} />
-                <Text style={styles.deleteButtonText}>Clear all</Text>
-              </Pressable>
-            </View>
-          )}
 
           {notifications.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -229,7 +187,7 @@ export default function NotificationsScreen() {
                         {notification.message}
                       </Text>
                       <Text style={styles.notificationTime}>
-                        {formatTime(notification.createdAt)}
+                        {formatTime(notification.createdAt || notification.timestamp)}
                       </Text>
                     </View>
                   </View>
