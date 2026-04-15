@@ -64,6 +64,16 @@ export function CollectionFarmersPage() {
         finally { setActionLoading(false) }
     }
 
+    const handlePermanentDelete = async (id: string) => {
+        if (!confirm('⚠️ PERMANENT DELETE\n\nThis will permanently delete this farmer and ALL related data (milk collections, advances, payments).\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?')) return
+        setActionLoading(true)
+        try {
+            const res = await permanentDeleteAdminPurchaseFarmer(id)
+            if (res.success) fetchFarmers()
+        } catch (e) { console.error(e) }
+        finally { setActionLoading(false) }
+    }
+
     const formatDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
     return (
