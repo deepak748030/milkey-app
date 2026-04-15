@@ -152,9 +152,14 @@ export function CollectionFarmersPage() {
                                         <span className="px-2 py-0.5 bg-destructive/10 text-destructive rounded-full text-xs font-medium">Deleted</span>
                                     )}
                                     {f.isActive === false ? (
-                                        <button onClick={() => handleRestore(f._id)} disabled={actionLoading} className="p-1.5 hover:bg-green-500/10 rounded-lg transition-colors" title="Restore">
-                                            <RotateCcw className="w-4 h-4 text-green-600" />
-                                        </button>
+                                        <>
+                                            <button onClick={() => handleRestore(f._id)} disabled={actionLoading} className="p-1.5 hover:bg-green-500/10 rounded-lg transition-colors" title="Restore">
+                                                <RotateCcw className="w-4 h-4 text-green-600" />
+                                            </button>
+                                            <button onClick={() => handlePermanentDelete(f._id)} disabled={actionLoading} className="p-1.5 hover:bg-destructive/10 rounded-lg transition-colors" title="Permanent Delete">
+                                                <AlertTriangle className="w-4 h-4 text-destructive" />
+                                            </button>
+                                        </>
                                     ) : (
                                         <button onClick={() => handleDelete(f._id)} disabled={actionLoading} className="p-1.5 hover:bg-destructive/10 rounded-lg transition-colors">
                                             <Trash2 className="w-4 h-4 text-destructive" />
@@ -239,14 +244,24 @@ export function CollectionFarmersPage() {
                                         </td>
                                         <td className="px-4 py-3 text-center">
                                             {f.isActive === false ? (
-                                                <button
-                                                    onClick={() => handleRestore(f._id)}
-                                                    disabled={actionLoading}
-                                                    className="p-2 hover:bg-green-500/10 rounded-lg transition-colors"
-                                                    title="Restore farmer"
-                                                >
-                                                    <RotateCcw className="w-4 h-4 text-green-600" />
-                                                </button>
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <button
+                                                        onClick={() => handleRestore(f._id)}
+                                                        disabled={actionLoading}
+                                                        className="p-2 hover:bg-green-500/10 rounded-lg transition-colors"
+                                                        title="Restore farmer"
+                                                    >
+                                                        <RotateCcw className="w-4 h-4 text-green-600" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handlePermanentDelete(f._id)}
+                                                        disabled={actionLoading}
+                                                        className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
+                                                        title="Permanent Delete"
+                                                    >
+                                                        <AlertTriangle className="w-4 h-4 text-destructive" />
+                                                    </button>
+                                                </div>
                                             ) : (
                                                 <button
                                                     onClick={() => handleDelete(f._id)}
