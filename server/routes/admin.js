@@ -1586,6 +1586,33 @@ router.delete('/purchase-farmers/:id', adminAuth, async (req, res) => {
     }
 });
 
+// DELETE /api/admin/purchase-farmers/:id/permanent - Force permanent delete (admin only)
+router.delete('/purchase-farmers/:id/permanent', adminAuth, async (req, res) => {
+    try {
+        const MilkCollection = require('../models/MilkCollection');
+        const Advance = require('../models/Advance');
+        const Payment = require('../models/Payment');
+
+        // Delete all related data
+        await Promise.all([
+            MilkCollection.deleteMany({ purchaseFarmer: req.params.id }),
+            Advance.deleteMany({ farmer: req.params.id }),
+            Payment.deleteMany({ farmer: req.params.id }),
+        ]);
+
+        // Permanently delete the farmer
+        await PurchaseFarmer.findByIdAndDelete(req.params.id);
+
+        res.json({
+            success: true,
+            message: 'Farmer and all related data permanently deleted'
+        });
+    } catch (error) {
+        console.error('Admin permanent delete purchase farmer error:', error);
+        res.status(500).json({ success: false, message: 'Failed to permanently delete farmer' });
+    }
+});
+
 
 router.get('/users-list', adminAuth, async (req, res) => {
     try {
