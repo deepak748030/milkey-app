@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, RefreshCw, UserPlus, Trash2, RotateCcw } from 'lucide-react'
+import { Search, RefreshCw, UserPlus, Trash2, RotateCcw, AlertTriangle } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
-import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, restoreAdminPurchaseFarmer, type AdminPurchaseFarmer } from '@/lib/api'
+import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, restoreAdminPurchaseFarmer, permanentDeleteAdminPurchaseFarmer, type AdminPurchaseFarmer } from '@/lib/api'
 
 export function CollectionFarmersPage() {
     const [farmers, setFarmers] = useState<AdminPurchaseFarmer[]>([])
