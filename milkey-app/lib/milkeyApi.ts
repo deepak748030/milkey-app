@@ -1029,6 +1029,13 @@ export const authApiNew = {
         });
     },
 
+    googleLoginWithInfo: async (data: { email: string; name: string; picture: string }) => {
+        return apiRequest<{ token: string; user: any }>('/auth/google-info', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
     sendPhoneOtp: async (phone: string) => {
         return apiRequest<{ message: string }>('/auth/send-phone-otp', {
             method: 'POST',

@@ -970,4 +970,63 @@ router.post('/google', async (req, res) => {
     }
 });
 
+// POST /api/auth/google-info - Google Sign In with user info (from expo-auth-session access token)
+router.post('/google-info', async (req, res) => {
+    try {
+        const { email, name, picture } = req.body;
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email is required' });
+        }
+
+        // Find or create user
+        let user = await User.findOne({ email: email.toLowerCase() });
+
+        if (!user) {
+            user = new User({
+                name: name || email.split('@')[0],
+                email: email.toLowerCase(),
+                phone: '',
+                password: hashPassword(crypto.randomBytes(16).toString('hex')),
+                avatar: picture || '',
+                isVerified: true
+            });
+            await user.save();
+        }
+
+        if (user.isBlocked) {
+            return res.status(403).json({ success: false, message: 'Your account has been blocked' });
+        }
+
+        user.lastLogin = new Date();
+        if (picture && !user.avatar) {
+            user.avatar = picture;
+        }
+        await user.save();
+
+        const token = generateToken(user._id);
+
+        res.json({
+            success: true,
+            message: 'Login successful',
+            response: {
+                token,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    avatar: user.avatar,
+                    address: user.address,
+                    role: user.role,
+                    referralCode: user.referralCode,
+                    memberSince: user.createdAt
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Google info auth error:', error);
+        res.status(500).json({ success: false, message: 'Google sign in failed' });
+    }
+});
+
 module.exports = router;
