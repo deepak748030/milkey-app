@@ -4,10 +4,18 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
+const admin = require('firebase-admin');
 const User = require('../models/User');
 const Referral = require('../models/Referral');
 const auth = require('../middleware/auth');
 const { notifyReferralSignup } = require('../lib/pushNotifications');
+
+// Initialize Firebase Admin SDK (only once)
+if (!admin.apps.length) {
+    admin.initializeApp({
+        projectId: 'milkeyapp',
+    });
+}
 
 // Simple password hashing (use bcrypt in production)
 const hashPassword = (password) => {
@@ -802,7 +810,77 @@ router.post('/phone-login', async (req, res) => {
     }
 });
 
-// POST /api/auth/phone-register - Register after phone OTP verification
+// POST /api/auth/firebase-phone-login - Login with Firebase Phone Auth ID token
+router.post('/firebase-phone-login', async (req, res) => {
+    try {
+        const { firebaseIdToken, phone } = req.body;
+        if (!firebaseIdToken || !phone) {
+            return res.status(400).json({ success: false, message: 'Firebase ID token and phone are required' });
+        }
+
+        // Verify the Firebase ID token
+        let decodedToken;
+        try {
+            decodedToken = await admin.auth().verifyIdToken(firebaseIdToken);
+        } catch (verifyError) {
+            console.error('Firebase token verification failed:', verifyError);
+            return res.status(401).json({ success: false, message: 'Invalid or expired Firebase token' });
+        }
+
+        // Ensure the token's phone matches
+        const firebasePhone = decodedToken.phone_number;
+        const normalizedPhone = phone.replace(/^\+91/, '');
+        const normalizedFirebasePhone = firebasePhone ? firebasePhone.replace(/^\+91/, '') : '';
+
+        if (normalizedFirebasePhone !== normalizedPhone) {
+            return res.status(400).json({ success: false, message: 'Phone number mismatch' });
+        }
+
+        // Find user by phone
+        const user = await User.findOne({ phone: normalizedPhone });
+        if (!user) {
+            return res.json({
+                success: true,
+                code: 'USER_NOT_FOUND',
+                message: 'Phone verified. Please complete registration.',
+                response: { needsRegistration: true, phone: normalizedPhone }
+            });
+        }
+
+        if (user.isBlocked) {
+            return res.status(403).json({ success: false, message: 'Your account has been blocked' });
+        }
+
+        user.lastLogin = new Date();
+        await user.save();
+
+        const token = generateToken(user._id);
+
+        res.json({
+            success: true,
+            message: 'Login successful',
+            response: {
+                token,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    avatar: user.avatar,
+                    address: user.address,
+                    role: user.role,
+                    referralCode: user.referralCode,
+                    memberSince: user.createdAt
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Firebase phone login error:', error);
+        res.status(500).json({ success: false, message: 'Login failed' });
+    }
+});
+
+
 router.post('/phone-register', async (req, res) => {
     try {
         const { phone, name, email, password, address, referralCode } = req.body;
