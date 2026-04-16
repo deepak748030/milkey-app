@@ -686,29 +686,29 @@ router.post('/reset-password', async (req, res) => {
 const phoneOtpStore = new Map();
 
 // POST /api/auth/send-phone-otp
-router.post('/send-phone-otp', async (req, res) => {
-    try {
-        const { phone } = req.body;
-        if (!phone) {
-            return res.status(400).json({ success: false, message: 'Phone number is required' });
-        }
+// router.post('/send-phone-otp', async (req, res) => {
+//     try {
+//         const { phone } = req.body;
+//         if (!phone) {
+//             return res.status(400).json({ success: false, message: 'Phone number is required' });
+//         }
 
-        // Use hardcoded OTP 123456 for now
-        const otp = '123456';
+//         // Use hardcoded OTP 123456 for now
+//         const otp = '123456';
 
-        phoneOtpStore.set(phone, {
-            otp,
-            expiresAt: Date.now() + 10 * 60 * 1000
-        });
+//         phoneOtpStore.set(phone, {
+//             otp,
+//             expiresAt: Date.now() + 10 * 60 * 1000
+//         });
 
-        console.log(`Phone OTP for ${phone}: ${otp}`);
+//         console.log(`Phone OTP for ${phone}: ${otp}`);
 
-        res.json({ success: true, message: 'OTP sent successfully' });
-    } catch (error) {
-        console.error('Send phone OTP error:', error);
-        res.status(500).json({ success: false, message: 'Failed to send OTP' });
-    }
-});
+//         res.json({ success: true, message: 'OTP sent successfully' });
+//     } catch (error) {
+//         console.error('Send phone OTP error:', error);
+//         res.status(500).json({ success: false, message: 'Failed to send OTP' });
+//     }
+// });
 
 // POST /api/auth/verify-phone-otp
 router.post('/verify-phone-otp', async (req, res) => {
@@ -811,9 +811,10 @@ router.post('/phone-login', async (req, res) => {
 });
 
 // POST /api/auth/firebase-phone-login - Login with Firebase Phone Auth ID token
-router.post('/firebase-phone-login', async (req, res) => {
+router.post('/send-phone-otp', async (req, res) => {
     try {
         const { firebaseIdToken, phone } = req.body;
+        console.log(firebaseIdToken, phone)
         if (!firebaseIdToken || !phone) {
             return res.status(400).json({ success: false, message: 'Firebase ID token and phone are required' });
         }
@@ -831,7 +832,7 @@ router.post('/firebase-phone-login', async (req, res) => {
         const firebasePhone = decodedToken.phone_number;
         const normalizedPhone = phone.replace(/^\+91/, '');
         const normalizedFirebasePhone = firebasePhone ? firebasePhone.replace(/^\+91/, '') : '';
-
+        console.log(normalizedFirebasePhone)
         if (normalizedFirebasePhone !== normalizedPhone) {
             return res.status(400).json({ success: false, message: 'Phone number mismatch' });
         }
@@ -881,100 +882,100 @@ router.post('/firebase-phone-login', async (req, res) => {
 });
 
 
-router.post('/phone-register', async (req, res) => {
-    try {
-        const { phone, name, email, password, address, referralCode } = req.body;
+// router.post('/phone-register', async (req, res) => {
+//     try {
+//         const { phone, name, email, password, address, referralCode } = req.body;
 
-        if (!phone || !name || !email || !password) {
-            return res.status(400).json({ success: false, message: 'Phone, name, email, and password are required' });
-        }
+//         if (!phone || !name || !email || !password) {
+//             return res.status(400).json({ success: false, message: 'Phone, name, email, and password are required' });
+//         }
 
-        if (password.length < 6) {
-            return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
-        }
+//         if (password.length < 6) {
+//             return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+//         }
 
-        // Check if user already exists
-        const existingUser = await User.findOne({
-            $or: [{ email: email.toLowerCase() }, { phone }]
-        });
+//         // Check if user already exists
+//         const existingUser = await User.findOne({
+//             $or: [{ email: email.toLowerCase() }, { phone }]
+//         });
 
-        if (existingUser) {
-            return res.status(400).json({
-                success: false,
-                message: existingUser.email === email.toLowerCase()
-                    ? 'Email already registered'
-                    : 'Phone number already registered'
-            });
-        }
+//         if (existingUser) {
+//             return res.status(400).json({
+//                 success: false,
+//                 message: existingUser.email === email.toLowerCase()
+//                     ? 'Email already registered'
+//                     : 'Phone number already registered'
+//             });
+//         }
 
-        // Handle referral
-        let referrer = null;
-        if (referralCode) {
-            referrer = await User.findOne({ referralCode: referralCode.toUpperCase() });
-            if (!referrer) {
-                return res.status(400).json({ success: false, message: 'Invalid referral code' });
-            }
-        }
+//         // Handle referral
+//         let referrer = null;
+//         if (referralCode) {
+//             referrer = await User.findOne({ referralCode: referralCode.toUpperCase() });
+//             if (!referrer) {
+//                 return res.status(400).json({ success: false, message: 'Invalid referral code' });
+//             }
+//         }
 
-        const user = new User({
-            name: name.trim(),
-            email: email.toLowerCase().trim(),
-            phone: phone.trim(),
-            password: hashPassword(password),
-            address: address ? address.trim() : '',
-            referredBy: referrer?._id,
-            isVerified: true
-        });
+//         const user = new User({
+//             name: name.trim(),
+//             email: email.toLowerCase().trim(),
+//             phone: phone.trim(),
+//             password: hashPassword(password),
+//             address: address ? address.trim() : '',
+//             referredBy: referrer?._id,
+//             isVerified: true
+//         });
 
-        await user.save();
+//         await user.save();
 
-        // Create referral record if referred
-        if (referrer) {
-            const ReferralConfig = require('../models/ReferralConfig');
-            const cfg = await ReferralConfig.findOneAndUpdate(
-                {},
-                { $setOnInsert: { defaultCommissionRate: 5 } },
-                { new: true, upsert: true }
-            );
-            const commissionRate = typeof cfg?.defaultCommissionRate === 'number' ? cfg.defaultCommissionRate : 5;
+//         // Create referral record if referred
+//         if (referrer) {
+//             const ReferralConfig = require('../models/ReferralConfig');
+//             const cfg = await ReferralConfig.findOneAndUpdate(
+//                 {},
+//                 { $setOnInsert: { defaultCommissionRate: 5 } },
+//                 { new: true, upsert: true }
+//             );
+//             const commissionRate = typeof cfg?.defaultCommissionRate === 'number' ? cfg.defaultCommissionRate : 5;
 
-            await Referral.create({
-                referrer: referrer._id,
-                referred: user._id,
-                code: referralCode.toUpperCase(),
-                status: 'active',
-                commissionRate
-            });
+//             await Referral.create({
+//                 referrer: referrer._id,
+//                 referred: user._id,
+//                 code: referralCode.toUpperCase(),
+//                 status: 'active',
+//                 commissionRate
+//             });
 
-            notifyReferralSignup(referrer._id.toString(), user.name)
-                .catch(err => console.error('Error sending referral signup notification:', err));
-        }
+//             notifyReferralSignup(referrer._id.toString(), user.name)
+//                 .catch(err => console.error('Error sending referral signup notification:', err));
+//         }
 
-        const token = generateToken(user._id);
+//         const token = generateToken(user._id);
 
-        res.status(201).json({
-            success: true,
-            message: 'Registration successful',
-            response: {
-                token,
-                user: {
-                    id: user._id,
-                    name: user.name,
-                    email: user.email,
-                    phone: user.phone,
-                    avatar: user.avatar,
-                    address: user.address,
-                    role: user.role,
-                    referralCode: user.referralCode,
-                    memberSince: user.createdAt
-                }
-            }
-        });
-    } catch (error) {
-        console.error('Phone register error:', error);
-        res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
-    }
-});
+//         res.status(201).json({
+//             success: true,
+//             message: 'Registration successful',
+//             response: {
+//                 token,
+//                 user: {
+//                     id: user._id,
+//                     name: user.name,
+//                     email: user.email,
+//                     phone: user.phone,
+//                     avatar: user.avatar,
+//                     address: user.address,
+//                     role: user.role,
+//                     referralCode: user.referralCode,
+//                     memberSince: user.createdAt
+//                 }
+//             }
+//         });
+//     } catch (error) {
+//         console.error('Phone register error:', error);
+//         res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
+//     }
+// });
 
 // POST /api/auth/google - Google Sign In
 router.post('/google', async (req, res) => {
