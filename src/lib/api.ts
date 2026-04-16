@@ -1166,6 +1166,12 @@ export const restoreAdminPurchaseFarmer = async (id: string) => {
     return response.data
 }
 
+export const permanentDeleteAdminPurchaseFarmer = async (id: string) => {
+    const response = await api.delete(`/admin/purchase-farmers/${id}/permanent`)
+    return response.data
+}
+
+
 export const getAdminCollectionReport = async (params: {
     startDate?: string
     endDate?: string
