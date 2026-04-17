@@ -149,6 +149,9 @@ export default function AuthScreen() {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [resetToken, setResetToken] = useState('');
 
+    // Firebase Phone Auth confirmation handle (kept across renders)
+    const confirmationRef = useRef<FirebaseAuthTypes.ConfirmationResult | null>(null);
+
     const [modalVisible, setModalVisible] = useState(false);
     const [modalTitle, setModalTitle] = useState('');
     const [modalMessage, setModalMessage] = useState('');
