@@ -11,10 +11,28 @@ const auth = require('../middleware/auth');
 const { notifyReferralSignup } = require('../lib/pushNotifications');
 
 // Initialize Firebase Admin SDK (only once)
+// Prefers GOOGLE_APPLICATION_CREDENTIALS env var or FIREBASE_SERVICE_ACCOUNT JSON
 if (!admin.apps.length) {
-    admin.initializeApp({
-        projectId: 'milkeyapp',
-    });
+    try {
+        if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount),
+                projectId: serviceAccount.project_id || 'milkeyapp',
+            });
+            console.log('[firebase-admin] initialized with FIREBASE_SERVICE_ACCOUNT env var');
+        } else {
+            // Falls back to GOOGLE_APPLICATION_CREDENTIALS or default credentials
+            admin.initializeApp({
+                credential: admin.credential.applicationDefault(),
+                projectId: 'milkeyapp',
+            });
+            console.log('[firebase-admin] initialized with applicationDefault credentials');
+        }
+    } catch (e) {
+        console.error('[firebase-admin] FAILED to init with credentials, falling back to projectId-only (verifyIdToken WILL FAIL):', e.message);
+        admin.initializeApp({ projectId: 'milkeyapp' });
+    }
 }
 
 // Simple password hashing (use bcrypt in production)
@@ -811,26 +829,14 @@ router.post('/phone-login', async (req, res) => {
 });
 
 // POST /api/auth/send-phone-otp
-// NOTE: Real SMS sending happens on the CLIENT via Firebase Phone Auth.
-// This endpoint exists only as a fallback / no-op acknowledgement so that
-// older clients (or non-Firebase flows) still work with the hardcoded OTP.
+// DEPRECATED — phone OTP is now sent by the CLIENT via Firebase Phone Auth (JS SDK + reCAPTCHA).
+// This endpoint stays only to return a clear error if any old client still calls it.
 router.post('/send-phone-otp', async (req, res) => {
-    try {
-        const { phone } = req.body;
-        console.log('[send-phone-otp] request body:', req.body);
-        if (!phone) {
-            console.warn('[send-phone-otp] missing phone');
-            return res.status(400).json({ success: false, message: 'Phone number is required' });
-        }
-        // Hardcoded fallback OTP (used only if client cannot use Firebase)
-        const otp = '123456';
-        phoneOtpStore.set(phone, { otp, expiresAt: Date.now() + 10 * 60 * 1000 });
-        console.log(`[send-phone-otp] fallback OTP stored for ${phone}: ${otp}`);
-        res.json({ success: true, message: 'OTP sent successfully' });
-    } catch (error) {
-        console.error('[send-phone-otp] error:', error);
-        res.status(500).json({ success: false, message: 'Failed to send OTP' });
-    }
+    console.warn('[send-phone-otp] called — deprecated. Phone OTP must go through Firebase on the client.');
+    return res.status(410).json({
+        success: false,
+        message: 'Phone OTP is now handled by Firebase on the client. Please update the app.',
+    });
 });
 
 // POST /api/auth/firebase-phone-login
