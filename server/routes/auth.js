@@ -629,7 +629,7 @@ router.post('/verify-forgot-otp', async (req, res) => {
     }
 });
 
-// POST /api/auth/reset-password
+// POST /api/auth/reset-password /send-phone-otp
 router.post('/reset-password', async (req, res) => {
     try {
         const { email, resetToken, newPassword } = req.body;
@@ -832,6 +832,7 @@ router.post('/phone-login', async (req, res) => {
 // DEPRECATED — phone OTP is now sent by the CLIENT via Firebase Phone Auth (JS SDK + reCAPTCHA).
 // This endpoint stays only to return a clear error if any old client still calls it.
 router.post('/send-phone-otp', async (req, res) => {
+    console.log(req.body)
     console.warn('[send-phone-otp] called — deprecated. Phone OTP must go through Firebase on the client.');
     return res.status(410).json({
         success: false,
