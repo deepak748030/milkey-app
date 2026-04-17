@@ -1216,14 +1216,14 @@ export default function PurchaseScreen() {
                         <View style={{ paddingHorizontal: 16, gap: 10, marginTop: 8 }}>
                             <Pressable
                                 style={[s.exportReportBtn, { backgroundColor: colors.primary }]}
-                                onPress={handleFullSummaryPrint}
+                                onPress={() => handleFullSummaryPrint()}
                             >
                                 <Printer size={18} color="#fff" />
                                 <Text style={s.exportReportBtnText}>Full Summary</Text>
                             </Pressable>
                             <Pressable
                                 style={[s.exportReportBtn, { backgroundColor: '#f59e0b' }]}
-                                onPress={handleShortSummaryPrint}
+                                onPress={() => handleShortSummaryPrint()}
                             >
                                 <Printer size={18} color="#fff" />
                                 <Text style={s.exportReportBtnText}>Short Summary</Text>

@@ -3,10 +3,13 @@ import { Platform, PermissionsAndroid } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { bytesToBase64 } from '@/lib/escpos';
 
+export type PrinterKind = 'ble' | 'classic';
+
 export interface BluetoothDevice {
     id: string;
     name: string;
     rssi?: number;
+    kind: PrinterKind;
 }
 
 interface BluetoothPrinterState {
@@ -30,6 +33,7 @@ interface BluetoothPrinterContextValue extends BluetoothPrinterState {
 
 const LAST_PRINTER_KEY = '@milkey_last_printer';
 const BLE_CHUNK_SIZE = 20;
+const CLASSIC_CHUNK_SIZE = 180;
 
 const PRINTER_SERVICE_UUIDS = [
     '49535343-FE7D-4AE5-8FA9-9FAFD205E455',
@@ -57,7 +61,9 @@ const initialState: BluetoothPrinterState = {
 
 const BluetoothPrinterContext = createContext<BluetoothPrinterContextValue | undefined>(undefined);
 
+// Lazy-load native modules — guarded so web/Expo Go does not crash
 let BleManager: any = null;
+let BluetoothManager: any = null; // tp-react-native-bluetooth-printer (Classic SPP)
 
 try {
     if (Platform.OS !== 'web') {
@@ -65,6 +71,16 @@ try {
     }
 } catch {
     BleManager = null;
+}
+
+try {
+    if (Platform.OS !== 'web') {
+        // tp-react-native-bluetooth-printer exposes BluetoothManager + BluetoothEscposPrinter
+        const tp = require('tp-react-native-bluetooth-printer');
+        BluetoothManager = tp.BluetoothManager || tp.default?.BluetoothManager || null;
+    }
+} catch {
+    BluetoothManager = null;
 }
 
 const normalizeUuid = (uuid?: string | null) => (uuid || '').replace(/-/g, '').toUpperCase();
@@ -84,7 +100,9 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
     const managerRef = useRef<any>(null);
     const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const connectedDeviceRef = useRef<any>(null);
+    const connectedDeviceRef = useRef<any>(null); // BLE native device
+    const connectedKindRef = useRef<PrinterKind | null>(null);
+    const classicConnectedAddrRef = useRef<string | null>(null);
     const disconnectSubscriptionRef = useRef<{ remove?: () => void } | null>(null);
     const writeCharRef = useRef<{ serviceUUID: string; characteristicUUID: string } | null>(null);
     const autoConnectAttemptedRef = useRef(false);
@@ -108,6 +126,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 const results = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
                 ]);
 
                 const scanGranted = results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === PermissionsAndroid.RESULTS.GRANTED;
@@ -147,14 +166,18 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         try {
             await AsyncStorage.setItem(LAST_PRINTER_KEY, JSON.stringify(device));
         } catch {
-            // ignore persistence failures
+            // ignore
         }
     }, []);
 
     const getLastPrinter = useCallback(async (): Promise<BluetoothDevice | null> => {
         try {
             const data = await AsyncStorage.getItem(LAST_PRINTER_KEY);
-            return data ? JSON.parse(data) : null;
+            if (!data) return null;
+            const parsed = JSON.parse(data);
+            // Backward compatibility: old saved devices had no `kind`
+            if (!parsed.kind) parsed.kind = 'ble';
+            return parsed;
         } catch {
             return null;
         }
@@ -164,6 +187,8 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         disconnectSubscriptionRef.current?.remove?.();
         disconnectSubscriptionRef.current = null;
         connectedDeviceRef.current = null;
+        classicConnectedAddrRef.current = null;
+        connectedKindRef.current = null;
         writeCharRef.current = null;
         setState(prev => ({
             ...prev,
@@ -189,10 +214,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                     const isKnownChar = PRINTER_WRITE_CHAR_UUIDS.some(uuid => normalizedChar.includes(normalizeUuid(uuid)));
 
                     if (isKnownService || isKnownChar) {
-                        writeCharRef.current = {
-                            serviceUUID: service.uuid,
-                            characteristicUUID: char.uuid,
-                        };
+                        writeCharRef.current = { serviceUUID: service.uuid, characteristicUUID: char.uuid };
                         return true;
                     }
                 }
@@ -203,11 +225,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 for (const char of chars) {
                     const isWritable = char.isWritableWithResponse || char.isWritableWithoutResponse;
                     if (!isWritable) continue;
-
-                    writeCharRef.current = {
-                        serviceUUID: service.uuid,
-                        characteristicUUID: char.uuid,
-                    };
+                    writeCharRef.current = { serviceUUID: service.uuid, characteristicUUID: char.uuid };
                     return true;
                 }
             }
@@ -219,12 +237,12 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
     }, []);
 
-    const connectToDeviceById = useCallback(async (deviceId: string, fallbackName?: string): Promise<boolean> => {
+    // ---------------- BLE connect ----------------
+    const connectBleDeviceById = useCallback(async (deviceId: string, fallbackName?: string): Promise<boolean> => {
         if (!managerRef.current) return false;
 
         try {
             let nativeDevice;
-
             try {
                 const isAlreadyConnected = await managerRef.current.isDeviceConnected(deviceId);
                 if (isAlreadyConnected) {
@@ -236,26 +254,34 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             }
 
             if (!nativeDevice) {
-                nativeDevice = await managerRef.current.connectToDevice(deviceId, {
-                    timeout: 15000,
-                    autoConnect: false,
-                });
+                nativeDevice = await managerRef.current.connectToDevice(deviceId, { timeout: 15000, autoConnect: false });
+            }
+
+            try {
+                if (Platform.OS === 'android' && typeof nativeDevice.requestMTU === 'function') {
+                    const mtuDevice = await nativeDevice.requestMTU(247);
+                    console.log('[ble-printer] MTU:', mtuDevice?.mtu);
+                }
+            } catch (mtuErr) {
+                console.warn('[ble-printer] MTU request failed:', mtuErr);
             }
 
             await nativeDevice.discoverAllServicesAndCharacteristics();
 
-            const foundCharacteristic = await discoverPrintCharacteristic(nativeDevice);
-            if (!foundCharacteristic) {
+            const found = await discoverPrintCharacteristic(nativeDevice);
+            if (!found) {
                 setState(prev => ({
                     ...prev,
-                    error: 'Connected to the device, but no writable printer characteristic was found.',
+                    error: 'Connected via BLE but no writable printer characteristic was found. Try connecting as a Classic (SPP) printer instead.',
                 }));
                 return false;
             }
 
             connectedDeviceRef.current = nativeDevice;
+            connectedKindRef.current = 'ble';
             disconnectSubscriptionRef.current?.remove?.();
             disconnectSubscriptionRef.current = nativeDevice.onDisconnected(() => {
+                console.log('[ble-printer] disconnected:', deviceId);
                 clearActiveConnection();
             });
 
@@ -263,28 +289,55 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 id: deviceId,
                 name: fallbackName || formatDeviceName(nativeDevice),
                 rssi: nativeDevice.rssi,
+                kind: 'ble',
             };
 
-            setState(prev => ({
-                ...prev,
-                isConnected: true,
-                connectedDevice: deviceInfo,
-                error: null,
-            }));
-
+            setState(prev => ({ ...prev, isConnected: true, connectedDevice: deviceInfo, error: null }));
             await saveLastPrinter(deviceInfo);
             return true;
         } catch (error: any) {
-            console.warn('Printer connection failed:', error?.message || error);
+            console.warn('[ble-printer] connection failed:', error?.message || error);
             clearActiveConnection();
-            setState(prev => ({
-                ...prev,
-                error: error?.message || 'Failed to connect to the printer.',
-            }));
+            setState(prev => ({ ...prev, error: error?.message || 'Failed to connect to BLE printer.' }));
             return false;
         }
     }, [clearActiveConnection, discoverPrintCharacteristic, saveLastPrinter]);
 
+    // ---------------- Classic (SPP) connect ----------------
+    const connectClassicDevice = useCallback(async (deviceId: string, fallbackName?: string): Promise<boolean> => {
+        if (!BluetoothManager) {
+            setState(prev => ({ ...prev, error: 'Classic Bluetooth library not available. Rebuild the app with EAS Build.' }));
+            return false;
+        }
+        try {
+            await BluetoothManager.connect(deviceId);
+            classicConnectedAddrRef.current = deviceId;
+            connectedKindRef.current = 'classic';
+
+            const deviceInfo: BluetoothDevice = {
+                id: deviceId,
+                name: fallbackName || `Classic Printer ${deviceId.slice(-4)}`,
+                kind: 'classic',
+            };
+
+            setState(prev => ({ ...prev, isConnected: true, connectedDevice: deviceInfo, error: null }));
+            await saveLastPrinter(deviceInfo);
+            console.log('[classic-printer] connected:', deviceId);
+            return true;
+        } catch (error: any) {
+            console.warn('[classic-printer] connection failed:', error?.message || error);
+            clearActiveConnection();
+            setState(prev => ({ ...prev, error: error?.message || 'Failed to connect to Classic printer. Make sure it is paired in Android Bluetooth settings first.' }));
+            return false;
+        }
+    }, [clearActiveConnection, saveLastPrinter]);
+
+    const connectToDeviceById = useCallback(async (device: BluetoothDevice): Promise<boolean> => {
+        if (device.kind === 'classic') return connectClassicDevice(device.id, device.name);
+        return connectBleDeviceById(device.id, device.name);
+    }, [connectBleDeviceById, connectClassicDevice]);
+
+    // ---------------- Init ----------------
     useEffect(() => {
         if (Platform.OS === 'web') {
             setState(prev => ({ ...prev, error: 'Bluetooth printing is not available on web.' }));
@@ -292,7 +345,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
 
         if (!BleManager) {
-            setState(prev => ({ ...prev, error: 'Bluetooth library not installed.' }));
+            setState(prev => ({ ...prev, error: 'Bluetooth library not installed. Run an EAS build.' }));
             return;
         }
 
@@ -308,17 +361,10 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 }));
 
                 if (!enabled) {
-                    if (scanTimeoutRef.current) {
-                        clearTimeout(scanTimeoutRef.current);
-                        scanTimeoutRef.current = null;
-                    }
+                    if (scanTimeoutRef.current) { clearTimeout(scanTimeoutRef.current); scanTimeoutRef.current = null; }
                     managerRef.current?.stopDeviceScan();
                     clearActiveConnection();
-                    setState(prev => ({
-                        ...prev,
-                        availableDevices: [],
-                        isScanning: false,
-                    }));
+                    setState(prev => ({ ...prev, availableDevices: [], isScanning: false }));
                     return;
                 }
 
@@ -329,7 +375,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
                     const lastPrinter = await getLastPrinter();
                     if (lastPrinter) {
-                        await connectToDeviceById(lastPrinter.id, lastPrinter.name);
+                        await connectToDeviceById(lastPrinter);
                     }
                 }
             }, true);
@@ -349,10 +395,8 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
     const stopScan = useCallback(() => {
         managerRef.current?.stopDeviceScan?.();
-        if (scanTimeoutRef.current) {
-            clearTimeout(scanTimeoutRef.current);
-            scanTimeoutRef.current = null;
-        }
+        try { BluetoothManager?.stopScan?.(); } catch { /* ignore */ }
+        if (scanTimeoutRef.current) { clearTimeout(scanTimeoutRef.current); scanTimeoutRef.current = null; }
         setState(prev => ({ ...prev, isScanning: false }));
     }, []);
 
@@ -367,71 +411,112 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         const hasPermission = permissionsGrantedRef.current || await requestPermissions();
         if (!hasPermission) return;
 
-        setState(prev => ({
-            ...prev,
-            isScanning: true,
-            availableDevices: [],
-            error: null,
-        }));
+        setState(prev => ({ ...prev, isScanning: true, availableDevices: [], error: null }));
 
         const foundDevices = new Map<string, BluetoothDevice>();
+        const isPrinterLike = (n: string) => /print|pos|thermal|rpp|mtp|btp|hm|spp|escpos|srs|tm-/i.test(n);
 
+        const updateList = () => {
+            setState(prev => ({
+                ...prev,
+                availableDevices: Array.from(foundDevices.values()).sort((a, b) => {
+                    const ap = isPrinterLike(a.name) ? 1 : 0;
+                    const bp = isPrinterLike(b.name) ? 1 : 0;
+                    if (ap !== bp) return bp - ap;
+                    return (b.rssi || -999) - (a.rssi || -999);
+                }),
+            }));
+        };
+
+        // 1) BLE scan
         managerRef.current.startDeviceScan(null, { allowDuplicates: false }, (error: any, device: any) => {
             if (error) {
                 stopScan();
-                setState(prev => ({
-                    ...prev,
-                    error: error.message || 'Bluetooth scan failed.',
-                }));
+                setState(prev => ({ ...prev, error: error.message || 'Bluetooth scan failed.' }));
                 return;
             }
-
             if (!device?.id) return;
-
-            const deviceName = formatDeviceName(device);
             foundDevices.set(device.id, {
                 id: device.id,
-                name: deviceName,
+                name: formatDeviceName(device),
                 rssi: device.rssi,
+                kind: 'ble',
             });
-
-            setState(prev => ({
-                ...prev,
-                availableDevices: Array.from(foundDevices.values()).sort((a, b) => (b.rssi || -999) - (a.rssi || -999)),
-            }));
+            updateList();
         });
 
-        scanTimeoutRef.current = setTimeout(() => {
-            stopScan();
-        }, 15000);
+        // 2) Classic (SPP) — list paired devices and start discovery for unpaired
+        if (BluetoothManager) {
+            try {
+                const result: any = await BluetoothManager.enableBluetooth();
+                // result may be array of paired device JSON strings, or undefined
+                const parsePaired = (raw: any) => {
+                    if (!raw) return [];
+                    if (Array.isArray(raw)) {
+                        return raw.map((d: any) => {
+                            try { return typeof d === 'string' ? JSON.parse(d) : d; } catch { return null; }
+                        }).filter(Boolean);
+                    }
+                    return [];
+                };
+                parsePaired(result).forEach((d: any) => {
+                    const addr = d.address || d.id;
+                    if (!addr) return;
+                    const key = `classic:${addr}`;
+                    foundDevices.set(key, {
+                        id: addr,
+                        name: (d.name || `Paired Printer ${addr.slice(-4)}`) + ' (Paired)',
+                        kind: 'classic',
+                    });
+                });
+
+                // Also fetch via scanDevices for already-paired devices
+                try {
+                    const scanRes: any = await BluetoothManager.scanDevices();
+                    const obj = typeof scanRes === 'string' ? JSON.parse(scanRes) : scanRes;
+                    const paired = obj?.paired || [];
+                    const found = obj?.found || [];
+                    [...paired, ...found].forEach((d: any) => {
+                        const addr = d.address || d.id;
+                        if (!addr) return;
+                        const key = `classic:${addr}`;
+                        if (foundDevices.has(key)) return;
+                        foundDevices.set(key, {
+                            id: addr,
+                            name: d.name || `Classic ${addr.slice(-4)}`,
+                            kind: 'classic',
+                        });
+                    });
+                } catch (scanErr) {
+                    console.warn('[classic-printer] scanDevices failed:', scanErr);
+                }
+                updateList();
+            } catch (clsErr) {
+                console.warn('[classic-printer] enable/scan failed:', clsErr);
+            }
+        }
+
+        scanTimeoutRef.current = setTimeout(() => { stopScan(); }, 15000);
     }, [requestPermissions, state.isBluetoothEnabled, state.isScanning, stopScan]);
 
     const connectToDevice = useCallback(async (device: BluetoothDevice) => {
         stopScan();
         setState(prev => ({ ...prev, error: null }));
-        const connected = await connectToDeviceById(device.id, device.name);
-        if (!connected) {
-            setState(prev => ({
-                ...prev,
-                isConnected: false,
-                connectedDevice: null,
-            }));
+        const ok = await connectToDeviceById(device);
+        if (!ok) {
+            setState(prev => ({ ...prev, isConnected: false, connectedDevice: null }));
         }
     }, [connectToDeviceById, stopScan]);
 
     const disconnectDevice = useCallback(async () => {
-        if (!managerRef.current || !connectedDeviceRef.current) {
-            clearActiveConnection();
-            return;
-        }
-
         try {
-            await managerRef.current.cancelDeviceConnection(connectedDeviceRef.current.id);
+            if (connectedKindRef.current === 'classic' && classicConnectedAddrRef.current && BluetoothManager) {
+                await BluetoothManager.disconnect(classicConnectedAddrRef.current);
+            } else if (connectedKindRef.current === 'ble' && managerRef.current && connectedDeviceRef.current) {
+                await managerRef.current.cancelDeviceConnection(connectedDeviceRef.current.id);
+            }
         } catch (error: any) {
-            setState(prev => ({
-                ...prev,
-                error: error?.message || 'Failed to disconnect printer.',
-            }));
+            setState(prev => ({ ...prev, error: error?.message || 'Failed to disconnect printer.' }));
         } finally {
             clearActiveConnection();
         }
@@ -448,65 +533,109 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             return false;
         }
 
-        if (connectedDeviceRef.current && writeCharRef.current) {
+        // Already connected?
+        if (connectedKindRef.current === 'ble' && connectedDeviceRef.current && writeCharRef.current) {
             try {
                 const alive = await managerRef.current.isDeviceConnected(connectedDeviceRef.current.id);
-                if (alive) {
-                    return true;
-                }
-            } catch {
-                // ignore and reconnect below
-            }
+                if (alive) return true;
+            } catch { /* reconnect below */ }
+        }
+        if (connectedKindRef.current === 'classic' && classicConnectedAddrRef.current && BluetoothManager) {
+            try {
+                const alive = await BluetoothManager.isDeviceConnected?.(classicConnectedAddrRef.current);
+                if (alive) return true;
+            } catch { /* reconnect below */ }
         }
 
         const lastPrinter = await getLastPrinter();
         if (!lastPrinter) {
-            setState(prev => ({ ...prev, error: 'No printer selected. Open the Bluetooth printer panel and connect a thermal printer first.' }));
+            setState(prev => ({ ...prev, error: 'No printer selected. Open the Bluetooth printer panel and connect a printer first.' }));
             return false;
         }
 
-        return connectToDeviceById(lastPrinter.id, lastPrinter.name);
+        return connectToDeviceById(lastPrinter);
     }, [connectToDeviceById, getLastPrinter, requestPermissions, state.isBluetoothEnabled]);
+
+    // ---------------- Print ----------------
+    const printDataBle = async (data: Uint8Array): Promise<boolean> => {
+        if (!connectedDeviceRef.current || !writeCharRef.current) return false;
+        const { serviceUUID, characteristicUUID } = writeCharRef.current;
+        const device = connectedDeviceRef.current;
+
+        for (let index = 0; index < data.length; index += BLE_CHUNK_SIZE) {
+            const chunk = data.slice(index, Math.min(index + BLE_CHUNK_SIZE, data.length));
+            const base64Chunk = bytesToBase64(chunk);
+
+            let written = false;
+            let lastErr: any = null;
+            for (let attempt = 0; attempt < 2 && !written; attempt++) {
+                try {
+                    await device.writeCharacteristicWithResponseForService(serviceUUID, characteristicUUID, base64Chunk);
+                    written = true;
+                } catch (e1) {
+                    lastErr = e1;
+                    try {
+                        await device.writeCharacteristicWithoutResponseForService(serviceUUID, characteristicUUID, base64Chunk);
+                        written = true;
+                    } catch (e2) {
+                        lastErr = e2;
+                        await new Promise(r => setTimeout(r, 50));
+                    }
+                }
+            }
+            if (!written) throw lastErr || new Error('Chunk write failed');
+
+            if (index + BLE_CHUNK_SIZE < data.length) {
+                await new Promise(resolve => setTimeout(resolve, 20));
+            }
+        }
+        return true;
+    };
+
+    const printDataClassic = async (data: Uint8Array): Promise<boolean> => {
+        if (!BluetoothManager) throw new Error('Classic Bluetooth library not available.');
+        // tp-react-native-bluetooth-printer accepts base64 raw bytes via writeRawDataToPrinter (preferred)
+        // Fallback to chunked sendData if writeRaw not present.
+        const writeRaw = (BluetoothManager as any).writeRawDataToPrinter;
+        if (typeof writeRaw === 'function') {
+            const base64All = bytesToBase64(data);
+            await writeRaw.call(BluetoothManager, base64All);
+            return true;
+        }
+        const sendData = (BluetoothManager as any).sendData || (BluetoothManager as any).write;
+        if (typeof sendData !== 'function') {
+            throw new Error('Classic printer write API not found in tp-react-native-bluetooth-printer build.');
+        }
+        for (let index = 0; index < data.length; index += CLASSIC_CHUNK_SIZE) {
+            const chunk = data.slice(index, Math.min(index + CLASSIC_CHUNK_SIZE, data.length));
+            await sendData.call(BluetoothManager, bytesToBase64(chunk));
+            if (index + CLASSIC_CHUNK_SIZE < data.length) {
+                await new Promise(r => setTimeout(r, 20));
+            }
+        }
+        return true;
+    };
 
     const printData = useCallback(async (data: Uint8Array): Promise<boolean> => {
         setState(prev => ({ ...prev, isPrinting: true, error: null }));
 
         const ready = await ensureConnected();
-        if (!ready || !connectedDeviceRef.current || !writeCharRef.current) {
+        if (!ready) {
             setState(prev => ({ ...prev, isPrinting: false }));
             return false;
         }
 
         try {
-            const { serviceUUID, characteristicUUID } = writeCharRef.current;
-            const device = connectedDeviceRef.current;
-
-            for (let index = 0; index < data.length; index += BLE_CHUNK_SIZE) {
-                const chunk = data.slice(index, Math.min(index + BLE_CHUNK_SIZE, data.length));
-                const base64Chunk = bytesToBase64(chunk);
-
-                try {
-                    await device.writeCharacteristicWithResponseForService(
-                        serviceUUID,
-                        characteristicUUID,
-                        base64Chunk
-                    );
-                } catch {
-                    await device.writeCharacteristicWithoutResponseForService(
-                        serviceUUID,
-                        characteristicUUID,
-                        base64Chunk
-                    );
-                }
-
-                if (index + BLE_CHUNK_SIZE < data.length) {
-                    await new Promise(resolve => setTimeout(resolve, 20));
-                }
+            console.log('[printer] sending', data.length, 'bytes via', connectedKindRef.current);
+            if (connectedKindRef.current === 'classic') {
+                await printDataClassic(data);
+            } else {
+                await printDataBle(data);
             }
-
             setState(prev => ({ ...prev, isPrinting: false, error: null }));
             return true;
         } catch (error: any) {
+            console.warn('[printer] print failed:', error?.message || error);
             setState(prev => ({
                 ...prev,
                 isPrinting: false,

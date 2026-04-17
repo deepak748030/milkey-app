@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, FlatList } from 'react-native';
 import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
-import { BluetoothDevice } from '@/hooks/useBluetoothPrinter';
+import { BluetoothDevice, PrinterKind } from '@/hooks/useBluetoothPrinter';
 import { buildTestPrint } from '@/lib/escpos';
 
 interface PrinterScanSheetProps {
@@ -22,6 +22,8 @@ interface PrinterScanSheetProps {
     onPrintData?: (data: Uint8Array) => Promise<boolean>;
 }
 
+type FilterMode = 'all' | PrinterKind;
+
 export default function PrinterScanSheet({
     visible,
     onClose,
@@ -40,6 +42,7 @@ export default function PrinterScanSheet({
 }: PrinterScanSheetProps) {
     const { colors } = useTheme();
     const [testPrintDone, setTestPrintDone] = useState(false);
+    const [filter, setFilter] = useState<FilterMode>('all');
 
     const handleTestPrint = async () => {
         if (!onPrintData) return;
@@ -48,25 +51,62 @@ export default function PrinterScanSheet({
         if (success) setTestPrintDone(true);
     };
 
-    const renderDevice = ({ item }: { item: BluetoothDevice }) => (
-        <Pressable
-            style={[styles.deviceItem, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => onConnect(item)}
-        >
-            <View style={styles.deviceInfo}>
-                <Bluetooth size={16} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                    <Text style={[styles.deviceName, { color: colors.foreground }]}>{item.name}</Text>
-                    {typeof item.rssi === 'number' && (
-                        <Text style={[styles.deviceRssi, { color: colors.mutedForeground }]}>
-                            Signal: {item.rssi} dBm
-                        </Text>
-                    )}
+    const filteredDevices = useMemo(() => {
+        if (filter === 'all') return availableDevices;
+        return availableDevices.filter(d => d.kind === filter);
+    }, [availableDevices, filter]);
+
+    const counts = useMemo(() => ({
+        all: availableDevices.length,
+        ble: availableDevices.filter(d => d.kind === 'ble').length,
+        classic: availableDevices.filter(d => d.kind === 'classic').length,
+    }), [availableDevices]);
+
+    const renderDevice = ({ item }: { item: BluetoothDevice }) => {
+        const isClassic = item.kind === 'classic';
+        return (
+            <Pressable
+                style={[styles.deviceItem, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => onConnect(item)}
+            >
+                <View style={styles.deviceInfo}>
+                    <Bluetooth size={16} color={colors.primary} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.deviceName, { color: colors.foreground }]}>{item.name}</Text>
+                        <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                            <View style={[styles.kindBadge, { backgroundColor: isClassic ? '#F59E0B' : colors.primary }]}>
+                                <Text style={styles.kindBadgeText}>{isClassic ? 'CLASSIC' : 'BLE'}</Text>
+                            </View>
+                            {typeof item.rssi === 'number' && (
+                                <Text style={[styles.deviceRssi, { color: colors.mutedForeground }]}>
+                                    {item.rssi} dBm
+                                </Text>
+                            )}
+                        </View>
+                    </View>
                 </View>
-            </View>
-            <Text style={[styles.connectText, { color: colors.primary }]}>Connect</Text>
-        </Pressable>
-    );
+                <Text style={[styles.connectText, { color: colors.primary }]}>Connect</Text>
+            </Pressable>
+        );
+    };
+
+    const renderFilterTab = (mode: FilterMode, label: string, count: number) => {
+        const active = filter === mode;
+        return (
+            <Pressable
+                key={mode}
+                onPress={() => setFilter(mode)}
+                style={[
+                    styles.filterTab,
+                    { backgroundColor: active ? colors.primary : colors.card, borderColor: colors.border },
+                ]}
+            >
+                <Text style={[styles.filterTabText, { color: active ? colors.white : colors.foreground }]}>
+                    {label} ({count})
+                </Text>
+            </Pressable>
+        );
+    };
 
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -84,7 +124,17 @@ export default function PrinterScanSheet({
 
                     {!isBluetoothEnabled && (
                         <View style={[styles.infoBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                            <Text style={[styles.infoText, { color: colors.foreground }]}>Turn on Bluetooth first, then scan and connect your thermal printer.</Text>
+                            <Text style={[styles.infoText, { color: colors.foreground }]}>
+                                Turn on Bluetooth AND Location services, then scan.
+                            </Text>
+                        </View>
+                    )}
+
+                    {isBluetoothEnabled && !isConnected && (
+                        <View style={[styles.infoBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
+                                Both BLE and Classic (SPP) printers are supported. For Classic printers, pair them in Android Bluetooth settings first.
+                            </Text>
                         </View>
                     )}
 
@@ -93,7 +143,9 @@ export default function PrinterScanSheet({
                             <View style={styles.connectedInfo}>
                                 <Wifi size={16} color={colors.success} />
                                 <View style={{ flex: 1 }}>
-                                    <Text style={[styles.connectedLabel, { color: colors.success }]}>Connected</Text>
+                                    <Text style={[styles.connectedLabel, { color: colors.success }]}>
+                                        Connected ({connectedDevice.kind === 'classic' ? 'Classic SPP' : 'BLE'})
+                                    </Text>
                                     <Text style={[styles.connectedName, { color: colors.foreground }]}>{connectedDevice.name}</Text>
                                 </View>
                             </View>
@@ -147,27 +199,35 @@ export default function PrinterScanSheet({
                             ) : (
                                 <>
                                     <RefreshCw size={16} color={colors.white} />
-                                    <Text style={[styles.scanBtnText, { color: colors.white }]}>Scan for Thermal Printers</Text>
+                                    <Text style={[styles.scanBtnText, { color: colors.white }]}>Scan for Printers</Text>
                                 </>
                             )}
                         </Pressable>
                     )}
 
                     {!isConnected && (
+                        <View style={styles.filterRow}>
+                            {renderFilterTab('all', 'All', counts.all)}
+                            {renderFilterTab('ble', 'BLE', counts.ble)}
+                            {renderFilterTab('classic', 'Classic', counts.classic)}
+                        </View>
+                    )}
+
+                    {!isConnected && (
                         <View style={{ flex: 1, marginTop: 6 }}>
                             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-                                {isScanning ? 'Scanning...' : `Available Devices (${availableDevices.length})`}
+                                {isScanning ? 'Scanning...' : `Available Devices (${filteredDevices.length})`}
                             </Text>
                             <FlatList
-                                data={availableDevices}
-                                keyExtractor={(item) => item.id}
+                                data={filteredDevices}
+                                keyExtractor={(item) => `${item.kind}:${item.id}`}
                                 renderItem={renderDevice}
                                 contentContainerStyle={{ gap: 6 }}
                                 ListEmptyComponent={
                                     <View style={styles.emptyState}>
                                         <BluetoothOff size={32} color={colors.mutedForeground} />
                                         <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                                            {isScanning ? 'Searching for nearby Bluetooth printers...' : 'No printers found yet. Scan again with the printer powered on.'}
+                                            {isScanning ? 'Searching for nearby Bluetooth printers...' : 'No printers found yet. For Classic printers, pair in Android settings first.'}
                                         </Text>
                                     </View>
                                 }
@@ -188,7 +248,7 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 20,
         paddingHorizontal: 6,
         paddingBottom: 30,
-        maxHeight: '70%',
+        maxHeight: '75%',
         borderTopWidth: 1,
     },
     handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 6 },
@@ -208,11 +268,16 @@ const styles = StyleSheet.create({
     errorText: { fontSize: 12, fontWeight: '500' },
     scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10, marginHorizontal: 6 },
     scanBtnText: { fontSize: 14, fontWeight: '600' },
-    sectionLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, paddingHorizontal: 6 },
+    filterRow: { flexDirection: 'row', gap: 6, marginTop: 8, marginHorizontal: 6 },
+    filterTab: { flex: 1, paddingVertical: 6, borderRadius: 8, borderWidth: 1, alignItems: 'center' },
+    filterTabText: { fontSize: 12, fontWeight: '600' },
+    sectionLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, paddingHorizontal: 6, marginTop: 6 },
     deviceItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 10, borderWidth: 1, marginHorizontal: 6 },
     deviceInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
     deviceName: { fontSize: 14, fontWeight: '600' },
     deviceRssi: { fontSize: 11 },
+    kindBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
+    kindBadgeText: { fontSize: 9, fontWeight: '700', color: '#fff', letterSpacing: 0.5 },
     connectText: { fontSize: 13, fontWeight: '600' },
     emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 30, gap: 10 },
     emptyText: { fontSize: 13, textAlign: 'center' },
