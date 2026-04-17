@@ -241,48 +241,30 @@ export default function AuthScreen() {
 
     const handleSendLoginOtp = useCallback(async () => {
         if (!phone || phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
+        if (!recaptchaRef.current) {
+            console.warn('[auth] sendOtp → recaptcha verifier not ready');
+            showModal('Error', 'reCAPTCHA not ready. Please try again in a moment.');
+            return;
+        }
         const fullPhone = `+91${phone}`;
-        const useFirebase = isFirebaseAvailable();
-        console.log('[auth] sendOtp → starting for', fullPhone, 'useFirebase=', useFirebase);
+        console.log('[auth] sendOtp → starting Firebase signInWithPhoneNumber for', fullPhone);
         setLoading(true);
         try {
-            if (useFirebase) {
-                // 1) Trigger Firebase Phone Auth — sends real SMS
-                const confirmation = await firebaseAuth().signInWithPhoneNumber(fullPhone);
-                confirmationRef.current = confirmation;
-                console.log('[auth] sendOtp → Firebase confirmation received');
-
-                // 2) Tell server (best-effort)
-                try {
-                    const result = await authApiNew.sendPhoneOtp(phone);
-                    console.log('[auth] sendOtp → server ack:', result);
-                } catch (serverErr) {
-                    console.warn('[auth] sendOtp → server ack failed (non-fatal):', serverErr);
-                }
-                setScreen('login-otp');
-                showModal('OTP Sent', `OTP sent to +91 ${phone}`);
-            } else {
-                // Fallback: server-side OTP (works in Expo Go / web preview)
-                console.log('[auth] sendOtp → using server fallback (Firebase native module unavailable)');
-                confirmationRef.current = null;
-                const result = await authApiNew.sendPhoneOtp(phone);
-                console.log('[auth] sendOtp → server result:', result);
-                if (result.success) {
-                    setScreen('login-otp');
-                    showModal('OTP Sent', `OTP sent to +91 ${phone}`);
-                } else {
-                    showModal('Error', result.message || 'Failed to send OTP');
-                }
-            }
+            // Send REAL SMS via Firebase JS SDK + reCAPTCHA verifier
+            const confirmation = await signInWithPhoneNumber(firebaseAuth, fullPhone, recaptchaRef.current);
+            confirmationRef.current = confirmation;
+            console.log('[auth] sendOtp → confirmation received, verificationId:', confirmation.verificationId);
+            setScreen('login-otp');
+            showModal('OTP Sent', `OTP sent to +91 ${phone}`);
         } catch (err: any) {
-            console.error('[auth] sendOtp → error:', err?.code, err?.message, err);
+            console.error('[auth] sendOtp → Firebase error:', err?.code, err?.message, err);
             const code = err?.code || '';
             let msg = 'Failed to send OTP. Please try again.';
             if (code === 'auth/invalid-phone-number') msg = 'Invalid phone number format.';
             else if (code === 'auth/too-many-requests') msg = 'Too many attempts. Please try again later.';
             else if (code === 'auth/network-request-failed') msg = 'Network error. Check your internet.';
-            else if (code === 'auth/billing-not-enabled') msg = 'SMS quota issue. Contact support.';
-            else if (err?.message?.includes('No Firebase App')) msg = 'Firebase not initialized — install the dev build (Expo Go is not supported for phone OTP).';
+            else if (code === 'auth/billing-not-enabled') msg = 'SMS quota issue. Enable billing on Firebase project.';
+            else if (code === 'auth/captcha-check-failed') msg = 'reCAPTCHA failed. Please try again.';
             else if (err?.message) msg = err.message;
             showModal('Error', msg);
         } finally { setLoading(false); }
@@ -290,47 +272,33 @@ export default function AuthScreen() {
 
     const handleOtpLogin = useCallback(async () => {
         if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
+        if (!confirmationRef.current) {
+            showModal('Error', 'OTP session expired. Please request a new OTP.');
+            setScreen('login');
+            return;
+        }
         setLoading(true);
         try {
-            // Path A: Firebase confirmation present → verify via Firebase, then exchange idToken with server
-            if (confirmationRef.current) {
-                console.log('[auth] verifyOtp → confirming Firebase OTP');
-                const credential = await confirmationRef.current.confirm(otp);
-                const firebaseUser = credential?.user;
-                if (!firebaseUser) throw new Error('Firebase did not return a user');
+            console.log('[auth] verifyOtp → confirming OTP via Firebase');
+            const credential = await confirmationRef.current.confirm(otp);
+            const firebaseUser = credential?.user;
+            if (!firebaseUser) throw new Error('Firebase did not return a user');
 
-                const firebaseIdToken = await firebaseUser.getIdToken(true);
-                console.log('[auth] verifyOtp → got Firebase idToken length:', firebaseIdToken.length, 'phone:', firebaseUser.phoneNumber);
+            const firebaseIdToken = await firebaseUser.getIdToken(true);
+            console.log('[auth] verifyOtp → got idToken (len):', firebaseIdToken.length, 'phone:', firebaseUser.phoneNumber);
 
-                const result = await authApiNew.firebasePhoneLogin(firebaseIdToken, phone);
-                console.log('[auth] verifyOtp → server response:', { success: result.success, code: (result as any).code });
+            const result = await authApiNew.firebasePhoneLogin(firebaseIdToken, phone);
+            console.log('[auth] verifyOtp → server response:', { success: result.success, code: (result as any).code });
 
-                if (result.success && result.response) {
-                    if ((result.response as any).needsRegistration || result.code === 'USER_NOT_FOUND') {
-                        setOtp(''); setScreen('register-details'); return;
-                    }
-                    await setAuthUser(result.response.token, result.response.user);
-                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                    router.replace('/(tabs)');
-                } else {
-                    showModal('Error', result.message || 'Login failed');
+            if (result.success && result.response) {
+                if ((result.response as any).needsRegistration || result.code === 'USER_NOT_FOUND') {
+                    setOtp(''); setScreen('register-details'); return;
                 }
+                await setAuthUser(result.response.token, result.response.user);
+                if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                router.replace('/(tabs)');
             } else {
-                // Path B: Server-side OTP fallback (Expo Go / web)
-                console.log('[auth] verifyOtp → using server fallback verifyPhoneOtp');
-                const result = await authApiNew.verifyPhoneOtp(phone, otp);
-                console.log('[auth] verifyOtp → server fallback response:', { success: result.success, code: (result as any).code });
-
-                if (result.success && result.response) {
-                    if ((result.response as any).needsRegistration || result.code === 'USER_NOT_FOUND') {
-                        setOtp(''); setScreen('register-details'); return;
-                    }
-                    await setAuthUser(result.response.token, result.response.user);
-                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                    router.replace('/(tabs)');
-                } else {
-                    showModal('Error', result.message || 'Invalid OTP');
-                }
+                showModal('Error', result.message || 'Login failed');
             }
         } catch (err: any) {
             console.error('[auth] verifyOtp → error:', err?.code, err?.message, err);
