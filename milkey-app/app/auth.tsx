@@ -262,32 +262,47 @@ export default function AuthScreen() {
     const handleSendLoginOtp = useCallback(async () => {
         if (!phone || phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
         const fullPhone = `+91${phone}`;
-        console.log('[auth] sendOtp → starting Firebase signInWithPhoneNumber for', fullPhone);
+        const useFirebase = isFirebaseAvailable();
+        console.log('[auth] sendOtp → starting for', fullPhone, 'useFirebase=', useFirebase);
         setLoading(true);
         try {
-            // 1) Trigger Firebase Phone Auth — this sends the real SMS
-            const confirmation = await auth().signInWithPhoneNumber(fullPhone);
-            confirmationRef.current = confirmation;
-            console.log('[auth] sendOtp → Firebase confirmation received, verificationId:', confirmation.verificationId);
+            if (useFirebase) {
+                // 1) Trigger Firebase Phone Auth — sends real SMS
+                const confirmation = await firebaseAuth().signInWithPhoneNumber(fullPhone);
+                confirmationRef.current = confirmation;
+                console.log('[auth] sendOtp → Firebase confirmation received');
 
-            // 2) Tell server (best-effort, used as fallback only)
-            try {
+                // 2) Tell server (best-effort)
+                try {
+                    const result = await authApiNew.sendPhoneOtp(phone);
+                    console.log('[auth] sendOtp → server ack:', result);
+                } catch (serverErr) {
+                    console.warn('[auth] sendOtp → server ack failed (non-fatal):', serverErr);
+                }
+                setScreen('login-otp');
+                showModal('OTP Sent', `OTP sent to +91 ${phone}`);
+            } else {
+                // Fallback: server-side OTP (works in Expo Go / web preview)
+                console.log('[auth] sendOtp → using server fallback (Firebase native module unavailable)');
+                confirmationRef.current = null;
                 const result = await authApiNew.sendPhoneOtp(phone);
-                console.log('[auth] sendOtp → server ack:', result);
-            } catch (serverErr) {
-                console.warn('[auth] sendOtp → server ack failed (non-fatal):', serverErr);
+                console.log('[auth] sendOtp → server result:', result);
+                if (result.success) {
+                    setScreen('login-otp');
+                    showModal('OTP Sent', `OTP sent to +91 ${phone}`);
+                } else {
+                    showModal('Error', result.message || 'Failed to send OTP');
+                }
             }
-
-            setScreen('login-otp');
-            showModal('OTP Sent', `OTP sent to +91 ${phone}`);
         } catch (err: any) {
-            console.error('[auth] sendOtp → Firebase error:', err?.code, err?.message, err);
+            console.error('[auth] sendOtp → error:', err?.code, err?.message, err);
             const code = err?.code || '';
             let msg = 'Failed to send OTP. Please try again.';
             if (code === 'auth/invalid-phone-number') msg = 'Invalid phone number format.';
             else if (code === 'auth/too-many-requests') msg = 'Too many attempts. Please try again later.';
             else if (code === 'auth/network-request-failed') msg = 'Network error. Check your internet.';
             else if (code === 'auth/billing-not-enabled') msg = 'SMS quota issue. Contact support.';
+            else if (err?.message?.includes('No Firebase App')) msg = 'Firebase not initialized — install the dev build (Expo Go is not supported for phone OTP).';
             else if (err?.message) msg = err.message;
             showModal('Error', msg);
         } finally { setLoading(false); }
