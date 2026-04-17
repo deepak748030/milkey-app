@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View, Text, StyleSheet, Pressable, TextInput, FlatList,
-    ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Platform, Linking
+    ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -18,9 +18,8 @@ import {
 } from '@/lib/milkeyApi';
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { buildReceiptBytes, concatBytes, INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, NORMAL_SIZE, BOLD_OFF, ALIGN_LEFT, textToBytes, separator, doubleSeparator, twoColumnLine, threeColumnLine, FEED_3_LINES } from '@/lib/escpos';
+import { concatBytes, INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, NORMAL_SIZE, BOLD_OFF, ALIGN_LEFT, textToBytes, separator, doubleSeparator, twoColumnLine, threeColumnLine, FEED_3_LINES } from '@/lib/escpos';
 import * as Sharing from 'expo-sharing';
-import { buildBluetoothPrintReceipt, buildBluetoothPrintSummary, printViaBluetoothPrintApp } from '@/lib/bluetoothPrintApp';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
@@ -43,7 +42,7 @@ export default function PurchaseScreen() {
         hasAccess, loading: subscriptionLoading, showSubscriptionModal,
         handleModalClose, handleSubscriptionSuccess
     } = useSubscriptionCheck('purchase');
-    const { isConnected, printData, isPrinting } = useBluetoothPrinter();
+    const { printData, isPrinting } = useBluetoothPrinter();
 
     const { purchaseTab: activeTab, setPurchaseTab: setActiveTab } = useSubTabStore();
 
@@ -418,9 +417,10 @@ export default function PurchaseScreen() {
     }, [filteredReportCollections, collections]);
 
     // Full Summary Print
-    const handleFullSummaryPrint = useCallback(async () => {
+    const handleFullSummaryPrint = useCallback(async (source?: 'purchase' | 'report') => {
         setShowPrintTypeModal(false);
-        const isReport = printSource === 'report';
+        const resolvedSource = source ?? printSource;
+        const isReport = resolvedSource === 'report';
         const data = isReport
             ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
             : collections;
@@ -465,49 +465,19 @@ export default function PurchaseScreen() {
         parts.push(BOLD_OFF, FEED_3_LINES);
 
         const bytes = concatBytes(...parts);
-        if (isConnected) {
-            const success = await printData(bytes);
-            if (success) showAlert('Success', 'Full summary printed!');
-        } else if (Platform.OS === 'android') {
-            // Fallback: Print via Bluetooth Print app
-            const details = data.map(c => ({
-                code: c.farmerCode || '-',
-                qty: String(c.quantity),
-                fat: String(c.fat || '-'),
-                rate: String(c.rate),
-                amount: '₹' + c.amount.toFixed(0),
-            }));
-            const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
-            const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
-            const printStr = buildBluetoothPrintSummary({
-                title: 'Full Shift Summary',
-                dateLabel: isReport && reportStartDate && reportEndDate
-                    ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
-                    : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`,
-                lines: [
-                    { label: 'Total Qty', value: totals.quantity.toFixed(2) + ' L' },
-                    { label: 'Total Amt', value: '₹' + totals.amount.toFixed(2) },
-                    { label: 'Avg Rate', value: avgRate },
-                    { label: 'Farmers', value: String(uniqueFarmers) },
-                ],
-                details,
-            });
-            await printViaBluetoothPrintApp(printStr);
-        } else {
-            const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
-            const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
-            let detailStr = '';
-            for (const c of data) {
-                detailStr += `${c.farmerCode || '-'} | Qty: ${c.quantity} | Fat: ${c.fat || '-'} | Rate: ${c.rate} | ₹${c.amount.toFixed(0)}\n`;
-            }
-            showAlert('Full Summary', `${detailStr}\nTotal Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ₹${avgRate}\nFarmers: ${uniqueFarmers}`);
+        const success = await printData(bytes);
+        if (success) {
+            showAlert('Success', 'Full summary printed!');
+            return;
         }
-    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, isConnected, printData, selectedReportFarmer]);
 
-    // Short Summary Print
-    const handleShortSummaryPrint = useCallback(async () => {
+        showAlert('Printer Not Ready', 'Connect your Bluetooth thermal printer from the top bar, then try printing again.');
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printData, selectedReportFarmer]);
+
+    const handleShortSummaryPrint = useCallback(async (source?: 'purchase' | 'report') => {
         setShowPrintTypeModal(false);
-        const isReport = printSource === 'report';
+        const resolvedSource = source ?? printSource;
+        const isReport = resolvedSource === 'report';
         const data = isReport
             ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
             : collections;
@@ -536,26 +506,14 @@ export default function PurchaseScreen() {
         parts.push(FEED_3_LINES);
 
         const bytes = concatBytes(...parts);
-        if (isConnected) {
-            const success = await printData(bytes);
-            if (success) showAlert('Success', 'Short summary printed!');
-        } else if (Platform.OS === 'android') {
-            const printStr = buildBluetoothPrintSummary({
-                title,
-                dateLabel,
-                lines: [
-                    { label: 'Total Qty', value: totals.quantity.toFixed(2) + ' L' },
-                    { label: 'Total Amt', value: '₹' + totals.amount.toFixed(2) },
-                    { label: 'Avg Rate', value: avgRate },
-                    { label: 'Samples', value: String(data.length) },
-                    { label: 'Farmers', value: String(uniqueFarmers) },
-                ],
-            });
-            await printViaBluetoothPrintApp(printStr);
-        } else {
-            showAlert('Short Summary', `Total Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ${avgRate}\nSamples: ${data.length}\nFarmers: ${uniqueFarmers}`);
+        const success = await printData(bytes);
+        if (success) {
+            showAlert('Success', 'Short summary printed!');
+            return;
         }
-    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printData, isConnected]);
+
+        showAlert('Printer Not Ready', 'Connect your Bluetooth thermal printer from the top bar, then try printing again.');
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printData]);
 
     // Export PDF for report
     const handleExportReportPdf = useCallback(async () => {
@@ -929,38 +887,25 @@ export default function PurchaseScreen() {
             {/* Print & Export Buttons */}
             <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Pressable
-                    style={[s.exportReportBtn, { flex: 1, backgroundColor: colors.primary }]}
+                    style={[s.exportReportBtn, { flex: 1, backgroundColor: colors.primary }, isPrinting && { opacity: 0.6 }]}
                     onPress={() => {
                         setPrintSource('report');
-                        if (isConnected) {
-                            // Bluetooth print full summary
-                            handleFullSummaryPrint();
-                        } else {
-                            handleExportReportPdf();
-                        }
+                        handleFullSummaryPrint('report');
                     }}
+                    disabled={isPrinting}
                 >
-                    <FileText size={16} color="#fff" />
+                    {isPrinting ? <ActivityIndicator size={16} color="#fff" /> : <FileText size={16} color="#fff" />}
                     <Text style={s.exportReportBtnText}>Full Summary</Text>
                 </Pressable>
                 <Pressable
-                    style={[s.exportReportBtn, { flex: 1, backgroundColor: '#f59e0b' }]}
+                    style={[s.exportReportBtn, { flex: 1, backgroundColor: '#f59e0b' }, isPrinting && { opacity: 0.6 }]}
                     onPress={() => {
                         setPrintSource('report');
-                        if (isConnected) {
-                            handleShortSummaryPrint();
-                        } else {
-                            // Short summary as alert info when no printer
-                            const data = filteredReportCollections.length > 0 ? filteredReportCollections : collections;
-                            const totals = filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals;
-                            if (data.length === 0) { showAlert('Info', 'No data'); return; }
-                            const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
-                            const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
-                            showAlert('Short Summary', `Total Qty: ${totals.quantity.toFixed(2)} L\nTotal Amt: ₹${totals.amount.toFixed(2)}\nAvg Rate: ₹${avgRate}\nSamples: ${data.length}\nFarmers: ${uniqueFarmers}`);
-                        }
+                        handleShortSummaryPrint('report');
                     }}
+                    disabled={isPrinting}
                 >
-                    <Printer size={16} color="#fff" />
+                    {isPrinting ? <ActivityIndicator size={16} color="#fff" /> : <Printer size={16} color="#fff" />}
                     <Text style={s.exportReportBtnText}>Short Summary</Text>
                 </Pressable>
             </View>

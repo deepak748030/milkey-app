@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, FlatList, Linking, Platform } from 'react-native';
-import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer, ExternalLink } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, FlatList } from 'react-native';
+import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { BluetoothDevice } from '@/hooks/useBluetoothPrinter';
 import { buildTestPrint } from '@/lib/escpos';
-import { printViaBluetoothPrintApp, buildBluetoothPrintTest } from '@/lib/bluetoothPrintApp';
 
 interface PrinterScanSheetProps {
     visible: boolean;
@@ -42,26 +41,11 @@ export default function PrinterScanSheet({
     const { colors } = useTheme();
     const [testPrintDone, setTestPrintDone] = useState(false);
 
-    const [appPrintLoading, setAppPrintLoading] = useState(false);
-
     const handleTestPrint = async () => {
         if (!onPrintData) return;
         setTestPrintDone(false);
-        const data = buildTestPrint();
-        const success = await onPrintData(data);
+        const success = await onPrintData(buildTestPrint());
         if (success) setTestPrintDone(true);
-    };
-
-    const handleTestPrintViaApp = async () => {
-        setAppPrintLoading(true);
-        const data = buildBluetoothPrintTest();
-        await printViaBluetoothPrintApp(data);
-        setAppPrintLoading(false);
-    };
-
-    const handleInstallApp = () => {
-        const url = 'https://play.google.com/store/apps/details?id=mate.bluetoothprint';
-        Linking.openURL(url).catch(() => { });
     };
 
     const renderDevice = ({ item }: { item: BluetoothDevice }) => (
@@ -73,7 +57,7 @@ export default function PrinterScanSheet({
                 <Bluetooth size={16} color={colors.primary} />
                 <View style={{ flex: 1 }}>
                     <Text style={[styles.deviceName, { color: colors.foreground }]}>{item.name}</Text>
-                    {item.rssi && (
+                    {typeof item.rssi === 'number' && (
                         <Text style={[styles.deviceRssi, { color: colors.mutedForeground }]}>
                             Signal: {item.rssi} dBm
                         </Text>
@@ -98,7 +82,12 @@ export default function PrinterScanSheet({
                         </Pressable>
                     </View>
 
-                    {/* Connected Device */}
+                    {!isBluetoothEnabled && (
+                        <View style={[styles.infoBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                            <Text style={[styles.infoText, { color: colors.foreground }]}>Turn on Bluetooth first, then scan and connect your thermal printer.</Text>
+                        </View>
+                    )}
+
                     {isConnected && connectedDevice && (
                         <View style={[styles.connectedCard, { backgroundColor: colors.secondary, borderColor: colors.success }]}>
                             <View style={styles.connectedInfo}>
@@ -139,17 +128,15 @@ export default function PrinterScanSheet({
                         </View>
                     )}
 
-                    {/* Error */}
                     {error && (
                         <View style={[styles.errorBox, { backgroundColor: '#FEE2E2', borderColor: colors.destructive }]}>
                             <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text>
                         </View>
                     )}
 
-                    {/* Scan Button */}
                     {!isConnected && (
                         <Pressable
-                            style={[styles.scanBtn, { backgroundColor: isScanning ? colors.muted : colors.primary }]}
+                            style={[styles.scanBtn, { backgroundColor: isScanning ? colors.muted : colors.primary, opacity: !isBluetoothEnabled && !isScanning ? 0.7 : 1 }]}
                             onPress={isScanning ? onStopScan : onStartScan}
                         >
                             {isScanning ? (
@@ -160,13 +147,12 @@ export default function PrinterScanSheet({
                             ) : (
                                 <>
                                     <RefreshCw size={16} color={colors.white} />
-                                    <Text style={[styles.scanBtnText, { color: colors.white }]}>Scan for Printers</Text>
+                                    <Text style={[styles.scanBtnText, { color: colors.white }]}>Scan for Thermal Printers</Text>
                                 </>
                             )}
                         </Pressable>
                     )}
 
-                    {/* Device List */}
                     {!isConnected && (
                         <View style={{ flex: 1, marginTop: 6 }}>
                             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
@@ -181,42 +167,11 @@ export default function PrinterScanSheet({
                                     <View style={styles.emptyState}>
                                         <BluetoothOff size={32} color={colors.mutedForeground} />
                                         <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                                            {isScanning ? 'Searching for devices...' : 'No devices found. Tap scan to search.'}
+                                            {isScanning ? 'Searching for nearby Bluetooth printers...' : 'No printers found yet. Scan again with the printer powered on.'}
                                         </Text>
                                     </View>
                                 }
                             />
-                        </View>
-                    )}
-
-                    {/* Bluetooth Print App Section */}
-                    {Platform.OS === 'android' && (
-                        <View style={[styles.appSection, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                            <Text style={[styles.appSectionTitle, { color: colors.foreground }]}>
-                                🖨️ Print via Bluetooth Print App
-                            </Text>
-                            <Text style={[styles.appSectionDesc, { color: colors.mutedForeground }]}>
-                                If direct BLE scan doesn't find your printer, use the Bluetooth Print app for reliable printing.
-                            </Text>
-                            <View style={{ flexDirection: 'row', gap: 8 }}>
-                                <Pressable
-                                    style={[styles.appBtn, { backgroundColor: colors.primary, opacity: appPrintLoading ? 0.6 : 1 }]}
-                                    onPress={handleTestPrintViaApp}
-                                    disabled={appPrintLoading}
-                                >
-                                    <Printer size={14} color={'#fff'} />
-                                    <Text style={[styles.appBtnText, { color: '#fff' }]}>
-                                        {appPrintLoading ? 'Opening...' : 'Test Print'}
-                                    </Text>
-                                </Pressable>
-                                <Pressable
-                                    style={[styles.appBtn, { backgroundColor: colors.secondary, borderWidth: 1, borderColor: colors.border }]}
-                                    onPress={handleInstallApp}
-                                >
-                                    <ExternalLink size={14} color={colors.primary} />
-                                    <Text style={[styles.appBtnText, { color: colors.primary }]}>Install App</Text>
-                                </Pressable>
-                            </View>
                         </View>
                     )}
                 </View>
@@ -229,13 +184,19 @@ const styles = StyleSheet.create({
     overlay: { flex: 1, justifyContent: 'flex-end' },
     overlayBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
     sheet: {
-        borderTopLeftRadius: 20, borderTopRightRadius: 20,
-        paddingHorizontal: 6, paddingBottom: 30, maxHeight: '70%', borderTopWidth: 1,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        paddingHorizontal: 6,
+        paddingBottom: 30,
+        maxHeight: '70%',
+        borderTopWidth: 1,
     },
     handle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 10, marginBottom: 6 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, paddingHorizontal: 6 },
     title: { fontSize: 18, fontWeight: '700' },
     closeBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+    infoBox: { padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 6, marginHorizontal: 6 },
+    infoText: { fontSize: 12, fontWeight: '500' },
     connectedCard: { flexDirection: 'column', padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 6, marginHorizontal: 6, gap: 8 },
     connectedInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     connectedLabel: { fontSize: 11, fontWeight: '600' },
@@ -255,9 +216,4 @@ const styles = StyleSheet.create({
     connectText: { fontSize: 13, fontWeight: '600' },
     emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 30, gap: 10 },
     emptyText: { fontSize: 13, textAlign: 'center' },
-    appSection: { marginTop: 10, marginHorizontal: 6, padding: 12, borderRadius: 12, borderWidth: 1, gap: 8 },
-    appSectionTitle: { fontSize: 14, fontWeight: '700' },
-    appSectionDesc: { fontSize: 12, lineHeight: 16 },
-    appBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 8 },
-    appBtnText: { fontSize: 13, fontWeight: '600' },
 });
