@@ -12,31 +12,9 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-// Firebase auth is loaded lazily — it requires a native build (won't work in Expo Go / web).
-// We import it defensively so the app doesn't crash when the native module is missing.
-let firebaseAuth: any = null;
-let FirebaseAuthTypes: any = null;
-try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@react-native-firebase/auth');
-    firebaseAuth = mod.default;
-    FirebaseAuthTypes = mod.FirebaseAuthTypes;
-    console.log('[auth] @react-native-firebase/auth loaded successfully');
-} catch (e) {
-    console.warn('[auth] @react-native-firebase/auth NOT available — falling back to server OTP. Reason:', (e as any)?.message);
-}
-
-const isFirebaseAvailable = () => {
-    if (!firebaseAuth) return false;
-    try {
-        // Touch the default app to confirm native init worked
-        firebaseAuth();
-        return true;
-    } catch (e) {
-        console.warn('[auth] Firebase native app not initialized:', (e as any)?.message);
-        return false;
-    }
-};
+import { signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
+import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
+import { firebaseAuth, firebaseConfig } from '@/lib/firebase';
 
 WebBrowser.maybeCompleteAuthSession();
 
