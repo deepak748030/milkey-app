@@ -325,6 +325,9 @@ const apiRequest = async <T>(
             (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
         }
 
+        const isAuthCall = endpoint.startsWith('/auth/');
+        if (isAuthCall) console.log('[api] →', options.method || 'GET', endpoint);
+
         const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             headers,
@@ -337,6 +340,8 @@ const apiRequest = async <T>(
         } catch {
             data = null;
         }
+
+        if (isAuthCall) console.log('[api] ←', endpoint, 'status:', response.status, 'success:', data?.success, 'msg:', data?.message);
 
         if (!response.ok) {
             // Extract clean error message without HTTP codes

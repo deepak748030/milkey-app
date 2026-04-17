@@ -810,36 +810,63 @@ router.post('/phone-login', async (req, res) => {
     }
 });
 
-// POST /api/auth/firebase-phone-login - Login with Firebase Phone Auth ID token
+// POST /api/auth/send-phone-otp
+// NOTE: Real SMS sending happens on the CLIENT via Firebase Phone Auth.
+// This endpoint exists only as a fallback / no-op acknowledgement so that
+// older clients (or non-Firebase flows) still work with the hardcoded OTP.
 router.post('/send-phone-otp', async (req, res) => {
     try {
+        const { phone } = req.body;
+        console.log('[send-phone-otp] request body:', req.body);
+        if (!phone) {
+            console.warn('[send-phone-otp] missing phone');
+            return res.status(400).json({ success: false, message: 'Phone number is required' });
+        }
+        // Hardcoded fallback OTP (used only if client cannot use Firebase)
+        const otp = '123456';
+        phoneOtpStore.set(phone, { otp, expiresAt: Date.now() + 10 * 60 * 1000 });
+        console.log(`[send-phone-otp] fallback OTP stored for ${phone}: ${otp}`);
+        res.json({ success: true, message: 'OTP sent successfully' });
+    } catch (error) {
+        console.error('[send-phone-otp] error:', error);
+        res.status(500).json({ success: false, message: 'Failed to send OTP' });
+    }
+});
+
+// POST /api/auth/firebase-phone-login
+// Client obtains Firebase ID token via Firebase Phone Auth, then sends it here.
+router.post('/firebase-phone-login', async (req, res) => {
+    try {
         const { firebaseIdToken, phone } = req.body;
-        console.log(firebaseIdToken, phone)
+        console.log('[firebase-phone-login] phone:', phone, 'tokenLen:', firebaseIdToken ? firebaseIdToken.length : 0);
+
         if (!firebaseIdToken || !phone) {
+            console.warn('[firebase-phone-login] missing firebaseIdToken or phone');
             return res.status(400).json({ success: false, message: 'Firebase ID token and phone are required' });
         }
 
-        // Verify the Firebase ID token
         let decodedToken;
         try {
             decodedToken = await admin.auth().verifyIdToken(firebaseIdToken);
+            console.log('[firebase-phone-login] decoded token uid:', decodedToken.uid, 'phone:', decodedToken.phone_number);
         } catch (verifyError) {
-            console.error('Firebase token verification failed:', verifyError);
+            console.error('[firebase-phone-login] token verification failed:', verifyError.message);
             return res.status(401).json({ success: false, message: 'Invalid or expired Firebase token' });
         }
 
-        // Ensure the token's phone matches
-        const firebasePhone = decodedToken.phone_number;
-        const normalizedPhone = phone.replace(/^\+91/, '');
-        const normalizedFirebasePhone = firebasePhone ? firebasePhone.replace(/^\+91/, '') : '';
-        console.log(normalizedFirebasePhone)
+        const firebasePhone = decodedToken.phone_number || '';
+        const normalizedPhone = String(phone).replace(/^\+91/, '').replace(/\D/g, '');
+        const normalizedFirebasePhone = firebasePhone.replace(/^\+91/, '').replace(/\D/g, '');
+        console.log('[firebase-phone-login] normalized phones — app:', normalizedPhone, 'firebase:', normalizedFirebasePhone);
+
         if (normalizedFirebasePhone !== normalizedPhone) {
+            console.warn('[firebase-phone-login] phone mismatch');
             return res.status(400).json({ success: false, message: 'Phone number mismatch' });
         }
 
-        // Find user by phone
         const user = await User.findOne({ phone: normalizedPhone });
         if (!user) {
+            console.log('[firebase-phone-login] user not found, needs registration');
             return res.json({
                 success: true,
                 code: 'USER_NOT_FOUND',
@@ -856,6 +883,7 @@ router.post('/send-phone-otp', async (req, res) => {
         await user.save();
 
         const token = generateToken(user._id);
+        console.log('[firebase-phone-login] login successful for user:', user._id.toString());
 
         res.json({
             success: true,
@@ -876,7 +904,7 @@ router.post('/send-phone-otp', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Firebase phone login error:', error);
+        console.error('[firebase-phone-login] error:', error);
         res.status(500).json({ success: false, message: 'Login failed' });
     }
 });

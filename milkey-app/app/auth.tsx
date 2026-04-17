@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, memo } from 'react';
+import React, { useState, useCallback, useEffect, memo, useRef } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -12,6 +12,7 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
+import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -148,6 +149,9 @@ export default function AuthScreen() {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [resetToken, setResetToken] = useState('');
 
+    // Firebase Phone Auth confirmation handle (kept across renders)
+    const confirmationRef = useRef<FirebaseAuthTypes.ConfirmationResult | null>(null);
+
     const [modalVisible, setModalVisible] = useState(false);
     const [modalTitle, setModalTitle] = useState('');
     const [modalMessage, setModalMessage] = useState('');
@@ -233,36 +237,82 @@ export default function AuthScreen() {
 
     const handleSendLoginOtp = useCallback(async () => {
         if (!phone || phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
+        const fullPhone = `+91${phone}`;
+        console.log('[auth] sendOtp → starting Firebase signInWithPhoneNumber for', fullPhone);
         setLoading(true);
         try {
-            const result = await authApiNew.sendPhoneOtp(phone);
-            if (result.success) {
-                setScreen('login-otp');
-                showModal('OTP Sent', 'OTP sent to your phone number');
-            } else showModal('Error', result.message || 'Failed to send OTP');
-        } catch { showModal('Error', 'Network error.'); }
-        finally { setLoading(false); }
+            // 1) Trigger Firebase Phone Auth — this sends the real SMS
+            const confirmation = await auth().signInWithPhoneNumber(fullPhone);
+            confirmationRef.current = confirmation;
+            console.log('[auth] sendOtp → Firebase confirmation received, verificationId:', confirmation.verificationId);
+
+            // 2) Tell server (best-effort, used as fallback only)
+            try {
+                const result = await authApiNew.sendPhoneOtp(phone);
+                console.log('[auth] sendOtp → server ack:', result);
+            } catch (serverErr) {
+                console.warn('[auth] sendOtp → server ack failed (non-fatal):', serverErr);
+            }
+
+            setScreen('login-otp');
+            showModal('OTP Sent', `OTP sent to +91 ${phone}`);
+        } catch (err: any) {
+            console.error('[auth] sendOtp → Firebase error:', err?.code, err?.message, err);
+            const code = err?.code || '';
+            let msg = 'Failed to send OTP. Please try again.';
+            if (code === 'auth/invalid-phone-number') msg = 'Invalid phone number format.';
+            else if (code === 'auth/too-many-requests') msg = 'Too many attempts. Please try again later.';
+            else if (code === 'auth/network-request-failed') msg = 'Network error. Check your internet.';
+            else if (code === 'auth/billing-not-enabled') msg = 'SMS quota issue. Contact support.';
+            else if (err?.message) msg = err.message;
+            showModal('Error', msg);
+        } finally { setLoading(false); }
     }, [phone, showModal]);
 
     const handleOtpLogin = useCallback(async () => {
         if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
+        if (!confirmationRef.current) {
+            showModal('Error', 'OTP session expired. Please request a new OTP.');
+            setScreen('login');
+            return;
+        }
         setLoading(true);
         try {
-            const result = await authApiNew.phoneLogin(phone, otp);
+            console.log('[auth] verifyOtp → confirming Firebase OTP');
+            // 1) Confirm OTP with Firebase → returns user credential
+            const credential = await confirmationRef.current.confirm(otp);
+            const firebaseUser = credential?.user;
+            if (!firebaseUser) throw new Error('Firebase did not return a user');
+
+            // 2) Get Firebase ID token
+            const firebaseIdToken = await firebaseUser.getIdToken(true);
+            console.log('[auth] verifyOtp → got Firebase idToken length:', firebaseIdToken.length, 'phone:', firebaseUser.phoneNumber);
+
+            // 3) Send to backend to get app JWT
+            const result = await authApiNew.firebasePhoneLogin(firebaseIdToken, phone);
+            console.log('[auth] verifyOtp → server response:', { success: result.success, code: (result as any).code });
+
             if (result.success && result.response) {
-                // Check if user needs registration
-                if (result.response.needsRegistration || result.code === 'USER_NOT_FOUND') {
+                if ((result.response as any).needsRegistration || result.code === 'USER_NOT_FOUND') {
                     setOtp('');
                     setScreen('register-details');
                     return;
                 }
-                // User exists - login
                 await setAuthUser(result.response.token, result.response.user);
                 if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                 router.replace('/(tabs)');
-            } else showModal('Error', result.message || 'Login failed');
-        } catch { showModal('Error', 'Network error.'); }
-        finally { setLoading(false); }
+            } else {
+                showModal('Error', result.message || 'Login failed');
+            }
+        } catch (err: any) {
+            console.error('[auth] verifyOtp → error:', err?.code, err?.message, err);
+            const code = err?.code || '';
+            let msg = 'Verification failed. Please try again.';
+            if (code === 'auth/invalid-verification-code') msg = 'Invalid OTP. Please check and try again.';
+            else if (code === 'auth/code-expired') msg = 'OTP expired. Please request a new one.';
+            else if (err?.message) msg = err.message;
+            showModal('Error', msg);
+        } finally { setLoading(false); }
     }, [phone, otp, expoPushToken, showModal]);
 
     const handleCompleteRegistration = useCallback(async () => {
