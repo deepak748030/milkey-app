@@ -388,6 +388,11 @@ export default function AuthScreen() {
 
     const ScreenWrapper = useCallback(({ children }: { children: React.ReactNode }) => (
         <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <FirebaseRecaptchaVerifierModal
+                ref={recaptchaRef}
+                firebaseConfig={firebaseConfig}
+                attemptInvisibleVerification={true}
+            />
             <LinearGradient
                 colors={[colors.primary + '14', colors.primary + '06', colors.background]}
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 260 }}
