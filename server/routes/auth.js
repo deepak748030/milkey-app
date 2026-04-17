@@ -11,10 +11,28 @@ const auth = require('../middleware/auth');
 const { notifyReferralSignup } = require('../lib/pushNotifications');
 
 // Initialize Firebase Admin SDK (only once)
+// Prefers GOOGLE_APPLICATION_CREDENTIALS env var or FIREBASE_SERVICE_ACCOUNT JSON
 if (!admin.apps.length) {
-    admin.initializeApp({
-        projectId: 'milkeyapp',
-    });
+    try {
+        if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount),
+                projectId: serviceAccount.project_id || 'milkeyapp',
+            });
+            console.log('[firebase-admin] initialized with FIREBASE_SERVICE_ACCOUNT env var');
+        } else {
+            // Falls back to GOOGLE_APPLICATION_CREDENTIALS or default credentials
+            admin.initializeApp({
+                credential: admin.credential.applicationDefault(),
+                projectId: 'milkeyapp',
+            });
+            console.log('[firebase-admin] initialized with applicationDefault credentials');
+        }
+    } catch (e) {
+        console.error('[firebase-admin] FAILED to init with credentials, falling back to projectId-only (verifyIdToken WILL FAIL):', e.message);
+        admin.initializeApp({ projectId: 'milkeyapp' });
+    }
 }
 
 // Simple password hashing (use bcrypt in production)
