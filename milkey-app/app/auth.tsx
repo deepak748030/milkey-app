@@ -310,38 +310,47 @@ export default function AuthScreen() {
 
     const handleOtpLogin = useCallback(async () => {
         if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
-        if (!confirmationRef.current) {
-            showModal('Error', 'OTP session expired. Please request a new OTP.');
-            setScreen('login');
-            return;
-        }
         setLoading(true);
         try {
-            console.log('[auth] verifyOtp → confirming Firebase OTP');
-            // 1) Confirm OTP with Firebase → returns user credential
-            const credential = await confirmationRef.current.confirm(otp);
-            const firebaseUser = credential?.user;
-            if (!firebaseUser) throw new Error('Firebase did not return a user');
+            // Path A: Firebase confirmation present → verify via Firebase, then exchange idToken with server
+            if (confirmationRef.current) {
+                console.log('[auth] verifyOtp → confirming Firebase OTP');
+                const credential = await confirmationRef.current.confirm(otp);
+                const firebaseUser = credential?.user;
+                if (!firebaseUser) throw new Error('Firebase did not return a user');
 
-            // 2) Get Firebase ID token
-            const firebaseIdToken = await firebaseUser.getIdToken(true);
-            console.log('[auth] verifyOtp → got Firebase idToken length:', firebaseIdToken.length, 'phone:', firebaseUser.phoneNumber);
+                const firebaseIdToken = await firebaseUser.getIdToken(true);
+                console.log('[auth] verifyOtp → got Firebase idToken length:', firebaseIdToken.length, 'phone:', firebaseUser.phoneNumber);
 
-            // 3) Send to backend to get app JWT
-            const result = await authApiNew.firebasePhoneLogin(firebaseIdToken, phone);
-            console.log('[auth] verifyOtp → server response:', { success: result.success, code: (result as any).code });
+                const result = await authApiNew.firebasePhoneLogin(firebaseIdToken, phone);
+                console.log('[auth] verifyOtp → server response:', { success: result.success, code: (result as any).code });
 
-            if (result.success && result.response) {
-                if ((result.response as any).needsRegistration || result.code === 'USER_NOT_FOUND') {
-                    setOtp('');
-                    setScreen('register-details');
-                    return;
+                if (result.success && result.response) {
+                    if ((result.response as any).needsRegistration || result.code === 'USER_NOT_FOUND') {
+                        setOtp(''); setScreen('register-details'); return;
+                    }
+                    await setAuthUser(result.response.token, result.response.user);
+                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                    router.replace('/(tabs)');
+                } else {
+                    showModal('Error', result.message || 'Login failed');
                 }
-                await setAuthUser(result.response.token, result.response.user);
-                if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                router.replace('/(tabs)');
             } else {
-                showModal('Error', result.message || 'Login failed');
+                // Path B: Server-side OTP fallback (Expo Go / web)
+                console.log('[auth] verifyOtp → using server fallback verifyPhoneOtp');
+                const result = await authApiNew.verifyPhoneOtp(phone, otp);
+                console.log('[auth] verifyOtp → server fallback response:', { success: result.success, code: (result as any).code });
+
+                if (result.success && result.response) {
+                    if ((result.response as any).needsRegistration || result.code === 'USER_NOT_FOUND') {
+                        setOtp(''); setScreen('register-details'); return;
+                    }
+                    await setAuthUser(result.response.token, result.response.user);
+                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
+                    router.replace('/(tabs)');
+                } else {
+                    showModal('Error', result.message || 'Invalid OTP');
+                }
             }
         } catch (err: any) {
             console.error('[auth] verifyOtp → error:', err?.code, err?.message, err);
