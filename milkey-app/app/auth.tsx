@@ -152,7 +152,9 @@ export default function AuthScreen() {
     const [resetToken, setResetToken] = useState('');
 
     // Firebase Phone Auth confirmation handle (kept across renders)
-    const confirmationRef = useRef<any>(null);
+    const confirmationRef = useRef<ConfirmationResult | null>(null);
+    // reCAPTCHA verifier ref — required by Firebase JS SDK on React Native
+    const recaptchaRef = useRef<any>(null);
 
     const [modalVisible, setModalVisible] = useState(false);
     const [modalTitle, setModalTitle] = useState('');
