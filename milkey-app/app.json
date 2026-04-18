@@ -98,12 +98,6 @@
         {
           "locationWhenInUsePermission": "Milkey needs location access to scan for nearby Bluetooth printers."
         }
-      ],
-      [
-        "react-native-thermal-printer",
-        {
-          "bluetoothPermission": "Milkey needs Bluetooth access to connect to thermal printers for printing receipts."
-        }
       ]
     ],
     "experiments": {
