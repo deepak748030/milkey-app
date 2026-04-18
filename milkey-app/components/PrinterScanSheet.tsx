@@ -144,57 +144,64 @@ export default function PrinterScanSheet({
                         </View>
                     )}
 
-                    {!isConnected && (
-                        <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 6 }}>
-                            <Pressable
-                                style={[styles.scanBtn, { flex: 1, backgroundColor: isScanning ? colors.muted : colors.primary, opacity: !isBluetoothEnabled && !isScanning ? 0.7 : 1 }]}
-                                onPress={isScanning ? onStopScan : onStartScan}
-                            >
-                                {isScanning ? (
-                                    <>
-                                        <ActivityIndicator size="small" color={colors.primary} />
-                                        <Text style={[styles.scanBtnText, { color: colors.foreground }]}>Stop Scanning</Text>
-                                    </>
-                                ) : (
-                                    <>
-                                        <RefreshCw size={16} color={colors.white} />
-                                        <Text style={[styles.scanBtnText, { color: colors.white }]}>Scan for Printers</Text>
-                                    </>
-                                )}
-                            </Pressable>
-                            {onOpenBluetoothSettings && (
-                                <Pressable
-                                    style={[styles.settingsBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-                                    onPress={onOpenBluetoothSettings}
-                                >
-                                    <Settings size={16} color={colors.foreground} />
-                                    <Text style={[styles.scanBtnText, { color: colors.foreground }]}>Pair</Text>
-                                </Pressable>
+                    {/* Scan button is ALWAYS visible — even when a printer is already
+                        connected — so users can switch printers or re-scan without
+                        having to disconnect first. */}
+                    <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 6 }}>
+                        <Pressable
+                            style={[styles.scanBtn, { flex: 1, backgroundColor: isScanning ? colors.muted : colors.primary }]}
+                            onPress={isScanning ? onStopScan : onStartScan}
+                        >
+                            {isScanning ? (
+                                <>
+                                    <ActivityIndicator size="small" color={colors.primary} />
+                                    <Text style={[styles.scanBtnText, { color: colors.foreground }]}>Stop Scanning</Text>
+                                </>
+                            ) : (
+                                <>
+                                    <RefreshCw size={16} color={colors.white} />
+                                    <Text style={[styles.scanBtnText, { color: colors.white }]}>
+                                        {isConnected ? 'Scan Again' : 'Scan for Printers'}
+                                    </Text>
+                                </>
                             )}
-                        </View>
-                    )}
+                        </Pressable>
+                        {onOpenBluetoothSettings && (
+                            <Pressable
+                                style={[styles.settingsBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+                                onPress={onOpenBluetoothSettings}
+                            >
+                                <Settings size={16} color={colors.foreground} />
+                                <Text style={[styles.scanBtnText, { color: colors.foreground }]}>Pair</Text>
+                            </Pressable>
+                        )}
+                    </View>
 
-                    {!isConnected && (
-                        <View style={{ flex: 1, marginTop: 6 }}>
-                            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-                                {isScanning ? 'Scanning...' : `Available Devices (${availableDevices.length})`}
-                            </Text>
-                            <FlatList
-                                data={availableDevices}
-                                keyExtractor={(item) => item.id}
-                                renderItem={renderDevice}
-                                contentContainerStyle={{ gap: 6 }}
-                                ListEmptyComponent={
-                                    <View style={styles.emptyState}>
-                                        <BluetoothOff size={32} color={colors.mutedForeground} />
-                                        <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                                            {isScanning ? 'Searching for nearby Bluetooth printers...' : 'No printers found yet. Pair your thermal printer in Android settings first.'}
-                                        </Text>
-                                    </View>
-                                }
-                            />
-                        </View>
-                    )}
+                    {/* Available devices list — also always visible so users can pick
+                        a different paired printer at any time. */}
+                    <View style={{ flex: 1, marginTop: 6 }}>
+                        <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
+                            {isScanning ? 'Scanning...' : `Available Devices (${availableDevices.length})`}
+                        </Text>
+                        <FlatList
+                            data={availableDevices}
+                            keyExtractor={(item) => item.id}
+                            renderItem={renderDevice}
+                            contentContainerStyle={{ gap: 6 }}
+                            ListEmptyComponent={
+                                <View style={styles.emptyState}>
+                                    <BluetoothOff size={32} color={colors.mutedForeground} />
+                                    <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                                        {isScanning
+                                            ? 'Searching for nearby Bluetooth printers...'
+                                            : isConnected
+                                                ? 'Tap "Scan Again" to look for other paired printers.'
+                                                : 'No printers found yet. Pair your thermal printer in Android settings first.'}
+                                    </Text>
+                                </View>
+                            }
+                        />
+                    </View>
                 </View>
             </View>
         </Modal>

@@ -314,13 +314,20 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     }, []);
 
     const startScan = useCallback(async () => {
-        if (scanInFlightRef.current) return;
+        // Don't silently bail — that's exactly what made the Scan button feel
+        // unresponsive in production after a previous scan. Instead, force-reset
+        // the in-flight flag so a fresh tap always starts a new scan.
+        if (scanInFlightRef.current) {
+            console.warn('[BluetoothPrinter] previous scan still flagged in-flight; forcing reset.');
+            scanInFlightRef.current = false;
+        }
         scanInFlightRef.current = true;
 
         if (IS_EXPO_GO || !ThermalPrinter) {
             scanInFlightRef.current = false;
             setState(prev => ({
                 ...prev,
+                isScanning: false,
                 error: 'Bluetooth printing requires a production APK (EAS build).',
             }));
             return;
