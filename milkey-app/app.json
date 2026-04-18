@@ -68,15 +68,6 @@
         }
       ],
       [
-        "react-native-ble-plx",
-        {
-          "isBackgroundEnabled": false,
-          "modes": [
-            "central"
-          ]
-        }
-      ],
-      [
         "expo-camera",
         {
           "cameraPermission": "Milkey needs camera access to scan QR codes."
