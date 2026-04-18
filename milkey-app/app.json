@@ -64,6 +64,9 @@
         "expo-build-properties",
         {
           "android": {
+            "extraMavenRepos": [
+              "https://jitpack.io"
+            ],
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
             "minSdkVersion": 24
@@ -96,9 +99,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Milkey needs location access to scan for nearby Bluetooth printers."
+          "locationWhenInUsePermission": "Milkey needs location access to scan for nearby Bluetooth printers.",
+          "isAndroidBackgroundLocationEnabled": false
         }
-      ]
+      ],
+      "./plugins/withBluetoothScanPermission"
     ],
     "experiments": {
       "typedRoutes": true

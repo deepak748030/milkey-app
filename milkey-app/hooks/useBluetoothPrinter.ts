@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Platform, PermissionsAndroid, Linking } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
@@ -99,6 +100,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
     const connectedMacRef = useRef<string | null>(null);
     const autoConnectAttemptedRef = useRef(false);
+    const scanInFlightRef = useRef(false);
 
     // ---------------- Permissions ----------------
     const requestPermissions = useCallback(async (): Promise<boolean> => {
@@ -113,6 +115,25 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 ? Platform.Version
                 : Number(Platform.Version);
 
+            const locationResult = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                {
+                    title: 'Location Permission',
+                    message: 'Milkey needs location access to find nearby Bluetooth printers.',
+                    buttonNeutral: 'Ask Me Later',
+                    buttonNegative: 'Cancel',
+                    buttonPositive: 'OK',
+                }
+            );
+
+            if (locationResult !== PermissionsAndroid.RESULTS.GRANTED) {
+                setState(prev => ({
+                    ...prev,
+                    error: 'Location permission denied. Turn on Location permission and GPS to scan printers.',
+                }));
+                return false;
+            }
+
             if (apiLevel >= 31) {
                 const results = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
@@ -125,24 +146,13 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 if (!scanGranted || !connectGranted) {
                     setState(prev => ({
                         ...prev,
-                        error: 'Bluetooth permission denied. Open Settings → Apps → Milkey → Permissions and allow "Nearby devices".',
-                    }));
-                    return false;
-                }
-            } else {
-                const result = await PermissionsAndroid.request(
-                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
-                );
-                if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-                    setState(prev => ({
-                        ...prev,
-                        error: 'Location permission denied. Older Android needs it to scan Bluetooth printers.',
+                        error: 'Bluetooth permission denied. Open Settings → Apps → Milkey → Permissions and allow Nearby devices.',
                     }));
                     return false;
                 }
             }
 
-            setState(prev => ({ ...prev, error: null }));
+            setState(prev => ({ ...prev, error: null, isBluetoothEnabled: true }));
             return true;
         } catch (e: any) {
             setState(prev => ({
@@ -150,6 +160,16 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 error: e?.message || 'Failed to request Bluetooth permissions.',
             }));
             return false;
+        }
+    }, []);
+
+    const isLocationServiceEnabled = useCallback(async (): Promise<boolean> => {
+        if (Platform.OS !== 'android') return true;
+
+        try {
+            return await Location.hasServicesEnabledAsync();
+        } catch {
+            return true;
         }
     }, []);
 
@@ -289,13 +309,16 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
     // ---------------- Scan ----------------
     const stopScan = useCallback(() => {
+        scanInFlightRef.current = false;
         setState(prev => ({ ...prev, isScanning: false }));
     }, []);
 
     const startScan = useCallback(async () => {
-        if (state.isScanning) return;
+        if (scanInFlightRef.current) return;
+        scanInFlightRef.current = true;
 
         if (IS_EXPO_GO || !ThermalPrinter) {
+            scanInFlightRef.current = false;
             setState(prev => ({
                 ...prev,
                 error: 'Bluetooth printing requires a production APK (EAS build).',
@@ -304,12 +327,26 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
 
         // ALWAYS re-check permissions at scan time (Android may have revoked).
-        const granted = await requestPermissions();
-        if (!granted) return;
-
         setState(prev => ({ ...prev, isScanning: true, availableDevices: [], error: null }));
 
         try {
+            const granted = await requestPermissions();
+            if (!granted) {
+                setState(prev => ({ ...prev, isScanning: false }));
+                return;
+            }
+
+            const locationEnabled = await isLocationServiceEnabled();
+            if (!locationEnabled) {
+                setState(prev => ({
+                    ...prev,
+                    isScanning: false,
+                    error: 'Phone Location is OFF. Turn on GPS/Location in Android quick settings, then scan again.',
+                }));
+                return;
+            }
+
+            await sleep(600);
             const list = await fetchDeviceList();
 
             const devices: BluetoothDevice[] = (list || [])
@@ -342,7 +379,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 isScanning: false,
                 isBluetoothEnabled: true,
                 error: devices.length === 0
-                    ? 'No paired Bluetooth printers found.\n\n1. Turn ON the printer\n2. Tap "Open Bluetooth Settings" below\n3. Pair the printer (PIN is usually 0000 or 1234)\n4. Come back here and tap Scan again.'
+                    ? 'No paired Bluetooth printers found.\n\n1. Turn ON the printer\n2. Make sure Bluetooth is ON\n3. Turn ON phone Location/GPS\n4. Tap Pair and pair the printer in Android settings (PIN is usually 0000 or 1234)\n5. Come back and tap Scan again.'
                     : null,
             }));
         } catch (e: any) {
@@ -363,8 +400,10 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 isScanning: false,
                 error: friendly,
             }));
+        } finally {
+            scanInFlightRef.current = false;
         }
-    }, [requestPermissions, state.isScanning, fetchDeviceList]);
+    }, [requestPermissions, isLocationServiceEnabled, fetchDeviceList]);
 
     // ---------------- Connect / Disconnect ----------------
     /**
