@@ -829,15 +829,33 @@ router.post('/phone-login', async (req, res) => {
 });
 
 // POST /api/auth/send-phone-otp
-// DEPRECATED — phone OTP is now sent by the CLIENT via Firebase Phone Auth (JS SDK + reCAPTCHA).
-// This endpoint stays only to return a clear error if any old client still calls it.
+// Server-side OTP. Currently uses a fixed dev OTP `123456` (works without an SMS provider).
+// TODO: plug in a real SMS provider (Twilio / MSG91 / Fast2SMS) by replacing the OTP block below.
 router.post('/send-phone-otp', async (req, res) => {
-    console.log(req.body)
-    console.warn('[send-phone-otp] called — deprecated. Phone OTP must go through Firebase on the client.');
-    return res.status(410).json({
-        success: false,
-        message: 'Phone OTP is now handled by Firebase on the client. Please update the app.',
-    });
+    try {
+        const { phone } = req.body || {};
+        console.log('[send-phone-otp] request body:', req.body);
+
+        if (!phone || !/^\d{10}$/.test(String(phone))) {
+            return res.status(400).json({ success: false, message: 'Valid 10-digit phone number is required' });
+        }
+
+        // Dev OTP — replace with a real SMS provider call to send a random 6-digit code.
+        const otp = '123456';
+        phoneOtpStore.set(phone, { otp, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+        console.log(`[send-phone-otp] OTP for ${phone}: ${otp} (dev mode — wire up SMS provider for production)`);
+
+        return res.json({
+            success: true,
+            message: 'OTP sent successfully',
+            // Surfaced only because we don't have a real SMS provider yet — remove in production.
+            response: { devOtp: otp },
+        });
+    } catch (error) {
+        console.error('[send-phone-otp] error:', error);
+        res.status(500).json({ success: false, message: 'Failed to send OTP' });
+    }
 });
 
 // POST /api/auth/firebase-phone-login

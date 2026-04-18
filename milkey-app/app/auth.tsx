@@ -12,9 +12,9 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import { signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import { firebaseAuth, firebaseConfig } from '@/lib/firebase';
+// NOTE: `expo-firebase-recaptcha` was removed (deprecated since Expo SDK 48).
+// Phone OTP now flows through our own server: /api/auth/send-phone-otp + /api/auth/phone-login.
+// Firebase JS SDK is still imported elsewhere for Google sign-in / future use.
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -151,10 +151,7 @@ export default function AuthScreen() {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [resetToken, setResetToken] = useState('');
 
-    // Firebase Phone Auth confirmation handle (kept across renders)
-    const confirmationRef = useRef<ConfirmationResult | null>(null);
-    // reCAPTCHA verifier ref — required by Firebase JS SDK on React Native
-    const recaptchaRef = useRef<any>(null);
+    // (Firebase phone-auth refs removed — OTP is handled by our server now.)
 
     const [modalVisible, setModalVisible] = useState(false);
     const [modalTitle, setModalTitle] = useState('');
@@ -242,40 +239,21 @@ export default function AuthScreen() {
     const handleSendLoginOtp = useCallback(async () => {
         if (!phone || phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
 
-        // ─── DEV/TEST BYPASS: phone numbers starting with 0000 OR test number 7489301982 use OTP 123456 ───
-        // Also: if reCAPTCHA isn't ready, fall back to dev OTP so testing isn't blocked.
-        const TEST_PHONES = ['7489301982', '9999999999', '0000000000'];
-        const isTestPhone = TEST_PHONES.includes(phone);
-
-        if (isTestPhone || !recaptchaRef.current) {
-            console.log('[auth] sendOtp → DEV BYPASS active for', phone, '(use OTP 123456)');
-            confirmationRef.current = null; // mark Firebase NOT used
-            setScreen('login-otp');
-            showModal('OTP Sent (Test Mode)', `Use OTP 123456 to login as +91 ${phone}`);
-            return;
-        }
-
-        const fullPhone = `+91${phone}`;
-        console.log('[auth] sendOtp → starting Firebase signInWithPhoneNumber for', fullPhone);
+        console.log('[auth] sendOtp → requesting OTP from server for +91', phone);
         setLoading(true);
         try {
-            // Send REAL SMS via Firebase JS SDK + reCAPTCHA verifier
-            const confirmation = await signInWithPhoneNumber(firebaseAuth, fullPhone, recaptchaRef.current);
-            confirmationRef.current = confirmation;
-            console.log('[auth] sendOtp → confirmation received, verificationId:', confirmation.verificationId);
-            setScreen('login-otp');
-            showModal('OTP Sent', `OTP sent to +91 ${phone}`);
+            const result = await authApiNew.sendPhoneOtp(phone);
+            console.log('[auth] sendOtp → server response:', { success: result.success, message: result.message });
+
+            if (result.success) {
+                setScreen('login-otp');
+                showModal('OTP Sent', `OTP sent to +91 ${phone}.\n\nTest OTP: 123456`);
+            } else {
+                showModal('Error', result.message || 'Failed to send OTP. Please try again.');
+            }
         } catch (err: any) {
-            console.error('[auth] sendOtp → Firebase error:', err?.code, err?.message, err);
-            const code = err?.code || '';
-            let msg = 'Failed to send OTP. Please try again.';
-            if (code === 'auth/invalid-phone-number') msg = 'Invalid phone number format.';
-            else if (code === 'auth/too-many-requests') msg = 'Too many attempts. Please try again later.';
-            else if (code === 'auth/network-request-failed') msg = 'Network error. Check your internet.';
-            else if (code === 'auth/billing-not-enabled') msg = 'SMS quota issue. Enable billing on Firebase project.';
-            else if (code === 'auth/captcha-check-failed') msg = 'reCAPTCHA failed. Please try again.';
-            else if (err?.message) msg = err.message;
-            showModal('Error', msg);
+            console.error('[auth] sendOtp → network error:', err?.message, err);
+            showModal('Error', 'Network error. Please check your internet and try again.');
         } finally { setLoading(false); }
     }, [phone, showModal]);
 
@@ -284,54 +262,23 @@ export default function AuthScreen() {
 
         setLoading(true);
         try {
-            // ─── DEV/TEST BYPASS: if no Firebase confirmation OR otp is 123456 → use legacy server OTP path ───
-            if (!confirmationRef.current || otp === '123456') {
-                console.log('[auth] verifyOtp → DEV BYPASS via /auth/phone-login (OTP=123456 path)');
-                const result = await authApiNew.phoneLogin(phone, otp);
-                console.log('[auth] verifyOtp(dev) → server response:', { success: result.success, code: (result as any).code });
-
-                if (result.success && result.response) {
-                    if ((result.response as any).needsRegistration || (result as any).code === 'USER_NOT_FOUND') {
-                        setOtp(''); setScreen('register-details'); return;
-                    }
-                    await setAuthUser(result.response.token, result.response.user);
-                    if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
-                    router.replace('/(tabs)');
-                } else {
-                    showModal('Error', result.message || 'Invalid OTP');
-                }
-                return;
-            }
-
-            console.log('[auth] verifyOtp → confirming OTP via Firebase');
-            const credential = await confirmationRef.current.confirm(otp);
-            const firebaseUser = credential?.user;
-            if (!firebaseUser) throw new Error('Firebase did not return a user');
-
-            const firebaseIdToken = await firebaseUser.getIdToken(true);
-            console.log('[auth] verifyOtp → got idToken (len):', firebaseIdToken.length, 'phone:', firebaseUser.phoneNumber);
-
-            const result = await authApiNew.firebasePhoneLogin(firebaseIdToken, phone);
+            console.log('[auth] verifyOtp → calling /auth/phone-login for +91', phone);
+            const result = await authApiNew.phoneLogin(phone, otp);
             console.log('[auth] verifyOtp → server response:', { success: result.success, code: (result as any).code });
 
             if (result.success && result.response) {
-                if ((result.response as any).needsRegistration || result.code === 'USER_NOT_FOUND') {
+                if ((result.response as any).needsRegistration || (result as any).code === 'USER_NOT_FOUND') {
                     setOtp(''); setScreen('register-details'); return;
                 }
                 await setAuthUser(result.response.token, result.response.user);
                 if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                 router.replace('/(tabs)');
             } else {
-                showModal('Error', result.message || 'Login failed');
+                showModal('Error', result.message || 'Invalid OTP');
             }
         } catch (err: any) {
-            console.error('[auth] verifyOtp → error:', err?.code, err?.message, err);
-            const code = err?.code || '';
-            let msg = 'Verification failed. Please try again.';
-            if (code === 'auth/invalid-verification-code') msg = 'Invalid OTP. Please check and try again.';
-            else if (code === 'auth/code-expired') msg = 'OTP expired. Please request a new one.';
-            else if (err?.message) msg = err.message;
-            showModal('Error', msg);
+            console.error('[auth] verifyOtp → error:', err?.message, err);
+            showModal('Error', 'Verification failed. Please try again.');
         } finally { setLoading(false); }
     }, [phone, otp, expoPushToken, showModal]);
 
@@ -412,11 +359,6 @@ export default function AuthScreen() {
 
     const ScreenWrapper = useCallback(({ children }: { children: React.ReactNode }) => (
         <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <FirebaseRecaptchaVerifierModal
-                ref={recaptchaRef}
-                firebaseConfig={firebaseConfig}
-                attemptInvisibleVerification={true}
-            />
             <LinearGradient
                 colors={[colors.primary + '14', colors.primary + '06', colors.background]}
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 260 }}
