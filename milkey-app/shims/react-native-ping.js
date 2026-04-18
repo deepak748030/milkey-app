@@ -1,6 +1,6 @@
-// Stub for react-native-ping. We only use Bluetooth printing, not network/IP printers,
-// so the network ping functionality from react-native-thermal-receipt-printer-image-qr
-// is never exercised. This stub prevents Metro from failing to resolve the module.
+// Stub for react-native-ping. The thermal printer libraries import it for
+// network/IP printing (printNet / printTcp), which we don't use — Bluetooth only.
+// This stub prevents Metro from failing to resolve the optional native module.
 module.exports = {
   default: {
     start: async () => {

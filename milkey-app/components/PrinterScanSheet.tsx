@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, FlatList } from 'react-native';
-import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer } from 'lucide-react-native';
+import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer, Settings } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { BluetoothDevice } from '@/hooks/useBluetoothPrinter';
-import { buildTestPrint } from '@/lib/escpos';
+import { buildTestPayload } from '@/lib/printFormat';
 
 interface PrinterScanSheetProps {
     visible: boolean;
@@ -19,7 +19,8 @@ interface PrinterScanSheetProps {
     onStopScan: () => void;
     onConnect: (device: BluetoothDevice) => void;
     onDisconnect: () => void;
-    onPrintData?: (data: Uint8Array) => Promise<boolean>;
+    onPrintText?: (payload: string) => Promise<boolean>;
+    onOpenBluetoothSettings?: () => void;
 }
 
 export default function PrinterScanSheet({
@@ -36,15 +37,16 @@ export default function PrinterScanSheet({
     onStopScan,
     onConnect,
     onDisconnect,
-    onPrintData,
+    onPrintText,
+    onOpenBluetoothSettings,
 }: PrinterScanSheetProps) {
     const { colors } = useTheme();
     const [testPrintDone, setTestPrintDone] = useState(false);
 
     const handleTestPrint = async () => {
-        if (!onPrintData) return;
+        if (!onPrintText) return;
         setTestPrintDone(false);
-        const success = await onPrintData(buildTestPrint());
+        const success = await onPrintText(buildTestPayload());
         if (success) setTestPrintDone(true);
     };
 
@@ -143,22 +145,33 @@ export default function PrinterScanSheet({
                     )}
 
                     {!isConnected && (
-                        <Pressable
-                            style={[styles.scanBtn, { backgroundColor: isScanning ? colors.muted : colors.primary, opacity: !isBluetoothEnabled && !isScanning ? 0.7 : 1 }]}
-                            onPress={isScanning ? onStopScan : onStartScan}
-                        >
-                            {isScanning ? (
-                                <>
-                                    <ActivityIndicator size="small" color={colors.primary} />
-                                    <Text style={[styles.scanBtnText, { color: colors.foreground }]}>Stop Scanning</Text>
-                                </>
-                            ) : (
-                                <>
-                                    <RefreshCw size={16} color={colors.white} />
-                                    <Text style={[styles.scanBtnText, { color: colors.white }]}>Scan for Printers</Text>
-                                </>
+                        <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 6 }}>
+                            <Pressable
+                                style={[styles.scanBtn, { flex: 1, backgroundColor: isScanning ? colors.muted : colors.primary, opacity: !isBluetoothEnabled && !isScanning ? 0.7 : 1 }]}
+                                onPress={isScanning ? onStopScan : onStartScan}
+                            >
+                                {isScanning ? (
+                                    <>
+                                        <ActivityIndicator size="small" color={colors.primary} />
+                                        <Text style={[styles.scanBtnText, { color: colors.foreground }]}>Stop Scanning</Text>
+                                    </>
+                                ) : (
+                                    <>
+                                        <RefreshCw size={16} color={colors.white} />
+                                        <Text style={[styles.scanBtnText, { color: colors.white }]}>Scan for Printers</Text>
+                                    </>
+                                )}
+                            </Pressable>
+                            {onOpenBluetoothSettings && (
+                                <Pressable
+                                    style={[styles.settingsBtn, { backgroundColor: colors.secondary, borderColor: colors.border }]}
+                                    onPress={onOpenBluetoothSettings}
+                                >
+                                    <Settings size={16} color={colors.foreground} />
+                                    <Text style={[styles.scanBtnText, { color: colors.foreground }]}>Pair</Text>
+                                </Pressable>
                             )}
-                        </Pressable>
+                        </View>
                     )}
 
                     {!isConnected && (
@@ -214,7 +227,8 @@ const styles = StyleSheet.create({
     disconnectText: { fontSize: 13, fontWeight: '600' },
     errorBox: { padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 6, marginHorizontal: 6 },
     errorText: { fontSize: 12, fontWeight: '500' },
-    scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10, marginHorizontal: 6 },
+    scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10 },
+    settingsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
     scanBtnText: { fontSize: 14, fontWeight: '600' },
     sectionLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, paddingHorizontal: 6, marginTop: 6 },
     deviceItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 10, borderWidth: 1, marginHorizontal: 6 },

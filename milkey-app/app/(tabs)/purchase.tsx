@@ -18,7 +18,7 @@ import {
 } from '@/lib/milkeyApi';
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { concatBytes, INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, NORMAL_SIZE, BOLD_OFF, ALIGN_LEFT, textToBytes, separator, doubleSeparator, twoColumnLine, threeColumnLine, FEED_3_LINES } from '@/lib/escpos';
+import { title as fmtTitle, center as fmtCenter, twoCol, threeCol, line as fmtLine, doubleLine, feed } from '@/lib/printFormat';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -42,7 +42,7 @@ export default function PurchaseScreen() {
         hasAccess, loading: subscriptionLoading, showSubscriptionModal,
         handleModalClose, handleSubscriptionSuccess
     } = useSubscriptionCheck('purchase');
-    const { printData, isPrinting } = useBluetoothPrinter();
+    const { printText, isPrinting } = useBluetoothPrinter();
 
     const { purchaseTab: activeTab, setPurchaseTab: setActiveTab } = useSubTabStore();
 
@@ -434,45 +434,42 @@ export default function PurchaseScreen() {
             : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
         const farmerLabel = isReport && selectedReportFarmer ? `Farmer: ${selectedReportFarmer.name}` : '';
 
-        const parts: Uint8Array[] = [INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, textToBytes(title + '\n'), NORMAL_SIZE, BOLD_OFF, textToBytes(dateLabel + '\n')];
-        if (farmerLabel) parts.push(textToBytes(farmerLabel + '\n'));
-        parts.push(ALIGN_LEFT, doubleSeparator());
-
-        parts.push(textToBytes(threeColumnLine('Code', 'Qty', 'Amt')));
-        parts.push(separator());
+        let payload = '';
+        payload += fmtTitle(title);
+        payload += fmtCenter(dateLabel);
+        if (farmerLabel) payload += fmtCenter(farmerLabel);
+        payload += doubleLine();
+        payload += threeCol('Code', 'Qty', 'Amt', { bold: true });
+        payload += fmtLine();
 
         for (const c of data) {
             const code = c.farmerCode || '-';
             const name = c.purchaseFarmer?.name || '';
-            parts.push(textToBytes(twoColumnLine(code + (name ? ` ${name}` : ''), '')));
-            parts.push(textToBytes(twoColumnLine('  Milk: ' + String(c.quantity), 'Fat: ' + (c.fat || '-'))));
-            parts.push(textToBytes(twoColumnLine('  SNF: ' + ((c as any).snf || '-'), 'Rate: ' + String(c.rate))));
-            parts.push(BOLD_ON);
-            parts.push(textToBytes(twoColumnLine('  Amount:', '₹' + c.amount.toFixed(0))));
-            parts.push(BOLD_OFF);
-            parts.push(separator());
+            payload += `[L]${code}${name ? ' ' + name : ''}\n`;
+            payload += twoCol('  Milk: ' + String(c.quantity), 'Fat: ' + (c.fat || '-'));
+            payload += twoCol('  SNF: ' + ((c as any).snf || '-'), 'Rate: ' + String(c.rate));
+            payload += twoCol('  Amount:', 'Rs ' + c.amount.toFixed(0), { bold: true });
+            payload += fmtLine();
         }
 
-        parts.push(doubleSeparator());
-        parts.push(BOLD_ON);
-        parts.push(textToBytes(twoColumnLine('Total Qty:', totals.quantity.toFixed(2) + ' L')));
-        parts.push(textToBytes(twoColumnLine('Total Amt:', '₹' + totals.amount.toFixed(2))));
+        payload += doubleLine();
+        payload += twoCol('Total Qty:', totals.quantity.toFixed(2) + ' L', { bold: true });
+        payload += twoCol('Total Amt:', 'Rs ' + totals.amount.toFixed(2), { bold: true });
         const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
-        parts.push(textToBytes(twoColumnLine('Grand Avg Rate:', avgRate)));
+        payload += twoCol('Grand Avg Rate:', avgRate, { bold: true });
         const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
-        parts.push(textToBytes(twoColumnLine('Total Farmers:', String(uniqueFarmers))));
-        parts.push(textToBytes(twoColumnLine('Total Net Qty:', totals.quantity.toFixed(2))));
-        parts.push(BOLD_OFF, FEED_3_LINES);
+        payload += twoCol('Total Farmers:', String(uniqueFarmers), { bold: true });
+        payload += twoCol('Total Net Qty:', totals.quantity.toFixed(2), { bold: true });
+        payload += feed(3);
 
-        const bytes = concatBytes(...parts);
-        const success = await printData(bytes);
+        const success = await printText(payload);
         if (success) {
             showAlert('Success', 'Full summary printed!');
             return;
         }
 
         showAlert('Printer Not Ready', 'Connect your Bluetooth thermal printer from the top bar, then try printing again.');
-    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printData, selectedReportFarmer]);
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printText, selectedReportFarmer]);
 
     const handleShortSummaryPrint = useCallback(async (source?: 'purchase' | 'report') => {
         setShowPrintTypeModal(false);
@@ -493,27 +490,27 @@ export default function PurchaseScreen() {
         const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
         const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
 
-        const parts: Uint8Array[] = [INIT, ALIGN_CENTER, BOLD_ON, DOUBLE_ON, textToBytes(title + '\n'), NORMAL_SIZE, BOLD_OFF, textToBytes(dateLabel + '\n')];
-        parts.push(ALIGN_LEFT, doubleSeparator());
-        parts.push(BOLD_ON);
-        parts.push(textToBytes(twoColumnLine('Total Qty:', totals.quantity.toFixed(2) + ' L')));
-        parts.push(textToBytes(twoColumnLine('Total Amt:', '₹' + totals.amount.toFixed(2))));
-        parts.push(textToBytes(twoColumnLine('Average Rate:', avgRate)));
-        parts.push(textToBytes(twoColumnLine('Number of Samples:', String(data.length))));
-        parts.push(textToBytes(twoColumnLine('Number of Farmers:', String(uniqueFarmers))));
-        parts.push(BOLD_OFF, doubleSeparator());
-        parts.push(ALIGN_CENTER, textToBytes('--- Short Summary ---\n'));
-        parts.push(FEED_3_LINES);
+        let payload = '';
+        payload += fmtTitle(title);
+        payload += fmtCenter(dateLabel);
+        payload += doubleLine();
+        payload += twoCol('Total Qty:', totals.quantity.toFixed(2) + ' L', { bold: true });
+        payload += twoCol('Total Amt:', 'Rs ' + totals.amount.toFixed(2), { bold: true });
+        payload += twoCol('Average Rate:', avgRate, { bold: true });
+        payload += twoCol('Number of Samples:', String(data.length), { bold: true });
+        payload += twoCol('Number of Farmers:', String(uniqueFarmers), { bold: true });
+        payload += doubleLine();
+        payload += fmtCenter('--- Short Summary ---');
+        payload += feed(3);
 
-        const bytes = concatBytes(...parts);
-        const success = await printData(bytes);
+        const success = await printText(payload);
         if (success) {
             showAlert('Success', 'Short summary printed!');
             return;
         }
 
         showAlert('Printer Not Ready', 'Connect your Bluetooth thermal printer from the top bar, then try printing again.');
-    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printData]);
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printText]);
 
     // Export PDF for report
     const handleExportReportPdf = useCallback(async () => {

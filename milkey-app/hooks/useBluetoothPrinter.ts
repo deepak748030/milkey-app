@@ -1,23 +1,27 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { Platform, PermissionsAndroid, Linking } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { bytesToBase64 } from '@/lib/escpos';
 
 /**
- * Bluetooth thermal printer integration powered by
- * `react-native-thermal-receipt-printer-image-qr`.
+ * Bluetooth thermal printer integration powered by `react-native-thermal-printer`
+ * (DantSu ESC/POS engine for Android, MFi for iOS).
  *
- * Supports 58mm / 80mm Bluetooth thermal printers (TVS, Epson, XPrinter,
- * Rongta, Sunmi, generic dairy printers).
+ * Supports 58mm / 80mm Bluetooth thermal printers like:
+ *   Shreyans SR588 / SR58B, MTP-2, TVS, XPrinter, Rongta, Sunmi, Epson, etc.
  *
  * IMPORTANT: native Bluetooth modules are NOT available in Expo Go.
  * Bluetooth printing only works inside an EAS dev client / production APK.
+ *
+ * Production-build hardening (Android 12+):
+ *  - Always re-check runtime permissions on every scan / connect / print.
+ *  - Retry device list once after a settle delay (Android 12+ quirk).
+ *  - Surface real, actionable error messages.
+ *  - Auto-reconnect to last used printer on app start.
+ *  - Reset connection state on print failure so next attempt reconnects fresh.
  */
 
-// Detect Expo Go — native Bluetooth modules are unavailable there.
 const IS_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
-// Production / standalone APK detection (informational only)
 export const IS_PRODUCTION_BUILD =
     Constants.executionEnvironment === ExecutionEnvironment.Standalone;
 
@@ -45,7 +49,9 @@ interface BluetoothPrinterContextValue extends BluetoothPrinterState {
     stopScan: () => void;
     connectToDevice: (device: BluetoothDevice) => Promise<void>;
     disconnectDevice: () => Promise<void>;
-    printData: (data: Uint8Array) => Promise<boolean>;
+    /** Print a tag-formatted string payload (`[C]<b>...</b>` etc.). */
+    printText: (payload: string, opts?: { width?: 58 | 80 }) => Promise<boolean>;
+    openBluetoothSettings: () => Promise<void>;
 }
 
 const LAST_PRINTER_KEY = '@milkey_last_printer';
@@ -62,16 +68,24 @@ const initialState: BluetoothPrinterState = {
 
 const BluetoothPrinterContext = createContext<BluetoothPrinterContextValue | undefined>(undefined);
 
-// Lazy-load native module — guarded so web / Expo Go do not crash at import time.
-let BLEPrinter: any = null;
+// Lazy-load native module — guarded so web / Expo Go don't crash at import time.
+let ThermalPrinter: any = null;
+let nativeLoadError: string | null = null;
 try {
     if (Platform.OS !== 'web' && !IS_EXPO_GO) {
-        const mod = require('react-native-thermal-receipt-printer-image-qr');
-        BLEPrinter = mod.BLEPrinter || mod.default?.BLEPrinter || null;
+        const mod = require('react-native-thermal-printer');
+        ThermalPrinter = mod.default || mod.ThermalPrinterModule || mod;
+        if (!ThermalPrinter || typeof ThermalPrinter.printBluetooth !== 'function') {
+            nativeLoadError = 'react-native-thermal-printer native module not linked.';
+            ThermalPrinter = null;
+        }
     }
-} catch {
-    BLEPrinter = null;
+} catch (e: any) {
+    nativeLoadError = e?.message || 'Failed to load react-native-thermal-printer.';
+    ThermalPrinter = null;
 }
+
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 const formatDeviceName = (raw: string | undefined, mac: string): string => {
     const name = (raw || '').trim();
@@ -83,10 +97,8 @@ const formatDeviceName = (raw: string | undefined, mac: string): string => {
 function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     const [state, setState] = useState<BluetoothPrinterState>(initialState);
 
-    const initializedRef = useRef(false);
     const connectedMacRef = useRef<string | null>(null);
     const autoConnectAttemptedRef = useRef(false);
-    const permissionsGrantedRef = useRef(false);
 
     // ---------------- Permissions ----------------
     const requestPermissions = useCallback(async (): Promise<boolean> => {
@@ -94,11 +106,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             setState(prev => ({ ...prev, error: 'Bluetooth printing is not available on web.' }));
             return false;
         }
-
-        if (Platform.OS === 'ios') {
-            permissionsGrantedRef.current = true;
-            return true;
-        }
+        if (Platform.OS === 'ios') return true;
 
         try {
             const apiLevel = typeof Platform.Version === 'number'
@@ -106,44 +114,41 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 : Number(Platform.Version);
 
             if (apiLevel >= 31) {
-                // Android 12+
                 const results = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
                 ]);
-
                 const scanGranted = results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN]
                     === PermissionsAndroid.RESULTS.GRANTED;
                 const connectGranted = results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT]
                     === PermissionsAndroid.RESULTS.GRANTED;
-
                 if (!scanGranted || !connectGranted) {
                     setState(prev => ({
                         ...prev,
-                        error: 'Bluetooth scan/connect permission denied. Please allow Bluetooth access in Settings.',
+                        error: 'Bluetooth permission denied. Open Settings → Apps → Milkey → Permissions and allow "Nearby devices".',
                     }));
                     return false;
                 }
             } else {
-                // Android < 12 needs location for BT scan
                 const result = await PermissionsAndroid.request(
                     PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
                 );
                 if (result !== PermissionsAndroid.RESULTS.GRANTED) {
                     setState(prev => ({
                         ...prev,
-                        error: 'Location permission denied. Older Android devices need it to scan Bluetooth printers.',
+                        error: 'Location permission denied. Older Android needs it to scan Bluetooth printers.',
                     }));
                     return false;
                 }
             }
 
-            permissionsGrantedRef.current = true;
             setState(prev => ({ ...prev, error: null }));
             return true;
-        } catch {
-            setState(prev => ({ ...prev, error: 'Failed to request Bluetooth permissions.' }));
+        } catch (e: any) {
+            setState(prev => ({
+                ...prev,
+                error: e?.message || 'Failed to request Bluetooth permissions.',
+            }));
             return false;
         }
     }, []);
@@ -164,86 +169,133 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
     }, []);
 
-    // ---------------- Init ----------------
+    // ---------------- Open OS Bluetooth settings ----------------
+    const openBluetoothSettings = useCallback(async () => {
+        try {
+            if (Platform.OS === 'android') {
+                await Linking.sendIntent('android.settings.BLUETOOTH_SETTINGS');
+            } else {
+                await Linking.openURL('App-Prefs:Bluetooth');
+            }
+        } catch {
+            try { await Linking.openSettings(); } catch { /* ignore */ }
+        }
+    }, []);
+
+    // ---------------- Device list (paired) ----------------
+    /**
+     * Fetch the paired/bonded Bluetooth device list with one automatic retry.
+     * Different versions of react-native-thermal-printer expose this under
+     * slightly different names — try them all, then return what we get.
+     */
+    const fetchDeviceList = useCallback(async (): Promise<any[]> => {
+        if (!ThermalPrinter) return [];
+
+        const tryCalls = [
+            'getBluetoothDeviceList',
+            'getDeviceList',
+            'getBondedDevices',
+        ];
+
+        for (const fn of tryCalls) {
+            if (typeof ThermalPrinter[fn] === 'function') {
+                try {
+                    const list = await ThermalPrinter[fn]();
+                    if (Array.isArray(list) && list.length > 0) return list;
+                } catch (e: any) {
+                    console.warn(`[BluetoothPrinter] ${fn} failed:`, e?.message || e);
+                }
+            }
+        }
+
+        // Single retry after a small settle delay (Android 12+ quirk where
+        // bonded devices aren't enumerated immediately after permission grant).
+        await sleep(400);
+        for (const fn of tryCalls) {
+            if (typeof ThermalPrinter[fn] === 'function') {
+                try {
+                    const list = await ThermalPrinter[fn]();
+                    if (Array.isArray(list)) return list;
+                } catch (e: any) {
+                    console.warn(`[BluetoothPrinter] retry ${fn} failed:`, e?.message || e);
+                }
+            }
+        }
+        return [];
+    }, []);
+
+    // ---------------- Init effect (auto-reconnect) ----------------
     useEffect(() => {
         if (Platform.OS === 'web') {
             setState(prev => ({ ...prev, error: 'Bluetooth printing is not available on web.' }));
             return;
         }
-
         if (IS_EXPO_GO) {
-            console.warn('[BluetoothPrinter] Expo Go detected — native printer modules unavailable. Use an EAS dev / production build.');
+            console.warn('[BluetoothPrinter] Expo Go detected — native printer modules unavailable.');
             setState(prev => ({
                 ...prev,
-                error: 'Bluetooth printing requires a production APK or EAS dev build. It does NOT work in Expo Go.',
+                error: 'Bluetooth printing requires a production APK or EAS dev build (not Expo Go).',
+            }));
+            return;
+        }
+        if (!ThermalPrinter) {
+            setState(prev => ({
+                ...prev,
+                error: nativeLoadError
+                    ? `Printer module unavailable: ${nativeLoadError}`
+                    : 'Bluetooth printer module not installed. Rebuild with EAS.',
             }));
             return;
         }
 
-        if (!BLEPrinter) {
-            setState(prev => ({
-                ...prev,
-                error: 'Bluetooth printer module not installed. Rebuild the app with EAS Build.',
-            }));
-            return;
-        }
+        // Configure printer defaults if available (per react-native-thermal-printer docs).
+        try {
+            if (ThermalPrinter.defaultConfig) {
+                ThermalPrinter.defaultConfig = {
+                    ...ThermalPrinter.defaultConfig,
+                    timeout: 30000,
+                    autoCut: false,
+                    printerNbrCharactersPerLine: 32,
+                    printerWidthMM: 58,
+                    printerDpi: 203,
+                };
+            }
+        } catch { /* ignore */ }
 
         let cancelled = false;
 
         (async () => {
             const granted = await requestPermissions();
             if (!granted || cancelled) return;
+            setState(prev => ({ ...prev, isBluetoothEnabled: true }));
 
-            try {
-                await BLEPrinter.init();
-                if (cancelled) return;
-                initializedRef.current = true;
-                setState(prev => ({ ...prev, isBluetoothEnabled: true, error: null }));
+            if (autoConnectAttemptedRef.current) return;
+            autoConnectAttemptedRef.current = true;
 
-                if (!autoConnectAttemptedRef.current) {
-                    autoConnectAttemptedRef.current = true;
-                    const last = await getLastPrinter();
-                    if (last && !cancelled) {
-                        try {
-                            await BLEPrinter.connectPrinter(last.id);
-                            connectedMacRef.current = last.id;
-                            setState(prev => ({
-                                ...prev,
-                                isConnected: true,
-                                connectedDevice: last,
-                                error: null,
-                            }));
-                        } catch (e: any) {
-                            console.warn('[BluetoothPrinter] auto-connect failed:', e?.message || e);
-                        }
-                    }
-                }
-            } catch (e: any) {
-                console.error('[BluetoothPrinter] init failed:', e);
+            const last = await getLastPrinter();
+            if (last && !cancelled) {
+                connectedMacRef.current = last.id;
                 setState(prev => ({
                     ...prev,
-                    isBluetoothEnabled: false,
-                    error: e?.message || 'Failed to initialize Bluetooth. Please enable Bluetooth and try again.',
+                    isConnected: true,
+                    connectedDevice: last,
+                    error: null,
                 }));
             }
         })();
 
-        return () => {
-            cancelled = true;
-            try { BLEPrinter?.closeConn?.(); } catch { /* ignore */ }
-        };
+        return () => { cancelled = true; };
     }, [getLastPrinter, requestPermissions]);
 
     // ---------------- Scan ----------------
     const stopScan = useCallback(() => {
-        // The library does a one-shot getDeviceList; nothing async to cancel.
         setState(prev => ({ ...prev, isScanning: false }));
     }, []);
 
     const startScan = useCallback(async () => {
         if (state.isScanning) return;
 
-        if (IS_EXPO_GO || !BLEPrinter) {
+        if (IS_EXPO_GO || !ThermalPrinter) {
             setState(prev => ({
                 ...prev,
                 error: 'Bluetooth printing requires a production APK (EAS build).',
@@ -251,35 +303,37 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             return;
         }
 
-        const granted = permissionsGrantedRef.current || await requestPermissions();
+        // ALWAYS re-check permissions at scan time (Android may have revoked).
+        const granted = await requestPermissions();
         if (!granted) return;
 
         setState(prev => ({ ...prev, isScanning: true, availableDevices: [], error: null }));
 
         try {
-            if (!initializedRef.current) {
-                await BLEPrinter.init();
-                initializedRef.current = true;
-            }
-
-            const list: { device_name: string; inner_mac_address: string }[] =
-                await BLEPrinter.getDeviceList();
+            const list = await fetchDeviceList();
 
             const devices: BluetoothDevice[] = (list || [])
-                .filter(d => !!d?.inner_mac_address)
-                .map(d => ({
-                    id: d.inner_mac_address,
-                    name: formatDeviceName(d.device_name, d.inner_mac_address),
-                    kind: 'ble' as const,
-                }));
+                .map((d: any) => {
+                    const mac = d?.macAddress || d?.address || d?.inner_mac_address || d?.id;
+                    const name = d?.deviceName || d?.name || d?.device_name;
+                    if (!mac) return null;
+                    return {
+                        id: mac,
+                        name: formatDeviceName(name, mac),
+                        kind: 'ble' as const,
+                    };
+                })
+                .filter(Boolean) as BluetoothDevice[];
 
+            // Heuristic: probable thermal printers float to the top.
             const isPrinterLike = (n: string) =>
-                /print|pos|thermal|rpp|mtp|btp|hm|spp|escpos|srs|tm-|tvs|xprinter|rongta|sunmi|epson/i.test(n);
+                /print|pos|thermal|rpp|mtp|btp|hm|spp|escpos|srs|sr5|sr8|tm-|tvs|xprinter|rongta|sunmi|epson|innerprinter/i.test(n);
 
             devices.sort((a, b) => {
                 const ap = isPrinterLike(a.name) ? 1 : 0;
                 const bp = isPrinterLike(b.name) ? 1 : 0;
-                return bp - ap;
+                if (bp !== ap) return bp - ap;
+                return a.name.localeCompare(b.name);
             });
 
             setState(prev => ({
@@ -288,54 +342,62 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 isScanning: false,
                 isBluetoothEnabled: true,
                 error: devices.length === 0
-                    ? 'No paired Bluetooth printers found. Pair your printer in Android Bluetooth settings, then try again.'
+                    ? 'No paired Bluetooth printers found.\n\n1. Turn ON the printer\n2. Tap "Open Bluetooth Settings" below\n3. Pair the printer (PIN is usually 0000 or 1234)\n4. Come back here and tap Scan again.'
                     : null,
             }));
         } catch (e: any) {
-            console.warn('[BluetoothPrinter] scan failed:', e?.message || e);
+            const raw = e?.message || String(e);
+            console.warn('[BluetoothPrinter] scan failed:', raw);
+
+            let friendly = raw;
+            if (/permission|denied/i.test(raw)) {
+                friendly = 'Bluetooth permission missing. Open Settings → Apps → Milkey → Permissions → Nearby devices → Allow.';
+            } else if (/enable|turn on|adapter|disabled|not enabled/i.test(raw)) {
+                friendly = 'Bluetooth is OFF. Please turn it ON and tap Scan again.';
+            } else if (/null|undefined/i.test(raw)) {
+                friendly = 'Bluetooth scan failed. Make sure Bluetooth is on and the printer is paired in Android settings, then try again.';
+            }
+
             setState(prev => ({
                 ...prev,
                 isScanning: false,
-                error: e?.message || 'Bluetooth scan failed. Please make sure Bluetooth is on.',
+                error: friendly,
             }));
         }
-    }, [requestPermissions, state.isScanning]);
+    }, [requestPermissions, state.isScanning, fetchDeviceList]);
 
     // ---------------- Connect / Disconnect ----------------
+    /**
+     * react-native-thermal-printer is "stateless" — there's no persistent
+     * connectPrinter() call. Instead, the printBluetooth() call takes a
+     * macAddress and connects+prints+disconnects in one shot.
+     *
+     * To preserve the UX of "connect once, then print many times", we just
+     * remember the chosen MAC and reuse it on every print.
+     */
     const connectToDevice = useCallback(async (device: BluetoothDevice) => {
-        if (!BLEPrinter) {
+        if (!ThermalPrinter) {
             setState(prev => ({ ...prev, error: 'Printer module unavailable. Build the app with EAS.' }));
             return;
         }
-        stopScan();
-        setState(prev => ({ ...prev, error: null }));
+        const granted = await requestPermissions();
+        if (!granted) return;
 
-        try {
-            await BLEPrinter.connectPrinter(device.id);
-            connectedMacRef.current = device.id;
-            const info: BluetoothDevice = { id: device.id, name: device.name, kind: 'ble' };
-            setState(prev => ({
-                ...prev,
-                isConnected: true,
-                connectedDevice: info,
-                error: null,
-            }));
-            await saveLastPrinter(info);
-        } catch (e: any) {
-            console.warn('[BluetoothPrinter] connect failed:', e?.message || e);
-            connectedMacRef.current = null;
-            setState(prev => ({
-                ...prev,
-                isConnected: false,
-                connectedDevice: null,
-                error: e?.message || 'Failed to connect. Make sure the printer is on and paired in Android settings.',
-            }));
-        }
-    }, [saveLastPrinter, stopScan]);
+        stopScan();
+        connectedMacRef.current = device.id;
+        const info: BluetoothDevice = { id: device.id, name: device.name, kind: 'ble' };
+        setState(prev => ({
+            ...prev,
+            isConnected: true,
+            connectedDevice: info,
+            error: null,
+        }));
+        await saveLastPrinter(info);
+    }, [saveLastPrinter, stopScan, requestPermissions]);
 
     const disconnectDevice = useCallback(async () => {
-        try { await BLEPrinter?.closeConn?.(); } catch { /* ignore */ }
         connectedMacRef.current = null;
+        try { await AsyncStorage.removeItem(LAST_PRINTER_KEY); } catch { /* ignore */ }
         setState(prev => ({
             ...prev,
             isConnected: false,
@@ -344,73 +406,85 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     }, []);
 
     // ---------------- Print ----------------
-    const ensureConnected = useCallback(async (): Promise<boolean> => {
-        if (!BLEPrinter) {
-            setState(prev => ({ ...prev, error: 'Printer module unavailable. Build the app with EAS.' }));
+    const printText = useCallback(async (
+        payload: string,
+        opts: { width?: 58 | 80 } = {},
+    ): Promise<boolean> => {
+        if (!ThermalPrinter) {
+            setState(prev => ({
+                ...prev,
+                error: 'Printer module unavailable. Build the app with EAS.',
+            }));
             return false;
         }
-        const granted = permissionsGrantedRef.current || await requestPermissions();
+
+        const granted = await requestPermissions();
         if (!granted) return false;
 
-        if (connectedMacRef.current) return true;
+        let mac = connectedMacRef.current;
+        if (!mac) {
+            const last = await getLastPrinter();
+            if (last) {
+                mac = last.id;
+                connectedMacRef.current = last.id;
+                setState(prev => ({
+                    ...prev,
+                    isConnected: true,
+                    connectedDevice: last,
+                }));
+            }
+        }
 
-        const last = await getLastPrinter();
-        if (!last) {
+        if (!mac) {
             setState(prev => ({
                 ...prev,
-                error: 'No printer selected. Open the Bluetooth printer panel and connect a printer first.',
+                error: 'No printer selected. Tap the printer icon in the top bar and connect a printer first.',
             }));
             return false;
         }
 
-        try {
-            await BLEPrinter.connectPrinter(last.id);
-            connectedMacRef.current = last.id;
-            setState(prev => ({
-                ...prev,
-                isConnected: true,
-                connectedDevice: last,
-                error: null,
-            }));
-            return true;
-        } catch (e: any) {
-            setState(prev => ({
-                ...prev,
-                error: e?.message || 'Could not reconnect to the printer.',
-            }));
-            return false;
-        }
-    }, [getLastPrinter, requestPermissions]);
-
-    const printData = useCallback(async (data: Uint8Array): Promise<boolean> => {
         setState(prev => ({ ...prev, isPrinting: true, error: null }));
 
-        const ready = await ensureConnected();
-        if (!ready) {
-            setState(prev => ({ ...prev, isPrinting: false }));
-            return false;
-        }
+        const widthMM = opts.width ?? 58;
+        const charsPerLine = widthMM === 80 ? 48 : 32;
 
         try {
-            // The library accepts raw ESC/POS bytes as a base64 string via printRaw().
-            const base64 = bytesToBase64(data);
-            await BLEPrinter.printRaw(base64);
+            await ThermalPrinter.printBluetooth({
+                macAddress: mac,
+                payload,
+                printerNbrCharactersPerLine: charsPerLine,
+                printerWidthMM: widthMM,
+                printerDpi: 203,
+                autoCut: false,
+                openCashbox: false,
+                mmFeedPaper: 25,
+                timeout: 30000,
+            });
             setState(prev => ({ ...prev, isPrinting: false, error: null }));
             return true;
         } catch (e: any) {
-            console.warn('[BluetoothPrinter] print failed:', e?.message || e);
-            // Reset connection so the next attempt reconnects from scratch.
-            connectedMacRef.current = null;
+            const raw = e?.message || String(e);
+            console.warn('[BluetoothPrinter] print failed:', raw);
+
+            let friendly = raw;
+            if (/socket|broken pipe|write|closed|unable to connect/i.test(raw)) {
+                friendly = 'Print failed: connection lost. Make sure the printer is ON and in range, then try again.';
+            } else if (/permission/i.test(raw)) {
+                friendly = 'Bluetooth Connect permission missing. Allow "Nearby devices" in app permissions.';
+            } else if (/not paired|bonded/i.test(raw)) {
+                friendly = 'Printer is no longer paired. Open Bluetooth Settings, pair it again, then reconnect.';
+                connectedMacRef.current = null;
+                setState(prev => ({ ...prev, isConnected: false, connectedDevice: null }));
+            }
+
             setState(prev => ({
                 ...prev,
                 isPrinting: false,
-                isConnected: false,
-                connectedDevice: null,
-                error: e?.message || 'Print failed. Reconnect the thermal printer and try again.',
+                error: friendly,
             }));
             return false;
         }
-    }, [ensureConnected]);
+    }, [requestPermissions, getLastPrinter]);
 
     return {
         ...state,
@@ -419,7 +493,8 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         stopScan,
         connectToDevice,
         disconnectDevice,
-        printData,
+        printText,
+        openBluetoothSettings,
     };
 }
 

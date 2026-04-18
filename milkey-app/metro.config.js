@@ -4,8 +4,8 @@ const path = require('path');
 
 const config = getDefaultConfig(__dirname);
 
-// Stub out `react-native-ping` because the thermal printer library imports it
-// for network/IP printing, which we don't use (Bluetooth only). This avoids
+// Stub out `react-native-ping` because thermal printer libraries import it
+// for optional network/IP printing — we only use Bluetooth. This avoids
 // the Metro "Unable to resolve react-native-ping" bundling error without
 // installing an extra native module.
 config.resolver.extraNodeModules = {
