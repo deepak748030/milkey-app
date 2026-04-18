@@ -1,7 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Platform, PermissionsAndroid } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { bytesToBase64 } from '@/lib/escpos';
+
+// Detect Expo Go — native Bluetooth modules are NOT available there.
+// Bluetooth printing only works in a custom dev build or production APK (EAS build).
+const IS_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 export type PrinterKind = 'ble' | 'classic';
 
