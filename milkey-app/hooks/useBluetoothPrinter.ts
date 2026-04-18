@@ -349,6 +349,15 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             return;
         }
 
+        if (IS_EXPO_GO) {
+            console.warn('[BluetoothPrinter] Running in Expo Go — native Bluetooth modules are unavailable. Use an EAS dev build or production APK.');
+            setState(prev => ({
+                ...prev,
+                error: 'Bluetooth printing requires a production APK (EAS build). It does NOT work in Expo Go. Build the APK to test printing.',
+            }));
+            return;
+        }
+
         if (!BleManager) {
             setState(prev => ({ ...prev, error: 'Bluetooth library not installed. Run an EAS build.' }));
             return;
@@ -393,8 +402,9 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 managerRef.current?.destroy();
                 managerRef.current = null;
             };
-        } catch {
-            setState(prev => ({ ...prev, error: 'Failed to initialize Bluetooth.' }));
+        } catch (e) {
+            console.error('[BluetoothPrinter] Failed to initialize BleManager:', e);
+            setState(prev => ({ ...prev, error: 'Failed to initialize Bluetooth. Make sure you are running an EAS build (not Expo Go).' }));
         }
     }, [clearActiveConnection, connectToDeviceById, getLastPrinter, requestPermissions]);
 
