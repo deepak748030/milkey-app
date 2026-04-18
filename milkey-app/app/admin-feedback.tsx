@@ -318,6 +318,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     userInfoEmail: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
     userInfoDate: { fontSize: 11, color: colors.mutedForeground, marginTop: 4 },
     detailLabel: { fontSize: 12, fontWeight: '600', color: colors.mutedForeground, marginBottom: 6, marginTop: 12 },
+
     detailText: { fontSize: 14, color: colors.foreground, lineHeight: 20 },
     typeDisplay: { backgroundColor: colors.secondary, padding: 10, borderRadius: 8 },
     statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
