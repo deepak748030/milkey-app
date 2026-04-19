@@ -50,23 +50,36 @@ export default function PrinterScanSheet({
         if (success) setTestPrintDone(true);
     };
 
-    const renderDevice = ({ item }: { item: BluetoothDevice }) => (
-        <Pressable
-            style={[styles.deviceItem, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={() => onConnect(item)}
-        >
-            <View style={styles.deviceInfo}>
-                <Bluetooth size={16} color={colors.primary} />
-                <View style={{ flex: 1 }}>
-                    <Text style={[styles.deviceName, { color: colors.foreground }]}>{item.name}</Text>
-                    <Text style={[styles.deviceMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
-                        {item.id}
-                    </Text>
+    const renderDevice = ({ item }: { item: BluetoothDevice }) => {
+        const isThisConnected = isConnected && connectedDevice?.id === item.id;
+        return (
+            <Pressable
+                style={[
+                    styles.deviceItem,
+                    {
+                        backgroundColor: isThisConnected ? colors.secondary : colors.card,
+                        borderColor: isThisConnected ? colors.success : colors.border,
+                        borderWidth: isThisConnected ? 2 : 1,
+                    },
+                ]}
+                onPress={() => !isThisConnected && onConnect(item)}
+                disabled={isThisConnected}
+            >
+                <View style={styles.deviceInfo}>
+                    <Bluetooth size={16} color={isThisConnected ? colors.success : colors.primary} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={[styles.deviceName, { color: colors.foreground }]}>{item.name}</Text>
+                        <Text style={[styles.deviceMeta, { color: colors.mutedForeground }]} numberOfLines={1}>
+                            {item.id}
+                        </Text>
+                    </View>
                 </View>
-            </View>
-            <Text style={[styles.connectText, { color: colors.primary }]}>Connect</Text>
-        </Pressable>
-    );
+                <Text style={[styles.connectText, { color: isThisConnected ? colors.success : colors.primary }]}>
+                    {isThisConnected ? '✓ Connected' : 'Connect'}
+                </Text>
+            </Pressable>
+        );
+    };
 
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>

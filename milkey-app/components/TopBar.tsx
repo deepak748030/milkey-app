@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ShoppingCart, Bell, Sun, Moon, Bluetooth, BluetoothOff } from 'lucide-react-native';
+import { ShoppingCart, Bell, Sun, Moon, Bluetooth, BluetoothOff, AlertCircle } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useCartStore } from '@/lib/cartStore';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
@@ -34,6 +34,17 @@ export default function TopBar() {
     loadCart();
   }, []);
 
+  // When the user opens the printer sheet, auto-trigger a paired-device scan
+  // so they immediately see their already-paired printer without tapping Scan.
+  // Guard against double-scan if a scan is already in flight from app-init.
+  useEffect(() => {
+    if (showPrinterSheet && !isScanning) {
+      const t = setTimeout(() => startScan(), 150);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPrinterSheet]);
+
   const itemCount = getItemCount();
 
   return (
@@ -56,17 +67,31 @@ export default function TopBar() {
           <Pressable onPress={() => setShowPrinterSheet(true)}>
             <Text style={[styles.appName, { color: colors.foreground }]}>Milkey</Text>
             <View style={styles.printerStatus}>
-              {isConnected ? (
+              {isPrinting ? (
+                <>
+                  <Bluetooth size={10} color={colors.primary} strokeWidth={2.5} />
+                  <Text style={[styles.statusText, { color: colors.primary }]} numberOfLines={1}>
+                    Printing...
+                  </Text>
+                </>
+              ) : isConnected ? (
                 <>
                   <Bluetooth size={10} color={colors.success} strokeWidth={2.5} />
-                  <Text style={[styles.statusText, { color: colors.success }]}>
+                  <Text style={[styles.statusText, { color: colors.success }]} numberOfLines={1}>
                     {connectedDevice?.name || 'Printer Connected'}
+                  </Text>
+                </>
+              ) : error ? (
+                <>
+                  <AlertCircle size={10} color={colors.destructive} strokeWidth={2.5} />
+                  <Text style={[styles.statusText, { color: colors.destructive }]} numberOfLines={1}>
+                    Printer error — tap to view
                   </Text>
                 </>
               ) : (
                 <>
                   <BluetoothOff size={10} color={colors.destructive} strokeWidth={2.5} />
-                  <Text style={[styles.statusText, { color: colors.destructive }]}>Not Connected</Text>
+                  <Text style={[styles.statusText, { color: colors.destructive }]}>Tap to connect printer</Text>
                 </>
               )}
             </View>
@@ -152,10 +177,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginTop: 1,
+    maxWidth: 180,
   },
   statusText: {
     fontSize: 10,
     fontWeight: '600',
+    flexShrink: 1,
   },
   rightSection: {
     flexDirection: 'row',

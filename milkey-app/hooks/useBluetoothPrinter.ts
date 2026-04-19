@@ -112,7 +112,7 @@ const formatDeviceName = (raw: string | undefined, mac: string): string => {
 };
 
 const isProbablyPrinter = (name: string) =>
-    /print|pos|thermal|rpp|mtp|btp|hm|spp|escpos|srs|sr5|sr8|tm-|tvs|xprinter|rongta|sunmi|epson|innerprinter/i.test(name);
+    /print|pos|thermal|rpp|mtp|btp|hm|spp|escpos|srs|sr5|sr8|sr588|tm-|tvs|xprinter|rongta|sunmi|epson|innerprinter|bt-spp|bluetooth printer/i.test(name);
 
 const normalizeDeviceList = (list: any[]): BluetoothDevice[] => {
     const byMac = new Map<string, BluetoothDevice>();
@@ -159,10 +159,13 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 : Number(Platform.Version);
 
             if (apiLevel >= 31) {
+                // Android 12+: BLUETOOTH_SCAN + BLUETOOTH_CONNECT only.
+                // We declare BLUETOOTH_SCAN with neverForLocation in the manifest,
+                // so ACCESS_FINE_LOCATION is NOT required and we MUST NOT request
+                // it — asking for it pops a confusing extra dialog.
                 const results = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
                 ]);
                 const scanGranted = results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN]
                     === PermissionsAndroid.RESULTS.GRANTED;
@@ -176,6 +179,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                     return false;
                 }
             } else {
+                // Android <= 11: needs ACCESS_FINE_LOCATION to enumerate paired BT.
                 const locationResult = await PermissionsAndroid.request(
                     PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
                     {
@@ -334,15 +338,42 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             if (autoConnectAttemptedRef.current) return;
             autoConnectAttemptedRef.current = true;
 
+            // Remember the last-used printer in-memory so it shows up in the list,
+            // but DO NOT mark as "connected" until we've actually verified the
+            // socket. Otherwise the topbar lies (shows green Connected) when the
+            // printer is OFF / out of range — confusing the user.
             const last = await getLastPrinter();
             if (last && !cancelled) {
-                connectedMacRef.current = last.id;
                 setState(prev => ({
                     ...prev,
-                    isConnected: true,
-                    connectedDevice: last,
-                    error: null,
+                    availableDevices: prev.availableDevices.find(d => d.id === last.id)
+                        ? prev.availableDevices
+                        : [last, ...prev.availableDevices],
                 }));
+            }
+
+            // Auto-load paired Bluetooth devices on app start so the user sees
+            // their already-paired printer in the list without having to tap Scan.
+            try {
+                await sleep(500);
+                const list = await fetchDeviceList();
+                if (cancelled) return;
+                const devices = normalizeDeviceList(list);
+                console.log('[BluetoothPrinter] auto-loaded paired devices on init:', devices.length);
+
+                // Merge connected device into the list if it's not already there
+                // (paired list sometimes omits currently-connected printers).
+                const merged = [...devices];
+                if (last && !merged.find(d => d.id === last.id)) {
+                    merged.unshift(last);
+                }
+
+                setState(prev => ({
+                    ...prev,
+                    availableDevices: merged,
+                }));
+            } catch (e: any) {
+                console.warn('[BluetoothPrinter] auto-load paired devices failed:', e?.message || e);
             }
         })();
 
@@ -376,7 +407,9 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
 
         // ALWAYS re-check permissions at scan time (Android may have revoked).
-        setState(prev => ({ ...prev, isScanning: true, availableDevices: [], error: null }));
+        // Note: do NOT clear availableDevices here — keep the previous list visible
+        // so the user doesn't see an empty list flash if the scan briefly fails.
+        setState(prev => ({ ...prev, isScanning: true, error: null }));
 
         try {
             const granted = await requestPermissions();
@@ -399,13 +432,22 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             const devices = normalizeDeviceList(list);
             console.log('[BluetoothPrinter] normalized devices:', devices.length, devices);
 
+            // Always include the currently-connected device in the list, even if
+            // the native paired-device call momentarily omits it.
+            const connectedMac = connectedMacRef.current;
+            const last = await getLastPrinter();
+            const merged = [...devices];
+            if (connectedMac && last && !merged.find(d => d.id === connectedMac)) {
+                merged.unshift(last);
+            }
+
             setState(prev => ({
                 ...prev,
-                availableDevices: devices,
+                availableDevices: merged,
                 isScanning: false,
                 isBluetoothEnabled: true,
-                error: devices.length === 0
-                    ? 'No paired Bluetooth printers found.\n\n1. Turn ON the printer\n2. Open Android Settings → Bluetooth\n3. Tap "Pair new device" and pair the printer (PIN is usually 0000 or 1234)\n4. Come back here and tap Scan again.\n\nNote: this list only shows already-paired devices.'
+                error: merged.length === 0
+                    ? 'No paired Bluetooth printers found.\n\n• Make sure Bluetooth is ON on this phone\n• Turn ON the printer (light should be solid)\n• Open Android Settings → Bluetooth → Pair new device → pair the printer (PIN 0000 or 1234)\n• Come back and tap Scan again.'
                     : null,
             }));
         } catch (e: any) {
@@ -429,7 +471,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         } finally {
             scanInFlightRef.current = false;
         }
-    }, [requestPermissions, fetchDeviceList]);
+    }, [requestPermissions, fetchDeviceList, getLastPrinter]);
 
     // ---------------- Connect / Disconnect ----------------
     /**
@@ -449,24 +491,79 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         if (!granted) return;
 
         stopScan();
+
+        // Verify the printer is actually reachable BEFORE marking it connected.
+        // We send an empty payload with 0 feed as a pure SPP socket probe — this
+        // opens the Bluetooth socket without ejecting any paper on the SR588.
+        // If it succeeds the printer is reachable; if it fails the user gets a
+        // real, actionable error instead of a silent "connected" lie.
+        setState(prev => ({ ...prev, isPrinting: true, error: null }));
+        try {
+            // Single space at left margin with 0 paper feed — opens the SPP
+            // socket and writes 1 char (which the printer buffers but does NOT
+            // visibly print or feed). Safer than empty string which some forks
+            // of react-native-thermal-printer reject with IllegalArgumentException.
+            await ThermalPrinter.printBluetooth({
+                macAddress: device.id,
+                payload: '[L] ',
+                printerNbrCharactersPerLine: 32,
+                printerWidthMM: 58,
+                printerDpi: 203,
+                autoCut: false,
+                openCashbox: false,
+                mmFeedPaper: 0,
+                timeout: 12000,
+            });
+        } catch (e: any) {
+            const raw = e?.message || String(e);
+            console.warn('[BluetoothPrinter] connect probe failed:', raw);
+            let friendly = `Could not connect to ${device.name}.`;
+            if (/socket|unable to connect|read failed|broken pipe|closed/i.test(raw)) {
+                friendly = `Could not reach ${device.name}. Make sure the printer is ON, in range, and not connected to another phone.`;
+            } else if (/permission/i.test(raw)) {
+                friendly = 'Bluetooth Connect permission missing. Allow "Nearby devices" in app permissions.';
+            } else if (/not paired|bonded/i.test(raw)) {
+                friendly = `${device.name} is not paired. Open Bluetooth Settings and pair it first.`;
+            } else if (/timeout/i.test(raw)) {
+                friendly = `Connection to ${device.name} timed out. Turn the printer OFF then ON and try again.`;
+            }
+            setState(prev => ({
+                ...prev,
+                isPrinting: false,
+                isConnected: false,
+                connectedDevice: null,
+                error: friendly,
+            }));
+            return;
+        }
+
         connectedMacRef.current = device.id;
         const info: BluetoothDevice = { id: device.id, name: device.name, kind: 'ble' };
-        setState(prev => ({
-            ...prev,
-            isConnected: true,
-            connectedDevice: info,
-            error: null,
-        }));
+        setState(prev => {
+            const exists = prev.availableDevices.find(d => d.id === info.id);
+            const list = exists ? prev.availableDevices : [info, ...prev.availableDevices];
+            return {
+                ...prev,
+                isPrinting: false,
+                isConnected: true,
+                connectedDevice: info,
+                availableDevices: list,
+                error: null,
+            };
+        });
         await saveLastPrinter(info);
     }, [saveLastPrinter, stopScan, requestPermissions]);
 
     const disconnectDevice = useCallback(async () => {
+        // Only clear the in-memory connection. Keep LAST_PRINTER_KEY so the
+        // user's last-used printer is still remembered for the next session —
+        // they can switch printers from the scan sheet without losing history.
         connectedMacRef.current = null;
-        try { await AsyncStorage.removeItem(LAST_PRINTER_KEY); } catch { /* ignore */ }
         setState(prev => ({
             ...prev,
             isConnected: false,
             connectedDevice: null,
+            error: null,
         }));
     }, []);
 
@@ -522,7 +619,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 printerDpi: 203,
                 autoCut: false,
                 openCashbox: false,
-                mmFeedPaper: 25,
+                mmFeedPaper: 12,
                 timeout: 30000,
             });
             setState(prev => ({ ...prev, isPrinting: false, error: null }));
