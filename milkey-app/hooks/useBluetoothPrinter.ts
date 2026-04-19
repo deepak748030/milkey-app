@@ -1,8 +1,24 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Platform, PermissionsAndroid, Linking } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+
+/**
+ * Best-effort check whether the device's GPS / Location Services is ON.
+ * On Android 12+ this is NOT required for fetching paired Bluetooth devices,
+ * so we never block scan based on it — we only use it for diagnostics.
+ */
+async function isLocationServiceEnabled(): Promise<boolean> {
+    try {
+        if (Platform.OS !== 'android') return true;
+        const enabled = await Location.hasServicesEnabledAsync();
+        return !!enabled;
+    } catch {
+        // If we can't tell, assume it's fine — never block the scan because of this.
+        return true;
+    }
+}
 
 /**
  * Bluetooth thermal printer integration powered by `react-native-thermal-printer`
@@ -95,6 +111,33 @@ const formatDeviceName = (raw: string | undefined, mac: string): string => {
     return `Thermal Printer ${suffix}`;
 };
 
+const isProbablyPrinter = (name: string) =>
+    /print|pos|thermal|rpp|mtp|btp|hm|spp|escpos|srs|sr5|sr8|tm-|tvs|xprinter|rongta|sunmi|epson|innerprinter/i.test(name);
+
+const normalizeDeviceList = (list: any[]): BluetoothDevice[] => {
+    const byMac = new Map<string, BluetoothDevice>();
+
+    for (const device of list || []) {
+        const mac = [device?.macAddress, device?.address, device?.inner_mac_address, device?.id]
+            .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+        if (!mac) continue;
+
+        const name = device?.deviceName || device?.name || device?.device_name;
+        byMac.set(mac, {
+            id: mac,
+            name: formatDeviceName(name, mac),
+            kind: 'ble',
+        });
+    }
+
+    return Array.from(byMac.values()).sort((a, b) => {
+        const printerDelta = Number(isProbablyPrinter(b.name)) - Number(isProbablyPrinter(a.name));
+        if (printerDelta !== 0) return printerDelta;
+        return a.name.localeCompare(b.name);
+    });
+};
+
 function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     const [state, setState] = useState<BluetoothPrinterState>(initialState);
 
@@ -115,29 +158,11 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 ? Platform.Version
                 : Number(Platform.Version);
 
-            const locationResult = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-                {
-                    title: 'Location Permission',
-                    message: 'Milkey needs location access to find nearby Bluetooth printers.',
-                    buttonNeutral: 'Ask Me Later',
-                    buttonNegative: 'Cancel',
-                    buttonPositive: 'OK',
-                }
-            );
-
-            if (locationResult !== PermissionsAndroid.RESULTS.GRANTED) {
-                setState(prev => ({
-                    ...prev,
-                    error: 'Location permission denied. Turn on Location permission and GPS to scan printers.',
-                }));
-                return false;
-            }
-
             if (apiLevel >= 31) {
                 const results = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
                 ]);
                 const scanGranted = results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN]
                     === PermissionsAndroid.RESULTS.GRANTED;
@@ -147,6 +172,25 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                     setState(prev => ({
                         ...prev,
                         error: 'Bluetooth permission denied. Open Settings → Apps → Milkey → Permissions and allow Nearby devices.',
+                    }));
+                    return false;
+                }
+            } else {
+                const locationResult = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                    {
+                        title: 'Location Permission',
+                        message: 'Milkey needs location access to find nearby Bluetooth printers.',
+                        buttonNeutral: 'Ask Me Later',
+                        buttonNegative: 'Cancel',
+                        buttonPositive: 'OK',
+                    }
+                );
+
+                if (locationResult !== PermissionsAndroid.RESULTS.GRANTED) {
+                    setState(prev => ({
+                        ...prev,
+                        error: 'Location permission denied. Allow Location to load paired printers on this Android version.',
                     }));
                     return false;
                 }
@@ -160,16 +204,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 error: e?.message || 'Failed to request Bluetooth permissions.',
             }));
             return false;
-        }
-    }, []);
-
-    const isLocationServiceEnabled = useCallback(async (): Promise<boolean> => {
-        if (Platform.OS !== 'android') return true;
-
-        try {
-            return await Location.hasServicesEnabledAsync();
-        } catch {
-            return true;
         }
     }, []);
 
@@ -211,38 +245,46 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     const fetchDeviceList = useCallback(async (): Promise<any[]> => {
         if (!ThermalPrinter) return [];
 
-        const tryCalls = [
-            'getBluetoothDeviceList',
-            'getDeviceList',
-            'getBondedDevices',
-        ];
-
-        for (const fn of tryCalls) {
-            if (typeof ThermalPrinter[fn] === 'function') {
-                try {
-                    const list = await ThermalPrinter[fn]();
-                    if (Array.isArray(list) && list.length > 0) return list;
-                } catch (e: any) {
-                    console.warn(`[BluetoothPrinter] ${fn} failed:`, e?.message || e);
-                }
-            }
+        if (typeof ThermalPrinter.getBluetoothDeviceList !== 'function') {
+            console.warn('[BluetoothPrinter] getBluetoothDeviceList is not available on the native module.');
+            return [];
         }
 
-        // Single retry after a small settle delay (Android 12+ quirk where
-        // bonded devices aren't enumerated immediately after permission grant).
+        try {
+            const list = await ThermalPrinter.getBluetoothDeviceList();
+            if (Array.isArray(list) && list.length > 0) return list;
+        } catch (e: any) {
+            console.warn('[BluetoothPrinter] getBluetoothDeviceList failed:', e?.message || e);
+        }
+
         await sleep(400);
-        for (const fn of tryCalls) {
-            if (typeof ThermalPrinter[fn] === 'function') {
-                try {
-                    const list = await ThermalPrinter[fn]();
-                    if (Array.isArray(list)) return list;
-                } catch (e: any) {
-                    console.warn(`[BluetoothPrinter] retry ${fn} failed:`, e?.message || e);
-                }
-            }
+
+        try {
+            const list = await ThermalPrinter.getBluetoothDeviceList();
+            if (Array.isArray(list)) return list;
+        } catch (e: any) {
+            console.warn('[BluetoothPrinter] retry getBluetoothDeviceList failed:', e?.message || e);
         }
+
         return [];
     }, []);
+
+    const resolvePreferredDevice = useCallback(async (devices: BluetoothDevice[]): Promise<BluetoothDevice | null> => {
+        const currentMac = connectedMacRef.current;
+        if (currentMac) {
+            const current = devices.find(device => device.id === currentMac);
+            if (current) return current;
+        }
+
+        const last = await getLastPrinter();
+        if (last) {
+            const remembered = devices.find(device => device.id === last.id);
+            if (remembered) return remembered;
+        }
+
+        if (devices.length === 1) return devices[0];
+        return null;
+    }, [getLastPrinter]);
 
     // ---------------- Init effect (auto-reconnect) ----------------
     useEffect(() => {
@@ -343,42 +385,19 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 return;
             }
 
+            // Soft check — log but never block. paired-device fetch on Android does
+            // not require GPS to be ON in modern react-native-thermal-printer.
             const locationEnabled = await isLocationServiceEnabled();
             if (!locationEnabled) {
-                setState(prev => ({
-                    ...prev,
-                    isScanning: false,
-                    error: 'Phone Location is OFF. Turn on GPS/Location in Android quick settings, then scan again.',
-                }));
-                return;
+                console.warn('[BluetoothPrinter] Location services are OFF — proceeding anyway for paired list.');
             }
 
-            await sleep(600);
+            await sleep(300);
             const list = await fetchDeviceList();
+            console.log('[BluetoothPrinter] raw paired list from native:', JSON.stringify(list));
 
-            const devices: BluetoothDevice[] = (list || [])
-                .map((d: any) => {
-                    const mac = d?.macAddress || d?.address || d?.inner_mac_address || d?.id;
-                    const name = d?.deviceName || d?.name || d?.device_name;
-                    if (!mac) return null;
-                    return {
-                        id: mac,
-                        name: formatDeviceName(name, mac),
-                        kind: 'ble' as const,
-                    };
-                })
-                .filter(Boolean) as BluetoothDevice[];
-
-            // Heuristic: probable thermal printers float to the top.
-            const isPrinterLike = (n: string) =>
-                /print|pos|thermal|rpp|mtp|btp|hm|spp|escpos|srs|sr5|sr8|tm-|tvs|xprinter|rongta|sunmi|epson|innerprinter/i.test(n);
-
-            devices.sort((a, b) => {
-                const ap = isPrinterLike(a.name) ? 1 : 0;
-                const bp = isPrinterLike(b.name) ? 1 : 0;
-                if (bp !== ap) return bp - ap;
-                return a.name.localeCompare(b.name);
-            });
+            const devices = normalizeDeviceList(list);
+            console.log('[BluetoothPrinter] normalized devices:', devices.length, devices);
 
             setState(prev => ({
                 ...prev,
@@ -386,7 +405,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 isScanning: false,
                 isBluetoothEnabled: true,
                 error: devices.length === 0
-                    ? 'No paired Bluetooth printers found.\n\n1. Turn ON the printer\n2. Make sure Bluetooth is ON\n3. Turn ON phone Location/GPS\n4. Tap Pair and pair the printer in Android settings (PIN is usually 0000 or 1234)\n5. Come back and tap Scan again.'
+                    ? 'No paired Bluetooth printers found.\n\n1. Turn ON the printer\n2. Open Android Settings → Bluetooth\n3. Tap "Pair new device" and pair the printer (PIN is usually 0000 or 1234)\n4. Come back here and tap Scan again.\n\nNote: this list only shows already-paired devices.'
                     : null,
             }));
         } catch (e: any) {
@@ -410,7 +429,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         } finally {
             scanInFlightRef.current = false;
         }
-    }, [requestPermissions, isLocationServiceEnabled, fetchDeviceList]);
+    }, [requestPermissions, fetchDeviceList]);
 
     // ---------------- Connect / Disconnect ----------------
     /**
