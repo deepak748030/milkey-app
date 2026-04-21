@@ -60,6 +60,28 @@ interface BluetoothPrinterState {
     isPrinting: boolean;
 }
 
+export interface PrinterDiagnostics {
+    platform: string;
+    apiLevel: number | string;
+    isExpoGo: boolean;
+    isProductionBuild: boolean;
+    nativeModuleLoaded: boolean;
+    nativeLoadError: string | null;
+    permissions: {
+        bluetoothConnect: boolean | 'n/a';
+        bluetoothScan: boolean | 'n/a';
+        accessFineLocation: boolean | 'n/a';
+    };
+    isBluetoothEnabled: boolean;
+    locationServicesEnabled: boolean;
+    bondedDeviceCount: number;
+    bondedDeviceNames: string[];
+    isConnected: boolean;
+    connectedDeviceName: string | null;
+    lastRawError: string | null;
+    capturedAt: string;
+}
+
 interface BluetoothPrinterContextValue extends BluetoothPrinterState {
     requestPermissions: () => Promise<boolean>;
     startScan: () => Promise<void>;
@@ -69,6 +91,8 @@ interface BluetoothPrinterContextValue extends BluetoothPrinterState {
     /** Print a tag-formatted string payload (`[C]<b>...</b>` etc.). */
     printText: (payload: string, opts?: { width?: 58 | 80 }) => Promise<boolean>;
     openBluetoothSettings: () => Promise<void>;
+    /** Collect a fresh diagnostic snapshot from the native module + OS. */
+    getDiagnostics: () => Promise<PrinterDiagnostics>;
 }
 
 const LAST_PRINTER_KEY = '@milkey_last_printer';
@@ -144,6 +168,8 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     const connectedMacRef = useRef<string | null>(null);
     const autoConnectAttemptedRef = useRef(false);
     const scanInFlightRef = useRef(false);
+    const lastRawErrorRef = useRef<string | null>(null);
+    const lastBondedListRef = useRef<BluetoothDevice[]>([]);
 
     // ---------------- Permissions ----------------
     /**
@@ -495,6 +521,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             console.log('[BluetoothPrinter] raw paired list from native:', JSON.stringify(list));
 
             const devices = normalizeDeviceList(list);
+            lastBondedListRef.current = devices;
             console.log('[BluetoothPrinter] normalized devices:', devices.length, devices);
 
             // Always include the currently-connected device in the list, even if
@@ -517,6 +544,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             }));
         } catch (e: any) {
             const raw = e?.message || String(e);
+            lastRawErrorRef.current = raw;
             console.warn('[BluetoothPrinter] scan failed:', raw);
 
             let friendly = raw;
@@ -581,6 +609,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             });
         } catch (e: any) {
             const raw = e?.message || String(e);
+            lastRawErrorRef.current = raw;
             console.warn('[BluetoothPrinter] connect probe failed:', raw);
             let friendly = `Could not connect to ${device.name}.`;
             if (/socket|unable to connect|read failed|broken pipe|closed/i.test(raw)) {
@@ -691,6 +720,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             return true;
         } catch (e: any) {
             const raw = e?.message || String(e);
+            lastRawErrorRef.current = raw;
             console.warn('[BluetoothPrinter] print failed:', raw);
 
             let friendly = raw;
@@ -713,6 +743,70 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
     }, [requestPermissions, getLastPrinter]);
 
+    // ---------------- Diagnostics ----------------
+    const getDiagnostics = useCallback(async (): Promise<PrinterDiagnostics> => {
+        const platform = Platform.OS;
+        const apiLevel = Platform.OS === 'android'
+            ? (typeof Platform.Version === 'number' ? Platform.Version : Number(Platform.Version))
+            : 'n/a';
+
+        let btConnect: boolean | 'n/a' = 'n/a';
+        let btScan: boolean | 'n/a' = 'n/a';
+        let fineLoc: boolean | 'n/a' = 'n/a';
+
+        if (Platform.OS === 'android') {
+            try {
+                btConnect = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
+            } catch { btConnect = false; }
+            try {
+                btScan = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN);
+            } catch { btScan = false; }
+            try {
+                fineLoc = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+            } catch { fineLoc = false; }
+        }
+
+        // Re-fetch bonded list fresh so the diagnostic reflects ground truth
+        // rather than whatever the last scan happened to leave behind.
+        let bonded: BluetoothDevice[] = lastBondedListRef.current;
+        let btEnabled = state.isBluetoothEnabled;
+        if (ThermalPrinter && (btConnect === true || Platform.OS !== 'android')) {
+            try {
+                const raw = await fetchDeviceList();
+                bonded = normalizeDeviceList(raw);
+                lastBondedListRef.current = bonded;
+                btEnabled = true; // a successful native call implies adapter is ON
+            } catch (e: any) {
+                lastRawErrorRef.current = e?.message || String(e);
+                btEnabled = false;
+            }
+        }
+
+        const locEnabled = await isLocationServiceEnabled();
+
+        return {
+            platform,
+            apiLevel,
+            isExpoGo: IS_EXPO_GO,
+            isProductionBuild: IS_PRODUCTION_BUILD,
+            nativeModuleLoaded: !!ThermalPrinter,
+            nativeLoadError,
+            permissions: {
+                bluetoothConnect: btConnect,
+                bluetoothScan: btScan,
+                accessFineLocation: fineLoc,
+            },
+            isBluetoothEnabled: btEnabled,
+            locationServicesEnabled: locEnabled,
+            bondedDeviceCount: bonded.length,
+            bondedDeviceNames: bonded.map(d => `${d.name} (${d.id})`),
+            isConnected: state.isConnected,
+            connectedDeviceName: state.connectedDevice?.name ?? null,
+            lastRawError: lastRawErrorRef.current,
+            capturedAt: new Date().toISOString(),
+        };
+    }, [state.isBluetoothEnabled, state.isConnected, state.connectedDevice, fetchDeviceList]);
+
     return {
         ...state,
         requestPermissions,
@@ -722,6 +816,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         disconnectDevice,
         printText,
         openBluetoothSettings,
+        getDiagnostics,
     };
 }
 

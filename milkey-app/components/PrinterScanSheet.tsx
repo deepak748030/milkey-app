@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, FlatList } from 'react-native';
-import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer, Settings } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, FlatList, ScrollView, Platform } from 'react-native';
+import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer, Settings, Activity, Copy, Check } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
-import { BluetoothDevice } from '@/hooks/useBluetoothPrinter';
+import { BluetoothDevice, PrinterDiagnostics, useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { buildTestPayload } from '@/lib/printFormat';
 
 interface PrinterScanSheetProps {
@@ -41,13 +42,83 @@ export default function PrinterScanSheet({
     onOpenBluetoothSettings,
 }: PrinterScanSheetProps) {
     const { colors } = useTheme();
+    const { getDiagnostics } = useBluetoothPrinter();
     const [testPrintDone, setTestPrintDone] = useState(false);
+    const [diagOpen, setDiagOpen] = useState(false);
+    const [diag, setDiag] = useState<PrinterDiagnostics | null>(null);
+    const [diagLoading, setDiagLoading] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     const handleTestPrint = async () => {
         if (!onPrintText) return;
         setTestPrintDone(false);
         const success = await onPrintText(buildTestPayload());
         if (success) setTestPrintDone(true);
+    };
+
+    const formatDiagText = (d: PrinterDiagnostics): string => {
+        const yn = (v: boolean | 'n/a') => v === 'n/a' ? 'n/a' : v ? '✓ granted' : '✗ denied';
+        return [
+            `Milkey Printer Diagnostics`,
+            `Captured: ${d.capturedAt}`,
+            ``,
+            `Platform: ${d.platform} (API ${d.apiLevel})`,
+            `Build: ${d.isProductionBuild ? 'Production APK' : d.isExpoGo ? 'Expo Go' : 'Dev/EAS'}`,
+            `Native module loaded: ${d.nativeModuleLoaded ? 'yes' : 'no'}`,
+            d.nativeLoadError ? `Native load error: ${d.nativeLoadError}` : null,
+            ``,
+            `Permissions:`,
+            `  BLUETOOTH_CONNECT: ${yn(d.permissions.bluetoothConnect)}`,
+            `  BLUETOOTH_SCAN:    ${yn(d.permissions.bluetoothScan)}`,
+            `  ACCESS_FINE_LOC:   ${yn(d.permissions.accessFineLocation)}`,
+            ``,
+            `Bluetooth adapter: ${d.isBluetoothEnabled ? 'ON' : 'OFF / unknown'}`,
+            `Location services: ${d.locationServicesEnabled ? 'ON' : 'OFF'}`,
+            ``,
+            `Bonded devices: ${d.bondedDeviceCount}`,
+            ...d.bondedDeviceNames.map(n => `  • ${n}`),
+            ``,
+            `Connected: ${d.isConnected ? d.connectedDeviceName ?? 'yes' : 'no'}`,
+            ``,
+            `Last raw native error:`,
+            `  ${d.lastRawError ?? '(none)'}`,
+        ].filter(Boolean).join('\n');
+    };
+
+    const handleToggleDiagnostics = async () => {
+        const next = !diagOpen;
+        setDiagOpen(next);
+        if (next && !diag) {
+            setDiagLoading(true);
+            try {
+                const snapshot = await getDiagnostics();
+                setDiag(snapshot);
+            } finally {
+                setDiagLoading(false);
+            }
+        }
+    };
+
+    const handleRefreshDiagnostics = async () => {
+        setDiagLoading(true);
+        try {
+            const snapshot = await getDiagnostics();
+            setDiag(snapshot);
+            setCopied(false);
+        } finally {
+            setDiagLoading(false);
+        }
+    };
+
+    const handleCopyDiagnostics = async () => {
+        if (!diag) return;
+        try {
+            await Clipboard.setStringAsync(formatDiagText(diag));
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            // ignore
+        }
     };
 
     const renderDevice = ({ item }: { item: BluetoothDevice }) => {
@@ -215,6 +286,58 @@ export default function PrinterScanSheet({
                             }
                         />
                     </View>
+
+                    {/* Diagnostics — small link, expands to show raw permission/BT
+                        state and a Copy button so users can send logs to support. */}
+                    <View style={[styles.diagWrapper, { borderTopColor: colors.border }]}>
+                        <Pressable onPress={handleToggleDiagnostics} style={styles.diagToggle}>
+                            <Activity size={12} color={colors.mutedForeground} />
+                            <Text style={[styles.diagToggleText, { color: colors.mutedForeground }]}>
+                                {diagOpen ? 'Hide diagnostics' : 'Diagnostics'}
+                            </Text>
+                        </Pressable>
+
+                        {diagOpen && (
+                            <View style={[styles.diagPanel, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                                {diagLoading && !diag ? (
+                                    <ActivityIndicator size="small" color={colors.primary} />
+                                ) : diag ? (
+                                    <>
+                                        <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled>
+                                            <Text style={[styles.diagText, { color: colors.foreground }]}>
+                                                {formatDiagText(diag)}
+                                            </Text>
+                                        </ScrollView>
+                                        <View style={styles.diagActions}>
+                                            <Pressable
+                                                onPress={handleRefreshDiagnostics}
+                                                disabled={diagLoading}
+                                                style={[styles.diagBtn, { backgroundColor: colors.secondary, opacity: diagLoading ? 0.6 : 1 }]}
+                                            >
+                                                <RefreshCw size={12} color={colors.foreground} />
+                                                <Text style={[styles.diagBtnText, { color: colors.foreground }]}>
+                                                    {diagLoading ? 'Refreshing...' : 'Refresh'}
+                                                </Text>
+                                            </Pressable>
+                                            <Pressable
+                                                onPress={handleCopyDiagnostics}
+                                                style={[styles.diagBtn, { backgroundColor: copied ? colors.success : colors.primary }]}
+                                            >
+                                                {copied ? <Check size={12} color={colors.white} /> : <Copy size={12} color={colors.white} />}
+                                                <Text style={[styles.diagBtnText, { color: colors.white }]}>
+                                                    {copied ? 'Copied!' : 'Copy logs'}
+                                                </Text>
+                                            </Pressable>
+                                        </View>
+                                    </>
+                                ) : (
+                                    <Text style={[styles.diagText, { color: colors.mutedForeground }]}>
+                                        No diagnostics available.
+                                    </Text>
+                                )}
+                            </View>
+                        )}
+                    </View>
                 </View>
             </View>
         </Modal>
@@ -258,4 +381,12 @@ const styles = StyleSheet.create({
     connectText: { fontSize: 13, fontWeight: '600' },
     emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 30, gap: 10 },
     emptyText: { fontSize: 13, textAlign: 'center' },
+    diagWrapper: { borderTopWidth: 1, marginHorizontal: 6, marginTop: 6, paddingTop: 6 },
+    diagToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
+    diagToggleText: { fontSize: 11, fontWeight: '600', textDecorationLine: 'underline' },
+    diagPanel: { marginTop: 6, padding: 10, borderRadius: 8, borderWidth: 1, gap: 8 },
+    diagText: { fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', lineHeight: 15 },
+    diagActions: { flexDirection: 'row', gap: 8 },
+    diagBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 6 },
+    diagBtnText: { fontSize: 12, fontWeight: '600' },
 });
