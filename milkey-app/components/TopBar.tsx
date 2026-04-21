@@ -36,10 +36,14 @@ export default function TopBar() {
 
   // When the user opens the printer sheet, auto-trigger a paired-device scan
   // so they immediately see their already-paired printer without tapping Scan.
-  // Guard against double-scan if a scan is already in flight from app-init.
+  // The 500ms delay is CRITICAL: it lets the modal slide-up animation finish
+  // AND lets the Android Bluetooth stack settle if a permission dialog just
+  // popped — without it, the very first scan after granting "Nearby devices"
+  // can silently return an empty list on Android 13+.
+  // Also guard against double-scan if a scan is already in flight.
   useEffect(() => {
     if (showPrinterSheet && !isScanning) {
-      const t = setTimeout(() => startScan(), 150);
+      const t = setTimeout(() => startScan(), 500);
       return () => clearTimeout(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

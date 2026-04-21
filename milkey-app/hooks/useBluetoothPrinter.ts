@@ -146,6 +146,35 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     const scanInFlightRef = useRef(false);
 
     // ---------------- Permissions ----------------
+    /**
+     * Check-first, then request — never prompt unnecessarily.
+     * On Android 12+ we only need BLUETOOTH_CONNECT to enumerate paired devices
+     * and to print. BLUETOOTH_SCAN is only needed for active discovery (which
+     * we don't do — we only query bonded devices). We still request both so a
+     * future "discover unpaired" feature works without re-prompting.
+     */
+    const checkPermissionsGranted = useCallback(async (): Promise<boolean> => {
+        if (Platform.OS !== 'android') return true;
+        const apiLevel = typeof Platform.Version === 'number'
+            ? Platform.Version
+            : Number(Platform.Version);
+        try {
+            if (apiLevel >= 31) {
+                const connect = await PermissionsAndroid.check(
+                    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                );
+                // CONNECT alone is sufficient to list bonded devices + print.
+                return connect;
+            }
+            const loc = await PermissionsAndroid.check(
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+            );
+            return loc;
+        } catch {
+            return false;
+        }
+    }, []);
+
     const requestPermissions = useCallback(async (): Promise<boolean> => {
         if (Platform.OS === 'web') {
             setState(prev => ({ ...prev, error: 'Bluetooth printing is not available on web.' }));
@@ -159,10 +188,23 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 : Number(Platform.Version);
 
             if (apiLevel >= 31) {
-                // Android 12+: BLUETOOTH_SCAN + BLUETOOTH_CONNECT only.
-                // We declare BLUETOOTH_SCAN with neverForLocation in the manifest,
-                // so ACCESS_FINE_LOCATION is NOT required and we MUST NOT request
-                // it — asking for it pops a confusing extra dialog.
+                // Track whether the user has already granted CONNECT before this
+                // request. If they had it, no UI dialog will pop and we don't
+                // need a settle delay. If they DIDN'T have it and we're about
+                // to prompt, we sleep 500ms after the grant so the Android
+                // Bluetooth stack finishes finalizing the permission before
+                // we hit the radio. Skipping this causes intermittent
+                // "permission denied" / silent scan failures right after the
+                // user taps "Allow" on the Nearby devices dialog.
+                const hadConnectAlready = await PermissionsAndroid.check(
+                    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+                );
+
+                // Android 12+: request BLUETOOTH_SCAN + BLUETOOTH_CONNECT together.
+                // Manifest declares BLUETOOTH_SCAN with neverForLocation, so the
+                // OS will NOT prompt for Location at all — single "Nearby devices"
+                // dialog covers both. We MUST NOT request ACCESS_FINE_LOCATION on
+                // API 31+ — it pops a second, confusing Location dialog.
                 const results = await PermissionsAndroid.requestMultiple([
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
                     PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
@@ -171,15 +213,31 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                     === PermissionsAndroid.RESULTS.GRANTED;
                 const connectGranted = results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT]
                     === PermissionsAndroid.RESULTS.GRANTED;
-                if (!scanGranted || !connectGranted) {
+                // CONNECT is the critical one — without it we can't enumerate
+                // bonded devices or open a socket. SCAN is nice-to-have for
+                // future discovery; if denied we still proceed since we only
+                // query bonded (paired) devices on the SR588 / SR58B / etc.
+                if (!connectGranted) {
                     setState(prev => ({
                         ...prev,
-                        error: 'Bluetooth permission denied. Open Settings → Apps → Milkey → Permissions and allow Nearby devices.',
+                        error: 'Bluetooth permission denied. Open Settings → Apps → Milkey → Permissions → Nearby devices → Allow.',
                     }));
                     return false;
                 }
+                if (!scanGranted) {
+                    console.warn('[BluetoothPrinter] BLUETOOTH_SCAN denied — proceeding with bonded-only flow.');
+                }
+
+                // Permission settle delay — only when we just prompted the user.
+                if (!hadConnectAlready) {
+                    console.log('[BluetoothPrinter] permission just granted — settling 500ms before native call.');
+                    await sleep(500);
+                }
             } else {
                 // Android <= 11: needs ACCESS_FINE_LOCATION to enumerate paired BT.
+                const hadLocationAlready = await PermissionsAndroid.check(
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                );
                 const locationResult = await PermissionsAndroid.request(
                     PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
                     {
@@ -197,6 +255,10 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                         error: 'Location permission denied. Allow Location to load paired printers on this Android version.',
                     }));
                     return false;
+                }
+                if (!hadLocationAlready) {
+                    console.log('[BluetoothPrinter] location permission just granted — settling 500ms.');
+                    await sleep(500);
                 }
             }
 
@@ -331,8 +393,11 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         let cancelled = false;
 
         (async () => {
-            const granted = await requestPermissions();
-            if (!granted || cancelled) return;
+            // Don't prompt on cold start — only auto-load if user already
+            // granted permissions in a previous session. First-time users will
+            // see the prompt when they tap the printer icon / Scan button.
+            const alreadyGranted = await checkPermissionsGranted();
+            if (!alreadyGranted || cancelled) return;
             setState(prev => ({ ...prev, isBluetoothEnabled: true }));
 
             if (autoConnectAttemptedRef.current) return;
@@ -378,7 +443,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         })();
 
         return () => { cancelled = true; };
-    }, [getLastPrinter, requestPermissions]);
+    }, [getLastPrinter, checkPermissionsGranted, fetchDeviceList]);
 
     // ---------------- Scan ----------------
     const stopScan = useCallback(() => {
@@ -447,7 +512,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 isScanning: false,
                 isBluetoothEnabled: true,
                 error: merged.length === 0
-                    ? 'No paired Bluetooth printers found.\n\n• Make sure Bluetooth is ON on this phone\n• Turn ON the printer (light should be solid)\n• Open Android Settings → Bluetooth → Pair new device → pair the printer (PIN 0000 or 1234)\n• Come back and tap Scan again.'
+                    ? 'No paired Bluetooth printers found.\n\n• Make sure Bluetooth is ON on this phone\n• Turn ON the printer (light should be solid)\n• Open Android Settings → Connected devices → Pair new device → pair the printer (PIN 0000 or 1234)\n• On Android 12+, also allow "Nearby devices" in App permissions\n• Come back and tap Scan again.'
                     : null,
             }));
         } catch (e: any) {
