@@ -192,6 +192,23 @@ const normalizeDeviceList = (list: any[]): BluetoothDevice[] => {
     });
 };
 
+const buildBluetoothPrintOptions = (
+    payload: string,
+    widthMM: 58 | 80,
+    charsPerLine: number,
+    macAddress?: string,
+) => ({
+    macAddress: macAddress ?? '',
+    payload,
+    printerNbrCharactersPerLine: charsPerLine,
+    printerWidthMM: widthMM,
+    printerDpi: 203,
+    autoCut: false,
+    openCashbox: false,
+    mmFeedPaper: 12,
+    timeout: 30000,
+});
+
 function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     const [state, setState] = useState<BluetoothPrinterState>(initialState);
 
@@ -660,69 +677,20 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         if (!granted) return;
 
         stopScan();
-
-        // Verify the printer is actually reachable BEFORE marking it connected.
-        // We send an empty payload with 0 feed as a pure SPP socket probe — this
-        // opens the Bluetooth socket without ejecting any paper on the SR588.
-        // If it succeeds the printer is reachable; if it fails the user gets a
-        // real, actionable error instead of a silent "connected" lie.
-        setState(prev => ({ ...prev, isPrinting: true, error: null }));
         lastConnectRef.current = {
             attemptedAt: new Date().toISOString(),
             deviceName: `${device.name} (${device.id})`,
-            outcome: 'never',
+            outcome: 'success',
             error: null,
         };
-        try {
-            // Single space at left margin with 0 paper feed — opens the SPP
-            // socket and writes 1 char (which the printer buffers but does NOT
-            // visibly print or feed). Safer than empty string which some forks
-            // of react-native-thermal-printer reject with IllegalArgumentException.
-            await ThermalPrinter.printBluetooth({
-                macAddress: device.id,
-                payload: '[L] ',
-                printerNbrCharactersPerLine: 32,
-                printerWidthMM: 58,
-                printerDpi: 203,
-                autoCut: false,
-                openCashbox: false,
-                mmFeedPaper: 0,
-                timeout: 12000,
-            });
-        } catch (e: any) {
-            const raw = e?.message || String(e);
-            lastRawErrorRef.current = raw;
-            lastConnectRef.current = { ...lastConnectRef.current, outcome: 'error', error: raw };
-            console.warn('[BluetoothPrinter] connect probe failed:', raw);
-            let friendly = `Could not connect to ${device.name}.`;
-            if (/socket|unable to connect|read failed|broken pipe|closed/i.test(raw)) {
-                friendly = `Could not reach ${device.name}. Make sure the printer is ON, in range, and not connected to another phone.`;
-            } else if (/permission/i.test(raw)) {
-                friendly = 'Bluetooth Connect permission missing. Allow "Nearby devices" in app permissions.';
-            } else if (/not paired|bonded/i.test(raw)) {
-                friendly = `${device.name} is not paired. Open Bluetooth Settings and pair it first.`;
-            } else if (/timeout/i.test(raw)) {
-                friendly = `Connection to ${device.name} timed out. Turn the printer OFF then ON and try again.`;
-            }
-            setState(prev => ({
-                ...prev,
-                isPrinting: false,
-                isConnected: false,
-                connectedDevice: null,
-                error: friendly,
-            }));
-            return;
-        }
 
         connectedMacRef.current = device.id;
         const info: BluetoothDevice = { id: device.id, name: device.name, kind: 'ble' };
-        lastConnectRef.current = { ...lastConnectRef.current, outcome: 'success', error: null };
         setState(prev => {
             const exists = prev.availableDevices.find(d => d.id === info.id);
             const list = exists ? prev.availableDevices : [info, ...prev.availableDevices];
             return {
                 ...prev,
-                isPrinting: false,
                 isConnected: true,
                 connectedDevice: info,
                 availableDevices: list,
@@ -794,19 +762,75 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         const charsPerLine = widthMM === 80 ? 48 : 32;
 
         try {
-            await ThermalPrinter.printBluetooth({
-                macAddress: mac,
-                payload,
-                printerNbrCharactersPerLine: charsPerLine,
-                printerWidthMM: widthMM,
-                printerDpi: 203,
-                autoCut: false,
-                openCashbox: false,
-                mmFeedPaper: 12,
-                timeout: 30000,
-            });
+            let refreshedBonded = lastBondedListRef.current;
+            let activeDevice = state.connectedDevice && state.connectedDevice.id === mac
+                ? state.connectedDevice
+                : null;
+
+            const runPrintAttempt = async (macAddress: string) => {
+                await ThermalPrinter.printBluetooth(
+                    buildBluetoothPrintOptions(payload, widthMM, charsPerLine, macAddress),
+                );
+            };
+
+            try {
+                await runPrintAttempt(mac);
+            } catch (primaryError: any) {
+                const primaryRaw = primaryError?.message || String(primaryError);
+                lastRawErrorRef.current = primaryRaw;
+                console.warn('[BluetoothPrinter] primary print attempt failed:', primaryRaw);
+
+                const freshRawList = await fetchDeviceList();
+                refreshedBonded = normalizeDeviceList(freshRawList);
+                lastBondedListRef.current = refreshedBonded;
+
+                const refreshedMatch = refreshedBonded.find(device => device.id === mac);
+                if (refreshedMatch) {
+                    activeDevice = refreshedMatch;
+                }
+
+                let retried = false;
+                if (/not found|bluetooth device not found/i.test(primaryRaw) || refreshedMatch) {
+                    retried = true;
+                    try {
+                        await runPrintAttempt(activeDevice?.id ?? mac);
+                    } catch (retryError: any) {
+                        const retryRaw = retryError?.message || String(retryError);
+                        lastRawErrorRef.current = retryRaw;
+                        console.warn('[BluetoothPrinter] print retry after refresh failed:', retryRaw);
+                        throw new Error(`${primaryRaw} | retry failed: ${retryRaw}`);
+                    }
+                } else {
+                    throw primaryError;
+                }
+
+                if (!retried) {
+                    throw primaryError;
+                }
+            }
+
+            if (!activeDevice && refreshedBonded.length === 1) {
+                activeDevice = refreshedBonded[0];
+            }
+
+            if (!activeDevice && lastBondedListRef.current.length === 1) {
+                activeDevice = lastBondedListRef.current[0];
+            }
+
+            if (!activeDevice) {
+                activeDevice = { id: mac, name: state.connectedDevice?.name ?? 'Bluetooth Printer', kind: 'ble' };
+            }
+
+            connectedMacRef.current = activeDevice.id;
+            await saveLastPrinter(activeDevice);
             lastPrintRef.current = { ...lastPrintRef.current, outcome: 'success', error: null };
-            setState(prev => ({ ...prev, isPrinting: false, error: null }));
+            setState(prev => ({
+                ...prev,
+                isPrinting: false,
+                isConnected: true,
+                connectedDevice: activeDevice,
+                error: null,
+            }));
             return true;
         } catch (e: any) {
             const raw = e?.message || String(e);
@@ -816,7 +840,33 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
             let friendly = raw;
             if (/socket|broken pipe|write|closed|unable to connect/i.test(raw)) {
-                friendly = 'Print failed: connection lost. Make sure the printer is ON and in range, then try again.';
+                const bondedCount = lastBondedListRef.current.length;
+                if (bondedCount === 1) {
+                    try {
+                        const onlyPrinter = lastBondedListRef.current[0];
+                        await ThermalPrinter.printBluetooth(
+                            buildBluetoothPrintOptions(payload, widthMM, charsPerLine),
+                        );
+                        connectedMacRef.current = onlyPrinter.id;
+                        await saveLastPrinter(onlyPrinter);
+                        lastPrintRef.current = { ...lastPrintRef.current, outcome: 'success', error: null };
+                        setState(prev => ({
+                            ...prev,
+                            isPrinting: false,
+                            isConnected: true,
+                            connectedDevice: onlyPrinter,
+                            error: null,
+                        }));
+                        return true;
+                    } catch (fallbackError: any) {
+                        const fallbackRaw = fallbackError?.message || String(fallbackError);
+                        lastRawErrorRef.current = fallbackRaw;
+                        lastPrintRef.current = { ...lastPrintRef.current, outcome: 'error', error: `${raw} | fallback failed: ${fallbackRaw}` };
+                        friendly = 'Print failed: the printer is paired but Android refused the Bluetooth socket. This usually means SR588 is connected to another phone, paired in the wrong Bluetooth mode, or needs to be unpaired and paired again.';
+                    }
+                } else {
+                    friendly = 'Print failed: connection lost. Make sure the printer is ON and in range, then try again.';
+                }
             } else if (/permission/i.test(raw)) {
                 friendly = 'Bluetooth Connect permission missing. Allow "Nearby devices" in app permissions.';
             } else if (/not paired|bonded/i.test(raw)) {
@@ -930,6 +980,12 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
         if (lastPrintRef.current.outcome === 'error' && lastPrintRef.current.error) {
             issues.push(`Last print failed: ${lastPrintRef.current.error}`);
+            if (
+                bonded.length === 1 &&
+                /socket|unable to connect|read failed|broken pipe|closed/i.test(lastPrintRef.current.error)
+            ) {
+                issues.push('SR588 may be paired in a different Bluetooth mode than the app is using — unpair it from Android, reboot the printer, pair again, then Test Print.');
+            }
         }
 
         const moduleName = ThermalPrinter
