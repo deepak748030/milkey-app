@@ -102,6 +102,7 @@ export default function PrinterScanSheet({
             d.lastPrint.error ? `  Error:    ${d.lastPrint.error}` : null,
             ``,
             `Connected: ${d.isConnected ? d.connectedDeviceName ?? 'yes' : 'no'}`,
+            !d.isConnected && d.connectedDeviceName ? `Selected printer: ${d.connectedDeviceName}` : null,
             d.rememberedPrinterName && !d.isConnected
                 ? `Remembered (last used): ${d.rememberedPrinterName}\n  → tap it in the list above and run Test Print to reconnect.`
                 : null,
@@ -154,19 +155,20 @@ export default function PrinterScanSheet({
     };
 
     const renderDevice = ({ item }: { item: BluetoothDevice }) => {
-        const isThisConnected = isConnected && connectedDevice?.id === item.id;
+        const isSelected = connectedDevice?.id === item.id;
+        const isThisConnected = isConnected && isSelected;
         return (
             <Pressable
                 style={[
                     styles.deviceItem,
                     {
-                        backgroundColor: isThisConnected ? colors.secondary : colors.card,
-                        borderColor: isThisConnected ? colors.success : colors.border,
-                        borderWidth: isThisConnected ? 2 : 1,
+                        backgroundColor: isSelected ? colors.secondary : colors.card,
+                        borderColor: isThisConnected ? colors.success : isSelected ? colors.primary : colors.border,
+                        borderWidth: isSelected ? 2 : 1,
                     },
                 ]}
-                onPress={() => !isThisConnected && onConnect(item)}
-                disabled={isThisConnected}
+                onPress={() => !isSelected && onConnect(item)}
+                disabled={isSelected}
             >
                 <View style={styles.deviceInfo}>
                     <Bluetooth size={16} color={isThisConnected ? colors.success : colors.primary} />
@@ -178,7 +180,7 @@ export default function PrinterScanSheet({
                     </View>
                 </View>
                 <Text style={[styles.connectText, { color: isThisConnected ? colors.success : colors.primary }]}>
-                    {isThisConnected ? '✓ Connected' : 'Connect'}
+                    {isThisConnected ? '✓ Connected' : isSelected ? 'Selected' : 'Connect'}
                 </Text>
             </Pressable>
         );
@@ -214,12 +216,14 @@ export default function PrinterScanSheet({
                         </View>
                     )}
 
-                    {isConnected && connectedDevice && (
-                        <View style={[styles.connectedCard, { backgroundColor: colors.secondary, borderColor: colors.success }]}>
+                    {connectedDevice && (
+                        <View style={[styles.connectedCard, { backgroundColor: colors.secondary, borderColor: isConnected ? colors.success : colors.primary }]}>
                             <View style={styles.connectedInfo}>
-                                <Wifi size={16} color={colors.success} />
+                                <Wifi size={16} color={isConnected ? colors.success : colors.primary} />
                                 <View style={{ flex: 1 }}>
-                                    <Text style={[styles.connectedLabel, { color: colors.success }]}>Connected</Text>
+                                    <Text style={[styles.connectedLabel, { color: isConnected ? colors.success : colors.primary }]}>
+                                        {isConnected ? 'Connected' : 'Selected'}
+                                    </Text>
                                     <Text style={[styles.connectedName, { color: colors.foreground }]}>{connectedDevice.name}</Text>
                                 </View>
                             </View>

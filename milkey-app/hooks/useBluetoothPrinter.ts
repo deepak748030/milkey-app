@@ -681,7 +681,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             attemptedAt: new Date().toISOString(),
             deviceName: `${device.name} (${device.id})`,
             outcome: 'success',
-            error: null,
+            error: 'Printer selected. The real Bluetooth socket opens only when you run Test Print or print a bill.',
         };
 
         connectedMacRef.current = device.id;
@@ -691,7 +691,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             const list = exists ? prev.availableDevices : [info, ...prev.availableDevices];
             return {
                 ...prev,
-                isConnected: true,
+                isConnected: false,
                 connectedDevice: info,
                 availableDevices: list,
                 error: null,
@@ -737,7 +737,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 connectedMacRef.current = last.id;
                 setState(prev => ({
                     ...prev,
-                    isConnected: true,
                     connectedDevice: last,
                 }));
             }
@@ -841,31 +840,22 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             let friendly = raw;
             if (/socket|broken pipe|write|closed|unable to connect/i.test(raw)) {
                 const bondedCount = lastBondedListRef.current.length;
+                const selectedPrinter = state.connectedDevice?.name
+                    ?? lastBondedListRef.current[0]?.name
+                    ?? 'the printer';
+
+                connectedMacRef.current = null;
+
+                setState(prev => ({
+                    ...prev,
+                    isConnected: false,
+                    connectedDevice: null,
+                }));
+
                 if (bondedCount === 1) {
-                    try {
-                        const onlyPrinter = lastBondedListRef.current[0];
-                        await ThermalPrinter.printBluetooth(
-                            buildBluetoothPrintOptions(payload, widthMM, charsPerLine),
-                        );
-                        connectedMacRef.current = onlyPrinter.id;
-                        await saveLastPrinter(onlyPrinter);
-                        lastPrintRef.current = { ...lastPrintRef.current, outcome: 'success', error: null };
-                        setState(prev => ({
-                            ...prev,
-                            isPrinting: false,
-                            isConnected: true,
-                            connectedDevice: onlyPrinter,
-                            error: null,
-                        }));
-                        return true;
-                    } catch (fallbackError: any) {
-                        const fallbackRaw = fallbackError?.message || String(fallbackError);
-                        lastRawErrorRef.current = fallbackRaw;
-                        lastPrintRef.current = { ...lastPrintRef.current, outcome: 'error', error: `${raw} | fallback failed: ${fallbackRaw}` };
-                        friendly = 'Print failed: the printer is paired but Android refused the Bluetooth socket. This usually means SR588 is connected to another phone, paired in the wrong Bluetooth mode, or needs to be unpaired and paired again.';
-                    }
+                    friendly = `Print failed: ${selectedPrinter} is paired and visible, but Android rejected the RFCOMM print socket. This means the real printer connection never opened, so the green printer light stayed OFF. Usually this happens when SR588 is paired in the wrong Bluetooth mode, still reserved by another app/phone, or needs unpair → pair again after installing the rebuilt app.`;
                 } else {
-                    friendly = 'Print failed: connection lost. Make sure the printer is ON and in range, then try again.';
+                    friendly = 'Print failed: Android could see the printer, but the Bluetooth print socket did not open. Make sure the printer is ON, close other printer apps, then reconnect and try again.';
                 }
             } else if (/permission/i.test(raw)) {
                 friendly = 'Bluetooth Connect permission missing. Allow "Nearby devices" in app permissions.';
