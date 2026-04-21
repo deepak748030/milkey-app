@@ -980,6 +980,12 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
         if (lastPrintRef.current.outcome === 'error' && lastPrintRef.current.error) {
             issues.push(`Last print failed: ${lastPrintRef.current.error}`);
+            if (
+                bonded.length === 1 &&
+                /socket|unable to connect|read failed|broken pipe|closed/i.test(lastPrintRef.current.error)
+            ) {
+                issues.push('SR588 may be paired in a different Bluetooth mode than the app is using — unpair it from Android, reboot the printer, pair again, then Test Print.');
+            }
         }
 
         const moduleName = ThermalPrinter
