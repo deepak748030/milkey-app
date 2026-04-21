@@ -66,6 +66,11 @@ export interface PrinterDiagnostics {
     isExpoGo: boolean;
     isProductionBuild: boolean;
     nativeModuleLoaded: boolean;
+    nativeModuleName: string | null;
+    nativeMethodsAvailable: {
+        getBluetoothDeviceList: boolean;
+        printBluetooth: boolean;
+    };
     nativeLoadError: string | null;
     permissions: {
         bluetoothConnect: boolean | 'n/a';
@@ -76,9 +81,34 @@ export interface PrinterDiagnostics {
     locationServicesEnabled: boolean;
     bondedDeviceCount: number;
     bondedDeviceNames: string[];
+    rawNativeResponse: string | null;
     isConnected: boolean;
     connectedDeviceName: string | null;
+    rememberedPrinterName: string | null;
+    /** Last scan attempt summary: when and how many devices it returned. */
+    lastScan: {
+        attemptedAt: string | null;
+        durationMs: number | null;
+        deviceCount: number | null;
+        outcome: 'success' | 'empty' | 'error' | 'never';
+        error: string | null;
+    };
+    /** Last connect attempt summary so users see why a tap didn't connect. */
+    lastConnect: {
+        attemptedAt: string | null;
+        deviceName: string | null;
+        outcome: 'success' | 'error' | 'never';
+        error: string | null;
+    };
+    /** Last test/real print attempt summary. */
+    lastPrint: {
+        attemptedAt: string | null;
+        outcome: 'success' | 'error' | 'never';
+        error: string | null;
+    };
     lastRawError: string | null;
+    /** Computed list of likely problems with one-line fixes. */
+    issues: string[];
     capturedAt: string;
 }
 
@@ -170,6 +200,16 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
     const scanInFlightRef = useRef(false);
     const lastRawErrorRef = useRef<string | null>(null);
     const lastBondedListRef = useRef<BluetoothDevice[]>([]);
+    const rawNativeResponseRef = useRef<string | null>(null);
+    const lastScanRef = useRef<PrinterDiagnostics['lastScan']>({
+        attemptedAt: null, durationMs: null, deviceCount: null, outcome: 'never', error: null,
+    });
+    const lastConnectRef = useRef<PrinterDiagnostics['lastConnect']>({
+        attemptedAt: null, deviceName: null, outcome: 'never', error: null,
+    });
+    const lastPrintRef = useRef<PrinterDiagnostics['lastPrint']>({
+        attemptedAt: null, outcome: 'never', error: null,
+    });
 
     // ---------------- Permissions ----------------
     /**
@@ -335,17 +375,23 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
      * slightly different names — try them all, then return what we get.
      */
     const fetchDeviceList = useCallback(async (): Promise<any[]> => {
-        if (!ThermalPrinter) return [];
+        if (!ThermalPrinter) {
+            rawNativeResponseRef.current = '(native module not loaded)';
+            return [];
+        }
 
         if (typeof ThermalPrinter.getBluetoothDeviceList !== 'function') {
+            rawNativeResponseRef.current = '(method getBluetoothDeviceList not available on native module)';
             console.warn('[BluetoothPrinter] getBluetoothDeviceList is not available on the native module.');
             return [];
         }
 
         try {
             const list = await ThermalPrinter.getBluetoothDeviceList();
+            try { rawNativeResponseRef.current = JSON.stringify(list); } catch { rawNativeResponseRef.current = String(list); }
             if (Array.isArray(list) && list.length > 0) return list;
         } catch (e: any) {
+            rawNativeResponseRef.current = `error: ${e?.message || String(e)}`;
             console.warn('[BluetoothPrinter] getBluetoothDeviceList failed:', e?.message || e);
         }
 
@@ -353,8 +399,10 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
         try {
             const list = await ThermalPrinter.getBluetoothDeviceList();
+            try { rawNativeResponseRef.current = `(retry) ${JSON.stringify(list)}`; } catch { rawNativeResponseRef.current = `(retry) ${String(list)}`; }
             if (Array.isArray(list)) return list;
         } catch (e: any) {
+            rawNativeResponseRef.current = `(retry) error: ${e?.message || String(e)}`;
             console.warn('[BluetoothPrinter] retry getBluetoothDeviceList failed:', e?.message || e);
         }
 
@@ -501,10 +549,22 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         // Note: do NOT clear availableDevices here — keep the previous list visible
         // so the user doesn't see an empty list flash if the scan briefly fails.
         setState(prev => ({ ...prev, isScanning: true, error: null }));
+        const scanStart = Date.now();
+        lastScanRef.current = {
+            attemptedAt: new Date().toISOString(),
+            durationMs: null, deviceCount: null, outcome: 'never', error: null,
+        };
 
         try {
             const granted = await requestPermissions();
             if (!granted) {
+                lastScanRef.current = {
+                    ...lastScanRef.current,
+                    durationMs: Date.now() - scanStart,
+                    deviceCount: 0,
+                    outcome: 'error',
+                    error: 'Permission denied',
+                };
                 setState(prev => ({ ...prev, isScanning: false }));
                 return;
             }
@@ -533,6 +593,14 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 merged.unshift(last);
             }
 
+            lastScanRef.current = {
+                attemptedAt: lastScanRef.current.attemptedAt,
+                durationMs: Date.now() - scanStart,
+                deviceCount: merged.length,
+                outcome: merged.length > 0 ? 'success' : 'empty',
+                error: null,
+            };
+
             setState(prev => ({
                 ...prev,
                 availableDevices: merged,
@@ -555,6 +623,14 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             } else if (/null|undefined/i.test(raw)) {
                 friendly = 'Bluetooth scan failed. Make sure Bluetooth is on and the printer is paired in Android settings, then try again.';
             }
+
+            lastScanRef.current = {
+                attemptedAt: lastScanRef.current.attemptedAt,
+                durationMs: Date.now() - scanStart,
+                deviceCount: 0,
+                outcome: 'error',
+                error: raw,
+            };
 
             setState(prev => ({
                 ...prev,
@@ -591,6 +667,12 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         // If it succeeds the printer is reachable; if it fails the user gets a
         // real, actionable error instead of a silent "connected" lie.
         setState(prev => ({ ...prev, isPrinting: true, error: null }));
+        lastConnectRef.current = {
+            attemptedAt: new Date().toISOString(),
+            deviceName: `${device.name} (${device.id})`,
+            outcome: 'never',
+            error: null,
+        };
         try {
             // Single space at left margin with 0 paper feed — opens the SPP
             // socket and writes 1 char (which the printer buffers but does NOT
@@ -610,6 +692,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         } catch (e: any) {
             const raw = e?.message || String(e);
             lastRawErrorRef.current = raw;
+            lastConnectRef.current = { ...lastConnectRef.current, outcome: 'error', error: raw };
             console.warn('[BluetoothPrinter] connect probe failed:', raw);
             let friendly = `Could not connect to ${device.name}.`;
             if (/socket|unable to connect|read failed|broken pipe|closed/i.test(raw)) {
@@ -633,6 +716,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
         connectedMacRef.current = device.id;
         const info: BluetoothDevice = { id: device.id, name: device.name, kind: 'ble' };
+        lastConnectRef.current = { ...lastConnectRef.current, outcome: 'success', error: null };
         setState(prev => {
             const exists = prev.availableDevices.find(d => d.id === info.id);
             const list = exists ? prev.availableDevices : [info, ...prev.availableDevices];
@@ -700,6 +784,11 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         }
 
         setState(prev => ({ ...prev, isPrinting: true, error: null }));
+        lastPrintRef.current = {
+            attemptedAt: new Date().toISOString(),
+            outcome: 'never',
+            error: null,
+        };
 
         const widthMM = opts.width ?? 58;
         const charsPerLine = widthMM === 80 ? 48 : 32;
@@ -716,11 +805,13 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 mmFeedPaper: 12,
                 timeout: 30000,
             });
+            lastPrintRef.current = { ...lastPrintRef.current, outcome: 'success', error: null };
             setState(prev => ({ ...prev, isPrinting: false, error: null }));
             return true;
         } catch (e: any) {
             const raw = e?.message || String(e);
             lastRawErrorRef.current = raw;
+            lastPrintRef.current = { ...lastPrintRef.current, outcome: 'error', error: raw };
             console.warn('[BluetoothPrinter] print failed:', raw);
 
             let friendly = raw;
@@ -784,12 +875,78 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
         const locEnabled = await isLocationServiceEnabled();
 
+        // Also surface the last-remembered printer (saved after a successful
+        // connect) so users understand why "Connected: no" can be shown even
+        // though they previously connected to a printer — the app deliberately
+        // does NOT mark a remembered printer as live-connected until a probe
+        // or print succeeds again. This avoids a false-green status when the
+        // printer is OFF / out of range.
+        let rememberedName: string | null = null;
+        try {
+            const last = await getLastPrinter();
+            if (last) rememberedName = `${last.name} (${last.id})`;
+        } catch { /* ignore */ }
+
+        // Compute likely problems from the captured signals so users see
+        // an actionable summary, not just raw fields.
+        const issues: string[] = [];
+        if (IS_EXPO_GO) {
+            issues.push('Running in Expo Go — Bluetooth printing requires an EAS build / production APK.');
+        }
+        if (!ThermalPrinter) {
+            issues.push('Native printer module not loaded — rebuild the app with EAS.');
+        } else if (typeof ThermalPrinter.getBluetoothDeviceList !== 'function') {
+            issues.push('Native method getBluetoothDeviceList missing — installed printer module is incompatible.');
+        }
+        if (Platform.OS === 'android') {
+            if (btConnect !== true) {
+                issues.push('BLUETOOTH_CONNECT permission denied — Settings → Apps → Milkey → Permissions → Nearby devices → Allow.');
+            }
+            const apiNum = typeof apiLevel === 'number' ? apiLevel : 0;
+            if (apiNum > 0 && apiNum < 31 && fineLoc !== true) {
+                issues.push('Location permission denied — required on Android 11 and below to list paired Bluetooth devices.');
+            }
+        }
+        if (!btEnabled) {
+            issues.push('Bluetooth adapter is OFF or unreachable — turn ON Bluetooth and try Scan again.');
+        }
+        if (btEnabled && bonded.length === 0) {
+            issues.push('No paired devices found — pair the printer in Android Settings → Connected devices first.');
+        }
+        if (lastScanRef.current.outcome === 'success' && bonded.length > 0 && !state.isConnected) {
+            issues.push('Devices visible but not connected — tap your printer in the list and run Test Print.');
+        }
+        if (lastConnectRef.current.outcome === 'error' && lastConnectRef.current.error) {
+            const err = lastConnectRef.current.error;
+            if (/socket|unable to connect|read failed|broken pipe|closed/i.test(err)) {
+                issues.push('Last connect failed: socket error — printer is OFF, out of range, or paired with another phone.');
+            } else if (/timeout/i.test(err)) {
+                issues.push('Last connect timed out — power-cycle the printer and try again.');
+            } else if (/not paired|bonded/i.test(err)) {
+                issues.push('Last connect failed: not paired — re-pair the printer in Android Bluetooth settings.');
+            } else {
+                issues.push(`Last connect failed: ${err}`);
+            }
+        }
+        if (lastPrintRef.current.outcome === 'error' && lastPrintRef.current.error) {
+            issues.push(`Last print failed: ${lastPrintRef.current.error}`);
+        }
+
+        const moduleName = ThermalPrinter
+            ? (ThermalPrinter.constructor?.name || 'react-native-thermal-printer')
+            : null;
+
         return {
             platform,
             apiLevel,
             isExpoGo: IS_EXPO_GO,
             isProductionBuild: IS_PRODUCTION_BUILD,
             nativeModuleLoaded: !!ThermalPrinter,
+            nativeModuleName: moduleName,
+            nativeMethodsAvailable: {
+                getBluetoothDeviceList: !!(ThermalPrinter && typeof ThermalPrinter.getBluetoothDeviceList === 'function'),
+                printBluetooth: !!(ThermalPrinter && typeof ThermalPrinter.printBluetooth === 'function'),
+            },
             nativeLoadError,
             permissions: {
                 bluetoothConnect: btConnect,
@@ -800,12 +957,18 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             locationServicesEnabled: locEnabled,
             bondedDeviceCount: bonded.length,
             bondedDeviceNames: bonded.map(d => `${d.name} (${d.id})`),
+            rawNativeResponse: rawNativeResponseRef.current,
             isConnected: state.isConnected,
             connectedDeviceName: state.connectedDevice?.name ?? null,
+            rememberedPrinterName: rememberedName,
+            lastScan: { ...lastScanRef.current },
+            lastConnect: { ...lastConnectRef.current },
+            lastPrint: { ...lastPrintRef.current },
             lastRawError: lastRawErrorRef.current,
+            issues,
             capturedAt: new Date().toISOString(),
         };
-    }, [state.isBluetoothEnabled, state.isConnected, state.connectedDevice, fetchDeviceList]);
+    }, [state.isBluetoothEnabled, state.isConnected, state.connectedDevice, fetchDeviceList, getLastPrinter]);
 
     return {
         ...state,

@@ -58,6 +58,8 @@ export default function PrinterScanSheet({
 
     const formatDiagText = (d: PrinterDiagnostics): string => {
         const yn = (v: boolean | 'n/a') => v === 'n/a' ? 'n/a' : v ? '✓ granted' : '✗ denied';
+        const ok = (v: boolean) => v ? '✓ yes' : '✗ no';
+        const ts = (v: string | null) => v ? new Date(v).toLocaleTimeString() : '(never)';
         return [
             `Milkey Printer Diagnostics`,
             `Captured: ${d.capturedAt}`,
@@ -65,6 +67,10 @@ export default function PrinterScanSheet({
             `Platform: ${d.platform} (API ${d.apiLevel})`,
             `Build: ${d.isProductionBuild ? 'Production APK' : d.isExpoGo ? 'Expo Go' : 'Dev/EAS'}`,
             `Native module loaded: ${d.nativeModuleLoaded ? 'yes' : 'no'}`,
+            d.nativeModuleName ? `Native module: ${d.nativeModuleName}` : null,
+            `Native methods:`,
+            `  getBluetoothDeviceList: ${ok(d.nativeMethodsAvailable.getBluetoothDeviceList)}`,
+            `  printBluetooth:         ${ok(d.nativeMethodsAvailable.printBluetooth)}`,
             d.nativeLoadError ? `Native load error: ${d.nativeLoadError}` : null,
             ``,
             `Permissions:`,
@@ -78,10 +84,36 @@ export default function PrinterScanSheet({
             `Bonded devices: ${d.bondedDeviceCount}`,
             ...d.bondedDeviceNames.map(n => `  • ${n}`),
             ``,
+            `Last scan:`,
+            `  At:       ${ts(d.lastScan.attemptedAt)}`,
+            `  Outcome:  ${d.lastScan.outcome}${d.lastScan.deviceCount !== null ? ` (${d.lastScan.deviceCount} devices)` : ''}`,
+            d.lastScan.durationMs !== null ? `  Duration: ${d.lastScan.durationMs}ms` : null,
+            d.lastScan.error ? `  Error:    ${d.lastScan.error}` : null,
+            ``,
+            `Last connect attempt:`,
+            `  At:       ${ts(d.lastConnect.attemptedAt)}`,
+            `  Device:   ${d.lastConnect.deviceName ?? '(none)'}`,
+            `  Outcome:  ${d.lastConnect.outcome}`,
+            d.lastConnect.error ? `  Error:    ${d.lastConnect.error}` : null,
+            ``,
+            `Last print attempt:`,
+            `  At:       ${ts(d.lastPrint.attemptedAt)}`,
+            `  Outcome:  ${d.lastPrint.outcome}`,
+            d.lastPrint.error ? `  Error:    ${d.lastPrint.error}` : null,
+            ``,
             `Connected: ${d.isConnected ? d.connectedDeviceName ?? 'yes' : 'no'}`,
+            d.rememberedPrinterName && !d.isConnected
+                ? `Remembered (last used): ${d.rememberedPrinterName}\n  → tap it in the list above and run Test Print to reconnect.`
+                : null,
+            ``,
+            `Raw native response (last fetch):`,
+            `  ${d.rawNativeResponse ?? '(none)'}`,
             ``,
             `Last raw native error:`,
             `  ${d.lastRawError ?? '(none)'}`,
+            ``,
+            d.issues.length > 0 ? `Detected issues (${d.issues.length}):` : `Detected issues: none ✓`,
+            ...d.issues.map(i => `  ⚠ ${i}`),
         ].filter(Boolean).join('\n');
     };
 
@@ -263,7 +295,7 @@ export default function PrinterScanSheet({
 
                     {/* Available devices list — also always visible so users can pick
                         a different paired printer at any time. */}
-                    <View style={{ flex: 1, marginTop: 6 }}>
+                    <View style={styles.deviceSection}>
                         <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
                             {isScanning ? 'Scanning...' : `Available Devices (${availableDevices.length})`}
                         </Text>
@@ -271,7 +303,13 @@ export default function PrinterScanSheet({
                             data={availableDevices}
                             keyExtractor={(item) => item.id}
                             renderItem={renderDevice}
-                            contentContainerStyle={{ gap: 6 }}
+                            style={styles.deviceList}
+                            nestedScrollEnabled
+                            keyboardShouldPersistTaps="handled"
+                            contentContainerStyle={[
+                                styles.deviceListContent,
+                                availableDevices.length === 0 && styles.deviceListEmptyContent,
+                            ]}
                             ListEmptyComponent={
                                 <View style={styles.emptyState}>
                                     <BluetoothOff size={32} color={colors.mutedForeground} />
@@ -373,6 +411,10 @@ const styles = StyleSheet.create({
     scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10 },
     settingsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
     scanBtnText: { fontSize: 14, fontWeight: '600' },
+    deviceSection: { marginTop: 6, minHeight: 150 },
+    deviceList: { maxHeight: 240 },
+    deviceListContent: { gap: 6, paddingBottom: 6 },
+    deviceListEmptyContent: { minHeight: 110, justifyContent: 'center' },
     sectionLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6, paddingHorizontal: 6, marginTop: 6 },
     deviceItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 10, borderWidth: 1, marginHorizontal: 6 },
     deviceInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
