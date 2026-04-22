@@ -9,7 +9,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 import {
     Plus, Edit2, Trash2, Calendar as CalendarIcon, Search, X,
     ChevronDown, FileText, User, Sun, Moon,
-    Droplets, CircleDot, Download, Check, Printer, Milk, Ban
+    Droplets, CircleDot, Download, Check, Printer, Milk, Ban,
+    MoreVertical, Share2
 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import {
@@ -18,7 +19,7 @@ import {
 } from '@/lib/milkeyApi';
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { title as fmtTitle, center as fmtCenter, twoCol, threeCol, line as fmtLine, doubleLine, feed } from '@/lib/printFormat';
+import { title as fmtTitle, center as fmtCenter, twoCol, threeCol, line as fmtLine, doubleLine, feed, buildReceiptPayload } from '@/lib/printFormat';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -103,6 +104,7 @@ export default function PurchaseScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [showPrintTypeModal, setShowPrintTypeModal] = useState(false);
     const [printSource, setPrintSource] = useState<'purchase' | 'report'>('purchase');
+    const [actionMenuEntry, setActionMenuEntry] = useState<MilkCollection | null>(null);
 
     const showAlert = useCallback((t: string, m: string) => { setAlertTitle(t); setAlertMessage(m); setAlertVisible(true); }, []);
     const showConfirm = useCallback((t: string, m: string, onConfirm: () => void) => { setConfirmData({ title: t, message: m, onConfirm }); setConfirmVisible(true); }, []);
@@ -246,7 +248,7 @@ export default function PurchaseScreen() {
         const dateStr = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getFullYear()).slice(-2)}`;
         const shiftStr = entryShift === 'morning' ? 'Morning' : 'Evening';
 
-        const message = `Digital Milk Slip\n\n----------------------------------------------------\n\nDairy - Amul\n\nCode - ${customer.code}\n\nName - ${customer.name}\n\nDate - ${dateStr}   shift - ${shiftStr}\n\n----------------------------------------------------\n\nFat - ${fat || '-'}                    SNF -  ${snf || '-'}\n\nRate(Rs.) - ${rate}      Qty -  ${qty}\n\nAmount - ${amount.toFixed(2)}`;
+        const message = `*Digital Milk Slip*\n----------------------------------------------------\nDairy - Amul\nCode - ${customer.code}\nName - ${customer.name}\nDate - ${dateStr}   shift - ${shiftStr}\n----------------------------------------------------\nFat - ${fat || '-'}              SNF - ${snf || '-'}\nRate(Rs.) - ${rate}    Qty - ${qty}\nAmount - ${amount.toFixed(2)}`;
 
         const phone = customer.mobile.replace(/\D/g, '');
 
@@ -303,6 +305,22 @@ export default function PurchaseScreen() {
             if (res.success) {
                 showAlert('Success', 'Entry saved');
 
+                // Auto-print entry slip if farmer's printEntrySlip is 'yes'
+                if (selectedCustomer.printEntrySlip === 'yes') {
+                    const slipPayload = buildReceiptPayload({
+                        farmerCode: selectedCustomer.code,
+                        farmerName: selectedCustomer.name,
+                        date: dateStr,
+                        shift: entryShift === 'morning' ? 'Morning' : 'Evening',
+                        quantity: qty,
+                        fat,
+                        snf,
+                        rate,
+                        amount,
+                    });
+                    printText(slipPayload).catch(() => { });
+                }
+
                 // Open SMS/WhatsApp if configured
                 openAlertApp(selectedCustomer, qty, fat, snf, rate, amount);
 
@@ -315,7 +333,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, openAlertApp]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, openAlertApp, printText]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -428,38 +446,52 @@ export default function PurchaseScreen() {
             ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
             : historyTotals;
 
-        const title = isReport ? 'COLLECTION REPORT' : 'COLLECTION';
         const dateLabel = isReport && reportStartDate && reportEndDate
             ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
             : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
         const farmerLabel = isReport && selectedReportFarmer ? `Farmer: ${selectedReportFarmer.name}` : '';
 
         let payload = '';
-        payload += fmtTitle(title);
+        payload += fmtTitle('Provisional Milk Bill');
         payload += fmtCenter(dateLabel);
         if (farmerLabel) payload += fmtCenter(farmerLabel);
         payload += doubleLine();
-        payload += threeCol('Code', 'Qty', 'Amt', { bold: true });
-        payload += fmtLine();
+
+        // Table header like the receipt image: Date Time Qty. FAT SNF Rate Amount
+        payload += `[L]<b>Date  Time Qty.  FAT  SNF Rate Amount</b>\n`;
 
         for (const c of data) {
-            const code = c.farmerCode || '-';
-            const name = c.purchaseFarmer?.name || '';
-            payload += `[L]${code}${name ? ' ' + name : ''}\n`;
-            payload += twoCol('  Milk: ' + String(c.quantity), 'Fat: ' + (c.fat || '-'));
-            payload += twoCol('  SNF: ' + ((c as any).snf || '-'), 'Rate: ' + String(c.rate));
-            payload += twoCol('  Amount:', 'Rs ' + c.amount.toFixed(0), { bold: true });
-            payload += fmtLine();
+            const d = new Date(c.date);
+            const dd = String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0');
+            const time = c.shift === 'morning' ? '06:00' : '18:00';
+            const qty = Number(c.quantity).toFixed(2);
+            const fat = c.fat ? Number(c.fat).toFixed(1) : '0.0';
+            const snf = c.snf ? Number(c.snf).toFixed(1) : '0.0';
+            const rate = Number(c.rate).toFixed(2);
+            const amt = Number(c.amount).toFixed(2);
+            payload += `[L]${dd} ${time} ${qty} ${fat} ${snf} ${rate} ${amt}\n`;
         }
 
         payload += doubleLine();
-        payload += twoCol('Total Qty:', totals.quantity.toFixed(2) + ' L', { bold: true });
-        payload += twoCol('Total Amt:', 'Rs ' + totals.amount.toFixed(2), { bold: true });
+
+        // Averages
+        const totalFat = data.length > 0 ? (data.reduce((s, c) => s + (c.fat || 0), 0) / data.length).toFixed(2) : '0';
+        const totalSnf = data.length > 0 ? (data.reduce((s, c) => s + (c.snf || 0), 0) / data.length).toFixed(2) : '0';
         const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
-        payload += twoCol('Grand Avg Rate:', avgRate, { bold: true });
-        const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
-        payload += twoCol('Total Farmers:', String(uniqueFarmers), { bold: true });
-        payload += twoCol('Total Net Qty:', totals.quantity.toFixed(2), { bold: true });
+
+        payload += twoCol('Average FAT/SNF:', `${totalFat}  ${totalSnf}`, { bold: true });
+        payload += twoCol('Total Qty:', totals.quantity.toFixed(2), { bold: true });
+        payload += twoCol('Total Amt:', totals.amount.toFixed(2), { bold: true });
+        payload += twoCol('Average Rate:', avgRate, { bold: true });
+
+        payload += doubleLine();
+
+        // Grand summary
+        payload += fmtCenter(`Grand Avg FAT/SNF: ${totalFat}  ${totalSnf}`, { bold: true });
+        payload += fmtCenter(`Total Qty: ${totals.quantity.toFixed(2)}  Total Amt: ${totals.amount.toFixed(2)}`, { bold: true });
+        payload += fmtCenter(`Grand Average Rate: ${avgRate}`, { bold: true });
+
+        payload += doubleLine();
         payload += feed(3);
 
         const success = await printText(payload);
@@ -482,25 +514,23 @@ export default function PurchaseScreen() {
             ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
             : historyTotals;
 
-        const title = 'Provisional Short Shift Summary';
         const dateLabel = isReport && reportStartDate && reportEndDate
             ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
-            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
+            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'M' : 'E'})`;
 
         const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
         const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
 
         let payload = '';
-        payload += fmtTitle(title);
+        payload += fmtCenter('Short Summary', { bold: true });
         payload += fmtCenter(dateLabel);
         payload += doubleLine();
         payload += twoCol('Total Qty:', totals.quantity.toFixed(2) + ' L', { bold: true });
         payload += twoCol('Total Amt:', 'Rs ' + totals.amount.toFixed(2), { bold: true });
-        payload += twoCol('Average Rate:', avgRate, { bold: true });
-        payload += twoCol('Number of Samples:', String(data.length), { bold: true });
-        payload += twoCol('Number of Farmers:', String(uniqueFarmers), { bold: true });
+        payload += twoCol('Avg Rate:', avgRate, { bold: true });
+        payload += twoCol('Samples:', String(data.length), { bold: true });
+        payload += twoCol('Farmers:', String(uniqueFarmers), { bold: true });
         payload += doubleLine();
-        payload += fmtCenter('--- Short Summary ---');
         payload += feed(3);
 
         const success = await printText(payload);
@@ -666,13 +696,13 @@ export default function PurchaseScreen() {
                     </Pressable>
                 )}
 
-                {showCow && (
+                {selectedCustomer && showCow && (
                     <Pressable onPress={() => setMilkType('cow')} style={[s.milkToggleBtn, milkType === 'cow' && s.milkToggleBtnActive]}>
                         <Milk size={14} color={milkType === 'cow' ? '#fff' : colors.foreground} />
                         <Text style={[s.milkToggleBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
                     </Pressable>
                 )}
-                {showBuffalo && (
+                {selectedCustomer && showBuffalo && (
                     <Pressable onPress={() => setMilkType('buffalo')} style={[s.milkToggleBtn, milkType === 'buffalo' && s.milkToggleBtnActive]}>
                         <Milk size={14} color={milkType === 'buffalo' ? '#fff' : colors.foreground} />
                         <Text style={[s.milkToggleBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
@@ -818,10 +848,9 @@ export default function PurchaseScreen() {
                                     <View style={s.entryCellAmt}><Text style={[s.entryCellText, { textAlign: 'center', color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text></View>
                                     <Pressable
                                         style={s.deleteBtn}
-                                        onPress={() => handleDeleteCollection(item._id)}
-                                        disabled={deletingId === item._id}
+                                        onPress={() => setActionMenuEntry(item)}
                                     >
-                                        {deletingId === item._id ? <ActivityIndicator size={10} color={colors.destructive} /> : <Trash2 size={12} color={colors.destructive} />}
+                                        <MoreVertical size={14} color={colors.mutedForeground} />
                                     </Pressable>
                                 </View>
                             ))}
@@ -928,27 +957,34 @@ export default function PurchaseScreen() {
                 <View style={s.tableWrap}>
                     <View style={s.tHead}>
                         <Text style={[s.tHeadText, s.entryCell1]}>{t.common.code}</Text>
+                        <Text style={[s.tHeadText, { flex: 0.7, textAlign: 'center' }]}>Date</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.milk}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.snf}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
                         <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
                     </View>
-                    {filteredReportCollections.map((item, index) => (
-                        <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
-                            <View style={[s.entryCell1, { alignItems: 'center' }]}>
-                                <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
-                                <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
+                    {filteredReportCollections.map((item, index) => {
+                        const d = new Date(item.date);
+                        const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        return (
+                            <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
+                                <View style={[s.entryCell1, { alignItems: 'center' }]}>
+                                    <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
+                                    <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
+                                </View>
+                                <Text style={[s.entryCellText, { flex: 0.7, textAlign: 'center', fontSize: 9 }]}>{dateStr}</Text>
+                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.quantity}</Text>
+                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.fat || '-'}</Text>
+                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text>
+                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.rate}</Text>
+                                <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>₹{item.amount.toFixed(0)}</Text>
                             </View>
-                            <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.quantity}</Text>
-                            <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.fat || '-'}</Text>
-                            <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text>
-                            <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.rate}</Text>
-                            <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>₹{item.amount.toFixed(0)}</Text>
-                        </View>
-                    ))}
+                        );
+                    })}
                     <View style={s.tFootRow}>
                         <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({filteredReportCollections.length})</Text>
+                        <Text style={[s.tFootText, { flex: 0.7 }]}></Text>
                         <Text style={[s.tFootText, s.entryCell2]}>{filteredReportTotals.quantity.toFixed(1)}</Text>
                         <Text style={[s.tFootText, s.entryCell2]}></Text>
                         <Text style={[s.tFootText, s.entryCell2]}></Text>
@@ -1228,6 +1264,94 @@ export default function PurchaseScreen() {
                         </View>
                     </View>
                 </View>
+            </Modal>
+
+            {/* Entry Action Menu */}
+            <Modal visible={!!actionMenuEntry} transparent animationType="fade" onRequestClose={() => setActionMenuEntry(null)}>
+                <Pressable style={s.modalOverlay} onPress={() => setActionMenuEntry(null)}>
+                    <View style={[s.modalSheet, { paddingHorizontal: 16, paddingTop: 12 }]}>
+                        <View style={s.modalHandle} />
+                        <Text style={[s.modalTitle, { textAlign: 'center', marginVertical: 10 }]}>Actions</Text>
+                        {[
+                            {
+                                icon: <Printer size={18} color={colors.primary} />, label: 'Print', onPress: () => {
+                                    if (!actionMenuEntry) return;
+                                    const e = actionMenuEntry;
+                                    setActionMenuEntry(null);
+                                    const payload = buildReceiptPayload({
+                                        farmerCode: e.farmerCode || '-',
+                                        farmerName: e.purchaseFarmer?.name || '-',
+                                        quantity: e.quantity,
+                                        fat: e.fat || 0,
+                                        snf: (e as any).snf || 0,
+                                        rate: e.rate,
+                                        amount: e.amount,
+                                        date: new Date(e.date),
+                                        shift: e.shift,
+                                        milkType: (e as any).milkType || 'buffalo',
+                                    });
+                                    printText(payload).catch(() => showAlert('Error', 'Print failed'));
+                                }
+                            },
+                            {
+                                icon: <Share2 size={18} color={colors.primary} />, label: 'Share Digital Slip', onPress: () => {
+                                    if (!actionMenuEntry) return;
+                                    const e = actionMenuEntry;
+                                    setActionMenuEntry(null);
+                                    const dateObj = new Date(e.date);
+                                    const dateStr = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getFullYear()).slice(-2)}`;
+                                    const shiftStr = e.shift === 'morning' ? 'Morning' : 'Evening';
+                                    const message = `*Digital Milk Slip*\nCode - ${e.farmerCode || '-'}\nName - ${e.purchaseFarmer?.name || '-'}\nDate - ${dateStr}  Shift - ${shiftStr}\nFat - ${e.fat || '-'}  SNF - ${(e as any).snf || '-'}\nRate - ${e.rate}  Qty - ${e.quantity}\nAmount - ₹${e.amount.toFixed(2)}`;
+                                    const phone = e.purchaseFarmer?.mobile?.replace(/\D/g, '') || '';
+                                    if (phone) {
+                                        const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
+                                        const encoded = encodeURIComponent(message);
+                                        Linking.openURL(`whatsapp://send?phone=${whatsappPhone}&text=${encoded}`).catch(() => {
+                                            Linking.openURL(`https://wa.me/${whatsappPhone}?text=${encoded}`).catch(() => { });
+                                        });
+                                    } else {
+                                        showAlert('Error', 'No mobile number found');
+                                    }
+                                }
+                            },
+                            {
+                                icon: <Edit2 size={18} color={colors.primary} />, label: 'Edit', onPress: () => {
+                                    if (!actionMenuEntry) return;
+                                    const e = actionMenuEntry;
+                                    setActionMenuEntry(null);
+                                    // Find farmer and select, then fill form with entry data
+                                    const farmer = customers.find(c => c.code === e.farmerCode) || customers.find(c => c._id === (e as any).purchaseFarmer?._id);
+                                    if (farmer) {
+                                        setSelectedCustomer(farmer);
+                                        setMilkQty(String(e.quantity));
+                                        setFatValue(e.fat ? String(e.fat) : '');
+                                        setSnfValue((e as any).snf ? String((e as any).snf) : '');
+                                        setRateValue(String(e.rate));
+                                        setMilkType((e as any).milkType || 'buffalo');
+                                        setEntryShift(e.shift);
+                                    }
+                                    // Delete the old entry silently
+                                    milkCollectionsApi.delete(e._id).then(() => fetchCollections(1)).catch(() => { });
+                                }
+                            },
+                            {
+                                icon: <Trash2 size={18} color={colors.destructive} />, label: 'Delete', color: colors.destructive, onPress: () => {
+                                    const id = actionMenuEntry?._id;
+                                    setActionMenuEntry(null);
+                                    if (id) handleDeleteCollection(id);
+                                }
+                            },
+                        ].map((action, i) => (
+                            <Pressable key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: i < 3 ? 0.5 : 0, borderBottomColor: colors.border }} onPress={action.onPress}>
+                                {action.icon}
+                                <Text style={{ fontSize: 15, fontWeight: '600', color: (action as any).color || colors.foreground }}>{action.label}</Text>
+                            </Pressable>
+                        ))}
+                        <Pressable style={{ alignItems: 'center', paddingVertical: 14, marginTop: 4 }} onPress={() => setActionMenuEntry(null)}>
+                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.mutedForeground }}>Cancel</Text>
+                        </Pressable>
+                    </View>
+                </Pressable>
             </Modal>
 
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />

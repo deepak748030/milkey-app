@@ -43,7 +43,7 @@ export default function SellingScreen() {
     const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const { tab } = useLocalSearchParams<{ tab?: string }>();
-    const { isConnected: isPrinterConnected } = useBluetoothPrinter();
+    const { isConnected: isPrinterConnected, printText } = useBluetoothPrinter();
 
     // Subscription check
     const {

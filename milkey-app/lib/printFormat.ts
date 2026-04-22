@@ -26,7 +26,7 @@ function safe(text: string | number | undefined | null): string {
 }
 
 /** Single horizontal separator line. */
-export function line(width: number = COLUMN_WIDTH_58, char: string = '-'): string {
+export function line(width: number = COLUMN_WIDTH_58, char: string = '.'): string {
     return `[L]${char.repeat(width)}` + NEW_LINE;
 }
 

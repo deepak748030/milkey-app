@@ -78,6 +78,8 @@ export interface PurchaseFarmer {
     totalAmount: number;
     lastPurchaseDate?: string;
     isActive: boolean;
+    alertMethod?: 'sms' | 'whatsapp' | 'none';
+    printEntrySlip?: 'default' | 'yes' | 'no';
 }
 
 export interface Advance {

@@ -253,8 +253,7 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
                                                         onPress={() => handleSelectFarmer(farmer)}
                                                     >
                                                         <View>
-                                                            <Text style={styles.suggestionName}>{farmer.name}</Text>
-                                                            <Text style={styles.suggestionCode}>Code: {farmer.code}</Text>
+                                                            <Text style={styles.suggestionName}>{farmer.code}</Text>
                                                         </View>
                                                     </Pressable>
                                                 ))}

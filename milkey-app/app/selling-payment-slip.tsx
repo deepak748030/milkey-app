@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { memberPaymentsApi, printSettingsApi, PrintSettings, MemberPayment } from '@/lib/milkeyApi';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
+import { title as fmtTitle, center as fmtCenter, twoCol, line as fmtLine, doubleLine, feed } from '@/lib/printFormat';
 
 export default function SellingPaymentSlipScreen() {
     const { colors } = useTheme();
@@ -125,8 +127,53 @@ export default function SellingPaymentSlipScreen() {
         }
     };
 
+    const { printText } = useBluetoothPrinter();
+
+    const formatDateDDMMYYYYLocal = (dateStr: string) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+    };
+
+    const generateThermalPayload = () => {
+        if (!payment) return '';
+        const p = payment;
+        const dairyName = printSettings?.dairyName || 'Payment Slip';
+        const mobile = printSettings?.mobileNumber || '';
+        const address = printSettings?.address || '';
+        const milkQty = (Number(p.totalQuantity) || 0).toFixed(1);
+        const milkRate = (Number(p.milkRate) || 0).toFixed(2);
+
+        let payload = '';
+        payload += fmtTitle(dairyName);
+        if (address) payload += fmtCenter(address);
+        if (mobile) payload += fmtCenter('Ph: ' + mobile);
+        payload += doubleLine();
+        payload += twoCol('From:', formatDateDDMMYYYYLocal(p.periodStart || p.date));
+        payload += twoCol('Till:', formatDateDDMMYYYYLocal(p.periodEnd || p.date));
+        payload += twoCol('Member:', p.member?.name || '-');
+        payload += fmtLine();
+        payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));
+        payload += twoCol('Milk Qty:', milkQty + ' L');
+        payload += twoCol('Milk Rate:', 'Rs ' + milkRate + '/L');
+        payload += twoCol('Milk Amount:', (p.totalSellAmount || 0).toFixed(0));
+        payload += twoCol('Total Payable:', (p.netPayable || 0).toFixed(0));
+        payload += twoCol('Paid Amount:', (p.amount || 0).toFixed(0));
+        payload += fmtLine();
+        payload += twoCol('Closing Bal:', (p.closingBalance || 0).toFixed(0), { bold: true });
+        payload += doubleLine();
+        payload += fmtCenter('Thank You!');
+        payload += feed(4);
+        return payload;
+    };
+
     const handlePrint = async () => {
         if (!payment) return;
+        // Try Bluetooth thermal printer first
+        const thermalPayload = generateThermalPayload();
+        const success = await printText(thermalPayload);
+        if (success) return;
+        // Fallback to system print
         try {
             const html = generateHtml();
             await Print.printAsync({ html });

@@ -1116,16 +1116,25 @@ export default function RegisterScreen() {
                         </View>
                     )}
 
-                    {/* Paid Amount Input */}
-                    <Text style={styles.sectionLabel}>Paid Amount</Text>
-                    <TextInput
-                        style={styles.paidInput}
-                        placeholder="Enter Paid Amount"
-                        value={paidAmount}
-                        onChangeText={setPaidAmount}
-                        keyboardType="numeric"
-                        placeholderTextColor={colors.mutedForeground}
-                    />
+                    {/* Paid Amount Input - styled like Milk Amount box */}
+                    <View style={styles.summaryCard}>
+                        <View style={styles.summaryRow}>
+                            <Text style={[styles.summaryLabel, { fontWeight: '700', color: colors.primary }]}>Paid Amount:</Text>
+                            <TextInput
+                                style={styles.milkAmountInput}
+                                value={paidAmount}
+                                onChangeText={setPaidAmount}
+                                onFocus={() => {
+                                    if (paidAmount === '0.00' || paidAmount === '0') {
+                                        setPaidAmount('');
+                                    }
+                                }}
+                                keyboardType="numeric"
+                                placeholder="0.00"
+                                placeholderTextColor={colors.mutedForeground}
+                            />
+                        </View>
+                    </View>
 
                     {/* Closing Balance */}
                     <View style={styles.closingRow}>
