@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Download, Printer } from 'lucide-react-native';
@@ -127,7 +127,7 @@ export default function SellingPaymentSlipScreen() {
         }
     };
 
-    const { printText } = useBluetoothPrinter();
+    const { printText, error: printerError } = useBluetoothPrinter();
 
     const formatDateDDMMYYYYLocal = (dateStr: string) => {
         if (!dateStr) return '';
@@ -169,17 +169,31 @@ export default function SellingPaymentSlipScreen() {
 
     const handlePrint = async () => {
         if (!payment) return;
-        // Try Bluetooth thermal printer first
+        // Try Bluetooth thermal printer first (same flow as Selling tab)
         const thermalPayload = generateThermalPayload();
         const success = await printText(thermalPayload);
         if (success) return;
-        // Fallback to system print
-        try {
-            const html = generateHtml();
-            await Print.printAsync({ html });
-        } catch (e) {
-            console.error('Print error:', e);
-        }
+
+        // Bluetooth print failed — surface the real reason and offer system print fallback.
+        const reason = printerError || 'No printer connected. Open the printer scanner from the top bar and connect a printer first.';
+        Alert.alert(
+            'Bluetooth print failed',
+            reason,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Use phone print',
+                    onPress: async () => {
+                        try {
+                            const html = generateHtml();
+                            await Print.printAsync({ html });
+                        } catch (e) {
+                            console.error('Print error:', e);
+                        }
+                    },
+                },
+            ],
+        );
     };
 
     const p = payment;

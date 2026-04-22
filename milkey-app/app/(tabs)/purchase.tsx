@@ -1278,6 +1278,8 @@ export default function PurchaseScreen() {
                                     if (!actionMenuEntry) return;
                                     const e = actionMenuEntry;
                                     setActionMenuEntry(null);
+                                    const dObj = new Date(e.date);
+                                    const dStr = `${String(dObj.getDate()).padStart(2, '0')}/${String(dObj.getMonth() + 1).padStart(2, '0')}/${dObj.getFullYear()}`;
                                     const payload = buildReceiptPayload({
                                         farmerCode: e.farmerCode || '-',
                                         farmerName: e.purchaseFarmer?.name || '-',
@@ -1286,11 +1288,13 @@ export default function PurchaseScreen() {
                                         snf: (e as any).snf || 0,
                                         rate: e.rate,
                                         amount: e.amount,
-                                        date: new Date(e.date),
+                                        date: dStr,
                                         shift: e.shift,
                                         milkType: (e as any).milkType || 'buffalo',
-                                    });
-                                    printText(payload).catch(() => showAlert('Error', 'Print failed'));
+                                    } as any);
+                                    printText(payload)
+                                        .then(ok => { if (!ok) showAlert('Print failed', 'Could not print. Open the printer scanner from the top bar and reconnect.'); })
+                                        .catch(() => showAlert('Error', 'Print failed'));
                                 }
                             },
                             {
