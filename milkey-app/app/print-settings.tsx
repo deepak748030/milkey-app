@@ -173,8 +173,8 @@ export default function PrintSettingsScreen() {
                             <View style={[
                                 styles.inlineSwitchThumb,
                                 settings.showMobileOnReceipt
-                                    ? { alignSelf: 'flex-end' as const }
-                                    : { alignSelf: 'flex-start' as const },
+                                    ? { transform: [{ translateX: 18 }] }
+                                    : { transform: [{ translateX: 0 }] },
                             ]} />
                         </Pressable>
                     </View>
@@ -289,13 +289,6 @@ export default function PrintSettingsScreen() {
                                 <Text style={styles.slipTotalValue}>{mockSlipData.amount}</Text>
                             </View>
 
-                            {settings.extraInfo ? (
-                                <>
-                                    <View style={styles.slipDivider} />
-                                    <Text style={styles.slipNote}>{settings.extraInfo}</Text>
-                                </>
-                            ) : null}
-
                             <View style={styles.slipDivider} />
                             <Text style={styles.slipFooter}>Thank You! Visit Again</Text>
                         </View>
@@ -408,6 +401,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         paddingHorizontal: 3,
     },
     inlineSwitchThumb: {
+        alignSelf: 'flex-start',
         width: 20,
         height: 20,
         borderRadius: 10,

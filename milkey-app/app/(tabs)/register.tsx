@@ -439,7 +439,7 @@ export default function RegisterScreen() {
     };
     // Navigate to register payment slip page
     const handlePrintPaymentSlip = async (p: Payment, _skipPrinterCheck = false) => {
-        (router as any).push({ pathname: '/register-payment-slip', params: { paymentId: p._id } });
+        (router as any).push({ pathname: '/register-payment-slip', params: { paymentId: p._id, autoPrint: _skipPrinterCheck ? '1' : '0' } });
     };
 
 

@@ -82,7 +82,7 @@ export default function TopBar() {
                 <>
                   <Bluetooth size={10} color={colors.success} strokeWidth={2.5} />
                   <Text style={[styles.statusText, { color: colors.success }]} numberOfLines={1}>
-                    {connectedDevice?.name || 'Printer Connected'}
+                    Connected
                   </Text>
                 </>
               ) : error ? (

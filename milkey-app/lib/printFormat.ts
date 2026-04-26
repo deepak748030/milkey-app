@@ -44,6 +44,48 @@ export function title(text: string, opts: { big?: boolean; bold?: boolean } = {}
     return `[C]${inner}` + NEW_LINE;
 }
 
+/** Centered header that keeps long dairy names on one row by avoiding big font. */
+export function headerTitle(text: string, width: number = COLUMN_WIDTH_58): string {
+    const value = safe(text).trim();
+    if (!value) return '';
+    const upper = value.toUpperCase();
+    const useBig = upper.length <= Math.max(14, Math.floor(width * 0.55));
+    const useWide = !useBig && upper.length <= Math.max(18, Math.floor(width * 0.75));
+    let inner = `<b>${upper}</b>`;
+    if (useBig) inner = `<font size='big'>${inner}</font>`;
+    else if (useWide) inner = `<font size='wide'>${inner}</font>`;
+    return `[C]${inner}` + NEW_LINE;
+}
+
+export interface ReceiptBrandingOptions {
+    dairyName?: string;
+    mobileNumber?: string;
+    address?: string;
+    showMobileOnReceipt?: boolean;
+    width?: number;
+}
+
+/** Common thermal receipt top: Dairy name + optional address + mobile. */
+export function brandedHeader(opts: ReceiptBrandingOptions = {}): string {
+    const w = opts.width ?? COLUMN_WIDTH_58;
+    let p = '';
+    p += headerTitle(opts.dairyName || 'MILKEY DAIRY', w);
+    if (opts.address) p += center(opts.address);
+    if (opts.showMobileOnReceipt !== false && opts.mobileNumber) p += center('PH: ' + opts.mobileNumber);
+    p += line(w);
+    return p;
+}
+
+/** Common thermal receipt bottom: optional note + required Thank You text. */
+export function brandedFooter(extraInfo?: string, width: number = COLUMN_WIDTH_58): string {
+    let p = line(width);
+    const note = safe(extraInfo).trim();
+    if (note) p += center(note);
+    p += center('Thank You!');
+    p += feed(4);
+    return p;
+}
+
 /** Centered normal-size line. */
 export function center(text: string, opts: { bold?: boolean } = {}): string {
     const inner = opts.bold ? `<b>${safe(text)}</b>` : safe(text);
@@ -106,12 +148,8 @@ export function buildReceiptPayload(opts: ReceiptOptions): string {
     const w = opts.width ?? COLUMN_WIDTH_58;
     let p = '';
 
-    if (opts.dairyName) p += title(opts.dairyName);
+    p += brandedHeader({ dairyName: opts.dairyName, address: opts.address, mobileNumber: opts.mobile, width: w });
     if (opts.ownerName) p += center(opts.ownerName);
-    if (opts.mobile) p += center('Ph: ' + opts.mobile);
-    if (opts.address) p += center(opts.address);
-
-    p += doubleLine(w);
 
     if (opts.farmerCode) p += twoCol('Code:', String(opts.farmerCode));
     if (opts.farmerName) p += twoCol('Name:', String(opts.farmerName));

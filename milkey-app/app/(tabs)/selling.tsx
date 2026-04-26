@@ -756,7 +756,7 @@ export default function SellingScreen() {
 
     // Navigate to selling payment slip page
     const handlePrintSellingPaymentSlip = async (p: MemberPayment, _skipPrinterCheck = false) => {
-        (router as any).push({ pathname: '/selling-payment-slip', params: { paymentId: p._id } });
+        (router as any).push({ pathname: '/selling-payment-slip', params: { paymentId: p._id, autoPrint: _skipPrinterCheck ? '1' : '0' } });
     };
 
     // Group filtered entries by date and member (like entry table)

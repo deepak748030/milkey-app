@@ -15,11 +15,11 @@ import {
 import TopBar from '@/components/TopBar';
 import {
     milkCollectionsApi, purchaseFarmersApi, rateChartsApi,
-    MilkCollection, PurchaseFarmer
+    MilkCollection, PurchaseFarmer, printSettingsApi, PrintSettings
 } from '@/lib/milkeyApi';
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { title as fmtTitle, center as fmtCenter, twoCol, threeCol, line as fmtLine, doubleLine, feed, buildReceiptPayload } from '@/lib/printFormat';
+import { brandedFooter, brandedHeader, center as fmtCenter, left as fmtLeft, twoCol, threeCol, line as fmtLine, doubleLine, feed, buildReceiptPayload } from '@/lib/printFormat';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -84,6 +84,7 @@ export default function PurchaseScreen() {
     const [reportCollections, setReportCollections] = useState<MilkCollection[]>([]);
     const [reportLoading, setReportLoading] = useState(false);
     const [reportTotals, setReportTotals] = useState({ quantity: 0, amount: 0 });
+    const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
 
     // Farmer tab state
     const [farmerTabSearch, setFarmerTabSearch] = useState('');
@@ -164,6 +165,11 @@ export default function PurchaseScreen() {
             fetchCustomers();
         }
     }, [activeTab]);
+    useEffect(() => {
+        printSettingsApi.get()
+            .then(res => { if (res.success && res.response) setPrintSettings(res.response); })
+            .catch(() => { });
+    }, []);
     useEffect(() => { fetchCollections(1); }, [entryDate, entryShift]);
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
     useEffect(() => { if (reportStartDate && reportEndDate) fetchReportData(); }, [reportStartDate, reportEndDate]);
@@ -264,6 +270,36 @@ export default function PurchaseScreen() {
         }
     }, [entryDate, entryShift]);
 
+    const receiptHeader = useCallback((label: string) => {
+        let payload = '';
+        payload += fmtCenter(`Collection < ${label}`);
+        payload += feed(2);
+        payload += brandedHeader({
+            dairyName: printSettings?.dairyName || 'MILKEY DAIRY',
+            address: printSettings?.address || '',
+            mobileNumber: printSettings?.mobileNumber || '',
+            showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
+        });
+        return payload;
+    }, [printSettings]);
+
+    const receiptFooter = useCallback(() => {
+        return brandedFooter(printSettings?.extraInfo?.trim());
+    }, [printSettings]);
+
+    const buildMilkSlipPayload = useCallback((entry: MilkCollection) => {
+        const dObj = new Date(entry.date);
+        const dStr = `${String(dObj.getDate()).padStart(2, '0')}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getFullYear()).slice(-2)}`;
+        let payload = receiptHeader('Purchase = Milk Slip');
+        payload += `[L]Code : ${entry.farmerCode || '-'}[R]Name : ${entry.purchaseFarmer?.name || '-'}\n\n`;
+        payload += `[L]Date : ${dStr}[R]Shift : ${entry.shift === 'morning' ? 'M' : 'E'}\n\n`;
+        payload += `[L]Fat : ${(entry.fat || 0).toFixed(1)}[R]SNF : ${((entry as any).snf || 0).toFixed(1)}\n\n`;
+        payload += `[L]Qty : ${Number(entry.quantity).toFixed(2)}[R]Rate : ${Number(entry.rate).toFixed(1)}\n\n`;
+        payload += `[L]Amount : ${Number(entry.amount).toFixed(2)}\n`;
+        payload += receiptFooter();
+        return payload;
+    }, [receiptHeader, receiptFooter]);
+
     const handleSaveEntry = useCallback(async () => {
         if (saving) return;
         if (!selectedCustomer) { showAlert('Error', 'Please select a customer'); return; }
@@ -307,17 +343,18 @@ export default function PurchaseScreen() {
 
                 // Auto-print entry slip if farmer's printEntrySlip is 'yes'
                 if (selectedCustomer.printEntrySlip === 'yes') {
-                    const slipPayload = buildReceiptPayload({
+                    const slipPayload = buildMilkSlipPayload({
+                        _id: res.response?._id || '',
                         farmerCode: selectedCustomer.code,
-                        farmerName: selectedCustomer.name,
+                        purchaseFarmer: selectedCustomer,
                         date: dateStr,
-                        shift: entryShift === 'morning' ? 'Morning' : 'Evening',
+                        shift: entryShift,
                         quantity: qty,
                         fat,
                         snf,
                         rate,
                         amount,
-                    });
+                    } as any);
                     printText(slipPayload).catch(() => { });
                 }
 
@@ -333,7 +370,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, openAlertApp, printText]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, openAlertApp, printText, buildMilkSlipPayload]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -449,16 +486,22 @@ export default function PurchaseScreen() {
         const dateLabel = isReport && reportStartDate && reportEndDate
             ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
             : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
-        const farmerLabel = isReport && selectedReportFarmer ? `Farmer: ${selectedReportFarmer.name}` : '';
 
-        let payload = '';
-        payload += fmtTitle('Provisional Milk Bill');
-        payload += fmtCenter(dateLabel);
-        if (farmerLabel) payload += fmtCenter(farmerLabel);
-        payload += doubleLine();
+        const locationLabel = isReport ? 'Report = Full Summary' : 'Purchase = Full Summary';
+        let payload = receiptHeader(locationLabel);
+        if (isReport) {
+            payload += fmtCenter(dateLabel);
+            if (selectedReportFarmer) {
+                payload += fmtLeft(`Code : ${selectedReportFarmer.code}`);
+                payload += fmtLeft(`Name : ${selectedReportFarmer.name}`);
+            }
+        } else {
+            payload += `[L]${formatDateStr(`${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`)}[C]Full Summary[R]${entryShift === 'morning' ? 'M' : 'E'}\n`;
+        }
+        payload += fmtLine();
 
         // Table header like the receipt image: Date Time Qty. FAT SNF Rate Amount
-        payload += `[L]<b>Date  Time Qty.  FAT  SNF Rate Amount</b>\n`;
+        payload += `[L]Date Time  Qty   FAT SNF Rate  Amount\n`;
 
         for (const c of data) {
             const d = new Date(c.date);
@@ -472,27 +515,20 @@ export default function PurchaseScreen() {
             payload += `[L]${dd} ${time} ${qty} ${fat} ${snf} ${rate} ${amt}\n`;
         }
 
-        payload += doubleLine();
+        payload += fmtLine();
 
         // Averages
         const totalFat = data.length > 0 ? (data.reduce((s, c) => s + (c.fat || 0), 0) / data.length).toFixed(2) : '0';
         const totalSnf = data.length > 0 ? (data.reduce((s, c) => s + (c.snf || 0), 0) / data.length).toFixed(2) : '0';
         const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
 
-        payload += twoCol('Average FAT/SNF:', `${totalFat}  ${totalSnf}`, { bold: true });
-        payload += twoCol('Total Qty:', totals.quantity.toFixed(2), { bold: true });
-        payload += twoCol('Total Amt:', totals.amount.toFixed(2), { bold: true });
-        payload += twoCol('Average Rate:', avgRate, { bold: true });
-
-        payload += doubleLine();
-
-        // Grand summary
-        payload += fmtCenter(`Grand Avg FAT/SNF: ${totalFat}  ${totalSnf}`, { bold: true });
-        payload += fmtCenter(`Total Qty: ${totals.quantity.toFixed(2)}  Total Amt: ${totals.amount.toFixed(2)}`, { bold: true });
-        payload += fmtCenter(`Grand Average Rate: ${avgRate}`, { bold: true });
-
-        payload += doubleLine();
-        payload += feed(3);
+        payload += twoCol('Average FAT/SNF :', `${totalFat} / ${totalSnf}`);
+        payload += twoCol('Samples :', String(data.length));
+        payload += twoCol('Farmers :', String(new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size));
+        payload += twoCol('Total Qty :', `${totals.quantity.toFixed(2)} L`);
+        payload += twoCol('Avg Rate :', avgRate);
+        payload += twoCol('Total Amt :', `Rs ${totals.amount.toFixed(2)}`);
+        payload += receiptFooter();
 
         const success = await printText(payload);
         if (success) {
@@ -501,7 +537,7 @@ export default function PurchaseScreen() {
         }
 
         showAlert('Printer Not Ready', 'Connect your Bluetooth thermal printer from the top bar, then try printing again.');
-    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printText, selectedReportFarmer]);
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printText, selectedReportFarmer, receiptHeader, receiptFooter]);
 
     const handleShortSummaryPrint = useCallback(async (source?: 'purchase' | 'report') => {
         setShowPrintTypeModal(false);
@@ -521,17 +557,26 @@ export default function PurchaseScreen() {
         const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
         const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
 
-        let payload = '';
-        payload += fmtCenter('Short Summary', { bold: true });
-        payload += fmtCenter(dateLabel);
-        payload += doubleLine();
-        payload += twoCol('Total Qty:', totals.quantity.toFixed(2) + ' L', { bold: true });
-        payload += twoCol('Total Amt:', 'Rs ' + totals.amount.toFixed(2), { bold: true });
-        payload += twoCol('Avg Rate:', avgRate, { bold: true });
-        payload += twoCol('Samples:', String(data.length), { bold: true });
-        payload += twoCol('Farmers:', String(uniqueFarmers), { bold: true });
-        payload += doubleLine();
-        payload += feed(3);
+        const avgFat = data.length > 0 ? (data.reduce((s, c) => s + (c.fat || 0), 0) / data.length).toFixed(1) : '0.0';
+        const avgSnf = data.length > 0 ? (data.reduce((s, c) => s + ((c as any).snf || 0), 0) / data.length).toFixed(1) : '0.0';
+        let payload = receiptHeader(isReport ? 'Report = Short Summary' : 'Purchase = Short Summary');
+        if (isReport) {
+            payload += fmtLeft(dateLabel);
+            if (selectedReportFarmer) {
+                payload += fmtLeft(`Code : ${selectedReportFarmer.code}`);
+                payload += fmtLeft(`Name : ${selectedReportFarmer.name}`);
+            }
+        } else {
+            payload += `[L]${formatDateStr(`${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`)}[C]Short Summary[R]${entryShift === 'morning' ? 'M' : 'E'}\n`;
+        }
+        payload += fmtLine();
+        payload += twoCol('Samples :', String(data.length));
+        payload += twoCol('Average FAT/SNF :', `${avgFat} / ${avgSnf}`);
+        payload += twoCol('Average Rate :', avgRate);
+        payload += twoCol('Total Qty :', `${totals.quantity.toFixed(2)} L`);
+        payload += twoCol('Total Amount :', isReport ? totals.amount.toFixed(2) : `Rs ${totals.amount.toFixed(2)}`);
+        if (!isReport) payload += twoCol('Farmers :', String(uniqueFarmers));
+        payload += receiptFooter();
 
         const success = await printText(payload);
         if (success) {
@@ -540,7 +585,7 @@ export default function PurchaseScreen() {
         }
 
         showAlert('Printer Not Ready', 'Connect your Bluetooth thermal printer from the top bar, then try printing again.');
-    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printText]);
+    }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printText, selectedReportFarmer, receiptHeader, receiptFooter]);
 
     // Export PDF for report
     const handleExportReportPdf = useCallback(async () => {
@@ -1278,20 +1323,7 @@ export default function PurchaseScreen() {
                                     if (!actionMenuEntry) return;
                                     const e = actionMenuEntry;
                                     setActionMenuEntry(null);
-                                    const dObj = new Date(e.date);
-                                    const dStr = `${String(dObj.getDate()).padStart(2, '0')}/${String(dObj.getMonth() + 1).padStart(2, '0')}/${dObj.getFullYear()}`;
-                                    const payload = buildReceiptPayload({
-                                        farmerCode: e.farmerCode || '-',
-                                        farmerName: e.purchaseFarmer?.name || '-',
-                                        quantity: e.quantity,
-                                        fat: e.fat || 0,
-                                        snf: (e as any).snf || 0,
-                                        rate: e.rate,
-                                        amount: e.amount,
-                                        date: dStr,
-                                        shift: e.shift,
-                                        milkType: (e as any).milkType || 'buffalo',
-                                    } as any);
+                                    const payload = buildMilkSlipPayload(e);
                                     printText(payload)
                                         .then(ok => { if (!ok) showAlert('Print failed', 'Could not print. Open the printer scanner from the top bar and reconnect.'); })
                                         .catch(() => showAlert('Error', 'Print failed'));

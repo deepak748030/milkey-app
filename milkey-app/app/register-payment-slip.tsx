@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -8,7 +8,7 @@ import { paymentsApi, printSettingsApi, PrintSettings, Payment } from '@/lib/mil
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { title as fmtTitle, center as fmtCenter, twoCol, line as fmtLine, doubleLine, feed } from '@/lib/printFormat';
+import { brandedFooter, brandedHeader, twoCol, line as fmtLine, feed } from '@/lib/printFormat';
 
 const formatDateDDMMYYYY = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -22,11 +22,12 @@ const formatDateDDMMYYYY = (dateStr?: string) => {
 export default function RegisterPaymentSlipScreen() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const { paymentId } = useLocalSearchParams<{ paymentId: string }>();
+    const { paymentId, autoPrint } = useLocalSearchParams<{ paymentId: string; autoPrint?: string }>();
     const [loading, setLoading] = useState(true);
     const [payment, setPayment] = useState<Payment | null>(null);
     const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
     const [downloading, setDownloading] = useState(false);
+    const autoPrintDoneRef = useRef(false);
 
     useEffect(() => {
         fetchData();
@@ -61,7 +62,6 @@ export default function RegisterPaymentSlipScreen() {
         const showMobile = printSettings?.showMobileOnReceipt !== false;
         const mobile = printSettings?.mobileNumber || '';
         const address = printSettings?.address || '';
-        const extraInfo = printSettings?.extraInfo || '';
 
         return `
       <html>
@@ -71,7 +71,7 @@ export default function RegisterPaymentSlipScreen() {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
           .center { text-align: center; }
-          .title { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
+          .title { font-size: clamp(13px, 5vw, 18px); font-weight: bold; margin-bottom: 4px; white-space: nowrap; text-transform: uppercase; }
           .subtitle { font-size: 12px; color: #666; margin-bottom: 2px; }
           .info-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
           .info-row .value { color: #d32f2f; font-weight: 600; }
@@ -103,7 +103,7 @@ export default function RegisterPaymentSlipScreen() {
         <div class="amount-row"><span><b>Closing Balance :</b></span><span class="value-black" style="color: ${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#333'}"><b>${(p.closingBalance || 0).toFixed(0)}</b></span></div>
         <div class="separator">${'*'.repeat(40)}</div>
         <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
-        ${extraInfo ? `<div class="note">${extraInfo}</div>` : ''}
+        <div class="generated">Thank You!</div>
       </body>
       </html>
     `;
@@ -125,24 +125,24 @@ export default function RegisterPaymentSlipScreen() {
         }
     };
 
-    const { printText, isConnected: isPrinterConnected, connectedDevice, error: printerError } = useBluetoothPrinter();
+    const { printText, isConnected: isPrinterConnected, error: printerError } = useBluetoothPrinter();
 
     const generateThermalPayload = () => {
         if (!payment) return '';
         const p = payment;
-        const dairyName = printSettings?.dairyName || 'Payment Slip';
-        const mobile = printSettings?.mobileNumber || '';
-        const address = printSettings?.address || '';
 
         let payload = '';
-        payload += fmtTitle(dairyName);
-        if (address) payload += fmtCenter(address);
-        if (mobile) payload += fmtCenter('Ph: ' + mobile);
-        payload += doubleLine();
+        payload += brandedHeader({
+            dairyName: printSettings?.dairyName || 'Payment Slip',
+            address: printSettings?.address || '',
+            mobileNumber: printSettings?.mobileNumber || '',
+            showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
+        });
         payload += twoCol('From:', formatDateDDMMYYYY(p.periodStart || p.date));
         payload += twoCol('Till:', formatDateDDMMYYYY(p.periodEnd || p.date));
         payload += twoCol('Code:', p.farmer?.code || '-');
         payload += twoCol('Name:', p.farmer?.name || '-');
+        payload += feed(1);
         payload += fmtLine();
         payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));
         payload += twoCol('Milk Amount:', (p.totalMilkAmount || 0).toFixed(0));
@@ -151,17 +151,18 @@ export default function RegisterPaymentSlipScreen() {
         payload += twoCol('Paid Amount:', (p.amount || 0).toFixed(0));
         payload += fmtLine();
         payload += twoCol('Closing Bal:', (p.closingBalance || 0).toFixed(0), { bold: true });
-        payload += doubleLine();
-        payload += fmtCenter('Thank You!');
-        payload += feed(4);
+        payload += brandedFooter();
         return payload;
     };
 
     const handlePrint = async () => {
         if (!payment) return;
-        // Try Bluetooth thermal printer first (same flow as Purchase tab)
-        const thermalPayload = generateThermalPayload();
-        const success = await printText(thermalPayload);
+        if (!isPrinterConnected) {
+            await Print.printAsync({ html: generateHtml() });
+            return;
+        }
+
+        const success = await printText(generateThermalPayload());
         if (success) return;
 
         // Bluetooth print failed — surface the real reason and offer system print fallback.
@@ -185,6 +186,12 @@ export default function RegisterPaymentSlipScreen() {
             ],
         );
     };
+
+    useEffect(() => {
+        if (loading || !payment || !printSettings || autoPrint !== '1' || autoPrintDoneRef.current) return;
+        autoPrintDoneRef.current = true;
+        handlePrint();
+    }, [loading, payment, printSettings, autoPrint]);
 
     const p = payment;
 
