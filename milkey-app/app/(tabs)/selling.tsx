@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ToastAndroid } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -22,6 +22,7 @@ import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
+import { buildSellingPaymentSlipPayload, buildMembersListPayload } from '@/lib/slipPrint';
 
 type TabType = SellingTab;
 
@@ -58,6 +59,19 @@ export default function SellingScreen() {
     const { sellingTab: activeTab, setSellingTab: setActiveTab } = useSubTabStore();
     const [isLoading, setIsLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [topPrintSettings, setTopPrintSettings] = useState<PrintSettings | null>(null);
+
+    useEffect(() => {
+        printSettingsApi.get().then(res => {
+            if (res.success && res.response) setTopPrintSettings(res.response);
+        }).catch(() => { });
+    }, []);
+
+    const notifyPrinterDisconnected = () => {
+        if (Platform.OS === 'android') {
+            ToastAndroid.show('Printer not connected', ToastAndroid.SHORT);
+        }
+    };
 
     // Set active tab from URL params
     useEffect(() => {
@@ -754,9 +768,19 @@ export default function SellingScreen() {
         return `${day}/${month}/${year}`;
     };
 
-    // Navigate to selling payment slip page
+    // Print a selling payment slip directly when a printer is connected,
+    // otherwise notify the user and open the slip preview screen as a fallback.
     const handlePrintSellingPaymentSlip = async (p: MemberPayment, _skipPrinterCheck = false) => {
-        (router as any).push({ pathname: '/selling-payment-slip', params: { paymentId: p._id, autoPrint: _skipPrinterCheck ? '1' : '0' } });
+        if (isPrinterConnected) {
+            try {
+                await printText(buildSellingPaymentSlipPayload(p, topPrintSettings));
+            } catch (e) {
+                console.error('Direct print error:', e);
+            }
+            return;
+        }
+        notifyPrinterDisconnected();
+        (router as any).push({ pathname: '/selling-payment-slip', params: { paymentId: p._id } });
     };
 
     // Group filtered entries by date and member (like entry table)
@@ -1262,67 +1286,20 @@ export default function SellingScreen() {
         }
     };
 
-    // Print members list
+    // Print members list to thermal printer (toast if no printer connected)
     const handlePrintMembers = async () => {
         if (members.length === 0) {
-            showAlert('Error', 'No members to print');
+            if (Platform.OS === 'android') ToastAndroid.show('No members to print', ToastAndroid.SHORT);
             return;
         }
-
-        const rows = members.map((item, index) => `
-            <tr style="${index % 2 === 0 ? '' : 'background-color: #f9fafb;'}">
-                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${index + 1}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center; font-weight: 600; color: #22c55e;">₹${item.ratePerLiter}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${item.name}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.mobile}</td>
-                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${item.address || '-'}</td>
-            </tr>
-        `).join('');
-
-        const html = `
-            <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
-                        h1 { color: #22c55e; text-align: center; margin-bottom: 5px; }
-                        .subtitle { text-align: center; color: #666; margin-bottom: 20px; font-size: 14px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-                        th { background-color: #22c55e; color: white; padding: 12px 10px; text-align: left; font-weight: 600; }
-                        th:first-child, th:nth-child(2), th:nth-child(4) { text-align: center; }
-                        .summary { margin-top: 20px; padding: 15px; background-color: #f0fdf4; border-radius: 8px; }
-                        .summary-text { font-size: 14px; color: #333; }
-                    </style>
-                </head>
-                <body>
-                    <h1>Members List</h1>
-                    <p class="subtitle">Generated on: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
-                    <table>
-                        <tr>
-                            <th style="width: 50px;">Sr.</th>
-                            <th style="width: 80px;">Rate/L</th>
-                            <th>Name</th>
-                            <th style="width: 120px;">Mobile</th>
-                            <th>Address</th>
-                        </tr>
-                        ${rows}
-                    </table>
-                    <div class="summary">
-                        <p class="summary-text"><strong>Total Members:</strong> ${members.length}</p>
-                    </div>
-                </body>
-            </html>
-        `;
-
+        if (!isPrinterConnected) {
+            notifyPrinterDisconnected();
+            return;
+        }
         try {
-            const { uri } = await Print.printToFileAsync({ html });
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri);
-            } else {
-                showAlert('PDF Generated', `Saved to: ${uri}`);
-            }
-        } catch (error) {
-            showAlert('Error', 'Failed to generate PDF');
+            await printText(buildMembersListPayload(members, topPrintSettings));
+        } catch (e) {
+            if (Platform.OS === 'android') ToastAndroid.show('Print failed', ToastAndroid.SHORT);
         }
     };
 

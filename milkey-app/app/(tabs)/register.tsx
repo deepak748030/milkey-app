@@ -7,7 +7,10 @@ import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Pri
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { farmersApi, advancesApi, paymentsApi, Farmer, Advance, Payment, FarmerPaymentSummary } from '@/lib/milkeyApi';
+import { ToastAndroid, Platform as RNPlatform } from 'react-native';
+import { farmersApi, advancesApi, paymentsApi, printSettingsApi, Farmer, Advance, Payment, FarmerPaymentSummary, PrintSettings } from '@/lib/milkeyApi';
+import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
+import { buildRegisterPaymentSlipPayload, buildFarmersListPayload } from '@/lib/slipPrint';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
@@ -51,6 +54,21 @@ export default function RegisterScreen() {
     const { registerTab: activeTab, setRegisterTab: setActiveTab } = useSubTabStore();
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const { isConnected: isPrinterConnected, printText } = useBluetoothPrinter();
+    const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
+
+    useEffect(() => {
+        printSettingsApi.get().then(res => {
+            if (res.success && res.response) setPrintSettings(res.response);
+        }).catch(() => { });
+    }, []);
+
+    const notifyPrinterDisconnected = () => {
+        const msg = 'Printer not connected';
+        if (RNPlatform.OS === 'android') {
+            ToastAndroid.show(msg, ToastAndroid.SHORT);
+        }
+    };
 
     // Set active tab from URL params
     useEffect(() => {
@@ -437,9 +455,19 @@ export default function RegisterScreen() {
         await fetchFarmerPayments(paymentFarmer.farmer.id, nextPage, true);
         setFarmerPaymentsLoadingMore(false);
     };
-    // Navigate to register payment slip page
+    // Print a register payment slip directly when a printer is connected,
+    // otherwise notify the user and open the slip preview screen as a fallback.
     const handlePrintPaymentSlip = async (p: Payment, _skipPrinterCheck = false) => {
-        (router as any).push({ pathname: '/register-payment-slip', params: { paymentId: p._id, autoPrint: _skipPrinterCheck ? '1' : '0' } });
+        if (isPrinterConnected) {
+            try {
+                await printText(buildRegisterPaymentSlipPayload(p, printSettings));
+            } catch (e) {
+                console.error('Direct print error:', e);
+            }
+            return;
+        }
+        notifyPrinterDisconnected();
+        (router as any).push({ pathname: '/register-payment-slip', params: { paymentId: p._id } });
     };
 
 
@@ -838,51 +866,20 @@ export default function RegisterScreen() {
         setAdvNote('');
     };
 
-    // Generate PDF
+    // Print farmers list to thermal printer (toast if no printer connected)
     const generateFarmersPDF = async () => {
-        const rows = farmers.map(item => `
-      <tr>
-        <td>${item.code}</td>
-        <td>${item.name}</td>
-        <td>${item.mobile}</td>
-      </tr>
-    `).join('');
-
-        const html = `
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 20px; }
-            h1 { color: #22C55E; text-align: center; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-            th { background-color: #22C55E; color: white; }
-            tr:nth-child(even) { background-color: #f2f2f2; }
-          </style>
-        </head>
-        <body>
-          <h1>Farmers List</h1>
-          <table>
-            <tr>
-              <th>Code</th>
-              <th>Name</th>
-              <th>Mobile</th>
-            </tr>
-            ${rows}
-          </table>
-        </body>
-      </html>
-    `;
-
+        if (!farmers.length) {
+            if (RNPlatform.OS === 'android') ToastAndroid.show('No farmers to print', ToastAndroid.SHORT);
+            return;
+        }
+        if (!isPrinterConnected) {
+            notifyPrinterDisconnected();
+            return;
+        }
         try {
-            const { uri } = await Print.printToFileAsync({ html });
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(uri);
-            } else {
-                showAlert('PDF Generated', `Saved to: ${uri}`);
-            }
-        } catch (error) {
-            showAlert('Error', 'Failed to generate PDF');
+            await printText(buildFarmersListPayload(farmers, printSettings));
+        } catch (e) {
+            if (RNPlatform.OS === 'android') ToastAndroid.show('Print failed', ToastAndroid.SHORT);
         }
     };
 

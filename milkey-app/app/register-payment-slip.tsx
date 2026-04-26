@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, ToastAndroid, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Download, Printer } from 'lucide-react-native';
@@ -155,36 +155,21 @@ export default function RegisterPaymentSlipScreen() {
         return payload;
     };
 
+    const showToast = (msg: string) => {
+        if (Platform.OS === 'android') ToastAndroid.show(msg, ToastAndroid.SHORT);
+    };
+
     const handlePrint = async () => {
         if (!payment) return;
         if (!isPrinterConnected) {
-            await Print.printAsync({ html: generateHtml() });
+            showToast('Printer not connected');
             return;
         }
 
         const success = await printText(generateThermalPayload());
         if (success) return;
 
-        // Bluetooth print failed — surface the real reason and offer system print fallback.
-        const reason = printerError || 'No printer connected. Open the printer scanner from the top bar and connect a printer first.';
-        Alert.alert(
-            'Bluetooth print failed',
-            reason,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Use phone print',
-                    onPress: async () => {
-                        try {
-                            const html = generateHtml();
-                            await Print.printAsync({ html });
-                        } catch (e) {
-                            console.error('Print error:', e);
-                        }
-                    },
-                },
-            ],
-        );
+        showToast(printerError || 'Print failed');
     };
 
     useEffect(() => {
