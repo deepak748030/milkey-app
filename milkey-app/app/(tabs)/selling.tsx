@@ -1150,6 +1150,73 @@ export default function SellingScreen() {
         }
     };
 
+    // Print Milk Slip - quick print of the current payment summary (without saving)
+    const [milkSlipPrinting, setMilkSlipPrinting] = useState(false);
+    const handlePrintMilkSlip = async () => {
+        if (!selectedPaymentMember) {
+            showAlert('Error', 'Please select a member first');
+            return;
+        }
+        setMilkSlipPrinting(true);
+        try {
+            const psRes = await printSettingsApi.get();
+            const ps = psRes.success ? psRes.response : null;
+            const dairyName = ps?.dairyName || 'Milk Slip';
+            const address = ps?.address || '';
+            const mobile = ps?.mobileNumber || '';
+            const showMobile = ps?.showMobileOnReceipt !== false;
+
+            const totalLiters = memberSummary?.selling?.totalLiters || 0;
+            const milkAmt = parseFloat(milkAmount) || 0;
+            const paidAmt = parseFloat(paymentAmount) || 0;
+            const prevBal = previousBalance || 0;
+            const payable = netPayable || 0;
+            const closing = payable - paidAmt;
+            const periodEnd = calcEndDate ? formatDateDDMMYYYY(calcEndDate) : formatDateDDMMYYYY(new Date().toISOString().split('T')[0]);
+            const periodStart = calcStartDate ? formatDateDDMMYYYY(calcStartDate) : '-';
+
+            const html = `
+                <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>
+                    *{margin:0;padding:0;box-sizing:border-box}
+                    body{font-family:'Courier New',monospace;padding:16px;max-width:380px;margin:0 auto;color:#222}
+                    .center{text-align:center}
+                    .title{font-size:18px;font-weight:bold;text-transform:uppercase;margin-bottom:4px}
+                    .sub{font-size:12px;color:#666;margin-bottom:2px}
+                    .sep{text-align:center;margin:10px 0;color:#999;font-size:11px;letter-spacing:1px}
+                    .row{display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px}
+                    .row .v{font-weight:600}
+                    .bold{font-weight:700;font-size:14px}
+                </style></head><body>
+                    <div class="center title">${dairyName}</div>
+                    ${address ? `<div class="center sub">${address}</div>` : ''}
+                    ${showMobile && mobile ? `<div class="center sub">📞 ${mobile}</div>` : ''}
+                    <div class="sep">${'*'.repeat(40)}</div>
+                    <div class="row"><span>From :</span><span class="v">${periodStart}</span></div>
+                    <div class="row"><span>Till :</span><span class="v">${periodEnd}</span></div>
+                    <div class="row"><span>Member :</span><span class="v">${selectedPaymentMember.name}</span></div>
+                    <div class="sep">${'*'.repeat(40)}</div>
+                    <div class="row"><span>Last Balance :</span><span class="v">₹${prevBal.toFixed(0)}</span></div>
+                    <div class="row"><span>Milk Quantity :</span><span class="v">${totalLiters.toFixed(1)} L</span></div>
+                    <div class="row"><span>Milk Amount :</span><span class="v">₹${milkAmt.toFixed(0)}</span></div>
+                    <div class="row"><span>Total Payable :</span><span class="v">₹${payable.toFixed(0)}</span></div>
+                    <div class="row"><span>Paid Amount :</span><span class="v">₹${paidAmt.toFixed(0)}</span></div>
+                    <div class="sep">${'*'.repeat(40)}</div>
+                    <div class="row bold"><span>Closing Balance :</span><span class="v">${closing < 0 ? '-' : ''}₹${Math.abs(closing).toFixed(0)}</span></div>
+                    <div class="sep">${'*'.repeat(40)}</div>
+                    <div class="center sub">Generated: ${new Date().toLocaleDateString('en-IN')}</div>
+                    <div class="center sub" style="margin-top:6px">Thank You!</div>
+                </body></html>
+            `;
+
+            await Print.printAsync({ html });
+        } catch (e) {
+            console.error('Milk slip print error:', e);
+            showAlert('Error', 'Failed to print milk slip');
+        } finally {
+            setMilkSlipPrinting(false);
+        }
+    };
+
     // Edit Payment Handler
     const handleEditPayment = (payment: MemberPayment) => {
         setEditingPayment(payment);
@@ -1668,32 +1735,57 @@ export default function SellingScreen() {
                         </View>
                     </View>
 
-                    {/* Download Milk Entries PDF */}
-                    <Pressable
-                        style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6,
-                            backgroundColor: colors.card,
-                            borderWidth: 1,
-                            borderColor: colors.primary,
-                            borderRadius: 6,
-                            paddingVertical: 8,
-                            marginBottom: 6,
-                        }}
-                        onPress={handleDownloadPaymentMemberEntriesPDF}
-                        disabled={paymentEntriesPdfLoading}
-                    >
-                        {paymentEntriesPdfLoading ? (
-                            <ActivityIndicator size="small" color={colors.primary} />
-                        ) : (
-                            <>
-                                <Download size={14} color={colors.primary} />
-                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Download Milk Entries PDF</Text>
-                            </>
-                        )}
-                    </Pressable>
+                    {/* Print Milk Slip + Full Detailed Entry buttons */}
+                    <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6 }}>
+                        <Pressable
+                            style={{
+                                flex: 1,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                backgroundColor: colors.primary,
+                                borderRadius: 6,
+                                paddingVertical: 8,
+                            }}
+                            onPress={handlePrintMilkSlip}
+                            disabled={milkSlipPrinting}
+                        >
+                            {milkSlipPrinting ? (
+                                <ActivityIndicator size="small" color={colors.white} />
+                            ) : (
+                                <>
+                                    <Printer size={14} color={colors.white} />
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.white }}>Print Milk Slip</Text>
+                                </>
+                            )}
+                        </Pressable>
+                        <Pressable
+                            style={{
+                                flex: 1,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                backgroundColor: colors.card,
+                                borderWidth: 1,
+                                borderColor: colors.primary,
+                                borderRadius: 6,
+                                paddingVertical: 8,
+                            }}
+                            onPress={handleDownloadPaymentMemberEntriesPDF}
+                            disabled={paymentEntriesPdfLoading}
+                        >
+                            {paymentEntriesPdfLoading ? (
+                                <ActivityIndicator size="small" color={colors.primary} />
+                            ) : (
+                                <>
+                                    <FileText size={14} color={colors.primary} />
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>Full Detailed Entry</Text>
+                                </>
+                            )}
+                        </Pressable>
+                    </View>
 
                     {/* Calculation Period Section - End Date Only */}
                     <View style={styles.calcPeriodCard}>
@@ -1748,16 +1840,27 @@ export default function SellingScreen() {
                         </View>
                     </View>
 
-                    {/* Payment Amount Input */}
-                    <Text style={styles.sectionLabel}>Paid Amount</Text>
-                    <TextInput
-                        style={styles.paidInput}
-                        placeholder="Enter Paid Amount"
-                        value={paymentAmount}
-                        onChangeText={setPaymentAmount}
-                        keyboardType="numeric"
-                        placeholderTextColor={colors.mutedForeground}
-                    />
+                    {/* Paid Amount Input - styled like Register/Payment box */}
+                    <View style={styles.paymentSummaryCard}>
+                        <View style={styles.summaryRow}>
+                            <Text style={[styles.summaryLabel, { fontWeight: '700', color: colors.primary }]}>Paid Amount:</Text>
+                            <View style={styles.summaryValueBox}>
+                                <TextInput
+                                    style={[styles.summaryValueBoxText, { color: colors.foreground, padding: 0, minWidth: 80, textAlign: 'right' }]}
+                                    placeholder="0.00"
+                                    value={paymentAmount}
+                                    onChangeText={setPaymentAmount}
+                                    onFocus={() => {
+                                        if (paymentAmount === '0.00' || paymentAmount === '0') {
+                                            setPaymentAmount('');
+                                        }
+                                    }}
+                                    keyboardType="numeric"
+                                    placeholderTextColor={colors.mutedForeground}
+                                />
+                            </View>
+                        </View>
+                    </View>
 
                     {/* Closing Balance - positive means customer owes, negative means overpaid */}
                     <View style={styles.closingRow}>
@@ -1788,10 +1891,17 @@ export default function SellingScreen() {
                 Payment History {selectedPaymentMember ? `(${selectedPaymentMember.name})` : ''}
             </Text>
             {(() => {
+                // Dedupe payments by _id (member-specific fetch + global fetch may overlap)
+                const seenIds = new Set<string>();
+                const uniquePayments = recentPayments.filter(p => {
+                    if (!p?._id || seenIds.has(p._id)) return false;
+                    seenIds.add(p._id);
+                    return true;
+                });
                 // Filter payments by member if one is selected
                 const filteredPayments = selectedPaymentMember
-                    ? recentPayments.filter(p => p.member?._id === selectedPaymentMember._id)
-                    : recentPayments;
+                    ? uniquePayments.filter(p => p.member?._id === selectedPaymentMember._id)
+                    : uniquePayments;
 
                 if (filteredPayments.length === 0) {
                     return (
