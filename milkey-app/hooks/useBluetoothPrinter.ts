@@ -196,7 +196,9 @@ const buildBluetoothPrintOptions = (
     payload: string,
     widthMM: 58 | 80,
     charsPerLine: number,
+    macAddress?: string,
 ) => ({
+    macAddress: macAddress ?? '',
     payload,
     printerNbrCharactersPerLine: charsPerLine,
     printerWidthMM: widthMM,
@@ -764,14 +766,14 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 ? state.connectedDevice
                 : null;
 
-            const runPrintAttempt = async () => {
+            const runPrintAttempt = async (macAddress: string) => {
                 await ThermalPrinter.printBluetooth(
-                    buildBluetoothPrintOptions(payload, widthMM, charsPerLine),
+                    buildBluetoothPrintOptions(payload, widthMM, charsPerLine, macAddress),
                 );
             };
 
             try {
-                await runPrintAttempt();
+                await runPrintAttempt(mac);
             } catch (primaryError: any) {
                 const primaryRaw = primaryError?.message || String(primaryError);
                 lastRawErrorRef.current = primaryRaw;
@@ -790,7 +792,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 if (/not found|bluetooth device not found/i.test(primaryRaw) || refreshedMatch) {
                     retried = true;
                     try {
-                        await runPrintAttempt();
+                        await runPrintAttempt(activeDevice?.id ?? mac);
                     } catch (retryError: any) {
                         const retryRaw = retryError?.message || String(retryError);
                         lastRawErrorRef.current = retryRaw;
