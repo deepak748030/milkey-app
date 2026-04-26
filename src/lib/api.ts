@@ -356,6 +356,7 @@ export const updateUser = async (id: string, data: {
     phone?: string
     address?: string
     role?: string
+    avatar?: string
 }) => {
     const response = await api.put(`/admin/users/${id}`, data)
     return response.data

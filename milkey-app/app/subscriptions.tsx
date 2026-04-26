@@ -164,11 +164,10 @@ function SuccessModal({ visible, title, message, onClose }: SuccessModalProps) {
 export default function SubscriptionsScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
-    const [activeTab, setActiveTab] = useState<'active' | 'available' | 'expired'>('active');
+    const [activeTab, setActiveTab] = useState<'active' | 'available'>('active');
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [activeSubscriptions, setActiveSubscriptions] = useState<UserSubscription[]>([]);
-    const [expiredSubscriptions, setExpiredSubscriptions] = useState<UserSubscription[]>([]);
     const [availableSubscriptions, setAvailableSubscriptions] = useState<AvailableSubscription[]>([]);
     const [isNewUser, setIsNewUser] = useState(false);
     const [purchasing, setPurchasing] = useState<string | null>(null);
@@ -217,7 +216,6 @@ export default function SubscriptionsScreen() {
             const mySubsResponse = await userSubscriptionsApi.getMy();
             if (mySubsResponse.success && mySubsResponse.response) {
                 setActiveSubscriptions(mySubsResponse.response.active || []);
-                setExpiredSubscriptions(mySubsResponse.response.expired || []);
             }
 
             // Fetch available subscriptions
@@ -522,43 +520,7 @@ export default function SubscriptionsScreen() {
         );
     };
 
-    const renderExpiredSubscription = (item: UserSubscription) => {
-        // Use locked-in subscription name as fallback when subscription is not populated
-        const subscriptionName = item.lockedSubscriptionName || item.subscription?.name || 'Subscription';
-        const subscriptionType = item.subscription?.subscriptionType ||
-            (item.isFree ? 'free' : (item.applicableTabs?.length > 1 ? 'combined' : 'single'));
-
-        const TypeIcon = getTypeIcon(subscriptionType);
-
-        return (
-            <View key={item._id} style={[styles.subscriptionCard, styles.expiredCard]}>
-                <View style={styles.cardHeader}>
-                    <View style={[styles.iconContainer, styles.expiredIcon]}>
-                        <TypeIcon size={24} color={colors.mutedForeground} />
-                    </View>
-                    <View style={styles.cardHeaderInfo}>
-                        <Text style={[styles.subscriptionName, styles.expiredText]}>{subscriptionName}</Text>
-                        <View style={[styles.statusBadge, styles.expiredBadge]}>
-                            <XCircle size={12} color={colors.destructive} />
-                            <Text style={[styles.statusText, { color: colors.destructive }]}>Expired</Text>
-                        </View>
-                    </View>
-                </View>
-
-                <View style={styles.cardDetails}>
-                    <View style={styles.detailRow}>
-                        <Calendar size={14} color={colors.mutedForeground} />
-                        <Text style={styles.detailText}>Expired on: {formatDate(item.endDate)}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.tabsContainer}>
-                    <Text style={styles.tabsLabel}>Covered: </Text>
-                    <Text style={styles.tabsValue}>{getTabNames(item.applicableTabs || item.subscription?.applicableTabs || [])}</Text>
-                </View>
-            </View>
-        );
-    };
+    // Expired subscriptions are intentionally not displayed.
 
     const renderAvailableSubscription = (item: AvailableSubscription) => {
         const TypeIcon = getTypeIcon(item.subscriptionType);
@@ -710,10 +672,6 @@ export default function SubscriptionsScreen() {
                 items = availableSubscriptions.map(renderAvailableSubscription).filter(Boolean);
                 emptyMessage = 'No subscriptions available';
                 break;
-            case 'expired':
-                items = expiredSubscriptions.map(renderExpiredSubscription).filter(Boolean);
-                emptyMessage = 'No expired subscriptions';
-                break;
         }
 
         if (items.length === 0) {
@@ -759,14 +717,6 @@ export default function SubscriptionsScreen() {
                 >
                     <Text style={[styles.tabText, activeTab === 'available' && styles.activeTabText]}>
                         Available ({availableSubscriptions.length})
-                    </Text>
-                </Pressable>
-                <Pressable
-                    style={[styles.tab, activeTab === 'expired' && styles.activeTab]}
-                    onPress={() => setActiveTab('expired')}
-                >
-                    <Text style={[styles.tabText, activeTab === 'expired' && styles.activeTabText]}>
-                        Expired ({expiredSubscriptions.length})
                     </Text>
                 </Pressable>
             </View>

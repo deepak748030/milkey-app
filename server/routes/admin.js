@@ -486,13 +486,14 @@ router.get('/users/:id', adminAuth, async (req, res) => {
 // PUT /api/admin/users/:id - Update user
 router.put('/users/:id', adminAuth, async (req, res) => {
     try {
-        const { name, email, phone, address, role } = req.body;
+        const { name, email, phone, address, role, avatar } = req.body;
         const updates = {};
 
         if (name) updates.name = name.trim();
         if (email) updates.email = email.toLowerCase().trim();
         if (phone) updates.phone = phone.trim();
         if (address !== undefined) updates.address = address.trim();
+        if (avatar !== undefined) updates.avatar = avatar;
         if (role && ['owner', 'staff', 'farmer'].includes(role)) {
             updates.role = role;
         }

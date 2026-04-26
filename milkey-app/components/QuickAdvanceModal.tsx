@@ -62,7 +62,7 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
 
         setLoading(true);
         try {
-            const res = await farmersApi.getAll();
+            const res = await farmersApi.getAll({ type: 'farmer' });
             if (res.success) {
                 setFarmers(res.response?.data || []);
             }
@@ -83,15 +83,36 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
         setShowSuggestions(false);
     };
 
-    // Filtered farmers for search
+    // Filtered farmers for search — exact code match always shown first, then partial
     const filteredFarmers = useMemo(() => {
-        if (!searchFarmer.trim()) return farmers.slice(0, 10);
-        const query = searchFarmer.toLowerCase();
-        return farmers.filter(f =>
+        const sortByCode = (a: Farmer, b: Farmer) => {
+            const an = parseInt(a.code, 10);
+            const bn = parseInt(b.code, 10);
+            if (!isNaN(an) && !isNaN(bn)) return an - bn;
+            return String(a.code).localeCompare(String(b.code));
+        };
+
+        if (!searchFarmer.trim()) {
+            return [...farmers].sort(sortByCode).slice(0, 50);
+        }
+
+        const query = searchFarmer.toLowerCase().trim();
+        const matches = farmers.filter(f =>
             f.name.toLowerCase().includes(query) ||
             f.code.toLowerCase().includes(query) ||
             f.mobile?.includes(query)
-        ).slice(0, 10);
+        );
+
+        // Prioritise: exact code match → code starts-with → rest, sorted numerically
+        const exact = matches.filter(f => f.code.toLowerCase() === query);
+        const startsWith = matches.filter(f => f.code.toLowerCase().startsWith(query) && f.code.toLowerCase() !== query);
+        const others = matches.filter(f => !f.code.toLowerCase().startsWith(query));
+
+        return [
+            ...exact.sort(sortByCode),
+            ...startsWith.sort(sortByCode),
+            ...others.sort(sortByCode),
+        ].slice(0, 50);
     }, [farmers, searchFarmer]);
 
     const formatDate = (dateStr: string) => {
@@ -242,7 +263,7 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
                                     {showSuggestions && (
                                         <View style={styles.suggestionDropdown}>
                                             <ScrollView
-                                                style={{ maxHeight: 150 }}
+                                                style={{ maxHeight: 220 }}
                                                 nestedScrollEnabled
                                                 keyboardShouldPersistTaps="handled"
                                             >
@@ -252,8 +273,16 @@ export function QuickAdvanceModal({ isVisible, onClose, onSuccess }: QuickAdvanc
                                                         style={styles.suggestionItem}
                                                         onPress={() => handleSelectFarmer(farmer)}
                                                     >
-                                                        <View>
-                                                            <Text style={styles.suggestionName}>{farmer.code}</Text>
+                                                        <View style={styles.suggestionRow}>
+                                                            <View style={styles.codeChip}>
+                                                                <Text style={styles.codeChipText}>{farmer.code}</Text>
+                                                            </View>
+                                                            <View style={{ flex: 1 }}>
+                                                                <Text style={styles.suggestionName} numberOfLines={1}>{farmer.name}</Text>
+                                                                {farmer.mobile ? (
+                                                                    <Text style={styles.suggestionMeta} numberOfLines={1}>{farmer.mobile}</Text>
+                                                                ) : null}
+                                                            </View>
                                                         </View>
                                                     </Pressable>
                                                 ))}
@@ -492,10 +521,34 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
     },
+    suggestionRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    codeChip: {
+        minWidth: 38,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        backgroundColor: colors.primary + '18',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    codeChipText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: colors.primary,
+    },
     suggestionName: {
         fontSize: 14,
-        fontWeight: '500',
+        fontWeight: '600',
         color: colors.foreground,
+    },
+    suggestionMeta: {
+        fontSize: 11,
+        color: colors.mutedForeground,
+        marginTop: 1,
     },
     suggestionCode: {
         fontSize: 12,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
     Search,
     ChevronLeft,
@@ -19,6 +19,7 @@ import {
     Send,
     CreditCard,
     Megaphone,
+    Camera,
 } from 'lucide-react'
 import {
     getUsers,
@@ -31,7 +32,8 @@ import {
     assignSubscriptionToUser,
     sendNotificationToUser,
     sendBulkNotification,
-    SubscriptionListItem
+    SubscriptionListItem,
+    uploadImage,
 } from '../lib/api'
 import { cn } from '../lib/utils'
 
@@ -116,6 +118,10 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
     const [notificationTitle, setNotificationTitle] = useState('')
     const [notificationMessage, setNotificationMessage] = useState('')
     const [sendingNotification, setSendingNotification] = useState(false)
+
+    // Avatar upload state (Instagram-style center-square crop, displayed as circle)
+    const [uploadingAvatar, setUploadingAvatar] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
 
     useEffect(() => {
         if (user) {
@@ -253,6 +259,74 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
         }
     }
 
+    // Crop the picked image to a centred square (Instagram-style) and return base64 JPEG
+    const cropToSquareBase64 = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onerror = () => reject(new Error('Failed to read file'))
+            reader.onload = () => {
+                const img = new Image()
+                img.onerror = () => reject(new Error('Failed to load image'))
+                img.onload = () => {
+                    const size = Math.min(img.width, img.height)
+                    const sx = (img.width - size) / 2
+                    const sy = (img.height - size) / 2
+
+                    const target = Math.min(size, 512) // cap output at 512px for upload size
+                    const canvas = document.createElement('canvas')
+                    canvas.width = target
+                    canvas.height = target
+                    const ctx = canvas.getContext('2d')
+                    if (!ctx) return reject(new Error('Canvas not supported'))
+                    ctx.drawImage(img, sx, sy, size, size, 0, 0, target, target)
+                    // Strip "data:image/jpeg;base64," prefix — backend expects raw or full URI; uploadToCloudinary accepts both
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+                    resolve(dataUrl)
+                }
+                img.src = String(reader.result)
+            }
+            reader.readAsDataURL(file)
+        })
+    }
+
+    const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        // Reset input so the same file can be picked again later
+        if (e.target) e.target.value = ''
+        if (!file) return
+
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file')
+            return
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            alert('Image must be smaller than 10MB')
+            return
+        }
+
+        setUploadingAvatar(true)
+        try {
+            const base64 = await cropToSquareBase64(file)
+            const uploadRes = await uploadImage(base64, 'milkey/avatars')
+            if (!uploadRes.success || !uploadRes.response?.url) {
+                alert(uploadRes.message || 'Failed to upload image')
+                return
+            }
+            const url = uploadRes.response.url
+            const updateRes = await updateUser(user._id, { avatar: url })
+            if (updateRes.success) {
+                onUpdate(updateRes.response)
+            } else {
+                alert(updateRes.message || 'Failed to save avatar')
+            }
+        } catch (err: any) {
+            console.error('Avatar upload failed:', err)
+            alert(err?.message || 'Failed to upload avatar')
+        } finally {
+            setUploadingAvatar(false)
+        }
+    }
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70" onClick={onClose}>
             <div
@@ -285,14 +359,41 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
                 </div>
 
                 <div className="flex flex-col items-center mb-4 sm:mb-6">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-muted overflow-hidden mb-3 sm:mb-4">
-                        {user.avatar ? (
-                            <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-xl sm:text-2xl font-bold text-muted-foreground">
-                                {user.name?.charAt(0).toUpperCase() || 'U'}
+                    <div className="relative mb-3 sm:mb-4">
+                        {/* Instagram-style gradient ring */}
+                        <div className="p-[3px] rounded-full bg-gradient-to-tr from-primary via-accent to-primary">
+                            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-card overflow-hidden flex items-center justify-center border-2 border-card">
+                                {user.avatar ? (
+                                    <img src={user.avatar} alt={user.name} className="w-full h-full object-cover rounded-full" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-xl sm:text-2xl font-bold text-muted-foreground bg-muted">
+                                        {user.name?.charAt(0).toUpperCase() || 'U'}
+                                    </div>
+                                )}
+                                {uploadingAvatar && (
+                                    <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
+                                        <Loader2 className="w-6 h-6 animate-spin text-white" />
+                                    </div>
+                                )}
                             </div>
-                        )}
+                        </div>
+                        {/* Camera button — opens file picker */}
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploadingAvatar}
+                            className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center border-2 border-card shadow-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                            title="Change profile picture"
+                        >
+                            <Camera className="w-4 h-4" />
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleAvatarFileChange}
+                        />
                     </div>
                     {isEditing ? (
                         <input

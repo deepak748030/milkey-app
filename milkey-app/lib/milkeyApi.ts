@@ -1029,6 +1029,13 @@ export const authApiNew = {
         });
     },
 
+    uploadAvatar: async (imageBase64: string) => {
+        return apiRequest<any>('/auth/upload-avatar', {
+            method: 'POST',
+            body: JSON.stringify({ image: imageBase64 }),
+        });
+    },
+
     googleLogin: async (idToken: string) => {
         return apiRequest<{ token: string; user: any }>('/auth/google', {
             method: 'POST',

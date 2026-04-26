@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Modal, Alert, ScrollView } from 'react-native';
-import { X } from 'lucide-react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, Modal, Alert, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { X, Camera, User as UserIcon } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
 import { authApi, getStoredUser } from '@/lib/api';
+import { authApiNew } from '@/lib/milkeyApi';
+import { updateAuthUser } from '@/lib/authStore';
 import { SuccessModal } from './SuccessModal';
 
 interface EditProfileModalProps {
@@ -17,6 +20,8 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [avatar, setAvatar] = useState<string>('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState({ title: '', message: '' });
@@ -35,6 +40,7 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
         setEmail(result.response.email);
         setPhone(result.response.phone);
         setAddress(result.response.address || '');
+        setAvatar((result.response as any).avatar || '');
       } else {
         const user = await getStoredUser();
         if (user) {
@@ -42,6 +48,7 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
           setEmail(user.email);
           setPhone(user.phone);
           setAddress((user as any).address || '');
+          setAvatar((user as any).avatar || '');
         }
       }
     } catch (error) {
@@ -51,7 +58,55 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
         setEmail(user.email);
         setPhone(user.phone);
         setAddress((user as any).address || '');
+        setAvatar((user as any).avatar || '');
       }
+    }
+  };
+
+  const handlePickAvatar = async () => {
+    if (uploadingAvatar) return;
+    try {
+      // Request permission
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission required', 'Please allow photo library access to change your profile picture.');
+        return;
+      }
+
+      // Instagram-like: square crop, then we render in a circle
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets || !result.assets[0]) return;
+
+      const asset = result.assets[0];
+      if (!asset.base64) {
+        Alert.alert('Error', 'Could not read image data.');
+        return;
+      }
+
+      setUploadingAvatar(true);
+      const uploadRes = await authApiNew.uploadAvatar(asset.base64);
+      if (uploadRes.success && uploadRes.response) {
+        const newUrl = uploadRes.response.avatar || '';
+        setAvatar(newUrl);
+        // Persist to local auth store so the profile screen circle updates instantly
+        await updateAuthUser({ avatar: newUrl });
+        // Notify parent so the profile screen refreshes immediately
+        onSave();
+      } else {
+        Alert.alert('Upload failed', uploadRes.message || 'Could not upload profile picture.');
+      }
+    } catch (e: any) {
+      console.error('Avatar upload error:', e);
+      Alert.alert('Error', e?.message || 'Failed to upload profile picture.');
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -113,7 +168,7 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
       borderRadius: 16,
       width: '100%',
       maxWidth: 400,
-      maxHeight: '80%',
+      maxHeight: '85%',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.3,
@@ -129,32 +184,67 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    closeButton: {
-      padding: 4,
+    closeButton: { padding: 4 },
+    title: { fontSize: 18, fontWeight: 'bold', color: colors.foreground },
+    placeholder: { width: 32 },
+    content: { padding: 20 },
+    // Avatar (Instagram-like circular)
+    avatarSection: {
+      alignItems: 'center',
+      marginBottom: 20,
     },
-    title: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: colors.foreground,
+    avatarRing: {
+      width: 116,
+      height: 116,
+      borderRadius: 58,
+      padding: 3,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    placeholder: {
+    avatarInner: {
+      width: 110,
+      height: 110,
+      borderRadius: 55,
+      backgroundColor: colors.muted,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 3,
+      borderColor: colors.card,
+    },
+    avatarImage: {
+      width: '100%',
+      height: '100%',
+    },
+    cameraBadge: {
+      position: 'absolute',
+      bottom: 2,
+      right: 2,
       width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: colors.card,
     },
-    content: {
-      padding: 20,
+    avatarHint: {
+      marginTop: 8,
+      fontSize: 12,
+      color: colors.mutedForeground,
     },
-    form: {
-      gap: 16,
-      marginBottom: 24,
+    uploadingOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      borderRadius: 55,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    fieldContainer: {
-      gap: 8,
-    },
-    label: {
-      fontSize: 14,
-      fontWeight: '500',
-      color: colors.foreground,
-    },
+    form: { gap: 16, marginBottom: 24 },
+    fieldContainer: { gap: 8 },
+    label: { fontSize: 14, fontWeight: '500', color: colors.foreground },
     input: {
       borderWidth: 1,
       borderColor: colors.border,
@@ -165,22 +255,10 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
       backgroundColor: colors.background,
       color: colors.foreground,
     },
-    disabledInput: {
-      backgroundColor: colors.muted,
-      color: colors.mutedForeground,
-    },
-    addressInput: {
-      minHeight: 80,
-      paddingTop: 12,
-    },
-    helperText: {
-      fontSize: 12,
-      color: colors.mutedForeground,
-    },
-    buttonRow: {
-      flexDirection: 'row',
-      gap: 12,
-    },
+    disabledInput: { backgroundColor: colors.muted, color: colors.mutedForeground },
+    addressInput: { minHeight: 80, paddingTop: 12 },
+    helperText: { fontSize: 12, color: colors.mutedForeground },
+    buttonRow: { flexDirection: 'row', gap: 12 },
     cancelButton: {
       flex: 1,
       borderWidth: 1,
@@ -189,11 +267,7 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
       borderRadius: 8,
       alignItems: 'center',
     },
-    cancelButtonText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.foreground,
-    },
+    cancelButtonText: { fontSize: 16, fontWeight: '600', color: colors.foreground },
     saveButton: {
       flex: 1,
       backgroundColor: colors.primary,
@@ -201,14 +275,8 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
       borderRadius: 8,
       alignItems: 'center',
     },
-    disabledButton: {
-      backgroundColor: colors.muted,
-    },
-    saveButtonText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: colors.primaryForeground,
-    },
+    disabledButton: { backgroundColor: colors.muted },
+    saveButtonText: { fontSize: 16, fontWeight: '600', color: colors.primaryForeground },
   });
 
   return (
@@ -231,6 +299,30 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
 
           {/* Content */}
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Instagram-like circular avatar with edit overlay */}
+            <View style={styles.avatarSection}>
+              <Pressable onPress={handlePickAvatar} disabled={uploadingAvatar}>
+                <View style={styles.avatarRing}>
+                  <View style={styles.avatarInner}>
+                    {avatar ? (
+                      <Image source={{ uri: avatar }} style={styles.avatarImage} resizeMode="cover" />
+                    ) : (
+                      <UserIcon size={48} color={colors.mutedForeground} />
+                    )}
+                    {uploadingAvatar && (
+                      <View style={styles.uploadingOverlay}>
+                        <ActivityIndicator color="#fff" />
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.cameraBadge}>
+                  <Camera size={16} color={'#fff'} />
+                </View>
+              </Pressable>
+              <Text style={styles.avatarHint}>Tap to change profile picture</Text>
+            </View>
+
             {/* Form Fields */}
             <View style={styles.form}>
               <View style={styles.fieldContainer}>

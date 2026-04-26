@@ -447,7 +447,80 @@ router.put('/profile', auth, async (req, res) => {
     }
 });
 
-// PUT /api/auth/push-token
+// POST /api/auth/upload-avatar - Upload profile picture to Cloudinary
+router.post('/upload-avatar', auth, async (req, res) => {
+    try {
+        const { image } = req.body;
+
+        if (!image) {
+            return res.status(400).json({
+                success: false,
+                message: 'Image data is required'
+            });
+        }
+
+        // Limit base64 payload (~10 MB raw)
+        if (image.length > 15 * 1024 * 1024) {
+            return res.status(400).json({
+                success: false,
+                message: 'Image too large. Maximum 10MB allowed.'
+            });
+        }
+
+        const { uploadToCloudinary, deleteFromCloudinary } = require('../lib/cloudinary');
+        const result = await uploadToCloudinary(image, 'milkey/avatars');
+
+        if (!result.success) {
+            return res.status(500).json({
+                success: false,
+                message: result.error || 'Failed to upload avatar'
+            });
+        }
+
+        // Best-effort cleanup of the previous avatar (only if it was a Cloudinary upload in our folder)
+        try {
+            const existing = await User.findById(req.userId).select('avatar');
+            const oldUrl = existing?.avatar || '';
+            if (oldUrl && oldUrl.includes('/milkey/avatars/')) {
+                const match = oldUrl.match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z]+$/);
+                if (match && match[1]) {
+                    await deleteFromCloudinary(match[1]);
+                }
+            }
+        } catch (e) {
+            // Ignore cleanup errors
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.userId,
+            { avatar: result.url },
+            { new: true }
+        ).select('-password -otp');
+
+        res.json({
+            success: true,
+            message: 'Avatar updated successfully',
+            response: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                avatar: user.avatar,
+                address: user.address,
+                role: user.role,
+                referralCode: user.referralCode,
+                memberSince: user.createdAt
+            }
+        });
+    } catch (error) {
+        console.error('Upload avatar error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to upload avatar'
+        });
+    }
+});
+
 router.put('/push-token', auth, async (req, res) => {
     try {
         const { expoPushToken } = req.body;

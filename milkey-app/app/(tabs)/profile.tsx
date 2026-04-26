@@ -92,7 +92,11 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.avatarWrapper}>
             <View style={styles.avatar}>
-              <User size={26} color={colors.white} />
+              {user?.avatar ? (
+                <Image source={{ uri: user.avatar }} style={styles.avatarImage} resizeMode="cover" />
+              ) : (
+                <User size={26} color={colors.white} />
+              )}
             </View>
           </View>
           <View style={styles.profileInfo}>
@@ -300,6 +304,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: colors.card,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   profileInfo: {
     alignItems: 'center',
