@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Modal, Alert, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Camera, User as UserIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
@@ -16,6 +17,7 @@ interface EditProfileModalProps {
 
 export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModalProps) {
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -161,7 +163,9 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
       backgroundColor: 'rgba(0, 0, 0, 0.6)',
       justifyContent: 'center',
       alignItems: 'center',
-      padding: 20,
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 20 + Math.max(insets.bottom, 0),
     },
     modal: {
       backgroundColor: colors.card,
@@ -258,25 +262,36 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
     disabledInput: { backgroundColor: colors.muted, color: colors.mutedForeground },
     addressInput: { minHeight: 80, paddingTop: 12 },
     helperText: { fontSize: 12, color: colors.mutedForeground },
+    footer: {
+      flexDirection: 'row',
+      gap: 12,
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 12 + Math.max(insets.bottom, 8),
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      backgroundColor: colors.card,
+    },
     buttonRow: { flexDirection: 'row', gap: 12 },
     cancelButton: {
       flex: 1,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingVertical: 12,
-      borderRadius: 8,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      paddingVertical: 14,
+      borderRadius: 10,
       alignItems: 'center',
+      backgroundColor: colors.card,
     },
-    cancelButtonText: { fontSize: 16, fontWeight: '600', color: colors.foreground },
+    cancelButtonText: { fontSize: 16, fontWeight: '700', color: colors.primary },
     saveButton: {
-      flex: 1,
+      flex: 1.4,
       backgroundColor: colors.primary,
-      paddingVertical: 12,
-      borderRadius: 8,
+      paddingVertical: 14,
+      borderRadius: 10,
       alignItems: 'center',
     },
     disabledButton: { backgroundColor: colors.muted },
-    saveButtonText: { fontSize: 16, fontWeight: '600', color: colors.primaryForeground },
+    saveButtonText: { fontSize: 16, fontWeight: '700', color: '#fff' },
   });
 
   return (
@@ -379,26 +394,26 @@ export function EditProfileModal({ isVisible, onClose, onSave }: EditProfileModa
                 <Text style={styles.helperText}>This address will be used for product delivery</Text>
               </View>
             </View>
-
-            {/* Buttons */}
-            <View style={styles.buttonRow}>
-              <Pressable style={styles.cancelButton} onPress={handleCancel}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.saveButton,
-                  (!name.trim() || loading) && styles.disabledButton
-                ]}
-                onPress={handleSave}
-                disabled={!name.trim() || loading}
-              >
-                <Text style={styles.saveButtonText}>
-                  {loading ? 'Saving...' : 'Save Changes'}
-                </Text>
-              </Pressable>
-            </View>
           </ScrollView>
+
+          {/* Sticky footer buttons - always visible above the phone navigation bar */}
+          <View style={styles.footer}>
+            <Pressable style={styles.cancelButton} onPress={handleCancel}>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.saveButton,
+                (!name.trim() || loading) && styles.disabledButton
+              ]}
+              onPress={handleSave}
+              disabled={!name.trim() || loading}
+            >
+              <Text style={styles.saveButtonText}>
+                {loading ? 'Saving...' : 'Save Changes'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 

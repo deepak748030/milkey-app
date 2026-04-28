@@ -35,7 +35,8 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.RECORD_AUDIO",
-        "android.permission.FOREGROUND_SERVICE"
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "blockedPermissions": []
     },
@@ -110,7 +111,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "084b6040-54e9-4e2f-a6a5-6e7c32bd2117"
+        "projectId": "5105d798-655a-478f-9ff0-062ac18b4e0e"
       }
     }
   }

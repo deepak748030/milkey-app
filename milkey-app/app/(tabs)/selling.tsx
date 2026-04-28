@@ -1189,6 +1189,7 @@ export default function SellingScreen() {
             const address = ps?.address || '';
             const mobile = ps?.mobileNumber || '';
             const showMobile = ps?.showMobileOnReceipt !== false;
+            const extraNote = (ps?.extraInfo || '').trim();
 
             const totalLiters = memberSummary?.selling?.totalLiters || 0;
             const milkAmt = parseFloat(milkAmount) || 0;
@@ -1227,6 +1228,7 @@ export default function SellingScreen() {
                     <div class="sep">${'*'.repeat(40)}</div>
                     <div class="row bold"><span>Closing Balance :</span><span class="v">${closing < 0 ? '-' : ''}₹${Math.abs(closing).toFixed(0)}</span></div>
                     <div class="sep">${'*'.repeat(40)}</div>
+                    ${extraNote ? `<div class="center sub" style="margin-top:4px">${extraNote}</div>` : ''}
                     <div class="center sub">Generated: ${new Date().toLocaleDateString('en-IN')}</div>
                     <div class="center sub" style="margin-top:6px">Thank You!</div>
                 </body></html>
@@ -1789,31 +1791,25 @@ export default function SellingScreen() {
                         </Pressable>
                     </View>
 
-                    {/* Summary Card */}
+                    {/* Summary Card - read-only values shown as plain text (no box bg) */}
                     <View style={styles.paymentSummaryCard}>
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Milk Qty (L):</Text>
-                            <View style={styles.summaryValueBox}>
-                                <Text style={[styles.summaryValueBoxText, { color: colors.foreground }]}>
-                                    {(memberSummary?.selling?.totalLiters || 0).toFixed(1)} L
-                                </Text>
-                            </View>
+                            <Text style={[styles.summaryValueBoxText, { color: colors.foreground }]}>
+                                {(memberSummary?.selling?.totalLiters || 0).toFixed(1)} L
+                            </Text>
                         </View>
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, opacity: 0.7 }]}>
                             <Text style={styles.summaryLabel}>Milk Amount (₹):</Text>
-                            <View style={styles.summaryValueBox}>
-                                <Text style={[styles.summaryValueBoxText, { color: colors.foreground }]}>
-                                    ₹ {milkAmount}
-                                </Text>
-                            </View>
+                            <Text style={[styles.summaryValueBoxText, { color: colors.foreground }]}>
+                                ₹ {milkAmount}
+                            </Text>
                         </View>
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
                             <Text style={[styles.summaryLabel, { fontWeight: '700' }]}>Total Payable:</Text>
-                            <View style={styles.summaryValueBox}>
-                                <Text style={[styles.summaryValueBoxText, { fontWeight: '700', color: netPayable >= 0 ? colors.primary : colors.destructive }]}>
-                                    ₹{netPayable.toFixed(2)}
-                                </Text>
-                            </View>
+                            <Text style={[styles.summaryValueBoxText, { fontWeight: '700', color: netPayable >= 0 ? colors.primary : colors.destructive }]}>
+                                ₹{netPayable.toFixed(2)}
+                            </Text>
                         </View>
                     </View>
 

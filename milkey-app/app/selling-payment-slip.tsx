@@ -161,7 +161,7 @@ export default function SellingPaymentSlipScreen() {
         payload += twoCol('Paid Amount:', (p.amount || 0).toFixed(0));
         payload += fmtLine();
         payload += twoCol('Closing Bal:', (p.closingBalance || 0).toFixed(0), { bold: true });
-        payload += brandedFooter();
+        payload += brandedFooter(printSettings?.extraInfo?.trim());
         return payload;
     };
 

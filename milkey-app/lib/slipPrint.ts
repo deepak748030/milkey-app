@@ -46,7 +46,7 @@ export function buildRegisterPaymentSlipPayload(
     payload += twoCol('Paid Amount:', (p.amount || 0).toFixed(0));
     payload += fmtLine();
     payload += twoCol('Closing Bal:', (p.closingBalance || 0).toFixed(0), { bold: true });
-    payload += brandedFooter();
+    payload += brandedFooter(printSettings?.extraInfo?.trim());
     return payload;
 }
 
@@ -73,7 +73,7 @@ export function buildSellingPaymentSlipPayload(
     payload += twoCol('Paid Amount:', (p.amount || 0).toFixed(0));
     payload += fmtLine();
     payload += twoCol('Closing Bal:', (p.closingBalance || 0).toFixed(0), { bold: true });
-    payload += brandedFooter();
+    payload += brandedFooter(printSettings?.extraInfo?.trim());
     return payload;
 }
 
@@ -96,7 +96,7 @@ export function buildFarmersListPayload(
     });
     payload += fmtLine();
     payload += twoCol('Total:', String(farmers.length), { bold: true });
-    payload += brandedFooter();
+    payload += brandedFooter(printSettings?.extraInfo?.trim());
     return payload;
 }
 
@@ -115,6 +115,6 @@ export function buildMembersListPayload(
     });
     payload += fmtLine();
     payload += twoCol('Total:', String(members.length), { bold: true });
-    payload += brandedFooter();
+    payload += brandedFooter(printSettings?.extraInfo?.trim());
     return payload;
 }

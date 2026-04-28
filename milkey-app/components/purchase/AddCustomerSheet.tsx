@@ -141,12 +141,31 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 <Pressable style={{ flex: 1 }} onPress={onClose} />
                 <View style={s.sheet}>
                     <View style={s.handle} />
+
+                    {/* Header with title + larger red X on the side */}
                     <View style={s.header}>
                         <Text style={s.title}>{editingFarmer ? 'Edit Customer' : 'Add Customer'}</Text>
-                        <Pressable onPress={onClose}><X size={22} color={colors.foreground} /></Pressable>
+                        <Pressable
+                            onPress={onClose}
+                            hitSlop={12}
+                            style={s.closeBtn}
+                        >
+                            <X size={26} color="#ef4444" strokeWidth={3} />
+                        </Pressable>
                     </View>
 
-                    <ScrollView style={s.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    {/* Action buttons moved to TOP so they aren't cut by phone navigation bar */}
+                    <View style={s.topActions}>
+                        <Pressable style={s.cancelBtn} onPress={() => { onClose(); resetForm(); }}>
+                            <X size={16} color={colors.foreground} />
+                            <Text style={s.cancelBtnText}>Cancel</Text>
+                        </Pressable>
+                        <Pressable style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+                            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>💾 Save</Text>}
+                        </Pressable>
+                    </View>
+
+                    <ScrollView style={s.body} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                         {/* Customer Details Card */}
                         <View style={s.sectionCard}>
                             <Text style={s.sectionTitle}>Customer Details</Text>
@@ -307,17 +326,6 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
 
                         <View style={{ height: 20 }} />
                     </ScrollView>
-
-                    {/* Footer Buttons */}
-                    <View style={s.footer}>
-                        <Pressable style={s.cancelBtn} onPress={() => { onClose(); resetForm(); }}>
-                            <X size={16} color={colors.foreground} />
-                            <Text style={s.cancelBtnText}>Cancel</Text>
-                        </Pressable>
-                        <Pressable style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
-                            {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveBtnText}>💾 Save</Text>}
-                        </Pressable>
-                    </View>
                 </View>
             </View>
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} />
@@ -355,7 +363,9 @@ const createSheetStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     priceBasisText: { fontSize: 13, fontWeight: '500', color: colors.foreground },
     priceBasisTextActive: { color: '#fff' },
     footer: { flexDirection: 'row', gap: 10, paddingHorizontal: 6, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border },
-    cancelBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
+    topActions: { flexDirection: 'row', gap: 10, paddingHorizontal: 10, paddingBottom: 10, paddingTop: 2, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.background },
+    closeBtn: { width: 30, height: 30, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ef444415', borderWidth: 1.5, borderColor: '#ef4444' },
+    cancelBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
     cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.foreground },
     saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.primary },
     saveBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View, Text, StyleSheet, Pressable, TextInput, FlatList,
-    ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking
+    ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking, Platform
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -90,6 +90,8 @@ export default function PurchaseScreen() {
     const [farmerTabSearch, setFarmerTabSearch] = useState('');
     const debouncedFarmerSearch = useDebounce(farmerTabSearch, 400);
     const [farmerSearchLoading, setFarmerSearchLoading] = useState(false);
+    const [reportFarmerCodeSearch, setReportFarmerCodeSearch] = useState('');
+    const [saleEntrySearch, setSaleEntrySearch] = useState('');
 
     // Modals
     const [showDateModal, setShowDateModal] = useState(false);
@@ -362,8 +364,10 @@ export default function PurchaseScreen() {
                 openAlertApp(selectedCustomer, qty, fat, snf, rate, amount);
 
                 setMilkQty(''); setFatValue(''); setSnfValue(''); setRateValue('');
-                if (selectedCustomer.priceBasis === 'rate') autoFillRate(selectedCustomer, milkType);
                 setIsZero(false);
+                // Auto-deselect the farmer/code after save so user must re-select for next entry.
+                // This prevents accidental double entries on the same code.
+                setSelectedCustomer(null);
                 fetchCollections(1);
             } else {
                 showAlert('Error', res.message || 'Failed to save');
@@ -385,12 +389,34 @@ export default function PurchaseScreen() {
         });
     }, []);
 
-    const handleSelectCustomer = useCallback((c: PurchaseFarmer) => {
+    const applySelectCustomer = useCallback((c: PurchaseFarmer) => {
         setSelectedCustomer(c);
         setShowCustomerModal(false);
         setShowInlineSearch(false);
         setInlineSearchCode('');
-    }, []);
+        // Auto-fill rate for rate-based pricing on selection
+        if (c.priceBasis === 'rate') autoFillRate(c, milkType);
+    }, [milkType]);
+
+    const handleSelectCustomer = useCallback((c: PurchaseFarmer) => {
+        // Detect double-entry: existing collection for same code in current shift+date
+        const existing = collections.find(col =>
+            (col.farmerCode === c.code || col.purchaseFarmer?._id === c._id) &&
+            col.shift === entryShift
+        );
+        if (existing) {
+            showConfirm(
+                'Double Entry?',
+                `Code ${c.code} (${c.name}) already has an entry for ${entryShift === 'morning' ? 'Morning' : 'Evening'} on this date. Are you sure you want to add another entry?`,
+                () => {
+                    setConfirmVisible(false);
+                    applySelectCustomer(c);
+                }
+            );
+            return;
+        }
+        applySelectCustomer(c);
+    }, [collections, entryShift, applySelectCustomer, showConfirm]);
 
     const handleEditCustomer = useCallback((c: PurchaseFarmer) => {
         setEditingCustomer(c);
@@ -845,42 +871,76 @@ export default function PurchaseScreen() {
         </View>
     );
 
-    // ── Sale Entries Table (fixed bottom) ──
-    const renderSaleEntriesTable = () => (
-        <View style={s.tableBottomWrap}>
-            <View style={s.tableWrap}>
-                <View style={s.tableBar}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                        <FileText size={13} color={colors.primary} />
-                        <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
-                        <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
-                    </View>
-                    <Pressable style={[s.pdfBtn, isPrinting && { opacity: 0.5 }]} onPress={() => handlePrintPress('purchase')} disabled={isPrinting}>
-                        {isPrinting ? <ActivityIndicator size={12} color="#fff" /> : <Printer size={12} color="#fff" />}
-                    </Pressable>
-                </View>
+    // ── Sale Entries Table (scrolls with page) ──
+    const renderSaleEntriesTable = () => {
+        // Latest entry first: sort by createdAt/_id descending (Mongo _id is time-ordered)
+        const sorted = [...collections].sort((a: any, b: any) => {
+            const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            if (at !== bt) return bt - at;
+            return String(b._id).localeCompare(String(a._id));
+        });
+        const q = saleEntrySearch.trim().toUpperCase();
+        const visible = q
+            ? sorted.filter(it => String(it.farmerCode || '').toUpperCase().includes(q))
+            : sorted;
 
-                <View style={s.tHead}>
-                    <View style={s.entryCell1}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.common.code}</Text></View>
-                    <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.milk}</Text></View>
-                    <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.fat}</Text></View>
-                    <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>SNF</Text></View>
-                    <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.common.rate}</Text></View>
-                    <View style={s.entryCellAmt}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.amt}</Text></View>
-                    <View style={{ width: 26 }} />
-                </View>
+        return (
+            <View style={s.tableBottomWrap}>
+                <View style={s.tableWrap}>
+                    <View style={s.tableBar}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                            <FileText size={13} color={colors.primary} />
+                            <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
+                            <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
+                        </View>
 
-                {historyLoading && collections.length === 0 ? (
-                    <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
-                ) : collections.length === 0 ? (
-                    <View style={s.emptyBox}>
-                        <Droplets size={24} color={colors.border} />
-                        <Text style={s.emptyText}>{t.purchase.noEntries}</Text>
+                        {/* Code search bar */}
+                        <View style={s.entrySearchBox}>
+                            <Search size={12} color={colors.mutedForeground} />
+                            <TextInput
+                                style={s.entrySearchInput}
+                                value={saleEntrySearch}
+                                onChangeText={(v) => setSaleEntrySearch(v.replace(/\s/g, '').toUpperCase())}
+                                placeholder="Search code"
+                                placeholderTextColor={colors.mutedForeground}
+                                autoCapitalize="characters"
+                                returnKeyType="search"
+                            />
+                            {saleEntrySearch.length > 0 && (
+                                <Pressable onPress={() => setSaleEntrySearch('')} hitSlop={8}>
+                                    <X size={12} color={colors.mutedForeground} />
+                                </Pressable>
+                            )}
+                        </View>
+
+                        <Pressable style={[s.pdfBtn, isPrinting && { opacity: 0.5 }]} onPress={() => handlePrintPress('purchase')} disabled={isPrinting}>
+                            {isPrinting ? <ActivityIndicator size={12} color="#fff" /> : <Printer size={12} color="#fff" />}
+                        </Pressable>
                     </View>
-                ) : (
-                    <>
-                        <ScrollView style={{ maxHeight: 90 }} nestedScrollEnabled showsVerticalScrollIndicator>
-                            {collections.map((item, index) => (
+
+                    <View style={s.tHead}>
+                        <View style={s.entryCell1}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.common.code}</Text></View>
+                        <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.milk}</Text></View>
+                        <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.fat}</Text></View>
+                        <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>SNF</Text></View>
+                        <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.common.rate}</Text></View>
+                        <View style={s.entryCellAmt}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.amt}</Text></View>
+                        <View style={{ width: 26 }} />
+                    </View>
+
+                    {historyLoading && collections.length === 0 ? (
+                        <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
+                    ) : visible.length === 0 ? (
+                        <View style={s.emptyBox}>
+                            <Droplets size={24} color={colors.border} />
+                            <Text style={s.emptyText}>
+                                {q ? `No entries for code "${q}"` : t.purchase.noEntries}
+                            </Text>
+                        </View>
+                    ) : (
+                        <View>
+                            {visible.map((item, index) => (
                                 <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
                                     <View style={s.entryCell1}>
                                         <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
@@ -899,13 +959,12 @@ export default function PurchaseScreen() {
                                     </Pressable>
                                 </View>
                             ))}
-                        </ScrollView>
-
-                    </>
-                )}
+                        </View>
+                    )}
+                </View>
             </View>
-        </View>
-    );
+        );
+    };
 
     // ── Report Tab ──
     const renderReportTab = () => (
@@ -914,7 +973,7 @@ export default function PurchaseScreen() {
             <Pressable style={s.reportFarmerPicker} onPress={() => setShowReportFarmerModal(true)}>
                 <User size={16} color={colors.primary} />
                 <Text style={s.reportFarmerText} numberOfLines={1}>
-                    {selectedReportFarmer ? `${selectedReportFarmer.code} - ${selectedReportFarmer.name}` : 'All Farmers'}
+                    {selectedReportFarmer ? `${selectedReportFarmer.code} - ${selectedReportFarmer.name}` : 'Enter farmer code'}
                 </Text>
                 {reportFarmerFilter ? (
                     <Pressable onPress={() => setReportFarmerFilter('')} hitSlop={6}>
@@ -1041,47 +1100,87 @@ export default function PurchaseScreen() {
 
             {/* Report Farmer Select Modal */}
             <Modal visible={showReportFarmerModal} animationType="slide" transparent onRequestClose={() => setShowReportFarmerModal(false)}>
-                <View style={s.modalOverlay}>
-                    <Pressable style={{ flex: 1 }} onPress={() => setShowReportFarmerModal(false)} />
-                    <View style={[s.modalSheet, { maxHeight: '70%' }]}>
-                        <View style={s.modalHandle} />
-                        <View style={s.modalHeader}>
-                            <Text style={s.modalTitle}>Select Farmer for Report</Text>
-                            <Pressable onPress={() => setShowReportFarmerModal(false)}><X size={18} color={colors.foreground} /></Pressable>
-                        </View>
-                        <Pressable
-                            style={[s.custListItem, { paddingHorizontal: 12 }]}
-                            onPress={() => { setReportFarmerFilter(''); setShowReportFarmerModal(false); }}
-                        >
-                            <View style={[s.custListAvatar, { backgroundColor: !reportFarmerFilter ? colors.primary : colors.muted }]}>
-                                <User size={14} color={!reportFarmerFilter ? '#fff' : colors.mutedForeground} />
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+                    <View style={s.modalOverlay}>
+                        <Pressable style={{ flex: 1 }} onPress={() => setShowReportFarmerModal(false)} />
+                        <View style={[s.modalSheet, { maxHeight: '85%' }]}>
+                            <View style={s.modalHandle} />
+                            <View style={s.modalHeader}>
+                                <Text style={s.modalTitle}>Select Farmer for Report</Text>
+                                <Pressable onPress={() => setShowReportFarmerModal(false)}><X size={18} color={colors.foreground} /></Pressable>
                             </View>
-                            <Text style={[s.custListName, !reportFarmerFilter && { color: colors.primary }]}>All Farmers</Text>
-                            {!reportFarmerFilter && <Check size={16} color={colors.primary} />}
-                        </Pressable>
-                        <FlatList
-                            data={customers}
-                            keyExtractor={item => item._id}
-                            renderItem={({ item }) => (
-                                <Pressable
-                                    style={[s.custListItem, { paddingHorizontal: 12 }]}
-                                    onPress={() => { setReportFarmerFilter(item._id); setShowReportFarmerModal(false); }}
-                                >
-                                    <View style={s.custListAvatar}>
-                                        <Text style={s.custListAvatarText}>{item.code}</Text>
+
+                            {/* Code-only search input */}
+                            <View style={s.searchRow}>
+                                <Search size={14} color={colors.mutedForeground} />
+                                <TextInput
+                                    style={s.searchInput}
+                                    value={reportFarmerCodeSearch}
+                                    onChangeText={(v) => setReportFarmerCodeSearch(v.replace(/\s/g, '').toUpperCase())}
+                                    placeholder="Enter farmer code"
+                                    placeholderTextColor={colors.mutedForeground}
+                                    autoCapitalize="characters"
+                                    keyboardType="default"
+                                    returnKeyType="search"
+                                    autoFocus
+                                    onSubmitEditing={() => {
+                                        const q = reportFarmerCodeSearch.trim();
+                                        if (!q) return;
+                                        const match = customers.find(c => String(c.code).toUpperCase() === q);
+                                        if (match) {
+                                            setReportFarmerFilter(match._id);
+                                            setReportFarmerCodeSearch('');
+                                            setShowReportFarmerModal(false);
+                                        }
+                                    }}
+                                />
+                                {reportFarmerCodeSearch.length > 0 && (
+                                    <Pressable onPress={() => setReportFarmerCodeSearch('')} hitSlop={8}>
+                                        <X size={14} color={colors.mutedForeground} />
+                                    </Pressable>
+                                )}
+                            </View>
+
+                            <FlatList
+                                data={
+                                    reportFarmerCodeSearch.trim()
+                                        ? customers.filter(c => String(c.code).toUpperCase().includes(reportFarmerCodeSearch.trim()))
+                                        : customers
+                                }
+                                keyExtractor={item => item._id}
+                                keyboardShouldPersistTaps="handled"
+                                renderItem={({ item }) => (
+                                    <Pressable
+                                        style={[s.custListItem, { paddingHorizontal: 12 }]}
+                                        onPress={() => {
+                                            setReportFarmerFilter(item._id);
+                                            setReportFarmerCodeSearch('');
+                                            setShowReportFarmerModal(false);
+                                        }}
+                                    >
+                                        <View style={s.custListAvatar}>
+                                            <Text style={s.custListAvatarText}>{item.code}</Text>
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={s.custListName}>{item.name}</Text>
+                                            {item.mobile ? <Text style={s.custListSub}>{item.mobile}</Text> : null}
+                                        </View>
+                                        {(reportFarmerFilter === item._id || reportFarmerFilter === item.code) && <Check size={16} color={colors.primary} />}
+                                    </Pressable>
+                                )}
+                                ListEmptyComponent={
+                                    <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                                        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+                                            {reportFarmerCodeSearch ? 'No farmer with this code' : 'No farmers'}
+                                        </Text>
                                     </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={s.custListName}>{item.name}</Text>
-                                        {item.mobile ? <Text style={s.custListSub}>{item.mobile}</Text> : null}
-                                    </View>
-                                    {(reportFarmerFilter === item._id || reportFarmerFilter === item.code) && <Check size={16} color={colors.primary} />}
-                                </Pressable>
-                            )}
-                            contentContainerStyle={{ paddingHorizontal: 6, paddingBottom: 16 }}
-                            showsVerticalScrollIndicator={false}
-                        />
+                                }
+                                contentContainerStyle={{ paddingHorizontal: 6, paddingBottom: 24 }}
+                                showsVerticalScrollIndicator={false}
+                            />
+                        </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
@@ -1182,11 +1281,10 @@ export default function PurchaseScreen() {
                 keyboardShouldPersistTaps="handled"
             >
                 {activeTab === 'Purchase' && renderCollectionTab()}
+                {activeTab === 'Purchase' && renderSaleEntriesTable()}
                 {activeTab === 'Report' && renderReportTab()}
                 {activeTab === 'C-Farmer' && renderFarmerTab()}
             </ScrollView>
-
-            {activeTab === 'Purchase' && renderSaleEntriesTable()}
 
 
             {/* ── Modals ── */}
@@ -1572,7 +1670,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     // Table
     tableBottomWrap: { paddingHorizontal: 10, paddingBottom: 8, paddingTop: 2 },
     tableWrap: { borderWidth: 1, borderColor: colors.border, overflow: 'hidden', borderRadius: 12 },
-    tableBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
+    tableBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 6 },
+    entrySearchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, marginHorizontal: 4 },
+    entrySearchInput: { flex: 1, fontSize: 11, color: colors.foreground, paddingVertical: 2 },
     tableBarTitle: { fontSize: 12, fontWeight: '700', color: colors.foreground },
     badge: { backgroundColor: colors.primary, paddingHorizontal: 5, paddingVertical: 0, borderRadius: 4 },
     badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
