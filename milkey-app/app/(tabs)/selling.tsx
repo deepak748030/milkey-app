@@ -23,6 +23,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
 import { buildSellingPaymentSlipPayload, buildMembersListPayload } from '@/lib/slipPrint';
+import { brandedHeaderHtml, brandedFooterHtml } from '@/lib/printFormat';
 
 type TabType = SellingTab;
 
@@ -857,6 +858,7 @@ export default function SellingScreen() {
               </style>
             </head>
             <body>
+              ${brandedHeaderHtml(topPrintSettings)}
               <h1>Milk Selling Report</h1>
               <p class="period">Period: ${reportStartDate ? formatDateDDMMYYYY(reportStartDate) : 'All'} to ${reportEndDate ? formatDateDDMMYYYY(reportEndDate) : 'All'}</p>
               <p class="generated">Generated on: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
@@ -877,6 +879,7 @@ export default function SellingScreen() {
                 <p>Total Quantity: ${totalQty.toFixed(2)} L</p>
                 <p>Total Amount: ₹${totalAmt.toFixed(2)}</p>
               </div>
+              ${brandedFooterHtml(topPrintSettings)}
             </body>
           </html>
         `;
@@ -943,6 +946,7 @@ export default function SellingScreen() {
                     </style>
                 </head>
                 <body>
+                    ${brandedHeaderHtml(topPrintSettings)}
                     <h1>Milk Selling Entries</h1>
                     <p class="subtitle">${periodText}</p>
                     <p class="filter-info">${memberText} | Generated: ${formatDate(new Date().toISOString().split('T')[0])}</p>
@@ -963,6 +967,7 @@ export default function SellingScreen() {
                         <p class="summary-text"><strong>Total Quantity:</strong> ${totalQty.toFixed(2)} L</p>
                         <p class="summary-text"><strong>Total Amount:</strong> ₹${totalAmt.toFixed(2)}</p>
                     </div>
+                    ${brandedFooterHtml(topPrintSettings)}
                 </body>
             </html>
         `;
@@ -1025,6 +1030,7 @@ export default function SellingScreen() {
                     </style>
                 </head>
                 <body>
+                    ${brandedHeaderHtml(topPrintSettings)}
                     <h1>Member Balance Report</h1>
                     <p class="subtitle">${selectedReportMember ? `Member: ${selectedReportMember.name}` : 'All Members'} | Generated: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
                     <table>
@@ -1041,6 +1047,7 @@ export default function SellingScreen() {
                         <p class="summary-text"><strong>Total Members:</strong> ${membersToShow.length}</p>
                         <p class="summary-text"><strong>Net Balance:</strong> <span style="color: ${netBalance >= 0 ? '#22c55e' : '#ef4444'};">${netBalance < 0 ? '-' : ''}₹${Math.abs(netBalance).toFixed(0)}</span></p>
                     </div>
+                    ${brandedFooterHtml(topPrintSettings)}
                 </body>
             </html>
         `;
@@ -1147,6 +1154,7 @@ export default function SellingScreen() {
                     .summary{margin-top:20px;padding:15px;background-color:#f0fdf4;border-radius:8px}
                     .summary-text{font-size:14px;color:#333;margin:5px 0}
                 </style></head><body>
+                    ${brandedHeaderHtml(topPrintSettings)}
                     <h1>Milk Entries - ${selectedPaymentMember.name}</h1>
                     <p class="subtitle">Period: ${periodText}</p>
                     <table>
@@ -1158,6 +1166,7 @@ export default function SellingScreen() {
                         <p class="summary-text"><strong>Total Quantity:</strong> ${totalQty.toFixed(2)} L</p>
                         <p class="summary-text"><strong>Total Amount:</strong> ₹${totalAmt.toFixed(2)}</p>
                     </div>
+                    ${brandedFooterHtml(topPrintSettings)}
                 </body></html>
             `;
 
@@ -2203,6 +2212,7 @@ export default function SellingScreen() {
                                                             th{background-color:#22c55e;color:white;padding:10px 8px;font-weight:600}
                                                             td{padding:10px 8px;border-bottom:1px solid #e5e7eb}
                                                         </style></head><body>
+                                                            ${brandedHeaderHtml(topPrintSettings)}
                                                             <h1>Member Balance Report</h1>
                                                             <p class="info">${member.name} | Generated: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
                                                             <table>
@@ -2216,6 +2226,7 @@ export default function SellingScreen() {
                                                                     </td>
                                                                 </tr>
                                                             </table>
+                                                            ${brandedFooterHtml(topPrintSettings)}
                                                         </body></html>
                                                     `;
                                                     await Print.printAsync({ html: singleHtml });

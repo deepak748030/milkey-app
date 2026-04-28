@@ -177,6 +177,65 @@ export function buildReceiptPayload(opts: ReceiptOptions): string {
     return p;
 }
 
+/** ---------------------------------------------------------------- */
+/** HTML helpers (used by PDF / WebView slips/reports)                 */
+/** ---------------------------------------------------------------- */
+
+export interface HtmlBrandingSettings {
+    dairyName?: string;
+    address?: string;
+    mobileNumber?: string;
+    showMobileOnReceipt?: boolean;
+    extraInfo?: string;
+}
+
+function escapeHtml(value: string | undefined | null): string {
+    if (value === undefined || value === null) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
+ * HTML branded header block (dairy name, address, mobile if enabled).
+ * Use inside the <body> at the top of any printable HTML/PDF document.
+ */
+export function brandedHeaderHtml(settings: HtmlBrandingSettings | null | undefined, opts: { compact?: boolean } = {}): string {
+    if (!settings) return '';
+    const dairyName = escapeHtml((settings.dairyName || '').trim());
+    const address = escapeHtml((settings.address || '').trim());
+    const mobile = escapeHtml((settings.mobileNumber || '').trim());
+    const showMobile = settings.showMobileOnReceipt !== false;
+    const parts: string[] = [];
+    if (dairyName) {
+        parts.push(`<div style="text-align:center;font-weight:700;font-size:${opts.compact ? '14px' : '18px'};text-transform:uppercase;margin-bottom:4px;color:#22c55e;">${dairyName}</div>`);
+    }
+    if (address) {
+        parts.push(`<div style="text-align:center;font-size:12px;color:#555;margin-bottom:2px;">${address}</div>`);
+    }
+    if (showMobile && mobile) {
+        parts.push(`<div style="text-align:center;font-size:12px;color:#555;margin-bottom:6px;">📞 ${mobile}</div>`);
+    }
+    return parts.join('');
+}
+
+/**
+ * HTML branded footer block (extra note + Thank You).
+ * Use inside the <body> at the bottom of any printable HTML/PDF document.
+ */
+export function brandedFooterHtml(settings: HtmlBrandingSettings | null | undefined): string {
+    if (!settings) return '';
+    const note = escapeHtml((settings.extraInfo || '').trim());
+    const parts: string[] = [];
+    if (note) {
+        parts.push(`<div style="text-align:center;font-size:12px;color:#444;margin-top:14px;padding:8px;border-top:1px dashed #ccc;font-style:italic;">${note}</div>`);
+    }
+    return parts.join('');
+}
+
 /** Build a printer self-test payload. */
 export function buildTestPayload(): string {
     let p = '';

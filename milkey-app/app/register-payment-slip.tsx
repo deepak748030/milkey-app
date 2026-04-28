@@ -102,6 +102,7 @@ export default function RegisterPaymentSlipScreen() {
         <div class="separator">${'*'.repeat(40)}</div>
         <div class="amount-row"><span><b>Closing Balance :</b></span><span class="value-black" style="color: ${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#333'}"><b>${(p.closingBalance || 0).toFixed(0)}</b></span></div>
         <div class="separator">${'*'.repeat(40)}</div>
+        ${printSettings?.extraInfo?.trim() ? `<div class="note">${printSettings.extraInfo.trim()}</div>` : ''}
         <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
         <div class="generated">Thank You!</div>
       </body>

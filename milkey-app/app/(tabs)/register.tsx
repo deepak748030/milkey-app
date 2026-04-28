@@ -11,6 +11,7 @@ import { ToastAndroid, Platform as RNPlatform } from 'react-native';
 import { farmersApi, advancesApi, paymentsApi, printSettingsApi, Farmer, Advance, Payment, FarmerPaymentSummary, PrintSettings } from '@/lib/milkeyApi';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { buildRegisterPaymentSlipPayload, buildFarmersListPayload } from '@/lib/slipPrint';
+import { brandedHeaderHtml, brandedFooterHtml } from '@/lib/printFormat';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
@@ -934,6 +935,7 @@ export default function RegisterScreen() {
                     </style>
                 </head>
                 <body>
+                    ${brandedHeaderHtml(printSettings)}
                     <h1>Advances Report</h1>
                     <p class="info">Generated on: ${new Date().toLocaleDateString('en-IN')} | Total Records: ${dataToExport.length}</p>
                     <table>
@@ -947,6 +949,7 @@ export default function RegisterScreen() {
                         </tr>
                         ${rows}
                     </table>
+                    ${brandedFooterHtml(printSettings)}
                 </body>
             </html>
         `;
