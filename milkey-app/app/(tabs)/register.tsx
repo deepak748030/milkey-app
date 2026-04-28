@@ -11,7 +11,7 @@ import { ToastAndroid, Platform as RNPlatform } from 'react-native';
 import { farmersApi, advancesApi, paymentsApi, printSettingsApi, Farmer, Advance, Payment, FarmerPaymentSummary, PrintSettings } from '@/lib/milkeyApi';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { buildRegisterPaymentSlipPayload, buildFarmersListPayload } from '@/lib/slipPrint';
-import { brandedHeaderHtml, brandedFooterHtml } from '@/lib/printFormat';
+import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, line as fmtLine, left as fmtLeft } from '@/lib/printFormat';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
@@ -884,6 +884,40 @@ export default function RegisterScreen() {
         }
     };
 
+    const downloadFarmersPDF = async () => {
+        if (!farmers.length) {
+            showAlert('Error', 'No farmers to export');
+            return;
+        }
+        const rows = farmers.map((f) => `
+            <tr>
+                <td>${f.code || '-'}</td>
+                <td>${f.name || '-'}</td>
+                <td>${f.mobile || '-'}</td>
+            </tr>
+        `).join('');
+        const html = `
+            <html><head><style>
+                body{font-family:Arial,sans-serif;padding:20px;color:#333} h1{color:#22C55E;text-align:center}
+                table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #ddd;padding:8px;font-size:12px;text-align:left}
+                th{background:#22C55E;color:#fff} tr:nth-child(even){background:#f9f9f9}
+            </style></head><body>
+                ${brandedHeaderHtml(printSettings)}
+                <h1>Farmers List</h1>
+                <p>Total Farmers: ${farmers.length}</p>
+                <table><tr><th>Code</th><th>Name</th><th>Mobile</th></tr>${rows}</table>
+                ${brandedFooterHtml(printSettings)}
+            </body></html>
+        `;
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Farmers List' });
+            else showAlert('PDF Generated', `Saved to: ${uri}`);
+        } catch (error) {
+            showAlert('Error', 'Failed to generate PDF');
+        }
+    };
+
     const styles = createStyles(colors, isDark);
 
 
@@ -964,6 +998,42 @@ export default function RegisterScreen() {
             }
         } catch (error) {
             showAlert('Error', 'Failed to generate PDF');
+        }
+    };
+
+    const printAdvancesThermal = async () => {
+        if (advances.length === 0) {
+            showAlert('Error', 'No advances to print');
+            return;
+        }
+        if (!isPrinterConnected) {
+            notifyPrinterDisconnected();
+            return;
+        }
+
+        let payload = '';
+        payload += brandedHeader({
+            dairyName: printSettings?.dairyName || 'Advances Report',
+            address: printSettings?.address || '',
+            mobileNumber: printSettings?.mobileNumber || '',
+            showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
+        });
+        payload += fmtLeft('Advances Report', { bold: true });
+        payload += twoCol('Records:', String(advances.length));
+        payload += fmtLine();
+        advances.forEach((item) => {
+            payload += twoCol(`${item.farmer?.code || '-'} ${item.farmer?.name || '-'}`, `Rs ${Number(item.amount || 0).toFixed(0)}`);
+            payload += twoCol(formatDateDDMMYYYY(item.date), item.status || '-');
+            if (item.note) payload += fmtLeft(`Note: ${item.note}`);
+            payload += fmtLine();
+        });
+        payload += twoCol('Total:', `Rs ${advances.reduce((sum, item) => sum + Number(item.amount || 0), 0).toFixed(0)}`, { bold: true });
+        payload += brandedFooter(printSettings?.extraInfo?.trim());
+
+        try {
+            await printText(payload);
+        } catch (e) {
+            if (RNPlatform.OS === 'android') ToastAndroid.show('Print failed', ToastAndroid.SHORT);
         }
     };
 
@@ -1622,6 +1692,10 @@ export default function RegisterScreen() {
                     <FileText size={14} color={colors.white} />
                     <Text style={styles.advancePdfBtnText}>PDF</Text>
                 </Pressable>
+                <Pressable style={[styles.advancePdfBtn, { backgroundColor: colors.primary }]} onPress={printAdvancesThermal}>
+                    <Printer size={14} color={colors.white} />
+                    <Text style={styles.advancePdfBtnText}>Print</Text>
+                </Pressable>
             </View>
 
             {/* Total Amount Header */}
@@ -1706,6 +1780,10 @@ export default function RegisterScreen() {
                     )}
                 </View>
                 <View style={styles.farmerHeaderBtns}>
+                    <Pressable style={styles.printFarmerBtn} onPress={downloadFarmersPDF}>
+                        <FileText size={14} color={colors.primary} />
+                        <Text style={styles.printFarmerText}>PDF</Text>
+                    </Pressable>
                     <Pressable style={styles.printFarmerBtn} onPress={generateFarmersPDF}>
                         <Printer size={14} color={colors.primary} />
                         <Text style={styles.printFarmerText}>Print</Text>

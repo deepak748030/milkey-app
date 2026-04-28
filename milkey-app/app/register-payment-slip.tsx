@@ -8,7 +8,7 @@ import { paymentsApi, printSettingsApi, PrintSettings, Payment } from '@/lib/mil
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { brandedFooter, brandedHeader, twoCol, line as fmtLine, feed } from '@/lib/printFormat';
+import { brandedFooter, brandedHeader, twoCol, labelValueWrap, line as fmtLine, feed } from '@/lib/printFormat';
 
 const formatDateDDMMYYYY = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -142,7 +142,7 @@ export default function RegisterPaymentSlipScreen() {
         payload += twoCol('From:', formatDateDDMMYYYY(p.periodStart || p.date));
         payload += twoCol('Till:', formatDateDDMMYYYY(p.periodEnd || p.date));
         payload += twoCol('Code:', p.farmer?.code || '-');
-        payload += twoCol('Name:', p.farmer?.name || '-');
+        payload += labelValueWrap('Name:', p.farmer?.name || '-');
         payload += feed(1);
         payload += fmtLine();
         payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));

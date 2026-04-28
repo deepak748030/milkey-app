@@ -23,7 +23,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
 import { buildSellingPaymentSlipPayload, buildMembersListPayload } from '@/lib/slipPrint';
-import { brandedHeaderHtml, brandedFooterHtml } from '@/lib/printFormat';
+import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, line as fmtLine, left as fmtLeft, center as fmtCenter, feed } from '@/lib/printFormat';
 
 type TabType = SellingTab;
 
@@ -906,6 +906,52 @@ export default function SellingScreen() {
             return;
         }
 
+        if (!isPrinterConnected) {
+            notifyPrinterDisconnected();
+            return;
+        }
+
+        const totalQty = groupedEntries.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
+        const totalAmt = groupedEntries.reduce((sum, e) => sum + e.totalAmount, 0);
+        const totalEntries = groupedEntries.reduce((sum, e) => sum + e.entryCount, 0);
+
+        let payload = '';
+        payload += brandedHeader({
+            dairyName: topPrintSettings?.dairyName || 'Milk Selling Entries',
+            address: topPrintSettings?.address || '',
+            mobileNumber: topPrintSettings?.mobileNumber || '',
+            showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
+        });
+        payload += fmtCenter('Milk Selling Entries', { bold: true });
+        payload += fmtLeft(recentEntriesStartDate || recentEntriesEndDate
+            ? `${recentEntriesStartDate ? formatDate(recentEntriesStartDate) : 'Start'} to ${recentEntriesEndDate ? formatDate(recentEntriesEndDate) : 'End'}`
+            : 'All Entries');
+        if (recentEntriesMemberFilter) payload += fmtLeft(`Member: ${selectedRecentMemberName}`);
+        payload += fmtLine();
+        groupedEntries.forEach((item) => {
+            payload += fmtLeft(`${formatDate(item.date)} ${item.memberName}`);
+            payload += twoCol(`M/E: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
+        });
+        payload += fmtLine();
+        payload += twoCol('Total Days:', String(groupedEntries.length));
+        payload += twoCol('Total Entries:', String(totalEntries));
+        payload += twoCol('Total Qty:', `${totalQty.toFixed(2)} L`);
+        payload += twoCol('Total Amount:', `Rs ${totalAmt.toFixed(0)}`, { bold: true });
+        payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
+
+        try {
+            await printText(payload);
+        } catch (error) {
+            showAlert('Error', 'Failed to print');
+        }
+    };
+
+    const handleEntriesPDF = async () => {
+        if (groupedEntries.length === 0) {
+            showAlert('Error', 'No entries to print');
+            return;
+        }
+
         const rows = groupedEntries.map(item => `
             <tr>
                 <td>${formatDate(item.date)}</td>
@@ -973,16 +1019,56 @@ export default function SellingScreen() {
         `;
 
         try {
-            await Print.printAsync({ html });
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Milk Selling Entries' });
+            } else {
+                showAlert('PDF Generated', `Saved to: ${uri}`);
+            }
         } catch (error) {
-            showAlert('Error', 'Failed to print');
+            showAlert('Error', 'Failed to generate PDF');
         }
     };
 
     const handlePrint = async () => {
+        if (!isPrinterConnected) {
+            notifyPrinterDisconnected();
+            return;
+        }
+
+        const reportRows = getGroupedReportEntries();
+        if (reportRows.length === 0) {
+            showAlert('Error', 'No entries to print');
+            return;
+        }
+
+        const totalQty = reportRows.reduce((sum, e) => sum + e.morningQty + e.eveningQty, 0);
+        const totalAmt = reportRows.reduce((sum, e) => sum + e.totalAmount, 0);
+        const totalEntries = reportRows.reduce((sum, e) => sum + e.entryCount, 0);
+
+        let payload = '';
+        payload += brandedHeader({
+            dairyName: topPrintSettings?.dairyName || 'Milk Selling Report',
+            address: topPrintSettings?.address || '',
+            mobileNumber: topPrintSettings?.mobileNumber || '',
+            showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
+        });
+        payload += fmtCenter('Milk Selling Report', { bold: true });
+        payload += fmtLeft(`${reportStartDate ? formatDateDDMMYYYY(reportStartDate) : 'All'} to ${reportEndDate ? formatDateDDMMYYYY(reportEndDate) : 'All'}`);
+        payload += fmtLine();
+        reportRows.forEach((item) => {
+            payload += fmtLeft(`${formatDateDDMMYYYY(item.date)} ${item.memberName}`);
+            payload += twoCol(`M/E: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
+        });
+        payload += fmtLine();
+        payload += twoCol('Total Days:', String(reportRows.length));
+        payload += twoCol('Total Entries:', String(totalEntries));
+        payload += twoCol('Total Qty:', `${totalQty.toFixed(2)} L`);
+        payload += twoCol('Total Amount:', `Rs ${totalAmt.toFixed(0)}`, { bold: true });
+        payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
+
         try {
-            const html = generateReportHTML();
-            await Print.printAsync({ html });
+            await printText(payload);
         } catch (error) {
             showAlert('Error', 'Failed to print');
         }
@@ -1083,9 +1169,39 @@ export default function SellingScreen() {
             return;
         }
 
+        if (!isPrinterConnected) {
+            notifyPrinterDisconnected();
+            return;
+        }
+
+        const selectedReportMember = reportMemberFilter
+            ? balanceReportData.find(m => m._id === reportMemberFilter)
+            : null;
+        const membersToShow = selectedReportMember ? [selectedReportMember] : balanceReportData;
+        const netBalance = balanceReportSummary?.netBalance || 0;
+
+        let payload = '';
+        payload += brandedHeader({
+            dairyName: topPrintSettings?.dairyName || 'Member Balance Report',
+            address: topPrintSettings?.address || '',
+            mobileNumber: topPrintSettings?.mobileNumber || '',
+            showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
+        });
+        payload += fmtCenter('Member Balance Report', { bold: true });
+        if (selectedReportMember) payload += fmtLeft(`Member: ${selectedReportMember.name}`);
+        payload += fmtLine();
+        membersToShow.forEach((member, index) => {
+            const balance = Number(member.totalBalance || 0);
+            payload += fmtLeft(`${index + 1}. ${member.name}`);
+            payload += twoCol('Balance:', `${balance < 0 ? '-' : balance > 0 ? '+' : ''}Rs ${Math.abs(balance).toFixed(0)}`);
+        });
+        payload += fmtLine();
+        payload += twoCol('Total Members:', String(membersToShow.length));
+        payload += twoCol('Net Balance:', `${netBalance < 0 ? '-' : ''}Rs ${Math.abs(netBalance).toFixed(0)}`, { bold: true });
+        payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
+
         try {
-            const html = generateMemberBalanceReportHTML();
-            await Print.printAsync({ html });
+            await printText(payload);
         } catch (error) {
             showAlert('Error', 'Failed to print');
         }
@@ -1183,6 +1299,65 @@ export default function SellingScreen() {
         }
     };
 
+    const handlePrintPaymentMemberEntriesThermal = async () => {
+        if (!selectedPaymentMember) {
+            showAlert('Error', 'Please select a member first');
+            return;
+        }
+        if (!isPrinterConnected) {
+            notifyPrinterDisconnected();
+            return;
+        }
+
+        try {
+            const params: Record<string, any> = { memberId: selectedPaymentMember._id, limit: 500 };
+            if (calcStartDate) params.startDate = calcStartDate;
+            if (calcEndDate) params.endDate = calcEndDate;
+            const res = await sellingEntriesApi.getAll(params);
+            const entries = res.success ? (res.response?.data || []) : [];
+            if (entries.length === 0) {
+                showAlert('Info', 'No milk entries found for this period');
+                return;
+            }
+
+            const groups: Record<string, { date: string; morningQty: number; eveningQty: number; totalAmount: number; rate: number }> = {};
+            entries.forEach((entry: any) => {
+                const dateStr = new Date(entry.date).toISOString().split('T')[0];
+                if (!groups[dateStr]) groups[dateStr] = { date: dateStr, morningQty: 0, eveningQty: 0, totalAmount: 0, rate: entry.rate };
+                groups[dateStr].morningQty += entry.morningQuantity || 0;
+                groups[dateStr].eveningQty += entry.eveningQuantity || 0;
+                groups[dateStr].totalAmount += entry.amount || 0;
+            });
+            const grouped = Object.values(groups).sort((a, b) => a.date.localeCompare(b.date));
+            const totalQty = grouped.reduce((s, e) => s + e.morningQty + e.eveningQty, 0);
+            const totalAmt = grouped.reduce((s, e) => s + e.totalAmount, 0);
+
+            let payload = '';
+            payload += brandedHeader({
+                dairyName: topPrintSettings?.dairyName || 'Milk Entries',
+                address: topPrintSettings?.address || '',
+                mobileNumber: topPrintSettings?.mobileNumber || '',
+                showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
+            });
+            payload += fmtCenter(`Milk Entries`, { bold: true });
+            payload += fmtLeft(`Member: ${selectedPaymentMember.name}`);
+            payload += fmtLeft(`${calcStartDate ? formatDateDDMMYYYY(calcStartDate) : 'Start'} to ${calcEndDate ? formatDateDDMMYYYY(calcEndDate) : 'End'}`);
+            payload += fmtLine();
+            grouped.forEach((item) => {
+                payload += fmtLeft(formatDateDDMMYYYY(item.date));
+                payload += twoCol(`M/E: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
+            });
+            payload += fmtLine();
+            payload += twoCol('Total Days:', String(grouped.length));
+            payload += twoCol('Total Qty:', `${totalQty.toFixed(2)} L`);
+            payload += twoCol('Total Amount:', `Rs ${totalAmt.toFixed(0)}`, { bold: true });
+            payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
+            await printText(payload);
+        } catch (error) {
+            showAlert('Error', 'Failed to print');
+        }
+    };
+
     // Print Milk Slip - quick print of the current payment summary (without saving)
     const [milkSlipPrinting, setMilkSlipPrinting] = useState(false);
     const handlePrintMilkSlip = async () => {
@@ -1190,16 +1365,14 @@ export default function SellingScreen() {
             showAlert('Error', 'Please select a member first');
             return;
         }
+        if (!isPrinterConnected) {
+            notifyPrinterDisconnected();
+            return;
+        }
         setMilkSlipPrinting(true);
         try {
             const psRes = await printSettingsApi.get();
             const ps = psRes.success ? psRes.response : null;
-            const dairyName = ps?.dairyName || 'Milk Slip';
-            const address = ps?.address || '';
-            const mobile = ps?.mobileNumber || '';
-            const showMobile = ps?.showMobileOnReceipt !== false;
-            const extraNote = (ps?.extraInfo || '').trim();
-
             const totalLiters = memberSummary?.selling?.totalLiters || 0;
             const milkAmt = parseFloat(milkAmount) || 0;
             const paidAmt = parseFloat(paymentAmount) || 0;
@@ -1209,41 +1382,27 @@ export default function SellingScreen() {
             const periodEnd = calcEndDate ? formatDateDDMMYYYY(calcEndDate) : formatDateDDMMYYYY(new Date().toISOString().split('T')[0]);
             const periodStart = calcStartDate ? formatDateDDMMYYYY(calcStartDate) : '-';
 
-            const html = `
-                <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><style>
-                    *{margin:0;padding:0;box-sizing:border-box}
-                    body{font-family:'Courier New',monospace;padding:16px;max-width:380px;margin:0 auto;color:#222}
-                    .center{text-align:center}
-                    .title{font-size:18px;font-weight:bold;text-transform:uppercase;margin-bottom:4px}
-                    .sub{font-size:12px;color:#666;margin-bottom:2px}
-                    .sep{text-align:center;margin:10px 0;color:#999;font-size:11px;letter-spacing:1px}
-                    .row{display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px}
-                    .row .v{font-weight:600}
-                    .bold{font-weight:700;font-size:14px}
-                </style></head><body>
-                    <div class="center title">${dairyName}</div>
-                    ${address ? `<div class="center sub">${address}</div>` : ''}
-                    ${showMobile && mobile ? `<div class="center sub">📞 ${mobile}</div>` : ''}
-                    <div class="sep">${'*'.repeat(40)}</div>
-                    <div class="row"><span>From :</span><span class="v">${periodStart}</span></div>
-                    <div class="row"><span>Till :</span><span class="v">${periodEnd}</span></div>
-                    <div class="row"><span>Member :</span><span class="v">${selectedPaymentMember.name}</span></div>
-                    <div class="sep">${'*'.repeat(40)}</div>
-                    <div class="row"><span>Last Balance :</span><span class="v">₹${prevBal.toFixed(0)}</span></div>
-                    <div class="row"><span>Milk Quantity :</span><span class="v">${totalLiters.toFixed(1)} L</span></div>
-                    <div class="row"><span>Milk Amount :</span><span class="v">₹${milkAmt.toFixed(0)}</span></div>
-                    <div class="row"><span>Total Payable :</span><span class="v">₹${payable.toFixed(0)}</span></div>
-                    <div class="row"><span>Paid Amount :</span><span class="v">₹${paidAmt.toFixed(0)}</span></div>
-                    <div class="sep">${'*'.repeat(40)}</div>
-                    <div class="row bold"><span>Closing Balance :</span><span class="v">${closing < 0 ? '-' : ''}₹${Math.abs(closing).toFixed(0)}</span></div>
-                    <div class="sep">${'*'.repeat(40)}</div>
-                    ${extraNote ? `<div class="center sub" style="margin-top:4px">${extraNote}</div>` : ''}
-                    <div class="center sub">Generated: ${new Date().toLocaleDateString('en-IN')}</div>
-                    <div class="center sub" style="margin-top:6px">Thank You!</div>
-                </body></html>
-            `;
-
-            await Print.printAsync({ html });
+            let payload = '';
+            payload += brandedHeader({
+                dairyName: ps?.dairyName || 'Milk Slip',
+                address: ps?.address || '',
+                mobileNumber: ps?.mobileNumber || '',
+                showMobileOnReceipt: ps?.showMobileOnReceipt !== false,
+            });
+            payload += twoCol('From:', periodStart);
+            payload += twoCol('Till:', periodEnd);
+            payload += fmtLeft(`Member: ${selectedPaymentMember.name}`);
+            payload += feed(1);
+            payload += fmtLine();
+            payload += twoCol('Last Balance:', `Rs ${prevBal.toFixed(0)}`);
+            payload += twoCol('Milk Qty:', `${totalLiters.toFixed(1)} L`);
+            payload += twoCol('Milk Amount:', `Rs ${milkAmt.toFixed(0)}`);
+            payload += twoCol('Total Payable:', `Rs ${payable.toFixed(0)}`);
+            payload += twoCol('Paid Amount:', `Rs ${paidAmt.toFixed(0)}`);
+            payload += fmtLine();
+            payload += twoCol('Closing Bal:', `${closing < 0 ? '-' : ''}Rs ${Math.abs(closing).toFixed(0)}`, { bold: true });
+            payload += brandedFooter(ps?.extraInfo?.trim());
+            await printText(payload);
         } catch (e) {
             console.error('Milk slip print error:', e);
             showAlert('Error', 'Failed to print milk slip');
@@ -1311,6 +1470,41 @@ export default function SellingScreen() {
             await printText(buildMembersListPayload(members, topPrintSettings));
         } catch (e) {
             if (Platform.OS === 'android') ToastAndroid.show('Print failed', ToastAndroid.SHORT);
+        }
+    };
+
+    const downloadMembersPDF = async () => {
+        if (members.length === 0) {
+            showAlert('Error', 'No members to export');
+            return;
+        }
+        const rows = members.map((m, index) => `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${m.name || '-'}</td>
+                <td>${m.mobile || '-'}</td>
+                <td style="text-align:right;">₹${Number(m.ratePerLiter || 0).toFixed(2)}/L</td>
+            </tr>
+        `).join('');
+        const html = `
+            <html><head><style>
+                body{font-family:Arial,sans-serif;padding:20px;color:#333} h1{color:#22C55E;text-align:center}
+                table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #ddd;padding:8px;font-size:12px;text-align:left}
+                th{background:#22C55E;color:#fff} tr:nth-child(even){background:#f9f9f9}
+            </style></head><body>
+                ${brandedHeaderHtml(topPrintSettings)}
+                <h1>Members List</h1>
+                <p>Total Members: ${members.length}</p>
+                <table><tr><th>Sr.</th><th>Name</th><th>Mobile</th><th>Rate</th></tr>${rows}</table>
+                ${brandedFooterHtml(topPrintSettings)}
+            </body></html>
+        `;
+        try {
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Members List' });
+            else showAlert('PDF Generated', `Saved to: ${uri}`);
+        } catch (error) {
+            showAlert('Error', 'Failed to generate PDF');
         }
     };
 
@@ -1554,6 +1748,13 @@ export default function SellingScreen() {
 
                     {/* Print Button */}
                     <Pressable
+                        style={[styles.printEntriesBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.primary }]}
+                        onPress={handleEntriesPDF}
+                    >
+                        <FileText size={14} color={colors.primary} />
+                        <Text style={[styles.printEntriesBtnText, { color: colors.primary }]}>PDF</Text>
+                    </Pressable>
+                    <Pressable
                         style={styles.printEntriesBtn}
                         onPress={handlePrintEntries}
                     >
@@ -1772,6 +1973,24 @@ export default function SellingScreen() {
                                     <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>Full Detailed Entry</Text>
                                 </>
                             )}
+                        </Pressable>
+                        <Pressable
+                            style={{
+                                flex: 1,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 6,
+                                backgroundColor: colors.card,
+                                borderWidth: 1,
+                                borderColor: colors.primary,
+                                borderRadius: 6,
+                                paddingVertical: 8,
+                            }}
+                            onPress={handlePrintPaymentMemberEntriesThermal}
+                        >
+                            <Printer size={14} color={colors.primary} />
+                            <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>Print Entry</Text>
                         </Pressable>
                     </View>
 
@@ -2134,27 +2353,27 @@ export default function SellingScreen() {
 
                 {/* All Members Balance Table */}
                 <View style={styles.memberSummarySection}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <Text style={[styles.memberSummaryTitle, { marginBottom: 0 }]}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8 }}>
+                        <Text style={[styles.memberSummaryTitle, { marginBottom: 0 }]} numberOfLines={1}>
                             {selectedReportMember ? 'Member Details' : 'All Members Balance'}
                         </Text>
-                        <Pressable
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                gap: 4,
-                                paddingHorizontal: 10,
-                                paddingVertical: 6,
-                                backgroundColor: colors.card,
-                                borderRadius: 6,
-                                borderWidth: 1,
-                                borderColor: colors.primary,
-                            }}
-                            onPress={handleReportPrint}
-                        >
-                            <Printer size={14} color={colors.primary} />
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Print</Text>
-                        </Pressable>
+                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                            <Pressable
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderRadius: 6, borderWidth: 1, borderColor: colors.primary }}
+                                onPress={handleReportPDF}
+                                disabled={reportDownloading}
+                            >
+                                {reportDownloading ? <ActivityIndicator size="small" color={colors.primary} /> : <FileText size={14} color={colors.primary} />}
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>PDF</Text>
+                            </Pressable>
+                            <Pressable
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderRadius: 6, borderWidth: 1, borderColor: colors.primary }}
+                                onPress={handleReportPrint}
+                            >
+                                <Printer size={14} color={colors.primary} />
+                                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Print</Text>
+                            </Pressable>
+                        </View>
                     </View>
 
                     {balanceReportLoading ? (
@@ -2201,35 +2420,26 @@ export default function SellingScreen() {
                                         <Pressable
                                             style={{ flex: 0.4, alignItems: 'center', justifyContent: 'center' }}
                                             onPress={async () => {
-                                                // Print single member balance report
+                                                if (!isPrinterConnected) {
+                                                    notifyPrinterDisconnected();
+                                                    return;
+                                                }
                                                 try {
-                                                    const singleHtml = `
-                                                        <html><head><meta charset="UTF-8"><style>
-                                                            body{font-family:Arial,sans-serif;padding:20px;color:#333}
-                                                            h1{color:#22c55e;text-align:center;margin-bottom:5px}
-                                                            .info{text-align:center;color:#666;margin-bottom:20px;font-size:14px}
-                                                            table{width:100%;border-collapse:collapse;margin-top:10px}
-                                                            th{background-color:#22c55e;color:white;padding:10px 8px;font-weight:600}
-                                                            td{padding:10px 8px;border-bottom:1px solid #e5e7eb}
-                                                        </style></head><body>
-                                                            ${brandedHeaderHtml(topPrintSettings)}
-                                                            <h1>Member Balance Report</h1>
-                                                            <p class="info">${member.name} | Generated: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
-                                                            <table>
-                                                                <tr><th>Name</th><th>Date</th><th>Till</th><th style="text-align:right;">Balance</th></tr>
-                                                                <tr>
-                                                                    <td>${member.name}</td>
-                                                                    <td style="text-align:center;">${formatDateDDMMYYYY(member.date)}</td>
-                                                                    <td style="text-align:center;">${member.lastPeriodEnd ? formatDateDDMMYYYY(member.lastPeriodEnd) : '-'}</td>
-                                                                    <td style="text-align:right;font-weight:700;color:${balance > 0 ? '#22c55e' : balance < 0 ? '#ef4444' : '#333'};">
-                                                                        ${balance < 0 ? '-' : balance > 0 ? '+' : ''}₹${Math.abs(balance).toFixed(0)}
-                                                                    </td>
-                                                                </tr>
-                                                            </table>
-                                                            ${brandedFooterHtml(topPrintSettings)}
-                                                        </body></html>
-                                                    `;
-                                                    await Print.printAsync({ html: singleHtml });
+                                                    let payload = '';
+                                                    payload += brandedHeader({
+                                                        dairyName: topPrintSettings?.dairyName || 'Member Balance Report',
+                                                        address: topPrintSettings?.address || '',
+                                                        mobileNumber: topPrintSettings?.mobileNumber || '',
+                                                        showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
+                                                    });
+                                                    payload += fmtCenter('Member Balance Report', { bold: true });
+                                                    payload += fmtLine();
+                                                    payload += fmtLeft(member.name);
+                                                    payload += twoCol('Date:', formatDateDDMMYYYY(member.date));
+                                                    payload += twoCol('Till:', member.lastPeriodEnd ? formatDateDDMMYYYY(member.lastPeriodEnd) : '-');
+                                                    payload += twoCol('Balance:', `${balance < 0 ? '-' : balance > 0 ? '+' : ''}Rs ${Math.abs(balance).toFixed(0)}`, { bold: true });
+                                                    payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
+                                                    await printText(payload);
                                                 } catch (error) {
                                                     showAlert('Error', 'Failed to print');
                                                 }
@@ -2280,6 +2490,10 @@ export default function SellingScreen() {
                     )}
                 </View>
                 <View style={styles.memberHeaderBtns}>
+                    <Pressable style={styles.printMemberBtn} onPress={downloadMembersPDF}>
+                        <FileText size={14} color={colors.primary} />
+                        <Text style={styles.printMemberText}>PDF</Text>
+                    </Pressable>
                     <Pressable style={styles.printMemberBtn} onPress={handlePrintMembers}>
                         <Printer size={14} color={colors.primary} />
                         <Text style={styles.printMemberText}>Print</Text>

@@ -108,6 +108,37 @@ export function twoCol(left: string, right: string, opts: { bold?: boolean } = {
     return `[L]${l}[R]${r}` + NEW_LINE;
 }
 
+/** Label + value row for names: uses the full line before wrapping continuation under the value. */
+export function labelValueWrap(label: string, value: string, width: number = COLUMN_WIDTH_58): string {
+    const prefix = `${safe(label).trim()} `;
+    const text = safe(value).trim() || '-';
+    const firstWidth = Math.max(1, width - prefix.length);
+    const nextPrefix = ' '.repeat(prefix.length);
+    const nextWidth = Math.max(1, width - nextPrefix.length);
+
+    const takeChunk = (remaining: string, max: number): [string, string] => {
+        if (remaining.length <= max) return [remaining, ''];
+        const hard = remaining.slice(0, max + 1);
+        const breakAt = hard.lastIndexOf(' ');
+        if (breakAt > 0 && breakAt <= max) {
+            return [remaining.slice(0, breakAt), remaining.slice(breakAt + 1).trimStart()];
+        }
+        return [remaining.slice(0, max), remaining.slice(max).trimStart()];
+    };
+
+    const lines: string[] = [];
+    let rest = text;
+    const [first, afterFirst] = takeChunk(rest, firstWidth);
+    lines.push(`[L]${prefix}${first}`);
+    rest = afterFirst;
+    while (rest) {
+        const [chunk, after] = takeChunk(rest, nextWidth);
+        lines.push(`[L]${nextPrefix}${chunk}`);
+        rest = after;
+    }
+    return lines.join(NEW_LINE) + NEW_LINE;
+}
+
 /** Three-column row: left + center + right. */
 export function threeCol(c1: string, c2: string, c3: string, opts: { bold?: boolean } = {}): string {
     const a = opts.bold ? `<b>${safe(c1)}</b>` : safe(c1);

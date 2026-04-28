@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, ToastAndroid, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Download, Printer } from 'lucide-react-native';
@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { farmersApi, printSettingsApi, PrintSettings, Farmer } from '@/lib/milkeyApi';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
+import { brandedHeader, brandedFooter, twoCol, line as fmtLine, left as fmtLeft, center as fmtCenter } from '@/lib/printFormat';
 
 export default function BalanceReportScreen() {
     const { colors, isDark } = useTheme();
@@ -16,6 +18,7 @@ export default function BalanceReportScreen() {
     const [farmers, setFarmers] = useState<Farmer[]>([]);
     const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
     const [downloading, setDownloading] = useState(false);
+    const { isConnected: isPrinterConnected, printText } = useBluetoothPrinter();
 
     const balanceType = type || 'positive';
 
@@ -147,9 +150,31 @@ export default function BalanceReportScreen() {
 
     const handlePrint = async () => {
         if (farmers.length === 0) return;
+        if (!isPrinterConnected) {
+            if (Platform.OS === 'android') ToastAndroid.show('Printer not connected', ToastAndroid.SHORT);
+            return;
+        }
+
+        let payload = '';
+        payload += brandedHeader({
+            dairyName: printSettings?.dairyName || 'Dairy',
+            address: printSettings?.address || '',
+            mobileNumber: printSettings?.mobileNumber || '',
+            showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
+        });
+        payload += fmtCenter(`${balanceType === 'positive' ? 'Positive' : 'Negative'} Balance`, { bold: true });
+        payload += fmtLine();
+        farmers.forEach((farmer) => {
+            const balance = getBalance(farmer);
+            payload += fmtLeft(`${farmer.code || '-'} ${farmer.name || '-'}`);
+            payload += twoCol('Balance:', `${balance < 0 ? '-' : ''}Rs ${Math.abs(balance).toFixed(0)}`);
+        });
+        payload += fmtLine();
+        payload += twoCol(`Total (${farmers.length}):`, `${totalBalance < 0 ? '-' : ''}Rs ${Math.abs(totalBalance).toFixed(0)}`, { bold: true });
+        payload += brandedFooter(printSettings?.extraInfo?.trim());
+
         try {
-            const html = generateHtml();
-            await Print.printAsync({ html });
+            await printText(payload);
         } catch (e) {
             console.error('Print error:', e);
         }

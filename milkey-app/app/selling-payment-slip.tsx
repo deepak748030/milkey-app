@@ -8,7 +8,7 @@ import { memberPaymentsApi, printSettingsApi, PrintSettings, MemberPayment } fro
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { brandedFooter, brandedHeader, twoCol, line as fmtLine, feed } from '@/lib/printFormat';
+import { brandedFooter, brandedHeader, twoCol, labelValueWrap, line as fmtLine, feed } from '@/lib/printFormat';
 
 export default function SellingPaymentSlipScreen() {
     const { colors } = useTheme();
@@ -151,7 +151,7 @@ export default function SellingPaymentSlipScreen() {
         });
         payload += twoCol('From:', formatDateDDMMYYYYLocal(p.periodStart || p.date));
         payload += twoCol('Till:', formatDateDDMMYYYYLocal(p.periodEnd || p.date));
-        payload += twoCol('Member:', p.member?.name || '-');
+        payload += labelValueWrap('Member:', p.member?.name || '-');
         payload += feed(1);
         payload += fmtLine();
         payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));

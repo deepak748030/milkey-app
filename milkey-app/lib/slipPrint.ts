@@ -4,7 +4,7 @@
  * These mirror the formatting in the slip preview screens so the same receipt
  * layout is used whether printing directly from the tab or from the slip page.
  */
-import { brandedFooter, brandedHeader, twoCol, line as fmtLine, feed } from './printFormat';
+import { brandedFooter, brandedHeader, twoCol, labelValueWrap, line as fmtLine, feed } from './printFormat';
 import { left as fmtLeft, center as fmtCenter } from './printFormat';
 import type { Payment, MemberPayment, PrintSettings, Farmer, Member } from './milkeyApi';
 
@@ -36,7 +36,7 @@ export function buildRegisterPaymentSlipPayload(
     payload += twoCol('From:', formatDateDDMMYYYY(p.periodStart || p.date));
     payload += twoCol('Till:', formatDateDDMMYYYY(p.periodEnd || p.date));
     payload += twoCol('Code:', p.farmer?.code || '-');
-    payload += twoCol('Name:', p.farmer?.name || '-');
+    payload += labelValueWrap('Name:', p.farmer?.name || '-');
     payload += feed(1);
     payload += fmtLine();
     payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));
@@ -62,7 +62,7 @@ export function buildSellingPaymentSlipPayload(
     payload += header(printSettings);
     payload += twoCol('From:', formatDateDDMMYYYY(p.periodStart || p.date));
     payload += twoCol('Till:', formatDateDDMMYYYY(p.periodEnd || p.date));
-    payload += twoCol('Member:', p.member?.name || '-');
+    payload += labelValueWrap('Member:', p.member?.name || '-');
     payload += feed(1);
     payload += fmtLine();
     payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));
