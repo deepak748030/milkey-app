@@ -910,15 +910,15 @@ export default function PurchaseScreen() {
             <View style={s.tableBottomWrap}>
                 <View style={s.tableWrap}>
                     <View style={s.tableBar}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <FileText size={16} color={colors.primary} />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                            <FileText size={13} color={colors.primary} />
                             <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
                             <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
                         </View>
 
                         {/* Code search bar */}
                         <View style={s.entrySearchBox}>
-                            <Search size={15} color={colors.mutedForeground} />
+                            <Search size={12} color={colors.mutedForeground} />
                             <TextInput
                                 style={s.entrySearchInput}
                                 value={saleEntrySearch}
@@ -930,13 +930,13 @@ export default function PurchaseScreen() {
                             />
                             {saleEntrySearch.length > 0 && (
                                 <Pressable onPress={() => setSaleEntrySearch('')} hitSlop={8}>
-                                    <X size={14} color={colors.mutedForeground} />
+                                    <X size={12} color={colors.mutedForeground} />
                                 </Pressable>
                             )}
                         </View>
 
                         <Pressable style={[s.pdfBtn, isPrinting && { opacity: 0.5 }]} onPress={() => handlePrintPress('purchase')} disabled={isPrinting}>
-                            {isPrinting ? <ActivityIndicator size={14} color="#fff" /> : <Printer size={16} color="#fff" />}
+                            {isPrinting ? <ActivityIndicator size={12} color="#fff" /> : <Printer size={12} color="#fff" />}
                         </Pressable>
                     </View>
 
@@ -1689,15 +1689,15 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     saveEntryText: { fontSize: 16, fontWeight: '900', color: '#fff' },
 
     // Table
-    tableBottomWrap: { paddingHorizontal: 2, paddingBottom: 8, paddingTop: 50 },
+    tableBottomWrap: { paddingHorizontal: 2, paddingBottom: 8, paddingTop: 20 },
     tableWrap: { borderWidth: 1, borderColor: colors.border, overflow: 'hidden', borderRadius: 12 },
     tableBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 6 },
-    entrySearchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginHorizontal: 6 },
-    entrySearchInput: { flex: 1, fontSize: 14, color: colors.foreground, paddingVertical: 4 },
-    tableBarTitle: { fontSize: 15, fontWeight: '700', color: colors.foreground },
-    badge: { backgroundColor: colors.primary, paddingHorizontal: 7, paddingVertical: 1, borderRadius: 5 },
-    badgeText: { fontSize: 11, fontWeight: '800', color: '#fff' },
-    pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 },
+    entrySearchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 6, marginHorizontal: 4 },
+    entrySearchInput: { flex: 1, fontSize: 11, color: colors.foreground, paddingVertical: 2 },
+    tableBarTitle: { fontSize: 12, fontWeight: '700', color: colors.foreground },
+    badge: { backgroundColor: colors.primary, paddingHorizontal: 5, paddingVertical: 0, borderRadius: 4 },
+    badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+    pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primary, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
     pdfBtnText: { fontSize: 10, fontWeight: '700', color: '#fff' },
 
     tHead: { flexDirection: 'row', backgroundColor: isDark ? colors.muted : '#eef2f7', paddingVertical: 6, paddingHorizontal: 8, alignItems: 'center' },
@@ -1782,3 +1782,4 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     statusBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
     statusBadgeText: { fontSize: 9, fontWeight: '700' },
 });
+// tableBottomWrap
