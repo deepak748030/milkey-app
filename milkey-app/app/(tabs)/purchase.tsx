@@ -274,8 +274,7 @@ export default function PurchaseScreen() {
 
     const receiptHeader = useCallback((label: string) => {
         let payload = '';
-        payload += fmtCenter(`Collection < ${label}`);
-        payload += feed(2);
+        payload += fmtCenter(label);
         payload += brandedHeader({
             dairyName: printSettings?.dairyName || 'MILKEY DAIRY',
             address: printSettings?.address || '',
@@ -292,11 +291,12 @@ export default function PurchaseScreen() {
     const buildMilkSlipPayload = useCallback((entry: MilkCollection) => {
         const dObj = new Date(entry.date);
         const dStr = `${String(dObj.getDate()).padStart(2, '0')}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getFullYear()).slice(-2)}`;
-        let payload = receiptHeader('Purchase = Milk Slip');
-        payload += `[L]Code : ${entry.farmerCode || '-'}[R]Name : ${entry.purchaseFarmer?.name || '-'}\n\n`;
-        payload += `[L]Date : ${dStr}[R]Shift : ${entry.shift === 'morning' ? 'M' : 'E'}\n\n`;
-        payload += `[L]Fat : ${(entry.fat || 0).toFixed(1)}[R]SNF : ${((entry as any).snf || 0).toFixed(1)}\n\n`;
-        payload += `[L]Qty : ${Number(entry.quantity).toFixed(2)}[R]Rate : ${Number(entry.rate).toFixed(1)}\n\n`;
+        let payload = receiptHeader('Collection');
+        payload += `[L]Code : ${entry.farmerCode || '-'}\n`;
+        payload += `[L]Name : ${entry.purchaseFarmer?.name || '-'}\n`;
+        payload += `[L]Date : ${dStr}[R]Shift : ${entry.shift === 'morning' ? 'M' : 'E'}\n`;
+        payload += `[L]Fat : ${(entry.fat || 0).toFixed(1)}[R]SNF : ${((entry as any).snf || 0).toFixed(1)}\n`;
+        payload += `[L]Qty : ${Number(entry.quantity).toFixed(2)}[R]Rate : ${Number(entry.rate).toFixed(1)}\n`;
         payload += `[L]Amount : ${Number(entry.amount).toFixed(2)}\n`;
         payload += receiptFooter();
         return payload;
@@ -1689,7 +1689,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     saveEntryText: { fontSize: 16, fontWeight: '900', color: '#fff' },
 
     // Table
-    tableBottomWrap: { paddingHorizontal: 10, paddingBottom: 8, paddingTop: 2 },
+    tableBottomWrap: { paddingHorizontal: 2, paddingBottom: 8, paddingTop: 50 },
     tableWrap: { borderWidth: 1, borderColor: colors.border, overflow: 'hidden', borderRadius: 12 },
     tableBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 6 },
     entrySearchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, marginHorizontal: 4 },
