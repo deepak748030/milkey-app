@@ -71,6 +71,8 @@ export interface User {
     referralCode?: string
     referralEarnings?: number
     totalReferralEarnings?: number
+    isVerified?: boolean
+    lastLogin?: string
 }
 
 export interface VendorKYC {
@@ -347,6 +349,15 @@ export const getUsers = async (params: {
 
 export const getUserById = async (id: string) => {
     const response = await api.get(`/admin/users/${id}`)
+    return response.data
+}
+
+export const getUsersExport = async (params: {
+    search?: string
+    status?: string
+    limit?: number
+}) => {
+    const response = await api.get('/admin/users/export', { params })
     return response.data
 }
 

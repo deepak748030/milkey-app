@@ -20,9 +20,15 @@ import {
     CreditCard,
     Megaphone,
     Camera,
+    Download,
+    FileText,
+    FileSpreadsheet,
+    FileJson,
+    FileType,
 } from 'lucide-react'
 import {
     getUsers,
+    getUsersExport,
     toggleUserBlock,
     updateUser,
     updateUserCommission,
@@ -35,6 +41,7 @@ import {
     SubscriptionListItem,
     uploadImage,
 } from '../lib/api'
+import { exportUsers, ExportFormat } from '../lib/userExport'
 import { cn } from '../lib/utils'
 
 // Skeleton component for loading state
@@ -750,6 +757,55 @@ function UserDetailModal({ user, onClose, onUpdate }: UserDetailModalProps) {
         </div>
     )
 }
+function ExportMenuItem({
+    icon,
+    label,
+    hint,
+    onClick,
+}: {
+    icon: React.ReactNode
+    label: string
+    hint?: string
+    onClick: () => void
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-muted transition-colors"
+        >
+            <span className="flex-shrink-0">{icon}</span>
+            <span className="flex-1">
+                <span className="block text-sm font-medium text-foreground">{label}</span>
+                {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
+            </span>
+        </button>
+    )
+}
+
+function StatChip({
+    label,
+    value,
+    tone,
+}: {
+    label: string
+    value: string | number
+    tone: 'primary' | 'success' | 'muted'
+}) {
+    const toneClass =
+        tone === 'primary'
+            ? 'bg-primary/10 text-primary'
+            : tone === 'success'
+                ? 'bg-success/10 text-success'
+                : 'bg-muted text-foreground'
+    return (
+        <div className="bg-card border border-border rounded-xl p-3">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{label}</p>
+            <span className={cn('inline-block px-2 py-0.5 rounded-md text-sm font-semibold capitalize', toneClass)}>
+                {value}
+            </span>
+        </div>
+    )
+}
 
 export function UsersPage() {
     const [users, setUsers] = useState<User[]>([])
@@ -758,6 +814,7 @@ export function UsersPage() {
     const [search, setSearch] = useState('')
     const [debouncedSearch, setDebouncedSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
+    const [pageSize, setPageSize] = useState(10)
     const [selectedUser, setSelectedUser] = useState<User | null>(null)
     const [blockingUserId, setBlockingUserId] = useState<string | null>(null)
 
@@ -767,18 +824,35 @@ export function UsersPage() {
     const [broadcastMessage, setBroadcastMessage] = useState('')
     const [sendingBroadcast, setSendingBroadcast] = useState(false)
 
+    // Export menu state
+    const [showExportMenu, setShowExportMenu] = useState(false)
+    const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null)
+    const exportMenuRef = useRef<HTMLDivElement | null>(null)
+
     // Debounce search for better performance
     useEffect(() => {
         const timer = setTimeout(() => setDebouncedSearch(search), 400)
         return () => clearTimeout(timer)
     }, [search])
 
+    // Close export menu on outside click
+    useEffect(() => {
+        if (!showExportMenu) return
+        const onClick = (e: MouseEvent) => {
+            if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+                setShowExportMenu(false)
+            }
+        }
+        document.addEventListener('mousedown', onClick)
+        return () => document.removeEventListener('mousedown', onClick)
+    }, [showExportMenu])
+
     const fetchUsers = useCallback(async (page = 1) => {
         setIsLoading(true)
         try {
             const response = await getUsers({
                 page,
-                limit: 10,
+                limit: pageSize,
                 search: debouncedSearch,
                 status: statusFilter,
             })
@@ -791,7 +865,49 @@ export function UsersPage() {
         } finally {
             setIsLoading(false)
         }
-    }, [debouncedSearch, statusFilter])
+    }, [debouncedSearch, statusFilter, pageSize])
+
+    const filterLabel =
+        statusFilter === 'new' ? 'new-7d' :
+            statusFilter === 'active' ? 'active' :
+                statusFilter === 'blocked' ? 'blocked' : 'all'
+
+    const handleExport = async (format: ExportFormat, scope: 'page' | 'all') => {
+        setShowExportMenu(false)
+        if (scope === 'page') {
+            if (!users.length) {
+                alert('No users on this page to export')
+                return
+            }
+            exportUsers(users, format, `${filterLabel}-page-${pagination?.page || 1}`)
+            return
+        }
+        // Export ALL users matching current filters (for marketing)
+        setExportingFormat(format)
+        try {
+            const response = await getUsersExport({
+                search: debouncedSearch,
+                status: statusFilter,
+                limit: 50000,
+            })
+            if (!response.success) {
+                alert(response.message || 'Failed to export users')
+                return
+            }
+            const all: User[] = response.response.users || []
+            if (!all.length) {
+                alert('No users matched the current filters')
+                return
+            }
+            exportUsers(all, format, filterLabel)
+        } catch (err: any) {
+            console.error('Export failed:', err)
+            alert(err?.response?.data?.message || 'Failed to export users')
+        } finally {
+            setExportingFormat(null)
+        }
+    }
+
 
     useEffect(() => {
         fetchUsers(1)
@@ -862,7 +978,43 @@ export function UsersPage() {
                         <p className="text-xs sm:text-base text-muted-foreground mt-0.5">Manage all registered users</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* Export menu */}
+                    <div className="relative" ref={exportMenuRef}>
+                        <button
+                            onClick={() => setShowExportMenu((v) => !v)}
+                            disabled={exportingFormat !== null}
+                            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-success text-success-foreground rounded-xl hover:opacity-90 transition-colors disabled:opacity-60"
+                            title="Export user data"
+                        >
+                            {exportingFormat ? (
+                                <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                            ) : (
+                                <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                            )}
+                            <span className="font-medium text-sm sm:text-base hidden sm:inline">
+                                {exportingFormat ? 'Exporting…' : 'Export'}
+                            </span>
+                        </button>
+                        {showExportMenu && (
+                            <div className="absolute right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-lg z-30 overflow-hidden">
+                                <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase bg-muted/50">
+                                    All matching users ({filterLabel})
+                                </div>
+                                <ExportMenuItem icon={<FileSpreadsheet className="w-4 h-4 text-success" />} label="Excel (.xlsx)" hint="Marketing-friendly" onClick={() => handleExport('xlsx', 'all')} />
+                                <ExportMenuItem icon={<FileText className="w-4 h-4 text-primary" />} label="CSV (.csv)" hint="Universal spreadsheet" onClick={() => handleExport('csv', 'all')} />
+                                <ExportMenuItem icon={<FileType className="w-4 h-4 text-destructive" />} label="PDF (.pdf)" hint="Printable report" onClick={() => handleExport('pdf', 'all')} />
+                                <ExportMenuItem icon={<FileText className="w-4 h-4 text-muted-foreground" />} label="Text (.txt)" hint="Plain readable list" onClick={() => handleExport('txt', 'all')} />
+                                <ExportMenuItem icon={<FileJson className="w-4 h-4 text-accent-foreground" />} label="JSON (.json)" hint="Raw data for devs" onClick={() => handleExport('json', 'all')} />
+                                <div className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase bg-muted/50 border-t border-border">
+                                    Current page only
+                                </div>
+                                <ExportMenuItem icon={<FileSpreadsheet className="w-4 h-4 text-success" />} label="Excel (.xlsx)" onClick={() => handleExport('xlsx', 'page')} />
+                                <ExportMenuItem icon={<FileText className="w-4 h-4 text-primary" />} label="CSV (.csv)" onClick={() => handleExport('csv', 'page')} />
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         onClick={() => setShowBroadcastModal(true)}
                         className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors"
@@ -881,6 +1033,16 @@ export function UsersPage() {
                 </div>
             </div>
 
+            {/* Stats summary */}
+            {pagination && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                    <StatChip label="Total (filtered)" value={pagination.total} tone="primary" />
+                    <StatChip label="Showing" value={users.length} tone="muted" />
+                    <StatChip label="Page" value={`${pagination.page} / ${pagination.pages || 1}`} tone="muted" />
+                    <StatChip label="Filter" value={filterLabel} tone="success" />
+                </div>
+            )}
+
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <div className="relative flex-1">
@@ -898,12 +1060,26 @@ export function UsersPage() {
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
                     className="px-3 sm:px-4 py-2.5 sm:py-3 bg-card border border-input rounded-xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-ring transition-all"
+                    title="Filter users"
                 >
-                    <option value="all">All Status</option>
+                    <option value="all">All Users</option>
+                    <option value="new">New (last 7 days)</option>
                     <option value="active">Active</option>
                     <option value="blocked">Blocked</option>
                 </select>
+
+                <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(parseInt(e.target.value))}
+                    className="px-3 sm:px-4 py-2.5 sm:py-3 bg-card border border-input rounded-xl text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-ring transition-all"
+                    title="Rows per page"
+                >
+                    <option value={10}>10 / page</option>
+                    <option value={25}>25 / page</option>
+                    <option value={50}>50 / page</option>
+                </select>
             </div>
+
 
             {/* Table - Desktop */}
             <div className="bg-card border border-border rounded-xl overflow-hidden hidden lg:block">

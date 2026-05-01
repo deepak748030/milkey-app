@@ -390,6 +390,11 @@ router.get('/users', adminAuth, async (req, res) => {
             query.isBlocked = false;
         } else if (status === 'blocked') {
             query.isBlocked = true;
+        } else if (status === 'new') {
+            // New users — registered in the last 7 days
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: sevenDaysAgo };
+            query.isBlocked = false;
         }
 
         // Search filter - uses regex but can be optimized with text index
@@ -431,6 +436,55 @@ router.get('/users', adminAuth, async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch users'
+        });
+    }
+});
+
+// GET /api/admin/users/export - Get ALL users matching filters (no pagination) for CSV/Excel/PDF export
+router.get('/users/export', adminAuth, async (req, res) => {
+    try {
+        const search = req.query.search?.trim() || '';
+        const status = req.query.status || 'all';
+        const limit = Math.min(50000, Math.max(1, parseInt(req.query.limit) || 10000));
+
+        const query = {};
+        if (status === 'active') {
+            query.isBlocked = false;
+        } else if (status === 'blocked') {
+            query.isBlocked = true;
+        } else if (status === 'new') {
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: sevenDaysAgo };
+            query.isBlocked = false;
+        }
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { phone: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const users = await User.find(query)
+            .select('_id name email phone avatar isBlocked createdAt role address referralCode referralEarnings totalReferralEarnings lastLogin isVerified')
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
+
+        res.json({
+            success: true,
+            response: {
+                users,
+                total: users.length,
+                exportedAt: new Date().toISOString()
+            }
+        });
+    } catch (error) {
+        console.error('Export users error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to export users'
         });
     }
 });
