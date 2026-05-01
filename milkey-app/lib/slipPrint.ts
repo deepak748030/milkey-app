@@ -1,12 +1,13 @@
 /**
  * Shared thermal-printer payload builders for register & selling payment slips.
  *
- * These mirror the formatting in the slip preview screens so the same receipt
- * layout is used whether printing directly from the tab or from the slip page.
+ * Labels are localized via `getSlipLabels()` which reads the current app
+ * language from `languageStore`.
  */
 import { brandedFooter, brandedHeader, twoCol, line as fmtLine } from './printFormat';
 import { left as fmtLeft, center as fmtCenter } from './printFormat';
 import type { Payment, MemberPayment, PrintSettings, Farmer, Member } from './milkeyApi';
+import { getSlipLabels } from './printTranslations';
 
 const formatDateDDMMYYYY = (dateStr?: string): string => {
     if (!dateStr) return '';
@@ -17,9 +18,9 @@ const formatDateDDMMYYYY = (dateStr?: string): string => {
     return `${day}/${month}/${year}`;
 };
 
-function header(printSettings: PrintSettings | null | undefined): string {
+function header(printSettings: PrintSettings | null | undefined, fallback: string): string {
     return brandedHeader({
-        dairyName: printSettings?.dairyName || 'Payment Slip',
+        dairyName: printSettings?.dairyName || fallback,
         address: printSettings?.address || '',
         mobileNumber: printSettings?.mobileNumber || '',
         showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
@@ -31,21 +32,22 @@ export function buildRegisterPaymentSlipPayload(
     p: Payment,
     printSettings: PrintSettings | null | undefined,
 ): string {
+    const t = getSlipLabels();
     let payload = '';
-    payload += header(printSettings);
-    payload += fmtLeft(`From:  ${formatDateDDMMYYYY(p.periodStart || p.date)}`);
-    payload += fmtLeft(`Till:  ${formatDateDDMMYYYY(p.periodEnd || p.date)}`);
-    payload += fmtLeft(`Code:  ${p.farmer?.code || '-'}`);
-    payload += fmtLeft(`Name:  ${p.farmer?.name || '-'}`);
+    payload += header(printSettings, t.paymentSlip);
+    payload += fmtLeft(`${t.from}:  ${formatDateDDMMYYYY(p.periodStart || p.date)}`);
+    payload += fmtLeft(`${t.till}:  ${formatDateDDMMYYYY(p.periodEnd || p.date)}`);
+    payload += fmtLeft(`${t.code}:  ${p.farmer?.code || '-'}`);
+    payload += fmtLeft(`${t.name}:  ${p.farmer?.name || '-'}`);
     payload += fmtLine();
-    payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));
-    payload += twoCol('Milk Amount:', (p.totalMilkAmount || 0).toFixed(0));
-    payload += twoCol('Advance/Prod:', (p.totalAdvanceDeduction || 0).toFixed(0));
-    payload += twoCol('Total Payable:', (p.netPayable || 0).toFixed(0));
-    payload += twoCol('Paid Amount:', (p.amount || 0).toFixed(0));
+    payload += twoCol(`${t.lastPayment}:`, (p.previousBalance || 0).toFixed(0));
+    payload += twoCol(`${t.milkAmount}:`, (p.totalMilkAmount || 0).toFixed(0));
+    payload += twoCol(`${t.advanceProduct}:`, (p.totalAdvanceDeduction || 0).toFixed(0));
+    payload += twoCol(`${t.totalPayable}:`, (p.netPayable || 0).toFixed(0));
+    payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
     payload += fmtLine();
-    payload += twoCol('Closing Bal:', (p.closingBalance || 0).toFixed(0), { bold: true });
-    payload += brandedFooter(printSettings?.extraInfo?.trim());
+    payload += twoCol(`${t.closingBal}:`, (p.closingBalance || 0).toFixed(0), { bold: true });
+    payload += brandedFooter(printSettings?.extraInfo?.trim() || t.thankYou);
     return payload;
 }
 
@@ -54,24 +56,25 @@ export function buildSellingPaymentSlipPayload(
     p: MemberPayment,
     printSettings: PrintSettings | null | undefined,
 ): string {
+    const t = getSlipLabels();
     const milkQty = (Number(p.totalQuantity) || 0).toFixed(1);
     const milkRate = (Number(p.milkRate) || 0).toFixed(2);
 
     let payload = '';
-    payload += header(printSettings);
-    payload += fmtLeft(`From:    ${formatDateDDMMYYYY(p.periodStart || p.date)}`);
-    payload += fmtLeft(`Till:    ${formatDateDDMMYYYY(p.periodEnd || p.date)}`);
-    payload += fmtLeft(`Member:  ${p.member?.name || '-'}`);
+    payload += header(printSettings, t.paymentSlip);
+    payload += fmtLeft(`${t.from}:    ${formatDateDDMMYYYY(p.periodStart || p.date)}`);
+    payload += fmtLeft(`${t.till}:    ${formatDateDDMMYYYY(p.periodEnd || p.date)}`);
+    payload += fmtLeft(`${t.member}:  ${p.member?.name || '-'}`);
     payload += fmtLine();
-    payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));
-    payload += twoCol('Milk Qty:', milkQty + ' L');
-    payload += twoCol('Milk Rate:', 'Rs ' + milkRate + '/L');
-    payload += twoCol('Milk Amount:', (p.totalSellAmount || 0).toFixed(0));
-    payload += twoCol('Total Payable:', (p.netPayable || 0).toFixed(0));
-    payload += twoCol('Paid Amount:', (p.amount || 0).toFixed(0));
+    payload += twoCol(`${t.lastPayment}:`, (p.previousBalance || 0).toFixed(0));
+    payload += twoCol(`${t.qty}:`, milkQty + ' L');
+    payload += twoCol(`${t.rate}:`, 'Rs ' + milkRate + '/L');
+    payload += twoCol(`${t.milkAmount}:`, (p.totalSellAmount || 0).toFixed(0));
+    payload += twoCol(`${t.totalPayable}:`, (p.netPayable || 0).toFixed(0));
+    payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
     payload += fmtLine();
-    payload += twoCol('Closing Bal:', (p.closingBalance || 0).toFixed(0), { bold: true });
-    payload += brandedFooter(printSettings?.extraInfo?.trim());
+    payload += twoCol(`${t.closingBal}:`, (p.closingBalance || 0).toFixed(0), { bold: true });
+    payload += brandedFooter(printSettings?.extraInfo?.trim() || t.thankYou);
     return payload;
 }
 
@@ -80,11 +83,12 @@ export function buildFarmersListPayload(
     farmers: Farmer[],
     printSettings: PrintSettings | null | undefined,
 ): string {
+    const t = getSlipLabels();
     let payload = '';
-    payload += header(printSettings);
-    payload += fmtCenter('Farmers List', { bold: true });
+    payload += header(printSettings, t.paymentSlip);
+    payload += fmtCenter(t.farmersList, { bold: true });
     payload += fmtLine();
-    payload += twoCol('Code  Name', 'Mobile', { bold: true });
+    payload += twoCol(`${t.code}  ${t.name}`, t.mobile, { bold: true });
     payload += fmtLine();
     farmers.forEach((f) => {
         const code = String(f.code ?? '-');
@@ -93,8 +97,8 @@ export function buildFarmersListPayload(
         payload += twoCol(`${code}  ${name}`, mobile);
     });
     payload += fmtLine();
-    payload += twoCol('Total:', String(farmers.length), { bold: true });
-    payload += brandedFooter(printSettings?.extraInfo?.trim());
+    payload += twoCol(`${t.total}:`, String(farmers.length), { bold: true });
+    payload += brandedFooter(printSettings?.extraInfo?.trim() || t.thankYou);
     return payload;
 }
 
@@ -103,16 +107,17 @@ export function buildMembersListPayload(
     members: Member[],
     printSettings: PrintSettings | null | undefined,
 ): string {
+    const t = getSlipLabels();
     let payload = '';
-    payload += header(printSettings);
-    payload += fmtCenter('Members List', { bold: true });
+    payload += header(printSettings, t.paymentSlip);
+    payload += fmtCenter(t.membersList, { bold: true });
     payload += fmtLine();
     members.forEach((m, idx) => {
         payload += twoCol(`${idx + 1}. ${m.name ?? '-'}`, `Rs ${Number(m.ratePerLiter || 0).toFixed(2)}/L`);
-        if (m.mobile) payload += fmtLeft(`   Ph: ${m.mobile}`);
+        if (m.mobile) payload += fmtLeft(`   ${t.mobile}: ${m.mobile}`);
     });
     payload += fmtLine();
-    payload += twoCol('Total:', String(members.length), { bold: true });
-    payload += brandedFooter(printSettings?.extraInfo?.trim());
+    payload += twoCol(`${t.total}:`, String(members.length), { bold: true });
+    payload += brandedFooter(printSettings?.extraInfo?.trim() || t.thankYou);
     return payload;
 }

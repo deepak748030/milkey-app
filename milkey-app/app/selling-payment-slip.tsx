@@ -9,6 +9,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { brandedFooter, brandedHeader, twoCol, labelValueWrap, line as fmtLine, feed } from '@/lib/printFormat';
+import { getSlipLabels } from '@/lib/printTranslations';
 
 export default function SellingPaymentSlipScreen() {
     const { colors } = useTheme();
@@ -58,7 +59,8 @@ export default function SellingPaymentSlipScreen() {
     const generateHtml = () => {
         if (!payment) return '';
         const p = payment;
-        const dairyName = printSettings?.dairyName || 'Payment Slip';
+        const t = getSlipLabels();
+        const dairyName = printSettings?.dairyName || t.paymentSlip;
         const showMobile = printSettings?.showMobileOnReceipt !== false;
         const mobile = printSettings?.mobileNumber || '';
         const address = printSettings?.address || '';
@@ -71,7 +73,7 @@ export default function SellingPaymentSlipScreen() {
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { font-family: 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
+                    body { font-family: 'Noto Sans Devanagari', 'Mangal', 'Courier New', monospace; padding: 20px; max-width: 380px; margin: 0 auto; }
                     .center { text-align: center; }
                     .title { font-size: clamp(13px, 5vw, 18px); font-weight: bold; margin-bottom: 4px; white-space: nowrap; text-transform: uppercase; }
                     .subtitle { font-size: 12px; color: #666; margin-bottom: 2px; }
@@ -91,22 +93,22 @@ export default function SellingPaymentSlipScreen() {
                 ${address ? `<div class="center subtitle">${address}</div>` : ''}
                 ${showMobile && mobile ? `<div class="center subtitle">📞 ${mobile}</div>` : ''}
                 <div class="separator">${'*'.repeat(40)}</div>
-                <div class="info-row"><span>From :</span><span class="value">${formatDateDDMMYYYY(p.periodStart || p.date)}</span></div>
-                <div class="info-row"><span>Till :</span><span class="value">${formatDateDDMMYYYY(p.periodEnd || p.date)}</span></div>
-                <div class="info-row"><span>Member :</span><span class="value">${p.member?.name || '—'}</span></div>
+                <div class="info-row"><span>${t.from} :</span><span class="value">${formatDateDDMMYYYY(p.periodStart || p.date)}</span></div>
+                <div class="info-row"><span>${t.till} :</span><span class="value">${formatDateDDMMYYYY(p.periodEnd || p.date)}</span></div>
+                <div class="info-row"><span>${t.member} :</span><span class="value">${p.member?.name || '—'}</span></div>
                 <div class="separator">${'*'.repeat(40)}</div>
-                <div class="amount-row"><span>Last Payment :</span><span class="value-black">${(p.previousBalance || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Milk Quantity :</span><span class="value-black">${milkQty} L</span></div>
-                <div class="amount-row"><span>Milk Rate :</span><span class="value-black">₹${milkRate}/L</span></div>
-                <div class="amount-row"><span>Total Milk Amount :</span><span class="value-black">${(p.totalSellAmount || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Total Payable :</span><span class="value-black">${(p.netPayable || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>Paid Amount :</span><span class="value-black">${(p.amount || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>${t.lastPayment} :</span><span class="value-black">${(p.previousBalance || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>${t.milkQuantity} :</span><span class="value-black">${milkQty} L</span></div>
+                <div class="amount-row"><span>${t.milkRate} :</span><span class="value-black">₹${milkRate}/L</span></div>
+                <div class="amount-row"><span>${t.milkAmount} :</span><span class="value-black">${(p.totalSellAmount || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>${t.totalPayable} :</span><span class="value-black">${(p.netPayable || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>${t.paidAmount} :</span><span class="value-black">${(p.amount || 0).toFixed(0)}</span></div>
                 <div class="separator">${'*'.repeat(40)}</div>
-                <div class="amount-row"><span><b>Closing Balance :</b></span><span class="value-black" style="color: ${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#333'}"><b>${(p.closingBalance || 0).toFixed(0)}</b></span></div>
+                <div class="amount-row"><span><b>${t.closingBalance} :</b></span><span class="value-black" style="color: ${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#333'}"><b>${(p.closingBalance || 0).toFixed(0)}</b></span></div>
                 <div class="separator">${'*'.repeat(40)}</div>
                 ${printSettings?.extraInfo?.trim() ? `<div class="note">${printSettings.extraInfo.trim()}</div>` : ''}
-                <div class="generated">Generated Date: ${new Date().toLocaleDateString('en-IN')}</div>
-                <div class="generated">Thank You!</div>
+                <div class="generated">${t.generatedDate}: ${new Date().toLocaleDateString('en-IN')}</div>
+                <div class="generated">${t.thankYou}</div>
             </body>
             </html>
         `;
@@ -139,30 +141,31 @@ export default function SellingPaymentSlipScreen() {
     const generateThermalPayload = () => {
         if (!payment) return '';
         const p = payment;
+        const t = getSlipLabels();
         const milkQty = (Number(p.totalQuantity) || 0).toFixed(1);
         const milkRate = (Number(p.milkRate) || 0).toFixed(2);
 
         let payload = '';
         payload += brandedHeader({
-            dairyName: printSettings?.dairyName || 'Payment Slip',
+            dairyName: printSettings?.dairyName || t.paymentSlip,
             address: printSettings?.address || '',
             mobileNumber: printSettings?.mobileNumber || '',
             showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
         });
-        payload += twoCol('From:', formatDateDDMMYYYYLocal(p.periodStart || p.date));
-        payload += twoCol('Till:', formatDateDDMMYYYYLocal(p.periodEnd || p.date));
-        payload += labelValueWrap('Member:', p.member?.name || '-');
+        payload += twoCol(`${t.from}:`, formatDateDDMMYYYYLocal(p.periodStart || p.date));
+        payload += twoCol(`${t.till}:`, formatDateDDMMYYYYLocal(p.periodEnd || p.date));
+        payload += labelValueWrap(`${t.member}:`, p.member?.name || '-');
         payload += feed(1);
         payload += fmtLine();
-        payload += twoCol('Last Payment:', (p.previousBalance || 0).toFixed(0));
-        payload += twoCol('Milk Qty:', milkQty + ' L');
-        payload += twoCol('Milk Rate:', 'Rs ' + milkRate + '/L');
-        payload += twoCol('Milk Amount:', (p.totalSellAmount || 0).toFixed(0));
-        payload += twoCol('Total Payable:', (p.netPayable || 0).toFixed(0));
-        payload += twoCol('Paid Amount:', (p.amount || 0).toFixed(0));
+        payload += twoCol(`${t.lastPayment}:`, (p.previousBalance || 0).toFixed(0));
+        payload += twoCol(`${t.qty}:`, milkQty + ' L');
+        payload += twoCol(`${t.rate}:`, 'Rs ' + milkRate + '/L');
+        payload += twoCol(`${t.milkAmount}:`, (p.totalSellAmount || 0).toFixed(0));
+        payload += twoCol(`${t.totalPayable}:`, (p.netPayable || 0).toFixed(0));
+        payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
         payload += fmtLine();
-        payload += twoCol('Closing Bal:', (p.closingBalance || 0).toFixed(0), { bold: true });
-        payload += brandedFooter(printSettings?.extraInfo?.trim());
+        payload += twoCol(`${t.closingBal}:`, (p.closingBalance || 0).toFixed(0), { bold: true });
+        payload += brandedFooter(printSettings?.extraInfo?.trim() || t.thankYou);
         return payload;
     };
 
@@ -190,6 +193,7 @@ export default function SellingPaymentSlipScreen() {
     }, [loading, payment, printSettings, autoPrint]);
 
     const p = payment;
+    const t = getSlipLabels();
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -199,7 +203,7 @@ export default function SellingPaymentSlipScreen() {
                     <ChevronLeft size={22} color={colors.foreground} />
                 </Pressable>
                 <Text style={[styles.headerTitle, { color: colors.foreground }]} numberOfLines={1}>
-                    Payment Slip
+                    {t.paymentSlip}
                 </Text>
                 <View style={styles.headerActions}>
                     <Pressable onPress={handleDownloadPdf} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
@@ -223,55 +227,55 @@ export default function SellingPaymentSlipScreen() {
                 <ScrollView style={styles.scrollView} contentContainerStyle={{ paddingHorizontal: 6, paddingTop: 6, paddingBottom: insets.bottom + 20 }}>
                     {/* Slip Card */}
                     <View style={[styles.slipCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <Text style={[styles.slipTitle, { color: colors.primary }]}>{printSettings?.dairyName || 'Payment Slip'}</Text>
+                        <Text style={[styles.slipTitle, { color: colors.primary }]}>{printSettings?.dairyName || t.paymentSlip}</Text>
                         {printSettings?.address ? <Text style={[styles.slipSub, { color: colors.mutedForeground }]}>{printSettings.address}</Text> : null}
 
                         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>From</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.from}</Text>
                             <Text style={[styles.slipValue, { color: colors.destructive }]}>{formatDateDDMMYYYY(p.periodStart || p.date)}</Text>
                         </View>
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>Till</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.till}</Text>
                             <Text style={[styles.slipValue, { color: colors.destructive }]}>{formatDateDDMMYYYY(p.periodEnd || p.date)}</Text>
                         </View>
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>Member</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.member}</Text>
                             <Text style={[styles.slipValue, { color: colors.foreground, fontWeight: '700' }]}>{p.member?.name || '—'}</Text>
                         </View>
 
                         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>Last Payment</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.lastPayment}</Text>
                             <Text style={[styles.slipValue, { color: colors.foreground }]}>₹{(p.previousBalance || 0).toFixed(0)}</Text>
                         </View>
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>Milk Quantity</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.milkQuantity}</Text>
                             <Text style={[styles.slipValue, { color: colors.foreground }]}>{(Number(p.totalQuantity) || 0).toFixed(1)} L</Text>
                         </View>
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>Milk Rate</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.milkRate}</Text>
                             <Text style={[styles.slipValue, { color: colors.foreground }]}>₹{(Number(p.milkRate) || 0).toFixed(2)}/L</Text>
                         </View>
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>Total Milk Amount</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.milkAmount}</Text>
                             <Text style={[styles.slipValue, { color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
                         </View>
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>Total Payable</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.totalPayable}</Text>
                             <Text style={[styles.slipValue, { color: colors.foreground }]}>₹{(p.netPayable || 0).toFixed(0)}</Text>
                         </View>
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>Paid Amount</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.paidAmount}</Text>
                             <Text style={[styles.slipValue, { color: colors.success || colors.primary }]}>₹{(p.amount || 0).toFixed(0)}</Text>
                         </View>
 
                         <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
                         <View style={[styles.slipRow, { paddingVertical: 8 }]}>
-                            <Text style={[styles.slipLabel, { fontWeight: '700', color: colors.foreground }]}>Closing Balance</Text>
+                            <Text style={[styles.slipLabel, { fontWeight: '700', color: colors.foreground }]}>{t.closingBalance}</Text>
                             <Text style={[styles.slipValue, { fontWeight: '700', fontSize: 16, color: (p.closingBalance || 0) < 0 ? colors.destructive : colors.primary }]}>
                                 {(p.closingBalance || 0) < 0 ? '-' : ''}₹{Math.abs(p.closingBalance || 0).toFixed(0)}
                             </Text>

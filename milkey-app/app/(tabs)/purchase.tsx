@@ -21,6 +21,7 @@ import {
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { brandedFooter, brandedHeader, brandedHeaderHtml, brandedFooterHtml, center as fmtCenter, left as fmtLeft, twoCol, threeCol, line as fmtLine, doubleLine, feed, buildReceiptPayload } from '@/lib/printFormat';
+import { getSlipLabels } from '@/lib/printTranslations';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -263,14 +264,15 @@ export default function PurchaseScreen() {
         const alertMethod = (customer as any).alertMethod || 'none';
         if (alertMethod === 'none' || !customer.mobile) return;
 
+        const t = getSlipLabels();
         const dateObj = entryDate;
         const dateStr = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getFullYear()).slice(-2)}`;
-        const shiftStr = entryShift === 'morning' ? 'Morning' : 'Evening';
+        const shiftStr = entryShift === 'morning' ? t.morning : t.evening;
 
         // Dairy name on the digital slip uses the dedicated `digitalSlipName`
         // setting if provided, otherwise falls back to the printed dairy name.
-        const dairyLabel = (printSettings?.digitalSlipName || printSettings?.dairyName || 'Dairy').trim();
-        const message = `*Digital Milk Slip*\n----------------------------------------------------\nDairy - ${dairyLabel}\nCode - ${customer.code}\nName - ${customer.name}\nDate - ${dateStr}   shift - ${shiftStr}\n----------------------------------------------------\nFat - ${fat || '-'}              SNF - ${snf || '-'}\nRate(Rs.) - ${rate}    Qty - ${qty}\nAmount - ${amount.toFixed(2)}`;
+        const dairyLabel = (printSettings?.digitalSlipName || printSettings?.dairyName || t.dairy).trim();
+        const message = `*${t.digitalMilkSlip}*\n----------------------------------------------------\n${t.dairy} - ${dairyLabel}\n${t.code} - ${customer.code}\n${t.name} - ${customer.name}\n${t.date} - ${dateStr}   ${t.shift} - ${shiftStr}\n----------------------------------------------------\n${t.fat} - ${fat || '-'}              ${t.snf} - ${snf || '-'}\n${t.rate}(Rs.) - ${rate}    ${t.qty} - ${qty}\n${t.amount} - ${amount.toFixed(2)}`;
 
         const phone = customer.mobile.replace(/\D/g, '');
 
@@ -303,15 +305,16 @@ export default function PurchaseScreen() {
     }, [printSettings]);
 
     const buildMilkSlipPayload = useCallback((entry: MilkCollection) => {
+        const t = getSlipLabels();
         const dObj = new Date(entry.date);
         const dStr = `${String(dObj.getDate()).padStart(2, '0')}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getFullYear()).slice(-2)}`;
-        let payload = receiptHeader('Collection');
-        payload += `[L]Code : ${entry.farmerCode || '-'}\n`;
-        payload += `[L]Name : ${entry.purchaseFarmer?.name || '-'}\n`;
-        payload += `[L]Date : ${dStr}[R]Shift : ${entry.shift === 'morning' ? 'M' : 'E'}\n`;
-        payload += `[L]Fat : ${(entry.fat || 0).toFixed(1)}[R]SNF : ${((entry as any).snf || 0).toFixed(1)}\n`;
-        payload += `[L]Qty : ${Number(entry.quantity).toFixed(2)}[R]Rate : ${Number(entry.rate).toFixed(1)}\n`;
-        payload += `[L]Amount : ${Number(entry.amount).toFixed(2)}\n`;
+        let payload = receiptHeader(t.collection);
+        payload += `[L]${t.code} : ${entry.farmerCode || '-'}\n`;
+        payload += `[L]${t.name} : ${entry.purchaseFarmer?.name || '-'}\n`;
+        payload += `[L]${t.date} : ${dStr}[R]${t.shift} : ${entry.shift === 'morning' ? t.morningShort : t.eveningShort}\n`;
+        payload += `[L]${t.fat} : ${(entry.fat || 0).toFixed(1)}[R]${t.snf} : ${((entry as any).snf || 0).toFixed(1)}\n`;
+        payload += `[L]${t.qty} : ${Number(entry.quantity).toFixed(2)}[R]${t.rate} : ${Number(entry.rate).toFixed(1)}\n`;
+        payload += `[L]${t.amount} : ${Number(entry.amount).toFixed(2)}\n`;
         payload += receiptFooter();
         return payload;
     }, [receiptHeader, receiptFooter]);
@@ -1500,11 +1503,12 @@ export default function PurchaseScreen() {
                                     if (!actionMenuEntry) return;
                                     const e = actionMenuEntry;
                                     setActionMenuEntry(null);
+                                    const t = getSlipLabels();
                                     const dateObj = new Date(e.date);
                                     const dateStr = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getFullYear()).slice(-2)}`;
-                                    const shiftStr = e.shift === 'morning' ? 'Morning' : 'Evening';
-                                    const dairyLabel = (printSettings?.digitalSlipName || printSettings?.dairyName || 'Dairy').trim();
-                                    const message = `*Digital Milk Slip*\nDairy - ${dairyLabel}\nCode - ${e.farmerCode || '-'}\nName - ${e.purchaseFarmer?.name || '-'}\nDate - ${dateStr}  Shift - ${shiftStr}\nFat - ${e.fat || '-'}  SNF - ${(e as any).snf || '-'}\nRate - ${e.rate}  Qty - ${e.quantity}\nAmount - ₹${e.amount.toFixed(2)}`;
+                                    const shiftStr = e.shift === 'morning' ? t.morning : t.evening;
+                                    const dairyLabel = (printSettings?.digitalSlipName || printSettings?.dairyName || t.dairy).trim();
+                                    const message = `*${t.digitalMilkSlip}*\n${t.dairy} - ${dairyLabel}\n${t.code} - ${e.farmerCode || '-'}\n${t.name} - ${e.purchaseFarmer?.name || '-'}\n${t.date} - ${dateStr}  ${t.shift} - ${shiftStr}\n${t.fat} - ${e.fat || '-'}  ${t.snf} - ${(e as any).snf || '-'}\n${t.rate} - ${e.rate}  ${t.qty} - ${e.quantity}\n${t.amount} - ₹${e.amount.toFixed(2)}`;
                                     const phone = e.purchaseFarmer?.mobile?.replace(/\D/g, '') || '';
                                     if (phone) {
                                         const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;
