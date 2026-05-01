@@ -272,9 +272,9 @@ export default function PurchaseScreen() {
         }
     }, [entryDate, entryShift]);
 
-    const receiptHeader = useCallback((label: string) => {
+    const receiptHeader = useCallback((label?: string) => {
         let payload = '';
-        payload += fmtCenter(label);
+        if (label) payload += fmtCenter(label);
         payload += brandedHeader({
             dairyName: printSettings?.dairyName || 'MILKEY DAIRY',
             address: printSettings?.address || '',
@@ -513,10 +513,10 @@ export default function PurchaseScreen() {
             ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
             : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
 
-        const locationLabel = isReport ? 'Report = Full Summary' : 'Purchase = Full Summary';
-        let payload = receiptHeader(locationLabel);
+        let payload = receiptHeader();
         if (isReport) {
-            payload += fmtCenter(dateLabel);
+            // Date range line — left-aligned per user request.
+            payload += fmtLeft(dateLabel);
             if (selectedReportFarmer) {
                 payload += fmtLeft(`Code : ${selectedReportFarmer.code}`);
                 payload += fmtLeft(`Name : ${selectedReportFarmer.name}`);
@@ -526,29 +526,52 @@ export default function PurchaseScreen() {
         }
         payload += fmtLine();
 
-        // Single-row tabular layout for 58mm (32 chars):
-        //   col1(4) sp col2(4) sp qty(4) sp fat(3) sp snf(3) sp rate(4) sp amt(4) = 32
-        // Report uses Date as col1; Purchase uses Code as col1.
-        const fit = (s: string, w: number, align: 'L' | 'R' = 'L') => {
+        // Single-row tabular layout for 58mm (32 chars).
+        // Report mode merges Date+Shift into one wider column (e.g. "26/04-M") and drops Time.
+        //   Report:    col1(7) sp qty(4) sp fat(3) sp snf(3) sp rate(4) sp amt(4) = 30
+        //   Purchase:  col1(4) sp col2(4) sp qty(4) sp fat(3) sp snf(3) sp rate(4) sp amt(4) = 32
+        const fit = (s: string, w: number, align: 'L' | 'R' | 'C' = 'L') => {
             const v = String(s ?? '');
             const t = v.length > w ? v.slice(0, w) : v;
-            return align === 'R' ? t.padStart(w, ' ') : t.padEnd(w, ' ');
+            if (align === 'R') return t.padStart(w, ' ');
+            if (align === 'C') {
+                const pad = w - t.length;
+                const left = Math.floor(pad / 2);
+                const right = pad - left;
+                return ' '.repeat(left) + t + ' '.repeat(right);
+            }
+            return t.padEnd(w, ' ');
         };
-        const tableRow = (c1: string, c2: string, qty: string, fat: string, snf: string, rate: string, amt: string, bold = false) => {
-            const row = `${fit(c1, 4, 'L')} ${fit(c2, 4, 'L')} ${fit(qty, 4, 'R')} ${fit(fat, 3, 'R')} ${fit(snf, 3, 'R')} ${fit(rate, 4, 'R')} ${fit(amt, 4, 'R')}`;
+        const tableRowReport = (c1: string, qty: string, fat: string, snf: string, rate: string, amt: string, bold = false) => {
+            const row = `${fit(c1, 7, 'C')} ${fit(qty, 4, 'R')} ${fit(fat, 3, 'R')} ${fit(snf, 3, 'R')} ${fit(rate, 4, 'R')} ${fit(amt, 4, 'R')}`;
+            return `[L]${bold ? `<b>${row}</b>` : row}\n`;
+        };
+        const tableRowPurchase = (c1: string, c2: string, qty: string, fat: string, snf: string, rate: string, amt: string, bold = false) => {
+            const row = `${fit(c1, 4, 'C')} ${fit(c2, 4, 'L')} ${fit(qty, 4, 'R')} ${fit(fat, 3, 'R')} ${fit(snf, 3, 'R')} ${fit(rate, 4, 'R')} ${fit(amt, 4, 'R')}`;
             return `[L]${bold ? `<b>${row}</b>` : row}\n`;
         };
 
-        // Header row — first column label depends on view
-        const firstColLabel = isReport ? 'Date' : 'Code';
-        payload += tableRow(firstColLabel, 'Time', ' Qty', 'Fat', 'Snf', 'Rate', ' Amt', true);
+        // Header row
+        if (isReport) {
+            payload += tableRowReport('Date/S', ' Qty', 'Fat', 'Snf', 'Rate', ' Amt', true);
+        } else {
+            payload += tableRowPurchase('Code', 'Time', ' Qty', 'Fat', 'Snf', 'Rate', ' Amt', true);
+        }
 
         for (const c of data) {
             const d = new Date(c.date);
-            const dd = String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0');
-            const time = c.shift === 'morning' ? '0600' : '1800';
+            const dd = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+            const shiftLetter = c.shift === 'morning' ? 'M' : 'E';
+            // Real entry time (HH:MM) from createdAt; fallback to shift default.
+            let time = c.shift === 'morning' ? '6:00' : '18:00';
+            const createdAt = (c as any).createdAt;
+            if (createdAt) {
+                const ct = new Date(createdAt);
+                if (!isNaN(ct.getTime())) {
+                    time = `${ct.getHours()}:${String(ct.getMinutes()).padStart(2, '0')}`;
+                }
+            }
             const code = String(c.farmerCode || c.purchaseFarmer?.code || '-');
-            const c1 = isReport ? dd : code;
             // Compact numeric formatting to fit fixed columns:
             const qtyN = Number(c.quantity) || 0;
             const qty = qtyN >= 100 ? qtyN.toFixed(0) : qtyN.toFixed(1); // 4 chars max
@@ -557,7 +580,11 @@ export default function PurchaseScreen() {
             const rateN = Number(c.rate) || 0;
             const rate = rateN >= 100 ? rateN.toFixed(0) : rateN.toFixed(1); // 4 chars max
             const amt = Math.round(Number(c.amount) || 0).toString(); // integer, up to 4 chars (≤9999)
-            payload += tableRow(c1, time, qty, fat, snf, rate, amt);
+            if (isReport) {
+                payload += tableRowReport(`${dd}-${shiftLetter}`, qty, fat, snf, rate, amt);
+            } else {
+                payload += tableRowPurchase(code, time, qty, fat, snf, rate, amt);
+            }
         }
 
         payload += fmtLine();
@@ -604,8 +631,9 @@ export default function PurchaseScreen() {
 
         const avgFat = data.length > 0 ? (data.reduce((s, c) => s + (c.fat || 0), 0) / data.length).toFixed(1) : '0.0';
         const avgSnf = data.length > 0 ? (data.reduce((s, c) => s + ((c as any).snf || 0), 0) / data.length).toFixed(1) : '0.0';
-        let payload = receiptHeader(isReport ? 'Report = Short Summary' : 'Purchase = Short Summary');
+        let payload = receiptHeader();
         if (isReport) {
+            // Date range line — left-aligned per user request.
             payload += fmtLeft(dateLabel);
             if (selectedReportFarmer) {
                 payload += fmtLeft(`Code : ${selectedReportFarmer.code}`);
@@ -1394,6 +1422,11 @@ export default function PurchaseScreen() {
                     } else {
                         fetchCustomers();
                     }
+                    // After editing/adding a farmer, deselect the current code so the
+                    // form resets fresh and the user must re-pick the code for the next entry.
+                    setSelectedCustomer(null);
+                    setMilkQty(''); setFatValue(''); setSnfValue(''); setRateValue('');
+                    setIsZero(false);
                 }}
                 editingFarmer={editingCustomer}
                 colors={colors}
