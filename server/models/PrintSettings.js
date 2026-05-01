@@ -39,6 +39,14 @@ const printSettingsSchema = new mongoose.Schema({
         default: '',
         trim: true,
         maxlength: [500, 'Extra info cannot exceed 500 characters']
+    },
+    // Separate dairy name shown on digital (WhatsApp/SMS) slips. Falls
+    // back to dairyName if empty.
+    digitalSlipName: {
+        type: String,
+        default: '',
+        trim: true,
+        maxlength: [200, 'Digital slip name cannot exceed 200 characters']
     }
 }, {
     timestamps: true

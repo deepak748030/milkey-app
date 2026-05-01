@@ -18,7 +18,8 @@ export default function PrintSettingsScreen() {
         mobileNumber: '',
         address: '',
         showMobileOnReceipt: true,
-        extraInfo: '',
+        extraInfo: 'Thank You !',
+        digitalSlipName: '',
     });
 
     const [alertVisible, setAlertVisible] = useState(false);
@@ -46,7 +47,10 @@ export default function PrintSettingsScreen() {
                     mobileNumber: res.response.mobileNumber || '',
                     address: res.response.address || '',
                     showMobileOnReceipt: res.response.showMobileOnReceipt !== false,
-                    extraInfo: res.response.extraInfo || '',
+                    // Default the receipt note to "Thank You !" so a fresh user
+                    // immediately sees the same footer as the printed slip.
+                    extraInfo: res.response.extraInfo || 'Thank You !',
+                    digitalSlipName: res.response.digitalSlipName || '',
                 });
             }
         } catch (e) {
@@ -122,18 +126,6 @@ export default function PrintSettingsScreen() {
                     <Text style={styles.iconLabel}>Receipt Configuration</Text>
                 </View>
 
-                {/* Address */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Address / Village Name</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Enter address or village name"
-                        value={settings.address}
-                        onChangeText={(v) => setSettings({ ...settings, address: v })}
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
-
                 {/* Dairy Name */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Dairy Name</Text>
@@ -146,9 +138,21 @@ export default function PrintSettingsScreen() {
                     />
                 </View>
 
+                {/* Village / Address */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Village / Address</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Enter village or address"
+                        value={settings.address}
+                        onChangeText={(v) => setSettings({ ...settings, address: v })}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+
                 {/* Phone Number with Toggle inline on right */}
                 <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Phone Number</Text>
+                    <Text style={styles.label}>Ph :</Text>
                     <View style={styles.phoneInputRow}>
                         <TextInput
                             style={[
@@ -183,12 +187,24 @@ export default function PrintSettingsScreen() {
                     </Text>
                 </View>
 
-                {/* Note for receipt */}
+                {/* Digital slip dairy name */}
                 <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Any Note for Receipt</Text>
+                    <Text style={styles.label}>Digital slip - Dairy name</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Name shown on WhatsApp / SMS slip"
+                        value={settings.digitalSlipName || ''}
+                        onChangeText={(v) => setSettings({ ...settings, digitalSlipName: v })}
+                        placeholderTextColor={colors.mutedForeground}
+                    />
+                </View>
+
+                {/* Extra note (footer) */}
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Extra note</Text>
                     <TextInput
                         style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
-                        placeholder="Any note for receipt"
+                        placeholder="Thank You !"
                         value={settings.extraInfo}
                         onChangeText={(v) => setSettings({ ...settings, extraInfo: v })}
                         multiline

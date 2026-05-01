@@ -22,6 +22,7 @@ import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useSubTabStore, RegisterTab } from '@/lib/subTabStore';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Helper function to format date as dd/mm/yyyy clear
 const formatDateDDMMYYYY = (dateStr: string) => {
@@ -63,6 +64,14 @@ export default function RegisterScreen() {
             if (res.success && res.response) setPrintSettings(res.response);
         }).catch(() => { });
     }, []);
+    // Refetch on focus so saved Print Settings reflect immediately on next slip.
+    useFocusEffect(
+        useCallback(() => {
+            printSettingsApi.get().then(res => {
+                if (res.success && res.response) setPrintSettings(res.response);
+            }).catch(() => { });
+        }, [])
+    );
 
     const notifyPrinterDisconnected = () => {
         const msg = 'Printer not connected';

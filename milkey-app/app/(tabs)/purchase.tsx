@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useFocusEffect } from '@react-navigation/native';
 import {
     Plus, Edit2, Trash2, Calendar as CalendarIcon, Search, X,
     ChevronDown, FileText, User, Sun, Moon,
@@ -172,6 +173,16 @@ export default function PurchaseScreen() {
             .then(res => { if (res.success && res.response) setPrintSettings(res.response); })
             .catch(() => { });
     }, []);
+    // Refetch print settings every time the Collection tab gains focus so any
+    // edits made on the Print Settings screen take effect immediately on the
+    // next slip — no app restart required.
+    useFocusEffect(
+        useCallback(() => {
+            printSettingsApi.get()
+                .then(res => { if (res.success && res.response) setPrintSettings(res.response); })
+                .catch(() => { });
+        }, [])
+    );
     useEffect(() => { fetchCollections(1); }, [entryDate, entryShift]);
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
     useEffect(() => { if (reportStartDate && reportEndDate) fetchReportData(); }, [reportStartDate, reportEndDate]);
@@ -256,7 +267,10 @@ export default function PurchaseScreen() {
         const dateStr = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getFullYear()).slice(-2)}`;
         const shiftStr = entryShift === 'morning' ? 'Morning' : 'Evening';
 
-        const message = `*Digital Milk Slip*\n----------------------------------------------------\nDairy - Amul\nCode - ${customer.code}\nName - ${customer.name}\nDate - ${dateStr}   shift - ${shiftStr}\n----------------------------------------------------\nFat - ${fat || '-'}              SNF - ${snf || '-'}\nRate(Rs.) - ${rate}    Qty - ${qty}\nAmount - ${amount.toFixed(2)}`;
+        // Dairy name on the digital slip uses the dedicated `digitalSlipName`
+        // setting if provided, otherwise falls back to the printed dairy name.
+        const dairyLabel = (printSettings?.digitalSlipName || printSettings?.dairyName || 'Dairy').trim();
+        const message = `*Digital Milk Slip*\n----------------------------------------------------\nDairy - ${dairyLabel}\nCode - ${customer.code}\nName - ${customer.name}\nDate - ${dateStr}   shift - ${shiftStr}\n----------------------------------------------------\nFat - ${fat || '-'}              SNF - ${snf || '-'}\nRate(Rs.) - ${rate}    Qty - ${qty}\nAmount - ${amount.toFixed(2)}`;
 
         const phone = customer.mobile.replace(/\D/g, '');
 
@@ -270,7 +284,7 @@ export default function PurchaseScreen() {
                 Linking.openURL(`https://wa.me/${whatsappPhone}?text=${encoded}`).catch(() => { });
             });
         }
-    }, [entryDate, entryShift]);
+    }, [entryDate, entryShift, printSettings]);
 
     const receiptHeader = useCallback((label?: string) => {
         let payload = '';
@@ -1489,7 +1503,8 @@ export default function PurchaseScreen() {
                                     const dateObj = new Date(e.date);
                                     const dateStr = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getFullYear()).slice(-2)}`;
                                     const shiftStr = e.shift === 'morning' ? 'Morning' : 'Evening';
-                                    const message = `*Digital Milk Slip*\nCode - ${e.farmerCode || '-'}\nName - ${e.purchaseFarmer?.name || '-'}\nDate - ${dateStr}  Shift - ${shiftStr}\nFat - ${e.fat || '-'}  SNF - ${(e as any).snf || '-'}\nRate - ${e.rate}  Qty - ${e.quantity}\nAmount - ₹${e.amount.toFixed(2)}`;
+                                    const dairyLabel = (printSettings?.digitalSlipName || printSettings?.dairyName || 'Dairy').trim();
+                                    const message = `*Digital Milk Slip*\nDairy - ${dairyLabel}\nCode - ${e.farmerCode || '-'}\nName - ${e.purchaseFarmer?.name || '-'}\nDate - ${dateStr}  Shift - ${shiftStr}\nFat - ${e.fat || '-'}  SNF - ${(e as any).snf || '-'}\nRate - ${e.rate}  Qty - ${e.quantity}\nAmount - ₹${e.amount.toFixed(2)}`;
                                     const phone = e.purchaseFarmer?.mobile?.replace(/\D/g, '') || '';
                                     if (phone) {
                                         const whatsappPhone = phone.startsWith('91') ? phone : `91${phone}`;

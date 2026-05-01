@@ -23,6 +23,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
 import { buildSellingPaymentSlipPayload, buildMembersListPayload } from '@/lib/slipPrint';
+import { useFocusEffect } from '@react-navigation/native';
 import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, line as fmtLine, left as fmtLeft, center as fmtCenter, feed } from '@/lib/printFormat';
 
 type TabType = SellingTab;
@@ -67,6 +68,14 @@ export default function SellingScreen() {
             if (res.success && res.response) setTopPrintSettings(res.response);
         }).catch(() => { });
     }, []);
+    // Refetch on focus so saved Print Settings reflect immediately on next slip.
+    useFocusEffect(
+        useCallback(() => {
+            printSettingsApi.get().then(res => {
+                if (res.success && res.response) setTopPrintSettings(res.response);
+            }).catch(() => { });
+        }, [])
+    );
 
     const notifyPrinterDisconnected = () => {
         if (Platform.OS === 'android') {

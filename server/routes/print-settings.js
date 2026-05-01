@@ -15,7 +15,8 @@ router.get('/', auth, async (req, res) => {
                 mobileNumber: req.user?.phone || '',
                 address: req.user?.address || '',
                 showMobileOnReceipt: true,
-                extraInfo: ''
+                extraInfo: '',
+                digitalSlipName: ''
             };
         }
         res.json({ success: true, response: settings });
@@ -28,7 +29,7 @@ router.get('/', auth, async (req, res) => {
 // PUT /api/print-settings - Update print settings
 router.put('/', auth, async (req, res) => {
     try {
-        const { dairyName, ownerName, mobileNumber, address, showMobileOnReceipt, extraInfo } = req.body;
+        const { dairyName, ownerName, mobileNumber, address, showMobileOnReceipt, extraInfo, digitalSlipName } = req.body;
 
         const settings = await PrintSettings.findOneAndUpdate(
             { owner: req.userId },
@@ -39,7 +40,8 @@ router.put('/', auth, async (req, res) => {
                 mobileNumber: mobileNumber || '',
                 address: address || '',
                 showMobileOnReceipt: showMobileOnReceipt !== undefined ? showMobileOnReceipt : true,
-                extraInfo: extraInfo || ''
+                extraInfo: extraInfo || '',
+                digitalSlipName: digitalSlipName || ''
             },
             { upsert: true, new: true, runValidators: true }
         );

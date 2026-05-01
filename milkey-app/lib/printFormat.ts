@@ -76,12 +76,15 @@ export function brandedHeader(opts: ReceiptBrandingOptions = {}): string {
     return p;
 }
 
-/** Common thermal receipt bottom: optional note + required Thank You text. */
+/**
+ * Common thermal receipt bottom: a single closing note line.
+ * The user-configured `extraInfo` is treated as the footer text and falls
+ * back to "Thank You !" when empty, matching the Print Settings default.
+ */
 export function brandedFooter(extraInfo?: string, width: number = COLUMN_WIDTH_58): string {
     let p = line(width);
-    const note = safe(extraInfo).trim();
-    if (note) p += center(note);
-    p += center('Thank You!');
+    const note = safe(extraInfo).trim() || 'Thank You !';
+    p += center(note);
     p += feed(4);
     return p;
 }
@@ -259,7 +262,7 @@ export function brandedHeaderHtml(settings: HtmlBrandingSettings | null | undefi
  */
 export function brandedFooterHtml(settings: HtmlBrandingSettings | null | undefined): string {
     if (!settings) return '';
-    const note = escapeHtml((settings.extraInfo || '').trim());
+    const note = escapeHtml((settings.extraInfo || '').trim() || 'Thank You !');
     const parts: string[] = [];
     if (note) {
         parts.push(`<div style="text-align:center;font-size:12px;color:#444;margin-top:14px;padding:8px;border-top:1px dashed #ccc;font-style:italic;">${note}</div>`);

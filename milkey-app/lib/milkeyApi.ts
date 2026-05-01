@@ -1817,6 +1817,8 @@ export interface PrintSettings {
     address: string;
     showMobileOnReceipt: boolean;
     extraInfo: string;
+    /** Optional dairy name used only on shared digital (WhatsApp/SMS) slips. */
+    digitalSlipName?: string;
 }
 
 // Print Settings API
