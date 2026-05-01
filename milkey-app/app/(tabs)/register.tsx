@@ -382,7 +382,7 @@ export default function RegisterScreen() {
         try {
             const [farmersRes, paymentsRes] = await Promise.all([
                 farmersApi.getAll({ includeInactive: true }),
-                paymentsApi.getAll({ limit: 20, latestPerFarmer: true }),
+                paymentsApi.getAll({ limit: 2, latestPerFarmer: true }),
             ]);
 
             if (!farmersRes.success) {
@@ -404,6 +404,8 @@ export default function RegisterScreen() {
                 showAlert('Error', paymentsRes.message || 'Failed to load settlements');
             } else if (paymentsRes.response?.data) {
                 setPayments(paymentsRes.response.data);
+                setPaymentsPage(1);
+                setPaymentsHasMore(paymentsRes.response.data.length >= 2);
             }
 
             // Fetch settlement summary stats
@@ -430,7 +432,7 @@ export default function RegisterScreen() {
                 setFarmerPaymentsPage(1);
                 setFarmerPaymentsHasMore(true);
             }
-            const res = await paymentsApi.getAll({ farmerId, limit: 20, page });
+            const res = await paymentsApi.getAll({ farmerId, limit: 2, page });
             if (!res.success) {
                 showAlert('Error', res.message || 'Failed to load settlement history');
                 if (!append) setFarmerPayments([]);
@@ -443,7 +445,7 @@ export default function RegisterScreen() {
                     setFarmerPayments(res.response.data);
                 }
                 // Check if more pages available
-                if (res.response.data.length < 20) {
+                if (res.response.data.length < 2) {
                     setFarmerPaymentsHasMore(false);
                 }
             } else {
@@ -486,11 +488,11 @@ export default function RegisterScreen() {
         setPaymentsLoadingMore(true);
         const nextPage = paymentsPage + 1;
         try {
-            const res = await paymentsApi.getAll({ limit: 20, page: nextPage, latestPerFarmer: true });
+            const res = await paymentsApi.getAll({ limit: 2, page: nextPage, latestPerFarmer: true });
             if (res.success && res.response?.data) {
                 setPayments(prev => [...prev, ...res.response!.data]);
                 setPaymentsPage(nextPage);
-                if (res.response.data.length < 20) {
+                if (res.response.data.length < 2) {
                     setPaymentsHasMore(false);
                 }
             } else {

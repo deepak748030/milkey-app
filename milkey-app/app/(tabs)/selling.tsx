@@ -24,7 +24,7 @@ import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
 import { buildSellingPaymentSlipPayload, buildMembersListPayload } from '@/lib/slipPrint';
 import { useFocusEffect } from '@react-navigation/native';
-import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, line as fmtLine, left as fmtLeft, center as fmtCenter, feed } from '@/lib/printFormat';
+import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, threeCol, line as fmtLine, left as fmtLeft, center as fmtCenter, feed } from '@/lib/printFormat';
 
 type TabType = SellingTab;
 
@@ -125,6 +125,14 @@ export default function SellingScreen() {
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'upi' | 'bank'>('cash');
     const [memberSummary, setMemberSummary] = useState<any>(null);
     const [recentPayments, setRecentPayments] = useState<MemberPayment[]>([]);
+    // Settlement history pagination - global (no member selected)
+    const [paymentsPage, setPaymentsPage] = useState(1);
+    const [paymentsHasMore, setPaymentsHasMore] = useState(true);
+    const [paymentsLoadingMore, setPaymentsLoadingMore] = useState(false);
+    // Settlement history pagination - member specific
+    const [memberPaymentsPage, setMemberPaymentsPage] = useState(1);
+    const [memberPaymentsHasMore, setMemberPaymentsHasMore] = useState(true);
+    const [memberPaymentsLoadingMore, setMemberPaymentsLoadingMore] = useState(false);
     const [paymentLoading, setPaymentLoading] = useState(false);
     const [savingPayment, setSavingPayment] = useState(false);
     const [paymentMemberSearch, setPaymentMemberSearch] = useState('');
@@ -311,7 +319,7 @@ export default function SellingScreen() {
             const [membersRes, entriesRes, paymentsRes, balanceReportRes] = await Promise.all([
                 membersApi.getAll({ includeInactive: true }),
                 sellingEntriesApi.getAll({ limit: 50 }),
-                memberPaymentsApi.getAll({ limit: 10 }),
+                memberPaymentsApi.getAll({ limit: 2, latestPerMember: true }),
                 membersApi.getBalanceReport()
             ]);
 
@@ -324,7 +332,10 @@ export default function SellingScreen() {
                 setEntriesPage(1);
             }
             if (paymentsRes.success) {
-                setRecentPayments(paymentsRes.response?.data || []);
+                const data = paymentsRes.response?.data || [];
+                setRecentPayments(data);
+                setPaymentsPage(1);
+                setPaymentsHasMore(data.length >= 2);
             }
             if (balanceReportRes.success) {
                 setBalanceReportData(balanceReportRes.response?.data || []);
@@ -415,7 +426,55 @@ export default function SellingScreen() {
         }
     };
 
-    // Save selling entry
+    // Load more global payment history (no member selected)
+    const loadMorePayments = async () => {
+        if (paymentsLoadingMore || !paymentsHasMore) return;
+        setPaymentsLoadingMore(true);
+        try {
+            const nextPage = paymentsPage + 1;
+            const res = await memberPaymentsApi.getAll({ limit: 2, page: nextPage, latestPerMember: true });
+            if (res.success && res.response?.data) {
+                const newData = res.response.data;
+                setRecentPayments(prev => {
+                    const seen = new Set(prev.map(p => p._id));
+                    return [...prev, ...newData.filter(p => !seen.has(p._id))];
+                });
+                setPaymentsPage(nextPage);
+                if (newData.length < 2) setPaymentsHasMore(false);
+            } else {
+                setPaymentsHasMore(false);
+            }
+        } catch (error) {
+            console.error('Load more payments error:', error);
+        } finally {
+            setPaymentsLoadingMore(false);
+        }
+    };
+
+    // Load more member-specific payment history
+    const loadMoreMemberPayments = async () => {
+        if (memberPaymentsLoadingMore || !memberPaymentsHasMore || !selectedPaymentMember) return;
+        setMemberPaymentsLoadingMore(true);
+        try {
+            const nextPage = memberPaymentsPage + 1;
+            const res = await memberPaymentsApi.getAll({ memberId: selectedPaymentMember._id, limit: 2, page: nextPage });
+            if (res.success && res.response?.data) {
+                const newData = res.response.data;
+                setRecentPayments(prev => {
+                    const seen = new Set(prev.map(p => p._id));
+                    return [...prev, ...newData.filter(p => !seen.has(p._id))];
+                });
+                setMemberPaymentsPage(nextPage);
+                if (newData.length < 2) setMemberPaymentsHasMore(false);
+            } else {
+                setMemberPaymentsHasMore(false);
+            }
+        } catch (error) {
+            console.error('Load more member payments error:', error);
+        } finally {
+            setMemberPaymentsLoadingMore(false);
+        }
+    };
     const handleSaveEntry = async () => {
         if (savingEntry) return;
 
@@ -505,7 +564,7 @@ export default function SellingScreen() {
                         ? { startDate: startDateFromLastPayment, endDate: undefined }
                         : undefined
                 ),
-                memberPaymentsApi.getAll({ memberId: member._id, limit: 20 }),
+                memberPaymentsApi.getAll({ memberId: member._id, limit: 2 }),
             ]);
 
             if (summaryRes.success && summaryRes.response) {
@@ -519,11 +578,14 @@ export default function SellingScreen() {
 
             // Update recentPayments with member-specific data so payment history shows correctly
             if (memberPaymentsRes.success && memberPaymentsRes.response?.data) {
+                const data = memberPaymentsRes.response.data;
                 setRecentPayments(prev => {
                     // Remove existing entries for this member and add fresh ones
                     const otherPayments = prev.filter(p => p.member?._id !== member._id);
-                    return [...memberPaymentsRes.response!.data, ...otherPayments];
+                    return [...data, ...otherPayments];
                 });
+                setMemberPaymentsPage(1);
+                setMemberPaymentsHasMore(data.length >= 2);
             }
         } catch (error) {
             setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
@@ -1341,6 +1403,23 @@ export default function SellingScreen() {
             const totalQty = grouped.reduce((s, e) => s + e.morningQty + e.eveningQty, 0);
             const totalAmt = grouped.reduce((s, e) => s + e.totalAmount, 0);
 
+            // Short date helpers (matches reference: 01-04-26)
+            const shortDate = (iso: string) => {
+                const d = new Date(iso);
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yy = String(d.getFullYear()).slice(-2);
+                return `${dd}-${mm}-${yy}`;
+            };
+            const shortDayMonth = (iso: string) => {
+                const d = new Date(iso);
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                return `${dd}-${mm}`;
+            };
+            // Compute member rate (per liter) for the period
+            const memberRate = Number(selectedPaymentMember.ratePerLiter) || (totalQty > 0 ? totalAmt / totalQty : 0);
+
             let payload = '';
             payload += brandedHeader({
                 dairyName: topPrintSettings?.dairyName || 'Milk Entries',
@@ -1349,17 +1428,25 @@ export default function SellingScreen() {
                 showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
             });
             payload += fmtCenter(`Milk Entries`, { bold: true });
-            payload += fmtLeft(`Member: ${selectedPaymentMember.name}`);
-            payload += fmtLeft(`${calcStartDate ? formatDateDDMMYYYY(calcStartDate) : 'Start'} to ${calcEndDate ? formatDateDDMMYYYY(calcEndDate) : 'End'}`);
+            payload += fmtLeft(`Name : ${selectedPaymentMember.name}`);
+            payload += fmtLeft(
+                `${calcStartDate ? shortDate(calcStartDate) : 'Start'} to ${calcEndDate ? shortDate(calcEndDate) : 'End'}`
+            );
             payload += fmtLine();
             grouped.forEach((item) => {
-                payload += fmtLeft(formatDateDDMMYYYY(item.date));
-                payload += twoCol(`M/E: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
+                const morn = item.morningQty > 0 ? String(item.morningQty) : '-';
+                const eve = item.eveningQty > 0 ? String(item.eveningQty) : '-';
+                payload += threeCol(
+                    `${shortDayMonth(item.date)} : M/E`,
+                    `${morn} + ${eve}`,
+                    String(item.totalAmount.toFixed(0))
+                );
             });
             payload += fmtLine();
-            payload += twoCol('Total Days:', String(grouped.length));
-            payload += twoCol('Total Qty:', `${totalQty.toFixed(2)} L`);
-            payload += twoCol('Total Amount:', `Rs ${totalAmt.toFixed(0)}`, { bold: true });
+            payload += twoCol('total Days :', String(grouped.length));
+            payload += twoCol('Total Qty :', `${totalQty.toFixed(2)} L`);
+            payload += twoCol('Rate / L :', String(memberRate.toFixed(2)));
+            payload += twoCol('Total Amount :', `Rs ${totalAmt.toFixed(0)}`, { bold: true });
             payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
             await printText(payload);
         } catch (error) {
@@ -2125,7 +2212,7 @@ export default function SellingScreen() {
                 if (selectedPaymentMember) {
                     return (
                         <View style={{ gap: 8 }}>
-                            {filteredPayments.slice(0, 10).map((p) => (
+                            {filteredPayments.map((p) => (
                                 <View key={p._id} style={styles.historyCard}>
                                     <View style={styles.historyCardHeader}>
                                         <Text style={[styles.historyName, { color: colors.primary, fontWeight: '700' }]}>
@@ -2203,6 +2290,19 @@ export default function SellingScreen() {
                                     )}
                                 </View>
                             ))}
+                            {memberPaymentsHasMore && (
+                                <Pressable
+                                    style={[styles.loadMoreBtn, memberPaymentsLoadingMore && { opacity: 0.6 }]}
+                                    onPress={loadMoreMemberPayments}
+                                    disabled={memberPaymentsLoadingMore}
+                                >
+                                    {memberPaymentsLoadingMore ? (
+                                        <ActivityIndicator size="small" color={colors.primary} />
+                                    ) : (
+                                        <Text style={styles.loadMoreText}>Load More</Text>
+                                    )}
+                                </Pressable>
+                            )}
                         </View>
                     );
                 }
@@ -2221,7 +2321,7 @@ export default function SellingScreen() {
                             <Text style={[styles.paymentTableHeaderText, { flex: 0.4, textAlign: 'center' }]}></Text>
                         </View>
                         {/* Table Rows */}
-                        {filteredPayments.slice(0, 15).map((p, index) => (
+                        {filteredPayments.map((p, index) => (
                             <View key={p._id} style={[styles.paymentTableRow, index % 2 === 0 && styles.paymentTableRowAlt]}>
                                 <Text style={[styles.paymentTableCell, { flex: 1.2 }]} numberOfLines={1}>{p.member?.name || '-'}</Text>
                                 <Text style={[styles.paymentTableCell, { flex: 0.6, textAlign: 'center' }]}>{(Number(p.totalQuantity) || 0).toFixed(1)}</Text>
@@ -2234,6 +2334,19 @@ export default function SellingScreen() {
                                 </Pressable>
                             </View>
                         ))}
+                        {paymentsHasMore && (
+                            <Pressable
+                                style={[styles.loadMoreBtn, paymentsLoadingMore && { opacity: 0.6 }]}
+                                onPress={loadMorePayments}
+                                disabled={paymentsLoadingMore}
+                            >
+                                {paymentsLoadingMore ? (
+                                    <ActivityIndicator size="small" color={colors.primary} />
+                                ) : (
+                                    <Text style={styles.loadMoreText}>Load More</Text>
+                                )}
+                            </Pressable>
+                        )}
                     </View>
                 );
             })()}

@@ -1284,13 +1284,14 @@ export interface MemberPayment {
 
 // Member Payments API (for Selling tab)
 export const memberPaymentsApi = {
-    getAll: async (params?: { memberId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
+    getAll: async (params?: { memberId?: string; startDate?: string; endDate?: string; limit?: number; page?: number; latestPerMember?: boolean }) => {
         const queryParams = new URLSearchParams();
         if (params?.memberId) queryParams.append('memberId', params.memberId);
         if (params?.startDate) queryParams.append('startDate', params.startDate);
         if (params?.endDate) queryParams.append('endDate', params.endDate);
         if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.latestPerMember) queryParams.append('latestPerMember', 'true');
         const query = queryParams.toString();
 
         return apiRequest<{ data: MemberPayment[] }>(`/member-payments${query ? `?${query}` : ''}`);

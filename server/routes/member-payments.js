@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const MemberPayment = require('../models/MemberPayment');
 const SellingEntry = require('../models/SellingEntry');
@@ -9,7 +10,7 @@ const { requireSubscription } = require('../middleware/subscription');
 // GET /api/member-payments - Get all member payments
 router.get('/', auth, async (req, res) => {
     try {
-        const { memberId, startDate, endDate, limit = 50, page = 1 } = req.query;
+        const { memberId, startDate, endDate, limit = 50, page = 1, latestPerMember } = req.query;
 
         const query = { owner: req.userId };
         if (memberId) query.member = memberId;
@@ -22,6 +23,51 @@ router.get('/', auth, async (req, res) => {
                 end.setHours(23, 59, 59, 999);
                 query.date.$lte = end;
             }
+        }
+
+        // If latestPerMember is requested (and no specific memberId), aggregate to last payment per member
+        if (latestPerMember === 'true' && !memberId) {
+            const matchStage = { owner: new mongoose.Types.ObjectId(req.userId) };
+            if (query.date) matchStage.date = query.date;
+
+            const pipeline = [
+                { $match: matchStage },
+                { $sort: { date: -1 } },
+                {
+                    $group: {
+                        _id: '$member',
+                        doc: { $first: '$$ROOT' }
+                    }
+                },
+                { $replaceRoot: { newRoot: '$doc' } },
+                { $sort: { date: -1 } },
+                { $skip: (parseInt(page) - 1) * parseInt(limit) },
+                { $limit: parseInt(limit) }
+            ];
+
+            const aggPayments = await MemberPayment.aggregate(pipeline);
+            await MemberPayment.populate(aggPayments, [{ path: 'member', select: 'name mobile' }]);
+
+            const totalAgg = await MemberPayment.aggregate([
+                { $match: matchStage },
+                { $group: { _id: '$member' } },
+                { $count: 'total' }
+            ]);
+            const totalUnique = totalAgg.length > 0 ? totalAgg[0].total : 0;
+
+            return res.json({
+                success: true,
+                response: {
+                    data: aggPayments,
+                    count: totalUnique,
+                    pagination: {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        total: totalUnique,
+                        pages: Math.ceil(totalUnique / parseInt(limit))
+                    }
+                }
+            });
         }
 
         const payments = await MemberPayment.find(query)
