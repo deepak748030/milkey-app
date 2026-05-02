@@ -6,14 +6,16 @@
 import { initializeApp, getApps, getApp, FirebaseOptions } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
-// Publishable client-side identifiers (safe to ship). Sourced from google-services.json.
+// Publishable client-side identifiers (safe to ship). Sourced from google-services.json
+// (project: milkey-72381, package: com.milkey.app). Keep these in sync whenever the
+// google-services.json is regenerated from Firebase console.
 export const firebaseConfig: FirebaseOptions = {
-    apiKey: 'AIzaSyB5Vd38Z7LKI4o4ped6xt9gnabwgngiALk',
-    authDomain: 'milkeyapp.firebaseapp.com',
-    projectId: 'milkeyapp',
-    storageBucket: 'milkeyapp.firebasestorage.app',
-    messagingSenderId: '835983322060',
-    appId: '1:835983322060:android:e3ba5212d68a99fcb90b69',
+    apiKey: 'AIzaSyALlGiMy-qMIvLUT5rB1PKQbG2Cm03B0Ts',
+    authDomain: 'milkey-72381.firebaseapp.com',
+    projectId: 'milkey-72381',
+    storageBucket: 'milkey-72381.firebasestorage.app',
+    messagingSenderId: '95043026756',
+    appId: '1:95043026756:android:6383a95e8ad4ce2b412111',
 };
 
 export const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
