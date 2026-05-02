@@ -1,26 +1,44 @@
 {
   "project_info": {
-    "project_number": "835983322060",
-    "project_id": "milkeyapp",
-    "storage_bucket": "milkeyapp.firebasestorage.app"
+    "project_number": "95043026756",
+    "project_id": "milkey-72381",
+    "storage_bucket": "milkey-72381.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:835983322060:android:e3ba5212d68a99fcb90b69",
+        "mobilesdk_app_id": "1:95043026756:android:6383a95e8ad4ce2b412111",
         "android_client_info": {
           "package_name": "com.milkey.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "95043026756-tu7o1v2rtfg83s4etkqok5i52na30915.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.milkey.app",
+            "certificate_hash": "cbff517acbcb5c2b92c33b7f20377ed4b37857c5"
+          }
+        },
+        {
+          "client_id": "95043026756-b6i7gsmmq6vb4fu9d4eo1lsdle4ctb1t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyB5Vd38Z7LKI4o4ped6xt9gnabwgngiALk"
+          "current_key": "AIzaSyALlGiMy-qMIvLUT5rB1PKQbG2Cm03B0Ts"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "95043026756-b6i7gsmmq6vb4fu9d4eo1lsdle4ctb1t.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
