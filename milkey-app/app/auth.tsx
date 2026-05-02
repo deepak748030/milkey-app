@@ -11,6 +11,8 @@ import { setAuthUser } from '@/lib/authStore';
 import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import * as Google from 'expo-auth-session/providers/google';
+import { makeRedirectUri } from 'expo-auth-session';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 // NOTE: `expo-firebase-recaptcha` was removed (deprecated since Expo SDK 48).
 // Phone OTP now flows through our own server: /api/auth/send-phone-otp + /api/auth/phone-login.
@@ -23,6 +25,8 @@ WebBrowser.maybeCompleteAuthSession();
 const GOOGLE_WEB_CLIENT_ID = '95043026756-b6i7gsmmq6vb4fu9d4eo1lsdle4ctb1t.apps.googleusercontent.com';
 const GOOGLE_ANDROID_CLIENT_ID = '95043026756-tu7o1v2rtfg83s4etkqok5i52na30915.apps.googleusercontent.com';
 const GOOGLE_SCOPES = ['openid', 'profile', 'email'];
+const GOOGLE_ANDROID_REDIRECT_SCHEME = `com.googleusercontent.apps.${GOOGLE_ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}`;
+const IS_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 // ─── Sub-components ───
 
@@ -121,10 +125,15 @@ export default function AuthScreen() {
     const insets = useSafeAreaInsets();
     const { expoPushToken } = usePushNotifications();
 
+    const googleRedirectUri = !IS_EXPO_GO && Platform.OS === 'android'
+        ? makeRedirectUri({ native: `${GOOGLE_ANDROID_REDIRECT_SCHEME}:/oauthredirect` })
+        : undefined;
+
     // Google Auth Session
     const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+        redirectUri: googleRedirectUri,
         scopes: GOOGLE_SCOPES,
     });
 
@@ -335,6 +344,18 @@ export default function AuthScreen() {
     }, [name, email, phone, password, address, referralCode, expoPushToken, showModal]);
 
     const handleGoogleAuth = useCallback(async () => {
+        if (IS_EXPO_GO) {
+            console.warn('[auth][google] blocked in Expo Go', {
+                executionEnvironment: Constants.executionEnvironment,
+                platform: Platform.OS,
+            });
+            showModal(
+                'Google Sign-In unavailable in Expo Go',
+                'Google OAuth Expo Go me work nahi karega because Google secure custom app redirect maangta hai aur Expo Go exp:// redirect use karta hai. Isko test karne ke liye Development Build ya installed APK/AAB use karo.'
+            );
+            return;
+        }
+
         if (!googleRequest) {
             console.error('[auth][google] request not ready', {
                 webClientId: GOOGLE_WEB_CLIENT_ID,
@@ -347,8 +368,12 @@ export default function AuthScreen() {
         try {
             console.log('[auth][google] opening prompt', {
                 platform: Platform.OS,
+                executionEnvironment: Constants.executionEnvironment,
+                isExpoGo: IS_EXPO_GO,
                 webClientId: GOOGLE_WEB_CLIENT_ID,
                 androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+                androidRedirectScheme: GOOGLE_ANDROID_REDIRECT_SCHEME,
+                configuredRedirectUri: googleRedirectUri,
                 redirectUri: googleRequest.redirectUri,
                 scopes: GOOGLE_SCOPES,
             });
@@ -359,7 +384,7 @@ export default function AuthScreen() {
             showModal('Error', 'Google sign in failed. Please try again.');
             setGoogleLoading(false);
         }
-    }, [googleRequest, googlePromptAsync, showModal]);
+    }, [googleRequest, googlePromptAsync, googleRedirectUri, showModal]);
 
     const handleForgotPassword = useCallback(async () => {
         if (!email) { showModal('Error', 'Please enter your email address'); return; }
@@ -626,12 +651,13 @@ export default function AuthScreen() {
 //   → Click "Create"
 //   → Copy the Client ID and replace GOOGLE_WEB_CLIENT_ID above
 //
-// STEP 3: Create Android Client ID (optional but recommended)
+// STEP 3: Create Android Client ID (required for Android native sign-in)
 //   → Same Credentials page → Create OAuth Client ID
 //   → Application type: "Android"
 //   → Package name: com.milkey.app
 //   → SHA-1: Get from `eas credentials` or your keystore
 //   → Copy Client ID → replace GOOGLE_ANDROID_CLIENT_ID above
+//   → Android redirect scheme is derived from that client ID and must be built into the app
 //
 // STEP 4: Update google-services.json
 //   → After creating OAuth clients, re-download google-services.json
