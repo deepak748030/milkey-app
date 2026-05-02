@@ -18,17 +18,11 @@ import * as WebBrowser from 'expo-web-browser';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ════════════════════════════════════════════════════════════
-// IMPORTANT: Replace this with your ACTUAL Web Client ID from:   
-// Firebase Console → Project Settings → General → Your Apps
-// OR Google Cloud Console → Credentials → OAuth 2.0 Client IDs → Web Client
-//
-// Current google-services.json has EMPTY oauth_client[].
-// You MUST create a Web Client ID in Google Cloud Console first.
-// See setup instructions at the bottom of this file.
-// ════════════════════════════════════════════════════════════
-const GOOGLE_WEB_CLIENT_ID = '835983322060-REPLACE_WITH_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
-const GOOGLE_ANDROID_CLIENT_ID = '835983322060-REPLACE_WITH_YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com';
+// Google OAuth client IDs from milkey-app/google-services.json.
+// Keep these synced whenever Firebase google-services.json is regenerated.
+const GOOGLE_WEB_CLIENT_ID = '95043026756-b6i7gsmmq6vb4fu9d4eo1lsdle4ctb1t.apps.googleusercontent.com';
+const GOOGLE_ANDROID_CLIENT_ID = '95043026756-tu7o1v2rtfg83s4etkqok5i52na30915.apps.googleusercontent.com';
+const GOOGLE_SCOPES = ['openid', 'profile', 'email'];
 
 // ─── Sub-components ───
 
@@ -131,6 +125,7 @@ export default function AuthScreen() {
     const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+        scopes: GOOGLE_SCOPES,
     });
 
     // Screens: 'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'
@@ -169,13 +164,28 @@ export default function AuthScreen() {
 
     // ─── Handle Google Response ───
     useEffect(() => {
+        if (googleResponse) {
+            console.log('[auth][google] response:', {
+                type: googleResponse.type,
+                error: googleResponse.type === 'error' ? googleResponse.error : undefined,
+                params: 'params' in googleResponse ? googleResponse.params : undefined,
+                hasAccessToken: googleResponse.type === 'success' ? !!googleResponse.authentication?.accessToken : false,
+                hasIdToken: googleResponse.type === 'success' ? !!googleResponse.authentication?.idToken : false,
+            });
+        }
+
         if (googleResponse?.type === 'success') {
             const { authentication } = googleResponse;
             if (authentication?.accessToken) {
                 handleGoogleToken(authentication.accessToken, authentication.idToken);
+            } else {
+                console.error('[auth][google] success response did not include accessToken');
+                setGoogleLoading(false);
+                showModal('Error', 'Google sign in failed: access token missing.');
             }
         } else if (googleResponse?.type === 'error') {
             setGoogleLoading(false);
+            console.error('[auth][google] auth-session error:', googleResponse.error, googleResponse.params);
             showModal('Error', 'Google sign in failed. Please try again.');
         } else if (googleResponse?.type === 'dismiss') {
             setGoogleLoading(false);
@@ -184,17 +194,26 @@ export default function AuthScreen() {
 
     const handleGoogleToken = async (accessToken: string, idToken?: string | null) => {
         try {
+            console.log('[auth][google] handling token:', { hasAccessToken: !!accessToken, hasIdToken: !!idToken });
             // If we have idToken, send it directly. Otherwise, fetch user info with accessToken
             let tokenToSend = idToken;
 
             if (!tokenToSend) {
                 // Fetch Google user info using access token
+                console.log('[auth][google] fetching Google userinfo');
                 const userInfoRes = await fetch('https://www.googleapis.com/userinfo/v2/me', {
                     headers: { Authorization: `Bearer ${accessToken}` },
                 });
                 const userInfo = await userInfoRes.json();
+                console.log('[auth][google] userinfo response:', {
+                    ok: userInfoRes.ok,
+                    status: userInfoRes.status,
+                    hasEmail: !!userInfo?.email,
+                    hasName: !!userInfo?.name,
+                });
 
-                if (!userInfo.email) {
+                if (!userInfoRes.ok || !userInfo.email) {
+                    console.error('[auth][google] userinfo failed:', userInfo);
                     showModal('Error', 'Could not get email from Google');
                     setGoogleLoading(false);
                     return;
@@ -205,6 +224,11 @@ export default function AuthScreen() {
                     email: userInfo.email,
                     name: userInfo.name || userInfo.email.split('@')[0],
                     picture: userInfo.picture || '',
+                });
+                console.log('[auth][google] server google-info result:', {
+                    success: authResult.success,
+                    message: authResult.message,
+                    hasToken: !!authResult.response?.token,
                 });
 
                 if (authResult.success && authResult.response) {
@@ -220,6 +244,11 @@ export default function AuthScreen() {
 
             // Send idToken to server
             const authResult = await authApiNew.googleLogin(tokenToSend);
+            console.log('[auth][google] server google-token result:', {
+                success: authResult.success,
+                message: authResult.message,
+                hasToken: !!authResult.response?.token,
+            });
             if (authResult.success && authResult.response) {
                 await setAuthUser(authResult.response.token, authResult.response.user);
                 if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
@@ -307,13 +336,26 @@ export default function AuthScreen() {
 
     const handleGoogleAuth = useCallback(async () => {
         if (!googleRequest) {
+            console.error('[auth][google] request not ready', {
+                webClientId: GOOGLE_WEB_CLIENT_ID,
+                androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+            });
             showModal('Error', 'Google Sign-In is not configured yet. Please set up Web Client ID in Firebase Console.');
             return;
         }
         setGoogleLoading(true);
         try {
-            await googlePromptAsync();
-        } catch {
+            console.log('[auth][google] opening prompt', {
+                platform: Platform.OS,
+                webClientId: GOOGLE_WEB_CLIENT_ID,
+                androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+                redirectUri: googleRequest.redirectUri,
+                scopes: GOOGLE_SCOPES,
+            });
+            const result = await googlePromptAsync();
+            console.log('[auth][google] prompt result:', { type: result.type });
+        } catch (err: any) {
+            console.error('[auth][google] prompt failed:', err?.message, err);
             showModal('Error', 'Google sign in failed. Please try again.');
             setGoogleLoading(false);
         }
