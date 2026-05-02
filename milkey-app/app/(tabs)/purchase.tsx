@@ -1127,7 +1127,7 @@ export default function PurchaseScreen() {
                 <View style={s.tableWrap}>
                     <View style={s.tHead}>
                         <Text style={[s.tHeadText, s.entryCell1]}>{t.common.code}</Text>
-                        <Text style={[s.tHeadText, { flex: 0.7, textAlign: 'center' }]}>Date</Text>
+                        <Text style={[s.tHeadText, { flex: 0.7, textAlign: 'center' }]}>Date/S</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.milk}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.snf}</Text>
@@ -1137,13 +1137,15 @@ export default function PurchaseScreen() {
                     {filteredReportCollections.map((item, index) => {
                         const d = new Date(item.date);
                         const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        const shiftLetter = item.shift === 'morning' ? 'M' : item.shift === 'evening' ? 'E' : '';
+                        const dateLabel = shiftLetter ? `${dateStr}-${shiftLetter}` : dateStr;
                         return (
                             <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
                                 <View style={[s.entryCell1, { alignItems: 'center' }]}>
                                     <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
                                     <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
                                 </View>
-                                <Text style={[s.entryCellText, { flex: 0.7, textAlign: 'center', fontSize: 9 }]}>{dateStr}</Text>
+                                <Text style={[s.entryCellText, { flex: 0.7, textAlign: 'center', fontSize: 9 }]}>{dateLabel}</Text>
                                 <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.quantity}</Text>
                                 <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.fat || '-'}</Text>
                                 <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text>

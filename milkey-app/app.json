@@ -17,7 +17,7 @@
       "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundColor": "#0d3b1f"
       },
       "googleServicesFile": "./google-services.json",
       "permissions": [

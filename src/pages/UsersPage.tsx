@@ -25,6 +25,8 @@ import {
     FileSpreadsheet,
     FileJson,
     FileType,
+    BadgeCheck,
+    AlertCircle,
 } from 'lucide-react'
 import {
     getUsers,
@@ -1092,6 +1094,7 @@ export function UsersPage() {
                                 <th className="text-left p-4 font-semibold text-muted-foreground">Phone</th>
                                 <th className="text-left p-4 font-semibold text-muted-foreground">Role</th>
                                 <th className="text-left p-4 font-semibold text-muted-foreground">Status</th>
+                                <th className="text-left p-4 font-semibold text-muted-foreground">Verified</th>
                                 <th className="text-left p-4 font-semibold text-muted-foreground">Joined</th>
                                 <th className="text-left p-4 font-semibold text-muted-foreground">Actions</th>
                             </tr>
@@ -1101,7 +1104,7 @@ export function UsersPage() {
                                 Array.from({ length: 5 }).map((_, i) => <UserSkeleton key={i} />)
                             ) : users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                                    <td colSpan={8} className="p-12 text-center text-muted-foreground">
                                         <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                                         <p className="text-lg">No users found</p>
                                     </td>
@@ -1135,6 +1138,19 @@ export function UsersPage() {
                                             )}>
                                                 {user.isBlocked ? 'Blocked' : 'Active'}
                                             </span>
+                                        </td>
+                                        <td className="p-4">
+                                            {user.isVerified ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full bg-success/10 text-success border border-success/30" title="Verified — already contacted for marketing">
+                                                    <BadgeCheck className="w-4 h-4" />
+                                                    Verified
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 ring-2 ring-amber-500/20 animate-pulse" title="New — not yet contacted for marketing">
+                                                    <AlertCircle className="w-4 h-4" />
+                                                    New
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="p-4 text-muted-foreground">
                                             {new Date(user.createdAt).toLocaleDateString()}
@@ -1231,12 +1247,25 @@ export function UsersPage() {
                                     <p className="font-medium text-foreground truncate">{user.name || 'No Name'}</p>
                                     <p className="text-xs text-muted-foreground truncate">{user.phone}</p>
                                 </div>
-                                <span className={cn(
-                                    'px-2 py-1 text-xs font-medium rounded-full flex-shrink-0',
-                                    user.isBlocked ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
-                                )}>
-                                    {user.isBlocked ? 'Blocked' : 'Active'}
-                                </span>
+                                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                    <span className={cn(
+                                        'px-2 py-1 text-xs font-medium rounded-full',
+                                        user.isBlocked ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success'
+                                    )}>
+                                        {user.isBlocked ? 'Blocked' : 'Active'}
+                                    </span>
+                                    {user.isVerified ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-success/10 text-success border border-success/30" title="Verified">
+                                            <BadgeCheck className="w-3 h-3" />
+                                            Verified
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 animate-pulse" title="New — not yet contacted">
+                                            <AlertCircle className="w-3 h-3" />
+                                            New
+                                        </span>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 text-sm mb-3">

@@ -30,11 +30,29 @@ router.get('/', auth, async (req, res) => {
         }
 
         const total = await PurchaseFarmer.countDocuments(query);
-        const farmers = await PurchaseFarmer.find(query)
-            .sort({ isActive: -1, code: 1 })
-            .limit(parseInt(limit))
-            .skip((parseInt(page) - 1) * parseInt(limit))
-            .lean();
+        // Sort by code numerically (ascending). Codes are stored as strings,
+        // so we use an aggregation that converts the code to a number when
+        // possible, falling back to a high value for non-numeric codes so
+        // they sort to the end. Active farmers first, then by numeric code.
+        const farmers = await PurchaseFarmer.aggregate([
+            { $match: query },
+            {
+                $addFields: {
+                    _codeNum: {
+                        $convert: {
+                            input: '$code',
+                            to: 'double',
+                            onError: Number.MAX_SAFE_INTEGER,
+                            onNull: Number.MAX_SAFE_INTEGER,
+                        },
+                    },
+                },
+            },
+            { $sort: { isActive: -1, _codeNum: 1, code: 1 } },
+            { $skip: (parseInt(page) - 1) * parseInt(limit) },
+            { $limit: parseInt(limit) },
+            { $project: { _codeNum: 0 } },
+        ]);
 
         res.json({
             success: true,
