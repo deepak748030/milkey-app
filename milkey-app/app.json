@@ -5,10 +5,7 @@
     "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": [
-      "milkey",
-      "com.googleusercontent.apps.95043026756-tu7o1v2rtfg83s4etkqok5i52na30915"
-    ],
+    "scheme": "milkey",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/icon.png",
@@ -105,7 +102,8 @@
           "isAndroidBackgroundLocationEnabled": false
         }
       ],
-      "./plugins/withBluetoothScanPermission"
+      "./plugins/withBluetoothScanPermission",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true

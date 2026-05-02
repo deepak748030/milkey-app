@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, memo, useRef } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -10,23 +10,36 @@ import { authApiNew } from '@/lib/milkeyApi';
 import { setAuthUser } from '@/lib/authStore';
 import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
-import * as Google from 'expo-auth-session/providers/google';
-import { makeRedirectUri } from 'expo-auth-session';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import * as WebBrowser from 'expo-web-browser';
+import {
+    GoogleSignin,
+    statusCodes,
+} from '@react-native-google-signin/google-signin';
 // NOTE: `expo-firebase-recaptcha` was removed (deprecated since Expo SDK 48).
 // Phone OTP now flows through our own server: /api/auth/send-phone-otp + /api/auth/phone-login.
 // Firebase JS SDK is still imported elsewhere for Google sign-in / future use.
 
-WebBrowser.maybeCompleteAuthSession();
-
 // Google OAuth client IDs from milkey-app/google-services.json.
-// Keep these synced whenever Firebase google-services.json is regenerated.
+// Web Client ID is REQUIRED — it's what gives us the idToken to verify on the server.
+// Native Android client ID does NOT need to be passed; the native SDK reads it from
+// google-services.json automatically using the package name + SHA-1.
 const GOOGLE_WEB_CLIENT_ID = '95043026756-b6i7gsmmq6vb4fu9d4eo1lsdle4ctb1t.apps.googleusercontent.com';
-const GOOGLE_ANDROID_CLIENT_ID = '95043026756-tu7o1v2rtfg83s4etkqok5i52na30915.apps.googleusercontent.com';
-const GOOGLE_SCOPES = ['openid', 'profile', 'email'];
-const GOOGLE_ANDROID_REDIRECT_SCHEME = `com.googleusercontent.apps.${GOOGLE_ANDROID_CLIENT_ID.replace('.apps.googleusercontent.com', '')}`;
 const IS_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+// Configure Google Sign-In once at module load (safe to call multiple times).
+// In Expo Go the native module is unavailable — guard so the app doesn't crash on import.
+if (!IS_EXPO_GO) {
+    try {
+        GoogleSignin.configure({
+            webClientId: GOOGLE_WEB_CLIENT_ID,
+            offlineAccess: true,
+            scopes: ['profile', 'email'],
+        });
+        console.log('[auth][google] GoogleSignin.configure done');
+    } catch (e) {
+        console.warn('[auth][google] GoogleSignin.configure failed:', e);
+    }
+}
 
 // ─── Sub-components ───
 
@@ -125,18 +138,6 @@ export default function AuthScreen() {
     const insets = useSafeAreaInsets();
     const { expoPushToken } = usePushNotifications();
 
-    const googleRedirectUri = !IS_EXPO_GO && Platform.OS === 'android'
-        ? makeRedirectUri({ native: `${GOOGLE_ANDROID_REDIRECT_SCHEME}:/oauthredirect` })
-        : undefined;
-
-    // Google Auth Session
-    const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
-        webClientId: GOOGLE_WEB_CLIENT_ID,
-        androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-        redirectUri: googleRedirectUri,
-        scopes: GOOGLE_SCOPES,
-    });
-
     // Screens: 'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'
     const [screen, setScreen] = useState<'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'>('login');
     const [loading, setLoading] = useState(false);
@@ -171,89 +172,35 @@ export default function AuthScreen() {
     const toggleNewPassword = useCallback(() => setShowNewPassword(v => !v), []);
     const handleReferralChange = useCallback((t: string) => setReferralCode(t.toUpperCase()), []);
 
-    // ─── Handle Google Response ───
-    useEffect(() => {
-        if (googleResponse) {
-            console.log('[auth][google] response:', {
-                type: googleResponse.type,
-                error: googleResponse.type === 'error' ? googleResponse.error : undefined,
-                params: 'params' in googleResponse ? googleResponse.params : undefined,
-                hasAccessToken: googleResponse.type === 'success' ? !!googleResponse.authentication?.accessToken : false,
-                hasIdToken: googleResponse.type === 'success' ? !!googleResponse.authentication?.idToken : false,
-            });
-        }
-
-        if (googleResponse?.type === 'success') {
-            const { authentication } = googleResponse;
-            if (authentication?.accessToken) {
-                handleGoogleToken(authentication.accessToken, authentication.idToken);
-            } else {
-                console.error('[auth][google] success response did not include accessToken');
-                setGoogleLoading(false);
-                showModal('Error', 'Google sign in failed: access token missing.');
-            }
-        } else if (googleResponse?.type === 'error') {
-            setGoogleLoading(false);
-            console.error('[auth][google] auth-session error:', googleResponse.error, googleResponse.params);
-            showModal('Error', 'Google sign in failed. Please try again.');
-        } else if (googleResponse?.type === 'dismiss') {
-            setGoogleLoading(false);
-        }
-    }, [googleResponse]);
-
-    const handleGoogleToken = async (accessToken: string, idToken?: string | null) => {
+    // ─── Send token / user info to our backend ───
+    const finishGoogleLogin = async (idToken: string | null, userInfo: { email: string; name?: string; photo?: string | null }) => {
         try {
-            console.log('[auth][google] handling token:', { hasAccessToken: !!accessToken, hasIdToken: !!idToken });
-            // If we have idToken, send it directly. Otherwise, fetch user info with accessToken
-            let tokenToSend = idToken;
-
-            if (!tokenToSend) {
-                // Fetch Google user info using access token
-                console.log('[auth][google] fetching Google userinfo');
-                const userInfoRes = await fetch('https://www.googleapis.com/userinfo/v2/me', {
-                    headers: { Authorization: `Bearer ${accessToken}` },
-                });
-                const userInfo = await userInfoRes.json();
-                console.log('[auth][google] userinfo response:', {
-                    ok: userInfoRes.ok,
-                    status: userInfoRes.status,
-                    hasEmail: !!userInfo?.email,
-                    hasName: !!userInfo?.name,
-                });
-
-                if (!userInfoRes.ok || !userInfo.email) {
-                    console.error('[auth][google] userinfo failed:', userInfo);
-                    showModal('Error', 'Could not get email from Google');
-                    setGoogleLoading(false);
-                    return;
-                }
-
-                // Send user info directly to server for Google auth
-                const authResult = await authApiNew.googleLoginWithInfo({
-                    email: userInfo.email,
-                    name: userInfo.name || userInfo.email.split('@')[0],
-                    picture: userInfo.picture || '',
-                });
-                console.log('[auth][google] server google-info result:', {
+            // Prefer idToken — backend can verify it cryptographically with Google.
+            if (idToken) {
+                console.log('[auth][google] sending idToken to server');
+                const authResult = await authApiNew.googleLogin(idToken);
+                console.log('[auth][google] server google-token result:', {
                     success: authResult.success,
                     message: authResult.message,
                     hasToken: !!authResult.response?.token,
                 });
-
                 if (authResult.success && authResult.response) {
                     await setAuthUser(authResult.response.token, authResult.response.user);
                     if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                     router.replace('/(tabs)');
-                } else {
-                    showModal('Error', authResult.message || 'Google sign in failed');
+                    return;
                 }
-                setGoogleLoading(false);
-                return;
+                // fall through to userinfo path on server failure
+                console.warn('[auth][google] idToken login failed, falling back to userinfo:', authResult.message);
             }
 
-            // Send idToken to server
-            const authResult = await authApiNew.googleLogin(tokenToSend);
-            console.log('[auth][google] server google-token result:', {
+            // Fallback: send raw user info (server treats as trusted only if no idToken path)
+            const authResult = await authApiNew.googleLoginWithInfo({
+                email: userInfo.email,
+                name: userInfo.name || userInfo.email.split('@')[0],
+                picture: userInfo.photo || '',
+            });
+            console.log('[auth][google] server google-info result:', {
                 success: authResult.success,
                 message: authResult.message,
                 hasToken: !!authResult.response?.token,
@@ -265,11 +212,12 @@ export default function AuthScreen() {
             } else {
                 showModal('Error', authResult.message || 'Google sign in failed');
             }
-        } catch (err) {
-            console.error('Google auth error:', err);
+        } catch (err: any) {
+            console.error('[auth][google] backend error:', err?.message, err);
             showModal('Error', 'Google sign in failed. Please try again.');
+        } finally {
+            setGoogleLoading(false);
         }
-        setGoogleLoading(false);
     };
 
     // ─── Handlers ───
@@ -351,40 +299,76 @@ export default function AuthScreen() {
             });
             showModal(
                 'Google Sign-In unavailable in Expo Go',
-                'Google OAuth Expo Go me work nahi karega because Google secure custom app redirect maangta hai aur Expo Go exp:// redirect use karta hai. Isko test karne ke liye Development Build ya installed APK/AAB use karo.'
+                'Google Sign-In Expo Go me kaam nahi karega kyunki yeh native module use karta hai.\n\nDevelopment build ya installed APK use karo:\n\n  npx eas build -p android --profile production'
             );
             return;
         }
 
-        if (!googleRequest) {
-            console.error('[auth][google] request not ready', {
-                webClientId: GOOGLE_WEB_CLIENT_ID,
-                androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-            });
-            showModal('Error', 'Google Sign-In is not configured yet. Please set up Web Client ID in Firebase Console.');
-            return;
-        }
         setGoogleLoading(true);
         try {
-            console.log('[auth][google] opening prompt', {
+            console.log('[auth][google] starting native sign-in', {
                 platform: Platform.OS,
                 executionEnvironment: Constants.executionEnvironment,
-                isExpoGo: IS_EXPO_GO,
                 webClientId: GOOGLE_WEB_CLIENT_ID,
-                androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-                androidRedirectScheme: GOOGLE_ANDROID_REDIRECT_SCHEME,
-                configuredRedirectUri: googleRedirectUri,
-                redirectUri: googleRequest.redirectUri,
-                scopes: GOOGLE_SCOPES,
             });
-            const result = await googlePromptAsync();
-            console.log('[auth][google] prompt result:', { type: result.type });
+
+            // Make sure Google Play Services are present (Android only no-op on iOS).
+            await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+            // Sign out any cached account first so the chooser always shows. Optional but
+            // helps avoid stale token issues during testing.
+            try { await GoogleSignin.signOut(); } catch { /* ignore */ }
+
+            const result: any = await GoogleSignin.signIn();
+            console.log('[auth][google] signIn raw result keys:', Object.keys(result || {}));
+
+            // v13+ wraps payload under `data`, older versions return it flat.
+            const payload = result?.data ?? result;
+            const idToken: string | null = payload?.idToken ?? null;
+            const userObj = payload?.user ?? {};
+
+            console.log('[auth][google] signIn parsed:', {
+                hasIdToken: !!idToken,
+                email: userObj?.email,
+                name: userObj?.name,
+            });
+
+            if (!userObj?.email) {
+                console.error('[auth][google] sign-in returned no email', payload);
+                showModal('Error', 'Google sign in failed: email not returned.');
+                setGoogleLoading(false);
+                return;
+            }
+
+            await finishGoogleLogin(idToken, {
+                email: userObj.email,
+                name: userObj.name,
+                photo: userObj.photo,
+            });
         } catch (err: any) {
-            console.error('[auth][google] prompt failed:', err?.message, err);
-            showModal('Error', 'Google sign in failed. Please try again.');
             setGoogleLoading(false);
+            const code = err?.code;
+            console.error('[auth][google] signIn error:', { code, message: err?.message, err });
+
+            if (code === statusCodes.SIGN_IN_CANCELLED) {
+                // User cancelled — silent.
+                return;
+            }
+            if (code === statusCodes.IN_PROGRESS) {
+                showModal('Please wait', 'Google sign-in is already in progress.');
+                return;
+            }
+            if (code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+                showModal('Error', 'Google Play Services not available on this device.');
+                return;
+            }
+            if (code === statusCodes.SIGN_IN_REQUIRED) {
+                showModal('Error', 'Sign-in required. Please try again.');
+                return;
+            }
+            showModal('Error', `Google sign in failed.${err?.message ? `\n\n${err.message}` : ''}`);
         }
-    }, [googleRequest, googlePromptAsync, googleRedirectUri, showModal]);
+    }, [showModal, expoPushToken]);
 
     const handleForgotPassword = useCallback(async () => {
         if (!email) { showModal('Error', 'Please enter your email address'); return; }
@@ -633,42 +617,31 @@ export default function AuthScreen() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// FIREBASE & GOOGLE SIGN-IN SETUP INSTRUCTIONS
+// GOOGLE SIGN-IN SETUP — using @react-native-google-signin/google-signin
 // ════════════════════════════════════════════════════════════════
 //
-// STEP 1: Enable Authentication in Firebase Console
-//   → Go to: https://console.firebase.google.com/project/milkeyapp/authentication
-//   → Click "Get Started"
-//   → Enable "Phone" provider
-//   → Enable "Google" provider (select support email)
+// 1. Web Client ID (GOOGLE_WEB_CLIENT_ID above) is the OAuth 2.0 client of
+//    type "Web application" from Google Cloud Console. The native SDK uses it
+//    to request an idToken that your backend can verify.
 //
-// STEP 2: Create Web Client ID (REQUIRED for expo-auth-session)
-//   → Go to: https://console.cloud.google.com/apis/credentials?project=milkeyapp
-//   → Click "Create Credentials" → "OAuth Client ID"
-//   → Application type: "Web application"
-//   → Name: "Milkey Web Client"
-//   → Authorized redirect URIs: Add https://auth.expo.io/@your-expo-username/milkey
-//   → Click "Create"
-//   → Copy the Client ID and replace GOOGLE_WEB_CLIENT_ID above
+// 2. Android Client ID is read AUTOMATICALLY from google-services.json by the
+//    native SDK using the package name (com.milkey.app) + SHA-1 fingerprint.
+//    You do NOT need to pass it in JS, and you do NOT need any custom URI
+//    scheme in app.json (Google has disabled custom URI schemes for Android
+//    OAuth — that's what caused the earlier "invalid_request" error).
 //
-// STEP 3: Create Android Client ID (required for Android native sign-in)
-//   → Same Credentials page → Create OAuth Client ID
-//   → Application type: "Android"
-//   → Package name: com.milkey.app
-//   → SHA-1: Get from `eas credentials` or your keystore
-//   → Copy Client ID → replace GOOGLE_ANDROID_CLIENT_ID above
-//   → Android redirect scheme is derived from that client ID and must be built into the app
+// 3. SHA-1 fingerprints that MUST be registered in Firebase Console
+//    → Project Settings → Your Android app → "Add fingerprint":
+//       • EAS production keystore SHA-1  (npx eas credentials -p android)
+//       • EAS preview keystore SHA-1     (if you have a preview profile)
+//       • Local debug SHA-1               (for `npx expo run:android`)
+//    After adding, RE-DOWNLOAD google-services.json and replace the file at
+//    milkey-app/google-services.json. Then rebuild the APK.
 //
-// STEP 4: Update google-services.json
-//   → After creating OAuth clients, re-download google-services.json
-//     from Firebase Console → Project Settings → Your Apps → Android
-//   → The oauth_client array should now be populated
+// 4. Build (cannot be tested in Expo Go — native module):
+//       npx eas build -p android --profile production
+//    Or for local dev: npx expo prebuild --clean && npx expo run:android
 //
-// STEP 5: Rebuild the app
-//   → npx expo prebuild --clean
-//   → npx expo run:android (for dev build)
-//   → OR use EAS Build
-//
-// NOTE: Phone OTP currently uses server-side hardcoded OTP (123456)
-//   For production, integrate Firebase Phone Auth or SMS service (Twilio/MSG91)
+// 5. Phone OTP still uses server-side hardcoded OTP (123456). For production,
+//    integrate Twilio/MSG91 in /api/auth/send-phone-otp.
 // ════════════════════════════════════════════════════════════════
