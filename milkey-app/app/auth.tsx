@@ -18,17 +18,10 @@ import * as WebBrowser from 'expo-web-browser';
 
 WebBrowser.maybeCompleteAuthSession();
 
-// ════════════════════════════════════════════════════════════
-// IMPORTANT: Replace this with your ACTUAL Web Client ID from:   
-// Firebase Console → Project Settings → General → Your Apps
-// OR Google Cloud Console → Credentials → OAuth 2.0 Client IDs → Web Client
-//
-// Current google-services.json has EMPTY oauth_client[].
-// You MUST create a Web Client ID in Google Cloud Console first.
-// See setup instructions at the bottom of this file.
-// ════════════════════════════════════════════════════════════
-const GOOGLE_WEB_CLIENT_ID = '835983322060-REPLACE_WITH_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
-const GOOGLE_ANDROID_CLIENT_ID = '835983322060-REPLACE_WITH_YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com';
+// Google OAuth client IDs from milkey-app/google-services.json.
+// Keep these synced whenever Firebase google-services.json is regenerated.
+const GOOGLE_WEB_CLIENT_ID = '95043026756-b6i7gsmmq6vb4fu9d4eo1lsdle4ctb1t.apps.googleusercontent.com';
+const GOOGLE_ANDROID_CLIENT_ID = '95043026756-tu7o1v2rtfg83s4etkqok5i52na30915.apps.googleusercontent.com';
 
 // ─── Sub-components ───
 
@@ -131,6 +124,7 @@ export default function AuthScreen() {
     const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+        scopes: ['openid', 'profile', 'email'],
     });
 
     // Screens: 'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'
