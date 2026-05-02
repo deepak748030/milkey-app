@@ -378,6 +378,12 @@ export const toggleUserBlock = async (id: string, reason?: string) => {
     return response.data
 }
 
+export const toggleUserVerify = async (id: string, isVerified?: boolean) => {
+    const body = typeof isVerified === 'boolean' ? { isVerified } : {}
+    const response = await api.put(`/admin/users/${id}/verify`, body)
+    return response.data
+}
+
 export const updateUserCommission = async (id: string, action: 'withdraw' | 'add' | 'set', amount: number) => {
     const response = await api.put(`/admin/users/${id}/commission`, { action, amount })
     return response.data

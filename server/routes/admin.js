@@ -738,6 +738,43 @@ router.put('/users/:id/block', adminAuth, async (req, res) => {
     }
 });
 
+// PUT /api/admin/users/:id/verify - Toggle user verification (marketing-contacted) status
+router.put('/users/:id/verify', adminAuth, async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Allow explicit value via body, otherwise toggle
+        if (typeof req.body?.isVerified === 'boolean') {
+            user.isVerified = req.body.isVerified;
+        } else {
+            user.isVerified = !user.isVerified;
+        }
+        await user.save();
+
+        res.json({
+            success: true,
+            message: user.isVerified ? 'User marked as verified' : 'User marked as new',
+            response: {
+                _id: user._id,
+                isVerified: user.isVerified
+            }
+        });
+    } catch (error) {
+        console.error('Toggle verify error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update verification status'
+        });
+    }
+});
+
 // GET /api/admin/dashboard - Comprehensive Dashboard analytics
 router.get('/dashboard', adminAuth, async (req, res) => {
     try {

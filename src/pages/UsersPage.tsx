@@ -32,6 +32,7 @@ import {
     getUsers,
     getUsersExport,
     toggleUserBlock,
+    toggleUserVerify,
     updateUser,
     updateUserCommission,
     User,
@@ -819,6 +820,7 @@ export function UsersPage() {
     const [pageSize, setPageSize] = useState(10)
     const [selectedUser, setSelectedUser] = useState<User | null>(null)
     const [blockingUserId, setBlockingUserId] = useState<string | null>(null)
+    const [verifyingUserId, setVerifyingUserId] = useState<string | null>(null)
 
     // Broadcast notification state
     const [showBroadcastModal, setShowBroadcastModal] = useState(false)
@@ -930,6 +932,38 @@ export function UsersPage() {
             console.error('Failed to toggle block:', err)
         } finally {
             setBlockingUserId(null)
+        }
+    }
+
+    const handleToggleVerify = async (user: User) => {
+        const nextValue = !user.isVerified
+        const confirmMsg = nextValue
+            ? `Mark "${user.name || 'this user'}" as Verified?\n\nUse this once you've contacted them for marketing.`
+            : `Revert "${user.name || 'this user'}" back to New (not yet contacted)?`
+        if (!window.confirm(confirmMsg)) return
+
+        setVerifyingUserId(user._id)
+        // Optimistic update
+        setUsers((prev) =>
+            prev.map((u) => (u._id === user._id ? { ...u, isVerified: nextValue } : u))
+        )
+        try {
+            const response = await toggleUserVerify(user._id, nextValue)
+            if (!response.success) {
+                // Revert on failure
+                setUsers((prev) =>
+                    prev.map((u) => (u._id === user._id ? { ...u, isVerified: !nextValue } : u))
+                )
+                alert(response.message || 'Failed to update verification status')
+            }
+        } catch (err: any) {
+            console.error('Failed to toggle verify:', err)
+            setUsers((prev) =>
+                prev.map((u) => (u._id === user._id ? { ...u, isVerified: !nextValue } : u))
+            )
+            alert(err?.response?.data?.message || 'Failed to update verification status')
+        } finally {
+            setVerifyingUserId(null)
         }
     }
 
@@ -1140,17 +1174,27 @@ export function UsersPage() {
                                             </span>
                                         </td>
                                         <td className="p-4">
-                                            {user.isVerified ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full bg-success/10 text-success border border-success/30" title="Verified — already contacted for marketing">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleToggleVerify(user)}
+                                                disabled={verifyingUserId === user._id}
+                                                title={user.isVerified ? 'Click to mark as New (revert)' : 'Click to mark as Verified (contacted)'}
+                                                className={cn(
+                                                    'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full border transition-all disabled:opacity-60',
+                                                    user.isVerified
+                                                        ? 'bg-success/10 text-success border-success/30 hover:bg-success/20'
+                                                        : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 ring-2 ring-amber-500/20 animate-pulse hover:animate-none hover:bg-amber-500/25'
+                                                )}
+                                            >
+                                                {verifyingUserId === user._id ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : user.isVerified ? (
                                                     <BadgeCheck className="w-4 h-4" />
-                                                    Verified
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 ring-2 ring-amber-500/20 animate-pulse" title="New — not yet contacted for marketing">
+                                                ) : (
                                                     <AlertCircle className="w-4 h-4" />
-                                                    New
-                                                </span>
-                                            )}
+                                                )}
+                                                {user.isVerified ? 'Verified' : 'New'}
+                                            </button>
                                         </td>
                                         <td className="p-4 text-muted-foreground">
                                             {new Date(user.createdAt).toLocaleDateString()}
@@ -1254,17 +1298,27 @@ export function UsersPage() {
                                     )}>
                                         {user.isBlocked ? 'Blocked' : 'Active'}
                                     </span>
-                                    {user.isVerified ? (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-success/10 text-success border border-success/30" title="Verified">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleToggleVerify(user)}
+                                        disabled={verifyingUserId === user._id}
+                                        className={cn(
+                                            'inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full border transition-all disabled:opacity-60 active:scale-95',
+                                            user.isVerified
+                                                ? 'bg-success/10 text-success border-success/30 hover:bg-success/20'
+                                                : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 animate-pulse hover:animate-none'
+                                        )}
+                                        title={user.isVerified ? 'Tap to mark as New' : 'Tap to mark as Verified'}
+                                    >
+                                        {verifyingUserId === user._id ? (
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : user.isVerified ? (
                                             <BadgeCheck className="w-3 h-3" />
-                                            Verified
-                                        </span>
-                                    ) : (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/40 animate-pulse" title="New — not yet contacted">
+                                        ) : (
                                             <AlertCircle className="w-3 h-3" />
-                                            New
-                                        </span>
-                                    )}
+                                        )}
+                                        {user.isVerified ? 'Verified' : 'New'}
+                                    </button>
                                 </div>
                             </div>
 
