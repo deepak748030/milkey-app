@@ -22,6 +22,7 @@ WebBrowser.maybeCompleteAuthSession();
 // Keep these synced whenever Firebase google-services.json is regenerated.
 const GOOGLE_WEB_CLIENT_ID = '95043026756-b6i7gsmmq6vb4fu9d4eo1lsdle4ctb1t.apps.googleusercontent.com';
 const GOOGLE_ANDROID_CLIENT_ID = '95043026756-tu7o1v2rtfg83s4etkqok5i52na30915.apps.googleusercontent.com';
+const GOOGLE_SCOPES = ['openid', 'profile', 'email'];
 
 // ─── Sub-components ───
 
@@ -124,7 +125,7 @@ export default function AuthScreen() {
     const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-        scopes: ['openid', 'profile', 'email'],
+        scopes: GOOGLE_SCOPES,
     });
 
     // Screens: 'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'
@@ -349,7 +350,7 @@ export default function AuthScreen() {
                 webClientId: GOOGLE_WEB_CLIENT_ID,
                 androidClientId: GOOGLE_ANDROID_CLIENT_ID,
                 redirectUri: googleRequest.redirectUri,
-                scopes: googleRequest.scopes,
+                scopes: GOOGLE_SCOPES,
             });
             const result = await googlePromptAsync();
             console.log('[auth][google] prompt result:', { type: result.type });
