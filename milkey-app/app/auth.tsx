@@ -11,10 +11,6 @@ import { setAuthUser } from '@/lib/authStore';
 import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import {
-    GoogleSignin,
-    statusCodes,
-} from '@react-native-google-signin/google-signin';
 // NOTE: `expo-firebase-recaptcha` was removed (deprecated since Expo SDK 48).
 // Phone OTP now flows through our own server: /api/auth/send-phone-otp + /api/auth/phone-login.
 // Firebase JS SDK is still imported elsewhere for Google sign-in / future use.
@@ -25,21 +21,56 @@ import {
 // google-services.json automatically using the package name + SHA-1.
 const GOOGLE_WEB_CLIENT_ID = '95043026756-b6i7gsmmq6vb4fu9d4eo1lsdle4ctb1t.apps.googleusercontent.com';
 const IS_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+const GOOGLE_STATUS_CODES = {
+    SIGN_IN_CANCELLED: 'SIGN_IN_CANCELLED',
+    IN_PROGRESS: 'IN_PROGRESS',
+    PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
+};
 
-// Configure Google Sign-In once at module load (safe to call multiple times).
-// In Expo Go the native module is unavailable — guard so the app doesn't crash on import.
-if (!IS_EXPO_GO) {
+let googleSigninModule: any | null | undefined;
+
+const getGoogleSigninModule = () => {
+    if (googleSigninModule !== undefined) return googleSigninModule;
+
     try {
-        GoogleSignin.configure({
+        // Lazy require is intentional: a static import crashes the whole auth screen
+        // when the installed Expo/dev APK does not contain RNGoogleSignin yet.
+        googleSigninModule = require('@react-native-google-signin/google-signin');
+        console.log('[auth][google] native module loaded');
+    } catch (e: any) {
+        googleSigninModule = null;
+        console.error('[auth][google] native module missing:', {
+            message: e?.message,
+            executionEnvironment: Constants.executionEnvironment,
+            platform: Platform.OS,
+        });
+    }
+
+    return googleSigninModule;
+};
+
+const configureGoogleSignin = () => {
+    if (IS_EXPO_GO) return false;
+
+    const module = getGoogleSigninModule();
+    if (!module?.GoogleSignin) return false;
+
+    try {
+        module.GoogleSignin.configure({
             webClientId: GOOGLE_WEB_CLIENT_ID,
             offlineAccess: true,
             scopes: ['profile', 'email'],
         });
         console.log('[auth][google] GoogleSignin.configure done');
+        return true;
     } catch (e) {
         console.warn('[auth][google] GoogleSignin.configure failed:', e);
+        return false;
     }
-}
+};
+
+// Do not configure at module load. If the native module is missing, importing it
+// at startup throws `RNGoogleSignin could not be found` before the auth UI renders.
 
 // ─── Sub-components ───
 
@@ -304,6 +335,20 @@ export default function AuthScreen() {
             return;
         }
 
+        const module = getGoogleSigninModule();
+        const GoogleSignin = module?.GoogleSignin;
+        const statusCodes = module?.statusCodes ?? GOOGLE_STATUS_CODES;
+
+        if (!GoogleSignin) {
+            console.error('[auth][google] blocked: RNGoogleSignin native module is not available in this installed app build');
+            showModal(
+                'Google Sign-In setup incomplete',
+                'Is installed app build me Google Sign-In native module include nahi hai. Auth screen ab crash nahi hogi, lekin Google login ke liye APK ko rebuild/reinstall karna padega:\n\n  npx eas build -p android --profile production\n\nYa local dev ke liye:\n  npx expo prebuild --clean && npx expo run:android'
+            );
+            return;
+        }
+
+        configureGoogleSignin();
         setGoogleLoading(true);
         try {
             console.log('[auth][google] starting native sign-in', {
