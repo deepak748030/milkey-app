@@ -12,6 +12,7 @@ import { farmersApi, advancesApi, paymentsApi, printSettingsApi, Farmer, Advance
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { buildRegisterPaymentSlipPayload, buildFarmersListPayload } from '@/lib/slipPrint';
 import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, line as fmtLine, left as fmtLeft } from '@/lib/printFormat';
+import { getThermalSlipLabels } from '@/lib/printTranslations';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Calendar } from '@/components/Calendar';
@@ -1022,23 +1023,24 @@ export default function RegisterScreen() {
             return;
         }
 
+        const tAdv = getThermalSlipLabels();
         let payload = '';
         payload += brandedHeader({
-            dairyName: printSettings?.dairyName || 'Advances Report',
+            dairyName: printSettings?.dairyName || tAdv.advancesReport,
             address: printSettings?.address || '',
             mobileNumber: printSettings?.mobileNumber || '',
             showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
         });
-        payload += fmtLeft('Advances Report', { bold: true });
-        payload += twoCol('Records:', String(advances.length));
+        payload += fmtLeft(tAdv.advancesReport, { bold: true });
+        payload += twoCol(`${tAdv.records}:`, String(advances.length));
         payload += fmtLine();
         advances.forEach((item) => {
             payload += twoCol(`${item.farmer?.code || '-'} ${item.farmer?.name || '-'}`, `Rs ${Number(item.amount || 0).toFixed(0)}`);
             payload += twoCol(formatDateDDMMYYYY(item.date), item.status || '-');
-            if (item.note) payload += fmtLeft(`Note: ${item.note}`);
+            if (item.note) payload += fmtLeft(`${tAdv.note}: ${item.note}`);
             payload += fmtLine();
         });
-        payload += twoCol('Total:', `Rs ${advances.reduce((sum, item) => sum + Number(item.amount || 0), 0).toFixed(0)}`, { bold: true });
+        payload += twoCol(`${tAdv.total}:`, `Rs ${advances.reduce((sum, item) => sum + Number(item.amount || 0), 0).toFixed(0)}`, { bold: true });
         payload += brandedFooter(printSettings?.extraInfo?.trim());
 
         try {

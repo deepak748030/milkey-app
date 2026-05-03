@@ -180,33 +180,36 @@ export interface ReceiptOptions {
 /** Build a milk-collection receipt payload. */
 export function buildReceiptPayload(opts: ReceiptOptions): string {
     const w = opts.width ?? COLUMN_WIDTH_58;
+    // Lazy require to avoid circular import (printTranslations -> languageStore).
+    const { getThermalSlipLabels } = require('./printTranslations') as typeof import('./printTranslations');
+    const t = getThermalSlipLabels();
     let p = '';
 
     p += brandedHeader({ dairyName: opts.dairyName, address: opts.address, mobileNumber: opts.mobile, width: w });
     if (opts.ownerName) p += center(opts.ownerName);
 
-    if (opts.farmerCode) p += twoCol('Code:', String(opts.farmerCode));
-    if (opts.farmerName) p += twoCol('Name:', String(opts.farmerName));
-    if (opts.date) p += twoCol('Date:', String(opts.date));
-    if (opts.shift) p += twoCol('Shift:', String(opts.shift));
+    if (opts.farmerCode) p += twoCol(`${t.code}:`, String(opts.farmerCode));
+    if (opts.farmerName) p += twoCol(`${t.name}:`, String(opts.farmerName));
+    if (opts.date) p += twoCol(`${t.date}:`, String(opts.date));
+    if (opts.shift) p += twoCol(`${t.shift}:`, String(opts.shift));
 
     p += line(w);
 
-    if (opts.quantity !== undefined) p += twoCol('Qty (L):', String(opts.quantity));
-    if (opts.fat !== undefined) p += twoCol('Fat:', String(opts.fat));
-    if (opts.snf !== undefined) p += twoCol('SNF:', String(opts.snf));
-    if (opts.rate !== undefined) p += twoCol('Rate:', String(opts.rate));
+    if (opts.quantity !== undefined) p += twoCol(`${t.qty} (L):`, String(opts.quantity));
+    if (opts.fat !== undefined) p += twoCol(`${t.fat}:`, String(opts.fat));
+    if (opts.snf !== undefined) p += twoCol(`${t.snf}:`, String(opts.snf));
+    if (opts.rate !== undefined) p += twoCol(`${t.rate}:`, String(opts.rate));
 
     p += line(w);
 
     if (opts.amount !== undefined) {
-        p += twoCol('TOTAL:', 'Rs ' + String(opts.amount), { bold: true });
+        p += twoCol(`${t.total}:`, 'Rs ' + String(opts.amount), { bold: true });
     }
 
     p += doubleLine(w);
 
     if (opts.extraInfo) p += center(opts.extraInfo);
-    p += center('Thank You!');
+    p += center(t.thankYou);
     p += feed(4);
     return p;
 }
@@ -272,15 +275,17 @@ export function brandedFooterHtml(settings: HtmlBrandingSettings | null | undefi
 
 /** Build a printer self-test payload. */
 export function buildTestPayload(): string {
+    const { getThermalSlipLabels } = require('./printTranslations') as typeof import('./printTranslations');
+    const t = getThermalSlipLabels();
     let p = '';
     p += title('MILKEY');
-    p += center('Printer Test', { bold: true });
+    p += center(t.print + ' Test', { bold: true });
     p += line();
-    p += twoCol('Status:', 'Connected');
+    p += twoCol(`${t.status}:`, 'Connected');
     p += twoCol('Width:', '58mm');
     p += twoCol('Protocol:', 'ESC/POS');
     p += line();
-    p += center('Printer is working!');
+    p += center(t.thankYou);
     p += feed(3);
     return p;
 }

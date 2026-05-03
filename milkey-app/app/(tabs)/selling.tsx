@@ -25,6 +25,7 @@ import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
 import { buildSellingPaymentSlipPayload, buildMembersListPayload } from '@/lib/slipPrint';
 import { useFocusEffect } from '@react-navigation/native';
 import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, threeCol, line as fmtLine, left as fmtLeft, center as fmtCenter, feed } from '@/lib/printFormat';
+import { getThermalSlipLabels } from '@/lib/printTranslations';
 
 type TabType = SellingTab;
 
@@ -987,27 +988,28 @@ export default function SellingScreen() {
         const totalEntries = groupedEntries.reduce((sum, e) => sum + e.entryCount, 0);
 
         let payload = '';
+        const tEnt = getThermalSlipLabels();
         payload += brandedHeader({
-            dairyName: topPrintSettings?.dairyName || 'Milk Selling Entries',
+            dairyName: topPrintSettings?.dairyName || tEnt.milkSellingEntries,
             address: topPrintSettings?.address || '',
             mobileNumber: topPrintSettings?.mobileNumber || '',
             showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
         });
-        payload += fmtCenter('Milk Selling Entries', { bold: true });
+        payload += fmtCenter(tEnt.milkSellingEntries, { bold: true });
         payload += fmtLeft(recentEntriesStartDate || recentEntriesEndDate
-            ? `${recentEntriesStartDate ? formatDate(recentEntriesStartDate) : 'Start'} to ${recentEntriesEndDate ? formatDate(recentEntriesEndDate) : 'End'}`
-            : 'All Entries');
-        if (recentEntriesMemberFilter) payload += fmtLeft(`Member: ${selectedRecentMemberName}`);
+            ? `${recentEntriesStartDate ? formatDate(recentEntriesStartDate) : tEnt.start} ${tEnt.to} ${recentEntriesEndDate ? formatDate(recentEntriesEndDate) : tEnt.end}`
+            : tEnt.allEntries);
+        if (recentEntriesMemberFilter) payload += fmtLeft(`${tEnt.member}: ${selectedRecentMemberName}`);
         payload += fmtLine();
         groupedEntries.forEach((item) => {
             payload += fmtLeft(`${formatDate(item.date)} ${item.memberName}`);
             payload += twoCol(`M/E: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
         });
         payload += fmtLine();
-        payload += twoCol('Total Days:', String(groupedEntries.length));
-        payload += twoCol('Total Entries:', String(totalEntries));
-        payload += twoCol('Total Qty:', `${totalQty.toFixed(2)} L`);
-        payload += twoCol('Total Amount:', `Rs ${totalAmt.toFixed(0)}`, { bold: true });
+        payload += twoCol(`${tEnt.totalDays}:`, String(groupedEntries.length));
+        payload += twoCol(`${tEnt.totalEntries}:`, String(totalEntries));
+        payload += twoCol(`${tEnt.totalQty}:`, `${totalQty.toFixed(2)} L`);
+        payload += twoCol(`${tEnt.totalAmount}:`, `Rs ${totalAmt.toFixed(0)}`, { bold: true });
         payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
 
         try {
@@ -1118,24 +1120,25 @@ export default function SellingScreen() {
         const totalEntries = reportRows.reduce((sum, e) => sum + e.entryCount, 0);
 
         let payload = '';
+        const tRep = getThermalSlipLabels();
         payload += brandedHeader({
-            dairyName: topPrintSettings?.dairyName || 'Milk Selling Report',
+            dairyName: topPrintSettings?.dairyName || tRep.milkSellingReport,
             address: topPrintSettings?.address || '',
             mobileNumber: topPrintSettings?.mobileNumber || '',
             showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
         });
-        payload += fmtCenter('Milk Selling Report', { bold: true });
-        payload += fmtLeft(`${reportStartDate ? formatDateDDMMYYYY(reportStartDate) : 'All'} to ${reportEndDate ? formatDateDDMMYYYY(reportEndDate) : 'All'}`);
+        payload += fmtCenter(tRep.milkSellingReport, { bold: true });
+        payload += fmtLeft(`${reportStartDate ? formatDateDDMMYYYY(reportStartDate) : tRep.allEntries} ${tRep.to} ${reportEndDate ? formatDateDDMMYYYY(reportEndDate) : tRep.allEntries}`);
         payload += fmtLine();
         reportRows.forEach((item) => {
             payload += fmtLeft(`${formatDateDDMMYYYY(item.date)} ${item.memberName}`);
             payload += twoCol(`M/E: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
         });
         payload += fmtLine();
-        payload += twoCol('Total Days:', String(reportRows.length));
-        payload += twoCol('Total Entries:', String(totalEntries));
-        payload += twoCol('Total Qty:', `${totalQty.toFixed(2)} L`);
-        payload += twoCol('Total Amount:', `Rs ${totalAmt.toFixed(0)}`, { bold: true });
+        payload += twoCol(`${tRep.totalDays}:`, String(reportRows.length));
+        payload += twoCol(`${tRep.totalEntries}:`, String(totalEntries));
+        payload += twoCol(`${tRep.totalQty}:`, `${totalQty.toFixed(2)} L`);
+        payload += twoCol(`${tRep.totalAmount}:`, `Rs ${totalAmt.toFixed(0)}`, { bold: true });
         payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
 
         try {
@@ -1252,23 +1255,24 @@ export default function SellingScreen() {
         const netBalance = balanceReportSummary?.netBalance || 0;
 
         let payload = '';
+        const tBal = getThermalSlipLabels();
         payload += brandedHeader({
-            dairyName: topPrintSettings?.dairyName || 'Member Balance Report',
+            dairyName: topPrintSettings?.dairyName || tBal.memberBalanceReport,
             address: topPrintSettings?.address || '',
             mobileNumber: topPrintSettings?.mobileNumber || '',
             showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
         });
-        payload += fmtCenter('Member Balance Report', { bold: true });
-        if (selectedReportMember) payload += fmtLeft(`Member: ${selectedReportMember.name}`);
+        payload += fmtCenter(tBal.memberBalanceReport, { bold: true });
+        if (selectedReportMember) payload += fmtLeft(`${tBal.member}: ${selectedReportMember.name}`);
         payload += fmtLine();
         membersToShow.forEach((member, index) => {
             const balance = Number(member.totalBalance || 0);
             payload += fmtLeft(`${index + 1}. ${member.name}`);
-            payload += twoCol('Balance:', `${balance < 0 ? '-' : balance > 0 ? '+' : ''}Rs ${Math.abs(balance).toFixed(0)}`);
+            payload += twoCol(`${tBal.balance}:`, `${balance < 0 ? '-' : balance > 0 ? '+' : ''}Rs ${Math.abs(balance).toFixed(0)}`);
         });
         payload += fmtLine();
-        payload += twoCol('Total Members:', String(membersToShow.length));
-        payload += twoCol('Net Balance:', `${netBalance < 0 ? '-' : ''}Rs ${Math.abs(netBalance).toFixed(0)}`, { bold: true });
+        payload += twoCol(`${tBal.totalMembers}:`, String(membersToShow.length));
+        payload += twoCol(`${tBal.netBalance}:`, `${netBalance < 0 ? '-' : ''}Rs ${Math.abs(netBalance).toFixed(0)}`, { bold: true });
         payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
 
         try {
@@ -1420,17 +1424,18 @@ export default function SellingScreen() {
             // Compute member rate (per liter) for the period
             const memberRate = Number(selectedPaymentMember.ratePerLiter) || (totalQty > 0 ? totalAmt / totalQty : 0);
 
+            const tME = getThermalSlipLabels();
             let payload = '';
             payload += brandedHeader({
-                dairyName: topPrintSettings?.dairyName || 'Milk Entries',
+                dairyName: topPrintSettings?.dairyName || tME.milkEntries,
                 address: topPrintSettings?.address || '',
                 mobileNumber: topPrintSettings?.mobileNumber || '',
                 showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
             });
-            payload += fmtCenter(`Milk Entries`, { bold: true });
-            payload += fmtLeft(`Name : ${selectedPaymentMember.name}`);
+            payload += fmtCenter(tME.milkEntries, { bold: true });
+            payload += fmtLeft(`${tME.name} : ${selectedPaymentMember.name}`);
             payload += fmtLeft(
-                `${calcStartDate ? shortDate(calcStartDate) : 'Start'} to ${calcEndDate ? shortDate(calcEndDate) : 'End'}`
+                `${calcStartDate ? shortDate(calcStartDate) : tME.start} ${tME.to} ${calcEndDate ? shortDate(calcEndDate) : tME.end}`
             );
             payload += fmtLine();
             grouped.forEach((item) => {
@@ -1443,10 +1448,10 @@ export default function SellingScreen() {
                 );
             });
             payload += fmtLine();
-            payload += twoCol('total Days :', String(grouped.length));
-            payload += twoCol('Total Qty :', `${totalQty.toFixed(2)} L`);
-            payload += twoCol('Rate / L :', String(memberRate.toFixed(2)));
-            payload += twoCol('Total Amount :', `Rs ${totalAmt.toFixed(0)}`, { bold: true });
+            payload += twoCol(`${tME.totalDays} :`, String(grouped.length));
+            payload += twoCol(`${tME.totalQty} :`, `${totalQty.toFixed(2)} L`);
+            payload += twoCol(`${tME.rate} / L :`, String(memberRate.toFixed(2)));
+            payload += twoCol(`${tME.totalAmount} :`, `Rs ${totalAmt.toFixed(0)}`, { bold: true });
             payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
             await printText(payload);
         } catch (error) {
@@ -1478,25 +1483,26 @@ export default function SellingScreen() {
             const periodEnd = calcEndDate ? formatDateDDMMYYYY(calcEndDate) : formatDateDDMMYYYY(new Date().toISOString().split('T')[0]);
             const periodStart = calcStartDate ? formatDateDDMMYYYY(calcStartDate) : '-';
 
+            const tMS = getThermalSlipLabels();
             let payload = '';
             payload += brandedHeader({
-                dairyName: ps?.dairyName || 'Milk Slip',
+                dairyName: ps?.dairyName || tMS.milkSlip,
                 address: ps?.address || '',
                 mobileNumber: ps?.mobileNumber || '',
                 showMobileOnReceipt: ps?.showMobileOnReceipt !== false,
             });
-            payload += twoCol('From:', periodStart);
-            payload += twoCol('Till:', periodEnd);
-            payload += fmtLeft(`Member: ${selectedPaymentMember.name}`);
+            payload += twoCol(`${tMS.from}:`, periodStart);
+            payload += twoCol(`${tMS.till}:`, periodEnd);
+            payload += fmtLeft(`${tMS.member}: ${selectedPaymentMember.name}`);
             payload += feed(1);
             payload += fmtLine();
-            payload += twoCol('Last Balance:', `Rs ${prevBal.toFixed(0)}`);
-            payload += twoCol('Milk Qty:', `${totalLiters.toFixed(1)} L`);
-            payload += twoCol('Milk Amount:', `Rs ${milkAmt.toFixed(0)}`);
-            payload += twoCol('Total Payable:', `Rs ${payable.toFixed(0)}`);
-            payload += twoCol('Paid Amount:', `Rs ${paidAmt.toFixed(0)}`);
+            payload += twoCol(`${tMS.lastBalance}:`, `Rs ${prevBal.toFixed(0)}`);
+            payload += twoCol(`${tMS.milkQuantity}:`, `${totalLiters.toFixed(1)} L`);
+            payload += twoCol(`${tMS.milkAmount}:`, `Rs ${milkAmt.toFixed(0)}`);
+            payload += twoCol(`${tMS.totalPayable}:`, `Rs ${payable.toFixed(0)}`);
+            payload += twoCol(`${tMS.paidAmount}:`, `Rs ${paidAmt.toFixed(0)}`);
             payload += fmtLine();
-            payload += twoCol('Closing Bal:', `${closing < 0 ? '-' : ''}Rs ${Math.abs(closing).toFixed(0)}`, { bold: true });
+            payload += twoCol(`${tMS.closingBal}:`, `${closing < 0 ? '-' : ''}Rs ${Math.abs(closing).toFixed(0)}`, { bold: true });
             payload += brandedFooter(ps?.extraInfo?.trim());
             await printText(payload);
         } catch (e) {
@@ -2547,19 +2553,20 @@ export default function SellingScreen() {
                                                     return;
                                                 }
                                                 try {
+                                                    const tRow = getThermalSlipLabels();
                                                     let payload = '';
                                                     payload += brandedHeader({
-                                                        dairyName: topPrintSettings?.dairyName || 'Member Balance Report',
+                                                        dairyName: topPrintSettings?.dairyName || tRow.memberBalanceReport,
                                                         address: topPrintSettings?.address || '',
                                                         mobileNumber: topPrintSettings?.mobileNumber || '',
                                                         showMobileOnReceipt: topPrintSettings?.showMobileOnReceipt !== false,
                                                     });
-                                                    payload += fmtCenter('Member Balance Report', { bold: true });
+                                                    payload += fmtCenter(tRow.memberBalanceReport, { bold: true });
                                                     payload += fmtLine();
                                                     payload += fmtLeft(member.name);
-                                                    payload += twoCol('Date:', formatDateDDMMYYYY(member.date));
-                                                    payload += twoCol('Till:', member.lastPeriodEnd ? formatDateDDMMYYYY(member.lastPeriodEnd) : '-');
-                                                    payload += twoCol('Balance:', `${balance < 0 ? '-' : balance > 0 ? '+' : ''}Rs ${Math.abs(balance).toFixed(0)}`, { bold: true });
+                                                    payload += twoCol(`${tRow.date}:`, formatDateDDMMYYYY(member.date));
+                                                    payload += twoCol(`${tRow.till}:`, member.lastPeriodEnd ? formatDateDDMMYYYY(member.lastPeriodEnd) : '-');
+                                                    payload += twoCol(`${tRow.balance}:`, `${balance < 0 ? '-' : balance > 0 ? '+' : ''}Rs ${Math.abs(balance).toFixed(0)}`, { bold: true });
                                                     payload += brandedFooter(topPrintSettings?.extraInfo?.trim());
                                                     await printText(payload);
                                                 } catch (error) {

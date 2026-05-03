@@ -9,6 +9,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { brandedHeader, brandedFooter, twoCol, line as fmtLine, left as fmtLeft, center as fmtCenter } from '@/lib/printFormat';
+import { getThermalSlipLabels } from '@/lib/printTranslations';
 
 export default function BalanceReportScreen() {
     const { colors, isDark } = useTheme();
@@ -155,22 +156,23 @@ export default function BalanceReportScreen() {
             return;
         }
 
+        const tBR = getThermalSlipLabels();
         let payload = '';
         payload += brandedHeader({
-            dairyName: printSettings?.dairyName || 'Dairy',
+            dairyName: printSettings?.dairyName || tBR.dairy,
             address: printSettings?.address || '',
             mobileNumber: printSettings?.mobileNumber || '',
             showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
         });
-        payload += fmtCenter(`${balanceType === 'positive' ? 'Positive' : 'Negative'} Balance`, { bold: true });
+        payload += fmtCenter(`${balanceType === 'positive' ? tBR.positiveBalance : tBR.negativeBalance}`, { bold: true });
         payload += fmtLine();
         farmers.forEach((farmer) => {
             const balance = getBalance(farmer);
             payload += fmtLeft(`${farmer.code || '-'} ${farmer.name || '-'}`);
-            payload += twoCol('Balance:', `${balance < 0 ? '-' : ''}Rs ${Math.abs(balance).toFixed(0)}`);
+            payload += twoCol(`${tBR.balance}:`, `${balance < 0 ? '-' : ''}Rs ${Math.abs(balance).toFixed(0)}`);
         });
         payload += fmtLine();
-        payload += twoCol(`Total (${farmers.length}):`, `${totalBalance < 0 ? '-' : ''}Rs ${Math.abs(totalBalance).toFixed(0)}`, { bold: true });
+        payload += twoCol(`${tBR.total} (${farmers.length}):`, `${totalBalance < 0 ? '-' : ''}Rs ${Math.abs(totalBalance).toFixed(0)}`, { bold: true });
         payload += brandedFooter(printSettings?.extraInfo?.trim());
 
         try {

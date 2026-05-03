@@ -39,9 +39,13 @@ export interface SlipLabels {
     rate: string;
     amount: string;
     mobile: string;
+    note: string;
+    time: string;
+    balance: string;
 
     // Payment rows
     lastPayment: string;
+    lastBalance: string;
     milkAmount: string;
     milkQuantity: string;
     milkRate: string;
@@ -51,9 +55,41 @@ export interface SlipLabels {
     closingBalance: string;
     closingBal: string; // shorter for thermal
 
+    // Reports / summaries
+    fullSummary: string;
+    shortSummary: string;
+    averageFatSnf: string;
+    samples: string;
+    totalQty: string;
+    totalAmount: string;
+    avgRate: string;
+    averageRate: string;
+    farmers: string;
+    totalDays: string;
+    totalEntries: string;
+    totalMembers: string;
+    netBalance: string;
+    records: string;
+    advancesReport: string;
+    milkSellingEntries: string;
+    milkSellingReport: string;
+    memberBalanceReport: string;
+    milkEntries: string;
+    milkSlip: string;
+    positiveBalance: string;
+    negativeBalance: string;
+    allEntries: string;
+    start: string;
+    end: string;
+    to: string;
+    actions: string;
+    print: string;
+    status: string;
+
     // WhatsApp / SMS slip
     dairy: string;
 }
+
 
 const en: SlipLabels = {
     collection: 'Collection',
@@ -83,8 +119,12 @@ const en: SlipLabels = {
     rate: 'Rate',
     amount: 'Amount',
     mobile: 'Mobile',
+    note: 'Note',
+    time: 'Time',
+    balance: 'Balance',
 
     lastPayment: 'Last Payment',
+    lastBalance: 'Last Balance',
     milkAmount: 'Milk Amount',
     milkQuantity: 'Milk Quantity',
     milkRate: 'Milk Rate',
@@ -93,6 +133,36 @@ const en: SlipLabels = {
     paidAmount: 'Paid Amount',
     closingBalance: 'Closing Balance',
     closingBal: 'Closing Bal',
+
+    fullSummary: 'Full Summary',
+    shortSummary: 'Short Summary',
+    averageFatSnf: 'Average FAT/SNF',
+    samples: 'Samples',
+    totalQty: 'Total Qty',
+    totalAmount: 'Total Amount',
+    avgRate: 'Avg Rate',
+    averageRate: 'Average Rate',
+    farmers: 'Farmers',
+    totalDays: 'Total Days',
+    totalEntries: 'Total Entries',
+    totalMembers: 'Total Members',
+    netBalance: 'Net Balance',
+    records: 'Records',
+    advancesReport: 'Advances Report',
+    milkSellingEntries: 'Milk Selling Entries',
+    milkSellingReport: 'Milk Selling Report',
+    memberBalanceReport: 'Member Balance Report',
+    milkEntries: 'Milk Entries',
+    milkSlip: 'Milk Slip',
+    positiveBalance: 'Positive Balance',
+    negativeBalance: 'Negative Balance',
+    allEntries: 'All Entries',
+    start: 'Start',
+    end: 'End',
+    to: 'to',
+    actions: 'Actions',
+    print: 'Print',
+    status: 'Status',
 
     dairy: 'Dairy',
 };
@@ -125,8 +195,12 @@ const hi: SlipLabels = {
     rate: 'दर',
     amount: 'राशि',
     mobile: 'मोबाइल',
+    note: 'टिप्पणी',
+    time: 'समय',
+    balance: 'शेष',
 
     lastPayment: 'पिछला भुगतान',
+    lastBalance: 'पिछला शेष',
     milkAmount: 'दूध राशि',
     milkQuantity: 'दूध मात्रा',
     milkRate: 'दूध दर',
@@ -135,6 +209,36 @@ const hi: SlipLabels = {
     paidAmount: 'भुगतान राशि',
     closingBalance: 'शेष राशि',
     closingBal: 'शेष राशि',
+
+    fullSummary: 'पूर्ण सारांश',
+    shortSummary: 'संक्षिप्त सारांश',
+    averageFatSnf: 'औसत फैट/एसएनएफ',
+    samples: 'नमूने',
+    totalQty: 'कुल मात्रा',
+    totalAmount: 'कुल राशि',
+    avgRate: 'औसत दर',
+    averageRate: 'औसत दर',
+    farmers: 'किसान',
+    totalDays: 'कुल दिन',
+    totalEntries: 'कुल प्रविष्टियाँ',
+    totalMembers: 'कुल सदस्य',
+    netBalance: 'शुद्ध शेष',
+    records: 'रिकॉर्ड',
+    advancesReport: 'अग्रिम रिपोर्ट',
+    milkSellingEntries: 'दूध विक्रय प्रविष्टियाँ',
+    milkSellingReport: 'दूध विक्रय रिपोर्ट',
+    memberBalanceReport: 'सदस्य शेष रिपोर्ट',
+    milkEntries: 'दूध प्रविष्टियाँ',
+    milkSlip: 'दूध पर्ची',
+    positiveBalance: 'जमा शेष',
+    negativeBalance: 'बकाया शेष',
+    allEntries: 'सभी प्रविष्टियाँ',
+    start: 'प्रारंभ',
+    end: 'अंत',
+    to: 'से',
+    actions: 'क्रियाएँ',
+    print: 'प्रिंट',
+    status: 'स्थिति',
 
     dairy: 'डेयरी',
 };
@@ -167,8 +271,12 @@ const mr: SlipLabels = {
     rate: 'दर',
     amount: 'रक्कम',
     mobile: 'मोबाइल',
+    note: 'टीप',
+    time: 'वेळ',
+    balance: 'शिल्लक',
 
     lastPayment: 'मागील पेमेंट',
+    lastBalance: 'मागील शिल्लक',
     milkAmount: 'दूध रक्कम',
     milkQuantity: 'दूध मात्रा',
     milkRate: 'दूध दर',
@@ -177,6 +285,36 @@ const mr: SlipLabels = {
     paidAmount: 'दिलेली रक्कम',
     closingBalance: 'शिल्लक रक्कम',
     closingBal: 'शिल्लक',
+
+    fullSummary: 'पूर्ण सारांश',
+    shortSummary: 'लघु सारांश',
+    averageFatSnf: 'सरासरी फॅट/एसएनएफ',
+    samples: 'नमुने',
+    totalQty: 'एकूण मात्रा',
+    totalAmount: 'एकूण रक्कम',
+    avgRate: 'सरासरी दर',
+    averageRate: 'सरासरी दर',
+    farmers: 'शेतकरी',
+    totalDays: 'एकूण दिवस',
+    totalEntries: 'एकूण नोंदी',
+    totalMembers: 'एकूण सदस्य',
+    netBalance: 'निव्वळ शिल्लक',
+    records: 'नोंदी',
+    advancesReport: 'अग्रिम अहवाल',
+    milkSellingEntries: 'दूध विक्री नोंदी',
+    milkSellingReport: 'दूध विक्री अहवाल',
+    memberBalanceReport: 'सदस्य शिल्लक अहवाल',
+    milkEntries: 'दूध नोंदी',
+    milkSlip: 'दूध स्लिप',
+    positiveBalance: 'जमा शिल्लक',
+    negativeBalance: 'थकीत शिल्लक',
+    allEntries: 'सर्व नोंदी',
+    start: 'प्रारंभ',
+    end: 'शेवट',
+    to: 'पर्यंत',
+    actions: 'कृती',
+    print: 'प्रिंट',
+    status: 'स्थिती',
 
     dairy: 'डेअरी',
 };
@@ -230,8 +368,12 @@ const hiLatin: SlipLabels = {
     rate: 'Dar',
     amount: 'Rashi',
     mobile: 'Mobile',
+    note: 'Note',
+    time: 'Time',
+    balance: 'Shesh',
 
     lastPayment: 'Pichla Bhugtan',
+    lastBalance: 'Pichla Shesh',
     milkAmount: 'Doodh Rashi',
     milkQuantity: 'Doodh Matra',
     milkRate: 'Doodh Dar',
@@ -240,6 +382,36 @@ const hiLatin: SlipLabels = {
     paidAmount: 'Bhugtan Rashi',
     closingBalance: 'Shesh Rashi',
     closingBal: 'Shesh',
+
+    fullSummary: 'Full Summary',
+    shortSummary: 'Short Summary',
+    averageFatSnf: 'Average FAT/SNF',
+    samples: 'Samples',
+    totalQty: 'Kul Matra',
+    totalAmount: 'Kul Rashi',
+    avgRate: 'Avg Dar',
+    averageRate: 'Average Dar',
+    farmers: 'Kisan',
+    totalDays: 'Kul Din',
+    totalEntries: 'Kul Entries',
+    totalMembers: 'Kul Sadasya',
+    netBalance: 'Net Shesh',
+    records: 'Records',
+    advancesReport: 'Advance Report',
+    milkSellingEntries: 'Doodh Vikray Entries',
+    milkSellingReport: 'Doodh Vikray Report',
+    memberBalanceReport: 'Sadasya Shesh Report',
+    milkEntries: 'Doodh Entries',
+    milkSlip: 'Doodh Slip',
+    positiveBalance: 'Jama Shesh',
+    negativeBalance: 'Bakaya Shesh',
+    allEntries: 'Sabhi Entries',
+    start: 'Start',
+    end: 'End',
+    to: 'se',
+    actions: 'Actions',
+    print: 'Print',
+    status: 'Status',
 
     dairy: 'Dairy',
 };
@@ -272,8 +444,12 @@ const mrLatin: SlipLabels = {
     rate: 'Dar',
     amount: 'Rakkam',
     mobile: 'Mobile',
+    note: 'Note',
+    time: 'Vel',
+    balance: 'Shillak',
 
     lastPayment: 'Magil Payment',
+    lastBalance: 'Magil Shillak',
     milkAmount: 'Doodh Rakkam',
     milkQuantity: 'Doodh Matra',
     milkRate: 'Doodh Dar',
@@ -283,23 +459,85 @@ const mrLatin: SlipLabels = {
     closingBalance: 'Shillak Rakkam',
     closingBal: 'Shillak',
 
+    fullSummary: 'Purna Saransh',
+    shortSummary: 'Laghu Saransh',
+    averageFatSnf: 'Sarasari FAT/SNF',
+    samples: 'Namune',
+    totalQty: 'Ekun Matra',
+    totalAmount: 'Ekun Rakkam',
+    avgRate: 'Sarasari Dar',
+    averageRate: 'Sarasari Dar',
+    farmers: 'Shetkari',
+    totalDays: 'Ekun Divas',
+    totalEntries: 'Ekun Nondi',
+    totalMembers: 'Ekun Sadasya',
+    netBalance: 'Nivval Shillak',
+    records: 'Records',
+    advancesReport: 'Advance Report',
+    milkSellingEntries: 'Doodh Vikri Nondi',
+    milkSellingReport: 'Doodh Vikri Report',
+    memberBalanceReport: 'Sadasya Shillak Report',
+    milkEntries: 'Doodh Nondi',
+    milkSlip: 'Doodh Slip',
+    positiveBalance: 'Jama Shillak',
+    negativeBalance: 'Thakit Shillak',
+    allEntries: 'Sarva Nondi',
+    start: 'Start',
+    end: 'End',
+    to: 'paryant',
+    actions: 'Actions',
+    print: 'Print',
+    status: 'Status',
+
     dairy: 'Dairy',
 };
 
+/**
+ * Thermal-printer label map.
+ *
+ * Modern Bluetooth thermal printers (POSIFLOW, SR588 newer firmwares,
+ * Sunmi, Epson, MTP-3, etc.) DO support Unicode / Devanagari when the
+ * text is sent as UTF-8 — the underlying DantSu ESC/POS engine renders
+ * the text as a bitmap before sending bytes to the printer, so any
+ * glyph that exists in the device font is printed correctly.
+ *
+ * We therefore send the proper Devanagari labels for hi / mr. If a
+ * very old printer can't render them, the user can switch the app
+ * language to English and the receipt will print in English.
+ *
+ * Roman-script transliterations are kept as a fallback (see
+ * `getThermalSlipLabelsLatin`) for legacy CP437-only printers.
+ */
 const THERMAL_MAP: Record<LanguageCode, SlipLabels> = {
+    en,
+    hi,
+    mr,
+};
+
+const THERMAL_LATIN_MAP: Record<LanguageCode, SlipLabels> = {
     en,
     hi: hiLatin,
     mr: mrLatin,
 };
 
 /**
- * Get slip labels safe for ESC/POS thermal printing.
+ * Get slip labels for ESC/POS thermal printing.
  *
- * For English → returns English labels.
- * For Hindi / Marathi → returns Roman-script transliterations so the
- * printer's CP437/Latin codepage renders them correctly instead of boxes.
+ * Returns native-script labels (Devanagari for hi / mr) so printers
+ * with Unicode support (POSIFLOW, modern SR588, Sunmi, etc.) render
+ * the user's chosen language correctly.
  */
 export function getThermalSlipLabels(lang?: LanguageCode): SlipLabels {
     const code = lang || (getLanguage() as LanguageCode);
     return THERMAL_MAP[code] || en;
+}
+
+/**
+ * Legacy Roman-script transliteration fallback for printers that only
+ * support CP437/Latin codepage (very old SR58B / no-name 58mm models).
+ * Not used by default — kept for opt-in escape hatch.
+ */
+export function getThermalSlipLabelsLatin(lang?: LanguageCode): SlipLabels {
+    const code = lang || (getLanguage() as LanguageCode);
+    return THERMAL_LATIN_MAP[code] || en;
 }

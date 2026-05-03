@@ -526,20 +526,21 @@ export default function PurchaseScreen() {
             ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
             : historyTotals;
 
+        const tFull = getThermalSlipLabels();
         const dateLabel = isReport && reportStartDate && reportEndDate
-            ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
-            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'Morning' : 'Evening'})`;
+            ? `${formatDateStr(reportStartDate)} ${tFull.to} ${formatDateStr(reportEndDate)}`
+            : `${formatDate(entryDate)} (${entryShift === 'morning' ? tFull.morning : tFull.evening})`;
 
         let payload = receiptHeader();
         if (isReport) {
             // Date range line — left-aligned per user request.
             payload += fmtLeft(dateLabel);
             if (selectedReportFarmer) {
-                payload += fmtLeft(`Code : ${selectedReportFarmer.code}`);
-                payload += fmtLeft(`Name : ${selectedReportFarmer.name}`);
+                payload += fmtLeft(`${tFull.code} : ${selectedReportFarmer.code}`);
+                payload += fmtLeft(`${tFull.name} : ${selectedReportFarmer.name}`);
             }
         } else {
-            payload += `[L]${formatDateStr(`${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`)}[C]Full Summary[R]${entryShift === 'morning' ? 'M' : 'E'}\n`;
+            payload += `[L]${formatDateStr(`${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`)}[C]${tFull.fullSummary}[R]${entryShift === 'morning' ? tFull.morningShort : tFull.eveningShort}\n`;
         }
         payload += fmtLine();
 
@@ -611,12 +612,12 @@ export default function PurchaseScreen() {
         const totalSnf = data.length > 0 ? (data.reduce((s, c) => s + (c.snf || 0), 0) / data.length).toFixed(2) : '0';
         const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
 
-        payload += twoCol('Average FAT/SNF :', `${totalFat} / ${totalSnf}`);
-        payload += twoCol('Samples :', String(data.length));
+        payload += twoCol(`${tFull.averageFatSnf} :`, `${totalFat} / ${totalSnf}`);
+        payload += twoCol(`${tFull.samples} :`, String(data.length));
         // 'Farmers' line intentionally removed per user request.
-        payload += twoCol('Total Qty :', `${totals.quantity.toFixed(2)} L`);
-        payload += twoCol('Avg Rate :', avgRate);
-        payload += twoCol('Total Amt :', `Rs ${totals.amount.toFixed(2)}`);
+        payload += twoCol(`${tFull.totalQty} :`, `${totals.quantity.toFixed(2)} L`);
+        payload += twoCol(`${tFull.avgRate} :`, avgRate);
+        payload += twoCol(`${tFull.totalAmount} :`, `Rs ${totals.amount.toFixed(2)}`);
         payload += receiptFooter();
 
         const success = await printText(payload);
@@ -639,9 +640,10 @@ export default function PurchaseScreen() {
             ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
             : historyTotals;
 
+        const tShort = getThermalSlipLabels();
         const dateLabel = isReport && reportStartDate && reportEndDate
-            ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
-            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'M' : 'E'})`;
+            ? `${formatDateStr(reportStartDate)} ${tShort.to} ${formatDateStr(reportEndDate)}`
+            : `${formatDate(entryDate)} (${entryShift === 'morning' ? tShort.morningShort : tShort.eveningShort})`;
 
         const avgRate = totals.quantity > 0 ? (totals.amount / totals.quantity).toFixed(2) : '0';
         const uniqueFarmers = new Set(data.map(c => c.farmerCode || c.purchaseFarmer?._id)).size;
@@ -653,19 +655,19 @@ export default function PurchaseScreen() {
             // Date range line — left-aligned per user request.
             payload += fmtLeft(dateLabel);
             if (selectedReportFarmer) {
-                payload += fmtLeft(`Code : ${selectedReportFarmer.code}`);
-                payload += fmtLeft(`Name : ${selectedReportFarmer.name}`);
+                payload += fmtLeft(`${tShort.code} : ${selectedReportFarmer.code}`);
+                payload += fmtLeft(`${tShort.name} : ${selectedReportFarmer.name}`);
             }
         } else {
-            payload += `[L]${formatDateStr(`${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`)}[C]Short Summary[R]${entryShift === 'morning' ? 'M' : 'E'}\n`;
+            payload += `[L]${formatDateStr(`${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`)}[C]${tShort.shortSummary}[R]${entryShift === 'morning' ? tShort.morningShort : tShort.eveningShort}\n`;
         }
         payload += fmtLine();
-        payload += twoCol('Samples :', String(data.length));
-        payload += twoCol('Average FAT/SNF :', `${avgFat} / ${avgSnf}`);
-        payload += twoCol('Average Rate :', avgRate);
-        payload += twoCol('Total Qty :', `${totals.quantity.toFixed(2)} L`);
-        payload += twoCol('Total Amount :', isReport ? totals.amount.toFixed(2) : `Rs ${totals.amount.toFixed(2)}`);
-        if (!isReport) payload += twoCol('Farmers :', String(uniqueFarmers));
+        payload += twoCol(`${tShort.samples} :`, String(data.length));
+        payload += twoCol(`${tShort.averageFatSnf} :`, `${avgFat} / ${avgSnf}`);
+        payload += twoCol(`${tShort.averageRate} :`, avgRate);
+        payload += twoCol(`${tShort.totalQty} :`, `${totals.quantity.toFixed(2)} L`);
+        payload += twoCol(`${tShort.totalAmount} :`, isReport ? totals.amount.toFixed(2) : `Rs ${totals.amount.toFixed(2)}`);
+        if (!isReport) payload += twoCol(`${tShort.farmers} :`, String(uniqueFarmers));
         payload += receiptFooter();
 
         const success = await printText(payload);
