@@ -1145,7 +1145,15 @@ export function UsersPage() {
                                 </tr>
                             ) : (
                                 users.map((user) => (
-                                    <tr key={user._id} className="border-b border-border hover:bg-muted/30 transition-colors">
+                                    <tr
+                                        key={user._id}
+                                        className="border-b border-border hover:bg-muted/30 transition-colors"
+                                        onContextMenu={(e) => {
+                                            e.preventDefault()
+                                            handleToggleVerify(user)
+                                        }}
+                                        title="Right-click to toggle Verified / New"
+                                    >
                                         <td className="p-4">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-12 h-12 rounded-full bg-muted overflow-hidden flex-shrink-0">
