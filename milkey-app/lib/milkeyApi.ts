@@ -1078,8 +1078,15 @@ export const authApiNew = {
         });
     },
 
-    phoneRegister: async (data: { phone: string; name: string; email: string; password: string; address?: string; referralCode?: string }) => {
+    phoneRegister: async (data: { phone: string; name: string; email: string; password?: string; address?: string; state?: string; avatar?: string; referralCode?: string }) => {
         return apiRequest<{ token: string; user: any }>('/auth/phone-register', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    checkGoogleEmail: async (data: { idToken?: string; email?: string; name?: string; picture?: string }) => {
+        return apiRequest<{ email: string; name: string; picture: string; exists: boolean }>('/auth/check-google-email', {
             method: 'POST',
             body: JSON.stringify(data),
         });

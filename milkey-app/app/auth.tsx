@@ -1,9 +1,9 @@
-import React, { useState, useCallback, memo } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, memo, useRef, useEffect } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Modal, FlatList } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
-import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin, ArrowLeft, CheckCircle } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin, ArrowLeft, CheckCircle, Camera, ChevronDown, X, Search } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApiNew } from '@/lib/milkeyApi';
@@ -11,6 +11,18 @@ import { setAuthUser } from '@/lib/authStore';
 import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
+import * as ImagePicker from 'expo-image-picker';
+
+const INDIAN_STATES = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+    'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+    'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
 // NOTE: `expo-firebase-recaptcha` was removed (deprecated since Expo SDK 48).
 // Phone OTP now flows through our own server: /api/auth/send-phone-otp + /api/auth/phone-login.
 // Firebase JS SDK is still imported elsewhere for Google sign-in / future use.
@@ -138,6 +150,113 @@ const PrimaryButton = memo(({ onPress, label, disabled, loading, colors, style, 
     );
 });
 
+const OtpBoxes = memo(({ value, onChange, colors, autoFocus }: { value: string; onChange: (v: string) => void; colors: any; autoFocus?: boolean }) => {
+    const refs = useRef<Array<TextInput | null>>([]);
+    const digits = (value || '').padEnd(6, ' ').slice(0, 6).split('');
+
+    useEffect(() => {
+        if (autoFocus) {
+            const t = setTimeout(() => refs.current[0]?.focus(), 200);
+            return () => clearTimeout(t);
+        }
+    }, [autoFocus]);
+
+    const handleChange = (text: string, idx: number) => {
+        const cleaned = text.replace(/\D/g, '');
+        if (cleaned.length > 1) {
+            const next = cleaned.slice(0, 6);
+            onChange(next);
+            const focusIdx = Math.min(next.length, 5);
+            setTimeout(() => refs.current[focusIdx]?.focus(), 0);
+            return;
+        }
+        const arr = (value || '').padEnd(6, ' ').slice(0, 6).split('');
+        arr[idx] = cleaned || ' ';
+        const joined = arr.join('').replace(/ /g, '');
+        onChange(joined);
+        if (cleaned && idx < 5) refs.current[idx + 1]?.focus();
+    };
+
+    const handleKeyPress = (e: any, idx: number) => {
+        if (e.nativeEvent.key === 'Backspace') {
+            const arr = (value || '').split('');
+            if (!arr[idx] && idx > 0) refs.current[idx - 1]?.focus();
+        }
+    };
+
+    return (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 6 }}>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+                <TextInput
+                    key={i}
+                    ref={(r) => { refs.current[i] = r; }}
+                    value={digits[i] === ' ' ? '' : digits[i]}
+                    onChangeText={(t) => handleChange(t, i)}
+                    onKeyPress={(e) => handleKeyPress(e, i)}
+                    keyboardType="number-pad"
+                    maxLength={i === 0 ? 6 : 1}
+                    autoComplete={i === 0 ? ('sms-otp' as any) : ('off' as any)}
+                    textContentType={i === 0 ? 'oneTimeCode' : 'none'}
+                    importantForAutofill={i === 0 ? 'yes' : 'no'}
+                    style={{
+                        width: 44,
+                        height: 52,
+                        borderRadius: 10,
+                        borderWidth: 1.5,
+                        borderColor: digits[i] !== ' ' ? colors.primary : colors.border,
+                        backgroundColor: colors.input,
+                        textAlign: 'center',
+                        fontSize: 20,
+                        fontWeight: '700',
+                        color: colors.foreground,
+                    }}
+                />
+            ))}
+        </View>
+    );
+});
+
+const StatePickerModal = memo(({ visible, onClose, onSelect, selected, colors }: { visible: boolean; onClose: () => void; onSelect: (s: string) => void; selected: string; colors: any }) => {
+    const [query, setQuery] = useState('');
+    const filtered = INDIAN_STATES.filter(s => s.toLowerCase().includes(query.toLowerCase()));
+    return (
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+            <Pressable style={{ flex: 1, backgroundColor: '#0008' }} onPress={onClose}>
+                <Pressable style={{ marginTop: 'auto', backgroundColor: colors.card, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '75%', paddingBottom: 20 }} onPress={() => { }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: colors.foreground }}>Select State</Text>
+                        <Pressable onPress={onClose} hitSlop={8}><X size={20} color={colors.foreground} /></Pressable>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input, marginHorizontal: 12, marginTop: 10, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
+                        <Search size={14} color={colors.mutedForeground} />
+                        <TextInput
+                            placeholder="Search state..."
+                            placeholderTextColor={colors.mutedForeground + '88'}
+                            value={query}
+                            onChangeText={setQuery}
+                            style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, color: colors.foreground, fontSize: 13 }}
+                        />
+                    </View>
+                    <FlatList
+                        data={filtered}
+                        keyExtractor={(item) => item}
+                        keyboardShouldPersistTaps="handled"
+                        renderItem={({ item }) => (
+                            <Pressable
+                                onPress={() => { onSelect(item); onClose(); }}
+                                style={({ pressed }) => ({ paddingHorizontal: 16, paddingVertical: 12, backgroundColor: pressed ? colors.muted : 'transparent', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' })}
+                            >
+                                <Text style={{ fontSize: 14, color: colors.foreground }}>{item}</Text>
+                                {selected === item && <CheckCircle size={16} color={colors.primary} />}
+                            </Pressable>
+                        )}
+                    />
+                </Pressable>
+            </Pressable>
+        </Modal>
+    );
+});
+
 const LogoHeader = memo(({ title, subtitle, colors, compact }: any) => (
     <View style={{ alignItems: 'center', marginBottom: compact ? 12 : 18 }}>
         <View style={{
@@ -187,6 +306,15 @@ export default function AuthScreen() {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [resetToken, setResetToken] = useState('');
 
+    // Register-details extras
+    const [stateName, setStateName] = useState('');
+    const [statePickerOpen, setStatePickerOpen] = useState(false);
+    const [avatarUri, setAvatarUri] = useState('');
+    const [avatarBase64, setAvatarBase64] = useState('');
+    const [emailVerified, setEmailVerified] = useState(false);
+    // Google flow mode: 'login' (sign-in only) or 'verify' (verify+attach during register)
+    const googleModeRef = useRef<'login' | 'verify'>('login');
+
     // (Firebase phone-auth refs removed — OTP is handled by our server now.)
 
     const [modalVisible, setModalVisible] = useState(false);
@@ -206,9 +334,46 @@ export default function AuthScreen() {
     // ─── Send token / user info to our backend ───
     const finishGoogleLogin = async (idToken: string | null, userInfo: { email: string; name?: string; photo?: string | null }) => {
         try {
+            // ─── Verify-email mode (used during register-details to attach a verified Google email) ───
+            if (googleModeRef.current === 'verify') {
+                console.log('[auth][google] verify-email mode for', userInfo.email);
+                const check = await authApiNew.checkGoogleEmail({
+                    idToken: idToken || undefined,
+                    email: userInfo.email,
+                    name: userInfo.name,
+                    picture: userInfo.photo || '',
+                });
+                if (!check.success || !check.response) {
+                    showModal('Error', check.message || 'Could not verify email');
+                    return;
+                }
+                if (check.response.exists) {
+                    showModal('Email already in use', `${check.response.email} is already registered. Please use a different Google account.`);
+                    return;
+                }
+                setEmail(check.response.email);
+                setEmailVerified(true);
+                if (!name && check.response.name) setName(check.response.name);
+                if (!avatarUri && check.response.picture) setAvatarUri(check.response.picture);
+                showModal('Verified', `Email ${check.response.email} verified successfully.`);
+                return;
+            }
+
+            // ─── Login mode: only sign in existing accounts (registration must use phone OTP) ───
             // Prefer idToken — backend can verify it cryptographically with Google.
             if (idToken) {
                 console.log('[auth][google] sending idToken to server');
+                // First check that the email is already registered (don't auto-create).
+                const check = await authApiNew.checkGoogleEmail({
+                    idToken,
+                    email: userInfo.email,
+                    name: userInfo.name,
+                    picture: userInfo.photo || '',
+                });
+                if (check.success && check.response && !check.response.exists) {
+                    showModal('Not registered', 'This Google account is not registered. Please sign up with your phone number first.');
+                    return;
+                }
                 const authResult = await authApiNew.googleLogin(idToken);
                 console.log('[auth][google] server google-token result:', {
                     success: authResult.success,
@@ -226,6 +391,15 @@ export default function AuthScreen() {
             }
 
             // Fallback: send raw user info (server treats as trusted only if no idToken path)
+            const checkInfo = await authApiNew.checkGoogleEmail({
+                email: userInfo.email,
+                name: userInfo.name,
+                picture: userInfo.photo || '',
+            });
+            if (checkInfo.success && checkInfo.response && !checkInfo.response.exists) {
+                showModal('Not registered', 'This Google account is not registered. Please sign up with your phone number first.');
+                return;
+            }
             const authResult = await authApiNew.googleLoginWithInfo({
                 email: userInfo.email,
                 name: userInfo.name || userInfo.email.split('@')[0],
@@ -248,6 +422,7 @@ export default function AuthScreen() {
             showModal('Error', 'Google sign in failed. Please try again.');
         } finally {
             setGoogleLoading(false);
+            googleModeRef.current = 'login';
         }
     };
 
@@ -301,16 +476,28 @@ export default function AuthScreen() {
 
     const handleCompleteRegistration = useCallback(async () => {
         if (!name) { showModal('Error', 'Please enter your name'); return; }
-        if (!email) { showModal('Error', 'Please enter your email'); return; }
-        if (!password || password.length < 6) { showModal('Error', 'Password must be at least 6 characters'); return; }
+        if (!emailVerified || !email) { showModal('Error', 'Please verify your email with Google first'); return; }
+        if (!stateName) { showModal('Error', 'Please select your state'); return; }
         setLoading(true);
         try {
+            // Upload avatar first (optional)
+            let avatarUrl = '';
+            if (avatarBase64) {
+                try {
+                    // upload-avatar requires auth, so we'll send base64 inline via phoneRegister
+                    avatarUrl = `data:image/jpeg;base64,${avatarBase64}`;
+                } catch (e) { console.warn('avatar upload skipped', e); }
+            } else if (avatarUri && avatarUri.startsWith('http')) {
+                avatarUrl = avatarUri;
+            }
+
             const result = await authApiNew.phoneRegister({
                 phone,
                 name,
                 email,
-                password,
                 address: address || undefined,
+                state: stateName || undefined,
+                avatar: avatarUrl || undefined,
                 referralCode: referralCode || undefined,
             });
             if (result.success && result.response) {
@@ -320,7 +507,31 @@ export default function AuthScreen() {
             } else showModal('Error', result.message || 'Registration failed');
         } catch { showModal('Error', 'Network error.'); }
         finally { setLoading(false); }
-    }, [name, email, phone, password, address, referralCode, expoPushToken, showModal]);
+    }, [name, email, emailVerified, phone, address, stateName, avatarBase64, avatarUri, referralCode, expoPushToken, showModal]);
+
+    const pickAvatar = useCallback(async () => {
+        try {
+            const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!perm.granted) {
+                showModal('Permission needed', 'Please allow gallery access to choose a profile photo.');
+                return;
+            }
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+                base64: true,
+            });
+            if (!result.canceled && result.assets?.[0]) {
+                const a = result.assets[0];
+                setAvatarUri(a.uri);
+                setAvatarBase64(a.base64 || '');
+            }
+        } catch (e: any) {
+            showModal('Error', e?.message || 'Failed to pick image');
+        }
+    }, [showModal]);
 
     const handleGoogleAuth = useCallback(async () => {
         if (IS_EXPO_GO) {
@@ -589,8 +800,8 @@ export default function AuthScreen() {
                 <FormCard>
                     <Text style={{ fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 2 }}>Enter OTP</Text>
                     <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Enter the OTP sent to your phone</Text>
-                    <InputField icon={Lock} placeholder="6-digit OTP" value={otp} onChangeText={setOtp} keyboardType="number-pad" maxLength={6} colors={colors} />
-                    <View style={{ height: 6 }} />
+                    <OtpBoxes value={otp} onChange={setOtp} colors={colors} autoFocus />
+                    <View style={{ height: 8 }} />
                     <PrimaryButton onPress={handleOtpLogin} label="Verify & Continue" loading={loading} colors={colors} />
                     <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={handleSendLoginOtp}>
                         <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Resend OTP</Text>
@@ -615,14 +826,74 @@ export default function AuthScreen() {
                         </View>
                     </View>
 
+                    {/* Profile image picker */}
+                    <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                        <Pressable onPress={pickAvatar} style={{
+                            width: 84, height: 84, borderRadius: 42,
+                            borderWidth: 2, borderColor: colors.primary, borderStyle: 'dashed',
+                            backgroundColor: colors.input,
+                            alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                        }}>
+                            {avatarUri ? (
+                                <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%' }} />
+                            ) : (
+                                <Camera size={28} color={colors.primary} />
+                            )}
+                        </Pressable>
+                        <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 6 }}>
+                            {avatarUri ? 'Tap to change photo' : 'Add profile photo (optional)'}
+                        </Text>
+                    </View>
+
                     <InputField icon={User} placeholder="Full Name *" value={name} onChangeText={setName} colors={colors} />
-                    <InputField icon={Mail} placeholder="Email Address *" value={email} onChangeText={setEmail} keyboardType="email-address" colors={colors} />
-                    <InputField icon={Lock} placeholder="Create Password (min 6 chars) *" value={password} onChangeText={setPassword} secureTextEntry={!showPassword} showToggle onToggle={togglePassword} toggleValue={showPassword} colors={colors} />
+
+                    {/* Email — verified via Google only */}
+                    {emailVerified ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input, borderRadius: 10, marginBottom: 6, borderWidth: 1, borderColor: colors.primary, height: 44, paddingHorizontal: 10, gap: 8 }}>
+                            <Mail size={16} color={colors.primary} />
+                            <Text style={{ flex: 1, fontSize: 13, color: colors.foreground }} numberOfLines={1}>{email}</Text>
+                            <CheckCircle size={16} color={colors.primary} />
+                        </View>
+                    ) : (
+                        <View style={{ marginBottom: 6 }}>
+                            <GoogleButton label="Verify Email with Google *" onPress={() => { googleModeRef.current = 'verify'; handleGoogleAuth(); }} />
+                            <Text style={{ fontSize: 10, color: colors.mutedForeground, textAlign: 'center', marginTop: 4 }}>
+                                Email is verified through your Google account
+                            </Text>
+                        </View>
+                    )}
+
+                    {/* State picker */}
+                    <Pressable onPress={() => setStatePickerOpen(true)} style={{
+                        flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input,
+                        borderRadius: 10, marginBottom: 6, borderWidth: 1, borderColor: colors.border,
+                        height: 44, paddingHorizontal: 10, gap: 8,
+                    }}>
+                        <MapPin size={16} color={colors.mutedForeground} />
+                        <Text style={{ flex: 1, fontSize: 13, color: stateName ? colors.foreground : colors.mutedForeground + '88' }}>
+                            {stateName || 'Select State *'}
+                        </Text>
+                        <ChevronDown size={16} color={colors.mutedForeground} />
+                    </Pressable>
+
                     <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline colors={colors} />
                     <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={handleReferralChange} autoCapitalize="characters" colors={colors} />
                     <View style={{ height: 6 }} />
-                    <PrimaryButton onPress={handleCompleteRegistration} label="Create Account & Continue" loading={loading} colors={colors} />
+                    <PrimaryButton
+                        onPress={handleCompleteRegistration}
+                        label="Save & Continue"
+                        loading={loading}
+                        disabled={!emailVerified || !name || !stateName}
+                        colors={colors}
+                    />
                 </FormCard>
+                <StatePickerModal
+                    visible={statePickerOpen}
+                    onClose={() => setStatePickerOpen(false)}
+                    onSelect={setStateName}
+                    selected={stateName}
+                    colors={colors}
+                />
             </ScreenWrapper>
         );
     }
@@ -647,7 +918,7 @@ export default function AuthScreen() {
 
                 <Divider />
 
-                <GoogleButton label="Continue with Google" onPress={handleGoogleAuth} />
+                <GoogleButton label="Sign in with Google" onPress={() => { googleModeRef.current = 'login'; handleGoogleAuth(); }} />
 
                 <Pressable style={{ alignSelf: 'center', marginTop: 10 }} onPress={() => setScreen('forgot')}>
                     <Text style={{ fontSize: 11, fontWeight: '500', color: colors.primary }}>Forgot Password?</Text>

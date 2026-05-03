@@ -1234,4 +1234,137 @@ router.post('/google-info', async (req, res) => {
     }
 });
 
+// POST /api/auth/check-google-email
+// Verifies a Google idToken, returns the verified email and whether it already exists
+router.post('/check-google-email', async (req, res) => {
+    try {
+        const { idToken, email: rawEmail, name, picture } = req.body || {};
+        let email = (rawEmail || '').toLowerCase().trim();
+        let verifiedName = name || '';
+        let verifiedPicture = picture || '';
+
+        if (idToken) {
+            try {
+                const parts = String(idToken).split('.');
+                if (parts.length === 3) {
+                    const decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+                    if (decoded?.email) email = String(decoded.email).toLowerCase();
+                    if (decoded?.name && !verifiedName) verifiedName = decoded.name;
+                    if (decoded?.picture && !verifiedPicture) verifiedPicture = decoded.picture;
+                }
+            } catch (_) { /* fall through */ }
+        }
+
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email is required' });
+        }
+
+        const existing = await User.findOne({ email });
+        return res.json({
+            success: true,
+            response: {
+                email,
+                name: verifiedName,
+                picture: verifiedPicture,
+                exists: !!existing,
+            },
+        });
+    } catch (error) {
+        console.error('check-google-email error:', error);
+        res.status(500).json({ success: false, message: 'Failed to verify email' });
+    }
+});
+
+// POST /api/auth/phone-register - Create account after phone OTP verification
+router.post('/phone-register', async (req, res) => {
+    try {
+        const { phone, name, email, password, address, state, avatar, referralCode } = req.body || {};
+
+        if (!phone || !name) {
+            return res.status(400).json({ success: false, message: 'Phone and name are required' });
+        }
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email is required (verify with Google)' });
+        }
+
+        const normalizedPhone = String(phone).replace(/\D/g, '').slice(-10);
+        const normalizedEmail = String(email).toLowerCase().trim();
+
+        const existing = await User.findOne({ $or: [{ phone: normalizedPhone }, { email: normalizedEmail }] });
+        if (existing) {
+            return res.status(400).json({
+                success: false,
+                message: existing.email === normalizedEmail
+                    ? 'Email already registered'
+                    : 'Phone number already registered',
+            });
+        }
+
+        let referrer = null;
+        if (referralCode) {
+            referrer = await User.findOne({ referralCode: String(referralCode).toUpperCase() });
+            if (!referrer) {
+                return res.status(400).json({ success: false, message: 'Invalid referral code' });
+            }
+        }
+
+        const user = new User({
+            name: String(name).trim(),
+            email: normalizedEmail,
+            phone: normalizedPhone,
+            password: hashPassword(password || crypto.randomBytes(16).toString('hex')),
+            address: address ? String(address).trim() : '',
+            state: state ? String(state).trim() : '',
+            avatar: avatar || '',
+            referredBy: referrer?._id,
+            isVerified: true,
+        });
+
+        await user.save();
+
+        if (referrer) {
+            const ReferralConfig = require('../models/ReferralConfig');
+            const cfg = await ReferralConfig.findOneAndUpdate(
+                {},
+                { $setOnInsert: { defaultCommissionRate: 5 } },
+                { new: true, upsert: true }
+            );
+            const commissionRate = typeof cfg?.defaultCommissionRate === 'number' ? cfg.defaultCommissionRate : 5;
+            await Referral.create({
+                referrer: referrer._id,
+                referred: user._id,
+                code: String(referralCode).toUpperCase(),
+                status: 'active',
+                commissionRate,
+            });
+            notifyReferralSignup(referrer._id.toString(), user.name)
+                .catch(err => console.error('Error sending referral signup notification:', err));
+        }
+
+        const token = generateToken(user._id);
+        return res.status(201).json({
+            success: true,
+            message: 'Registration successful',
+            response: {
+                token,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    avatar: user.avatar,
+                    address: user.address,
+                    state: user.state,
+                    role: user.role,
+                    referralCode: user.referralCode,
+                    memberSince: user.createdAt,
+                },
+            },
+        });
+    } catch (error) {
+        console.error('Phone register error:', error);
+        res.status(500).json({ success: false, message: 'Registration failed. Please try again.' });
+    }
+});
+
 module.exports = router;
