@@ -20,8 +20,6 @@ const INDIAN_STATES = [
     'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
     'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
     'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
 ];
 // NOTE: `expo-firebase-recaptcha` was removed (deprecated since Expo SDK 48).
 // Phone OTP now flows through our own server: /api/auth/send-phone-otp + /api/auth/phone-login.
@@ -151,68 +149,56 @@ const PrimaryButton = memo(({ onPress, label, disabled, loading, colors, style, 
 });
 
 const OtpBoxes = memo(({ value, onChange, colors, autoFocus }: { value: string; onChange: (v: string) => void; colors: any; autoFocus?: boolean }) => {
-    const refs = useRef<Array<TextInput | null>>([]);
+    const inputRef = useRef<TextInput | null>(null);
     const digits = (value || '').padEnd(6, ' ').slice(0, 6).split('');
 
     useEffect(() => {
         if (autoFocus) {
-            const t = setTimeout(() => refs.current[0]?.focus(), 200);
+            const t = setTimeout(() => inputRef.current?.focus(), 250);
             return () => clearTimeout(t);
         }
     }, [autoFocus]);
 
-    const handleChange = (text: string, idx: number) => {
-        const cleaned = text.replace(/\D/g, '');
-        if (cleaned.length > 1) {
-            const next = cleaned.slice(0, 6);
-            onChange(next);
-            const focusIdx = Math.min(next.length, 5);
-            setTimeout(() => refs.current[focusIdx]?.focus(), 0);
-            return;
-        }
-        const arr = (value || '').padEnd(6, ' ').slice(0, 6).split('');
-        arr[idx] = cleaned || ' ';
-        const joined = arr.join('').replace(/ /g, '');
-        onChange(joined);
-        if (cleaned && idx < 5) refs.current[idx + 1]?.focus();
-    };
-
-    const handleKeyPress = (e: any, idx: number) => {
-        if (e.nativeEvent.key === 'Backspace') {
-            const arr = (value || '').split('');
-            if (!arr[idx] && idx > 0) refs.current[idx - 1]?.focus();
-        }
+    const handleChange = (text: string) => {
+        onChange(text.replace(/\D/g, '').slice(0, 6));
     };
 
     return (
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 6 }}>
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-                <TextInput
-                    key={i}
-                    ref={(r) => { refs.current[i] = r; }}
-                    value={digits[i] === ' ' ? '' : digits[i]}
-                    onChangeText={(t) => handleChange(t, i)}
-                    onKeyPress={(e) => handleKeyPress(e, i)}
-                    keyboardType="number-pad"
-                    maxLength={i === 0 ? 6 : 1}
-                    autoComplete={i === 0 ? ('sms-otp' as any) : ('off' as any)}
-                    textContentType={i === 0 ? 'oneTimeCode' : 'none'}
-                    importantForAutofill={i === 0 ? 'yes' : 'no'}
-                    style={{
-                        width: 44,
-                        height: 52,
-                        borderRadius: 10,
-                        borderWidth: 1.5,
-                        borderColor: digits[i] !== ' ' ? colors.primary : colors.border,
-                        backgroundColor: colors.input,
-                        textAlign: 'center',
-                        fontSize: 20,
-                        fontWeight: '700',
-                        color: colors.foreground,
-                    }}
-                />
-            ))}
-        </View>
+        <Pressable onPress={() => inputRef.current?.focus()} style={{ marginVertical: 6 }}>
+            <TextInput
+                ref={inputRef}
+                value={value}
+                onChangeText={handleChange}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoComplete={'sms-otp' as any}
+                textContentType="oneTimeCode"
+                importantForAutofill="yes"
+                caretHidden
+                style={{ position: 'absolute', width: 1, height: 1, opacity: 0.01 }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <View
+                        key={i}
+                        style={{
+                            width: 44,
+                            height: 52,
+                            borderRadius: 10,
+                            borderWidth: 1.5,
+                            borderColor: digits[i] !== ' ' ? colors.primary : colors.border,
+                            backgroundColor: colors.input,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                        }}
+                    >
+                        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.foreground }}>
+                            {digits[i] === ' ' ? '' : digits[i]}
+                        </Text>
+                    </View>
+                ))}
+            </View>
+        </Pressable>
     );
 });
 
@@ -800,7 +786,7 @@ export default function AuthScreen() {
                 <FormCard>
                     <Text style={{ fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 2 }}>Enter OTP</Text>
                     <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Enter the OTP sent to your phone</Text>
-                    <OtpBoxes value={otp} onChange={setOtp} colors={colors} autoFocus />
+                    <OtpBoxes value={otp} onChange={setOtp} colors={colors} autoFocus={!modalVisible} />
                     <View style={{ height: 8 }} />
                     <PrimaryButton onPress={handleOtpLogin} label="Verify & Continue" loading={loading} colors={colors} />
                     <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={handleSendLoginOtp}>
@@ -847,22 +833,6 @@ export default function AuthScreen() {
 
                     <InputField icon={User} placeholder="Full Name *" value={name} onChangeText={setName} colors={colors} />
 
-                    {/* Email — verified via Google only */}
-                    {emailVerified ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input, borderRadius: 10, marginBottom: 6, borderWidth: 1, borderColor: colors.primary, height: 44, paddingHorizontal: 10, gap: 8 }}>
-                            <Mail size={16} color={colors.primary} />
-                            <Text style={{ flex: 1, fontSize: 13, color: colors.foreground }} numberOfLines={1}>{email}</Text>
-                            <CheckCircle size={16} color={colors.primary} />
-                        </View>
-                    ) : (
-                        <View style={{ marginBottom: 6 }}>
-                            <GoogleButton label="Verify Email with Google *" onPress={() => { googleModeRef.current = 'verify'; handleGoogleAuth(); }} />
-                            <Text style={{ fontSize: 10, color: colors.mutedForeground, textAlign: 'center', marginTop: 4 }}>
-                                Email is verified through your Google account
-                            </Text>
-                        </View>
-                    )}
-
                     {/* State picker */}
                     <Pressable onPress={() => setStatePickerOpen(true)} style={{
                         flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input,
@@ -878,6 +848,22 @@ export default function AuthScreen() {
 
                     <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline colors={colors} />
                     <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={handleReferralChange} autoCapitalize="characters" colors={colors} />
+
+                    {/* Email — verified via Google only */}
+                    {emailVerified ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input, borderRadius: 10, marginBottom: 6, borderWidth: 1, borderColor: colors.primary, height: 44, paddingHorizontal: 10, gap: 8 }}>
+                            <Mail size={16} color={colors.primary} />
+                            <Text style={{ flex: 1, fontSize: 13, color: colors.foreground }} numberOfLines={1}>{email}</Text>
+                            <CheckCircle size={16} color={colors.primary} />
+                        </View>
+                    ) : (
+                        <View style={{ marginBottom: 6 }}>
+                            <GoogleButton label="Verify Email with Google *" onPress={() => { googleModeRef.current = 'verify'; handleGoogleAuth(); }} />
+                            <Text style={{ fontSize: 10, color: colors.mutedForeground, textAlign: 'center', marginTop: 4 }}>
+                                Email is verified through your Google account
+                            </Text>
+                        </View>
+                    )}
                     <View style={{ height: 6 }} />
                     <PrimaryButton
                         onPress={handleCompleteRegistration}
