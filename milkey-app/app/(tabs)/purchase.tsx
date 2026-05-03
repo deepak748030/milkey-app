@@ -569,17 +569,27 @@ export default function PurchaseScreen() {
             return `[L]${bold ? `<b>${row}</b>` : row}\n`;
         };
 
-        // Header row
+        // Header row — short labels so they fit fixed thermal columns.
+        // Devanagari widths must stay within column width to avoid truncation.
+        const isHi = (tFull as any).from === 'से';
+        const hCode = isHi ? 'कोड' : 'Code';
+        const hTime = isHi ? 'समय' : 'Time';
+        const hQty = isHi ? ' मा' : ' Qty';
+        const hFat = isHi ? 'फै' : 'Fat';
+        const hSnf = isHi ? 'एस' : 'Snf';
+        const hRate = isHi ? ' दर' : 'Rate';
+        const hAmt = isHi ? ' रा' : ' Amt';
+        const hDateS = isHi ? 'दि/प' : 'Date/S';
         if (isReport) {
-            payload += tableRowReport('Date/S', ' Qty', 'Fat', 'Snf', 'Rate', ' Amt', true);
+            payload += tableRowReport(hDateS, hQty, hFat, hSnf, hRate, hAmt, true);
         } else {
-            payload += tableRowPurchase('Code', 'Time', ' Qty', 'Fat', 'Snf', 'Rate', ' Amt', true);
+            payload += tableRowPurchase(hCode, hTime, hQty, hFat, hSnf, hRate, hAmt, true);
         }
 
         for (const c of data) {
             const d = new Date(c.date);
             const dd = String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
-            const shiftLetter = c.shift === 'morning' ? 'M' : 'E';
+            const shiftLetter = c.shift === 'morning' ? tFull.morningShort : tFull.eveningShort;
             // Real entry time (HH:MM) from createdAt; fallback to shift default.
             let time = c.shift === 'morning' ? '6:00' : '18:00';
             const createdAt = (c as any).createdAt;

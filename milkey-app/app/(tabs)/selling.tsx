@@ -1003,7 +1003,7 @@ export default function SellingScreen() {
         payload += fmtLine();
         groupedEntries.forEach((item) => {
             payload += fmtLeft(`${formatDate(item.date)} ${item.memberName}`);
-            payload += twoCol(`M/E: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
+            payload += twoCol(`${tEnt.morningShort}/${tEnt.eveningShort}: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
         });
         payload += fmtLine();
         payload += twoCol(`${tEnt.totalDays}:`, String(groupedEntries.length));
@@ -1132,7 +1132,7 @@ export default function SellingScreen() {
         payload += fmtLine();
         reportRows.forEach((item) => {
             payload += fmtLeft(`${formatDateDDMMYYYY(item.date)} ${item.memberName}`);
-            payload += twoCol(`M/E: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
+            payload += twoCol(`${tRep.morningShort}/${tRep.eveningShort}: ${item.morningQty || '-'} + ${item.eveningQty || '-'} L`, `Rs ${item.totalAmount.toFixed(0)}`);
         });
         payload += fmtLine();
         payload += twoCol(`${tRep.totalDays}:`, String(reportRows.length));
@@ -1442,7 +1442,7 @@ export default function SellingScreen() {
                 const morn = item.morningQty > 0 ? String(item.morningQty) : '-';
                 const eve = item.eveningQty > 0 ? String(item.eveningQty) : '-';
                 payload += threeCol(
-                    `${shortDayMonth(item.date)} : M/E`,
+                    `${shortDayMonth(item.date)} : ${tME.morningShort}/${tME.eveningShort}`,
                     `${morn} + ${eve}`,
                     String(item.totalAmount.toFixed(0))
                 );
