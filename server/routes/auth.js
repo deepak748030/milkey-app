@@ -776,62 +776,115 @@ router.post('/reset-password', async (req, res) => {
 // Store for phone OTPs
 const phoneOtpStore = new Map();
 
+const { sendNinzaOtp, generate6DigitOtp, normalizeIndianMobile } = require('../lib/ninzaSms');
+
+// Allow a master/test OTP only when explicitly enabled (e.g., for review builds)
+const ALLOW_TEST_OTP = process.env.ALLOW_TEST_OTP === 'true';
+const TEST_OTP = process.env.TEST_OTP || '123456';
+
+// Simple per-number throttle: 1 OTP per 30s, max 5 per hour
+const phoneOtpRate = new Map();
+function checkOtpRateLimit(phone) {
+    const now = Date.now();
+    const entry = phoneOtpRate.get(phone) || { last: 0, count: 0, windowStart: now };
+    if (now - entry.windowStart > 60 * 60 * 1000) {
+        entry.count = 0;
+        entry.windowStart = now;
+    }
+    if (now - entry.last < 30 * 1000) {
+        return { ok: false, message: 'Please wait before requesting another OTP' };
+    }
+    if (entry.count >= 5) {
+        return { ok: false, message: 'Too many OTP requests. Try again later.' };
+    }
+    entry.last = now;
+    entry.count += 1;
+    phoneOtpRate.set(phone, entry);
+    return { ok: true };
+}
+
 // POST /api/auth/send-phone-otp
-// router.post('/send-phone-otp', async (req, res) => {
-//     try {
-//         const { phone } = req.body;
-//         if (!phone) {
-//             return res.status(400).json({ success: false, message: 'Phone number is required' });
-//         }
+router.post('/send-phone-otp', async (req, res) => {
+    try {
+        const { phone } = req.body || {};
+        const norm = normalizeIndianMobile(phone);
+        if (!norm.ok) {
+            return res.status(400).json({ success: false, message: norm.error });
+        }
 
-//         // Use hardcoded OTP 123456 for now
-//         const otp = '123456';
+        const rl = checkOtpRateLimit(norm.tenDigit);
+        if (!rl.ok) {
+            return res.status(429).json({ success: false, message: rl.message });
+        }
 
-//         phoneOtpStore.set(phone, {
-//             otp,
-//             expiresAt: Date.now() + 10 * 60 * 1000
-//         });
+        const otp = generate6DigitOtp();
 
-//         console.log(`Phone OTP for ${phone}: ${otp}`);
+        const result = await sendNinzaOtp(norm.tenDigit, otp);
+        if (!result.ok) {
+            console.error('[send-phone-otp] provider failed:', result);
+            return res.status(502).json({
+                success: false,
+                message: result.msg || result.error || 'Failed to send OTP. Please try again.',
+            });
+        }
 
-//         res.json({ success: true, message: 'OTP sent successfully' });
-//     } catch (error) {
-//         console.error('Send phone OTP error:', error);
-//         res.status(500).json({ success: false, message: 'Failed to send OTP' });
-//     }
-// });
+        phoneOtpStore.set(norm.tenDigit, {
+            otp,
+            expiresAt: Date.now() + 10 * 60 * 1000,
+            attempts: 0,
+        });
+
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[send-phone-otp] phone=${norm.tenDigit} otp=${otp}`);
+        }
+
+        return res.json({ success: true, message: 'OTP sent successfully' });
+    } catch (error) {
+        console.error('Send phone OTP error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to send OTP' });
+    }
+});
 
 // POST /api/auth/verify-phone-otp
 router.post('/verify-phone-otp', async (req, res) => {
     try {
-        const { phone, otp } = req.body;
+        const { phone, otp } = req.body || {};
         if (!phone || !otp) {
             return res.status(400).json({ success: false, message: 'Phone and OTP are required' });
         }
 
-        const storedData = phoneOtpStore.get(phone);
+        const norm = normalizeIndianMobile(phone);
+        if (!norm.ok) {
+            return res.status(400).json({ success: false, message: norm.error });
+        }
+        const key = norm.tenDigit;
 
+        if (ALLOW_TEST_OTP && otp === TEST_OTP) {
+            phoneOtpStore.delete(key);
+            return res.json({ success: true, message: 'OTP verified', response: { verified: true } });
+        }
+
+        const storedData = phoneOtpStore.get(key);
         if (!storedData) {
-            // Also accept hardcoded 123456
-            if (otp === '123456') {
-                return res.json({ success: true, message: 'OTP verified', response: { verified: true } });
-            }
             return res.status(400).json({ success: false, message: 'OTP expired or not found' });
         }
 
         if (Date.now() > storedData.expiresAt) {
-            phoneOtpStore.delete(phone);
-            if (otp === '123456') {
-                return res.json({ success: true, message: 'OTP verified', response: { verified: true } });
-            }
+            phoneOtpStore.delete(key);
             return res.status(400).json({ success: false, message: 'OTP has expired' });
         }
 
-        if (storedData.otp !== otp && otp !== '123456') {
+        storedData.attempts = (storedData.attempts || 0) + 1;
+        if (storedData.attempts > 5) {
+            phoneOtpStore.delete(key);
+            return res.status(429).json({ success: false, message: 'Too many invalid attempts. Please request a new OTP.' });
+        }
+
+        if (storedData.otp !== String(otp)) {
             return res.status(400).json({ success: false, message: 'Invalid OTP' });
         }
 
-        phoneOtpStore.delete(phone);
+        phoneOtpStore.delete(key);
         res.json({ success: true, message: 'OTP verified', response: { verified: true } });
     } catch (error) {
         console.error('Verify phone OTP error:', error);
@@ -842,29 +895,36 @@ router.post('/verify-phone-otp', async (req, res) => {
 // POST /api/auth/phone-login - Login with phone + OTP (auto-detect new user)
 router.post('/phone-login', async (req, res) => {
     try {
-        const { phone, otp } = req.body;
+        const { phone, otp } = req.body || {};
         if (!phone || !otp) {
             return res.status(400).json({ success: false, message: 'Phone and OTP are required' });
         }
 
-        // Verify OTP (accept hardcoded 123456)
-        const storedData = phoneOtpStore.get(phone);
-        if (otp !== '123456') {
-            if (!storedData || Date.now() > storedData.expiresAt || storedData.otp !== otp) {
+        const norm = normalizeIndianMobile(phone);
+        if (!norm.ok) {
+            return res.status(400).json({ success: false, message: norm.error });
+        }
+        const key = norm.tenDigit;
+
+        // Verify OTP
+        const storedData = phoneOtpStore.get(key);
+        const isTestOtp = ALLOW_TEST_OTP && otp === TEST_OTP;
+        if (!isTestOtp) {
+            if (!storedData || Date.now() > storedData.expiresAt || storedData.otp !== String(otp)) {
                 return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
             }
         }
-        phoneOtpStore.delete(phone);
+        phoneOtpStore.delete(key);
 
-        // Find user by phone
-        const user = await User.findOne({ phone });
+        // Find user by phone (try both 10-digit and stored format)
+        const user = await User.findOne({ phone: { $in: [key, norm.withCountry, '+' + norm.withCountry] } });
         if (!user) {
             // Return special code so app can show registration form
             return res.json({
                 success: true,
                 code: 'USER_NOT_FOUND',
                 message: 'Phone verified. Please complete registration.',
-                response: { needsRegistration: true, phone }
+                response: { needsRegistration: true, phone: key }
             });
         }
 
