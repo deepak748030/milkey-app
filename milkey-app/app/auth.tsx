@@ -895,12 +895,33 @@ export default function AuthScreen() {
                 <Text style={{ fontSize: 16, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 10 }}>Login / Register</Text>
 
                 <Text style={{ fontSize: 10, fontWeight: '600', color: colors.mutedForeground, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Enter your Mobile Number</Text>
-                <InputField icon={Phone} placeholder="Phone Number (10 digits)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={10} colors={colors} />
+                <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: colors.input,
+                    borderRadius: 10,
+                    marginBottom: 6,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    height: 44,
+                    overflow: 'hidden',
+                }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, height: '100%', backgroundColor: colors.muted, borderRightWidth: 1, borderRightColor: colors.border }}>
+                        <Phone size={16} color={colors.mutedForeground} />
+                        <Text style={{ marginLeft: 6, fontSize: 13, fontWeight: '700', color: colors.foreground }}>+91</Text>
+                    </View>
+                    <TextInput
+                        style={{ flex: 1, paddingVertical: Platform.OS === 'ios' ? 10 : 8, paddingHorizontal: 10, fontSize: 14, fontWeight: '600', letterSpacing: 0.5, color: colors.foreground }}
+                        placeholder="10-digit mobile number"
+                        value={phone}
+                        onChangeText={(t) => setPhone(t.replace(/[^0-9]/g, ''))}
+                        keyboardType="phone-pad"
+                        maxLength={10}
+                        placeholderTextColor={colors.mutedForeground + '88'}
+                    />
+                </View>
                 <View style={{ height: 6 }} />
                 <PrimaryButton onPress={handleSendLoginOtp} label="Send OTP" loading={loading && !googleLoading} colors={colors} />
-                <Text style={{ fontSize: 10, textAlign: 'center', color: colors.mutedForeground, marginTop: 4 }}>
-                    If registered → Login, If new → Create Account
-                </Text>
 
                 <Divider />
 
