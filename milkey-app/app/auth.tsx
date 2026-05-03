@@ -833,22 +833,6 @@ export default function AuthScreen() {
 
                     <InputField icon={User} placeholder="Full Name *" value={name} onChangeText={setName} colors={colors} />
 
-                    {/* Email — verified via Google only */}
-                    {emailVerified ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input, borderRadius: 10, marginBottom: 6, borderWidth: 1, borderColor: colors.primary, height: 44, paddingHorizontal: 10, gap: 8 }}>
-                            <Mail size={16} color={colors.primary} />
-                            <Text style={{ flex: 1, fontSize: 13, color: colors.foreground }} numberOfLines={1}>{email}</Text>
-                            <CheckCircle size={16} color={colors.primary} />
-                        </View>
-                    ) : (
-                        <View style={{ marginBottom: 6 }}>
-                            <GoogleButton label="Verify Email with Google *" onPress={() => { googleModeRef.current = 'verify'; handleGoogleAuth(); }} />
-                            <Text style={{ fontSize: 10, color: colors.mutedForeground, textAlign: 'center', marginTop: 4 }}>
-                                Email is verified through your Google account
-                            </Text>
-                        </View>
-                    )}
-
                     {/* State picker */}
                     <Pressable onPress={() => setStatePickerOpen(true)} style={{
                         flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input,
@@ -864,6 +848,22 @@ export default function AuthScreen() {
 
                     <InputField icon={MapPin} placeholder="Address (Optional)" value={address} onChangeText={setAddress} multiline colors={colors} />
                     <InputField icon={Gift} placeholder="Referral Code (Optional)" value={referralCode} onChangeText={handleReferralChange} autoCapitalize="characters" colors={colors} />
+
+                    {/* Email — verified via Google only */}
+                    {emailVerified ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.input, borderRadius: 10, marginBottom: 6, borderWidth: 1, borderColor: colors.primary, height: 44, paddingHorizontal: 10, gap: 8 }}>
+                            <Mail size={16} color={colors.primary} />
+                            <Text style={{ flex: 1, fontSize: 13, color: colors.foreground }} numberOfLines={1}>{email}</Text>
+                            <CheckCircle size={16} color={colors.primary} />
+                        </View>
+                    ) : (
+                        <View style={{ marginBottom: 6 }}>
+                            <GoogleButton label="Verify Email with Google *" onPress={() => { googleModeRef.current = 'verify'; handleGoogleAuth(); }} />
+                            <Text style={{ fontSize: 10, color: colors.mutedForeground, textAlign: 'center', marginTop: 4 }}>
+                                Email is verified through your Google account
+                            </Text>
+                        </View>
+                    )}
                     <View style={{ height: 6 }} />
                     <PrimaryButton
                         onPress={handleCompleteRegistration}
