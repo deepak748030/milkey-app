@@ -279,9 +279,9 @@ export function buildTestPayload(): string {
     const t = getThermalSlipLabels();
     let p = '';
     p += title('MILKEY');
-    p += center(t.print + ' Test', { bold: true });
+    p += center(`${t.print} ${t.test}`, { bold: true });
     p += line();
-    p += twoCol(`${t.status}:`, 'Connected');
+    p += twoCol(`${t.status}:`, t.connected);
     p += twoCol('Width:', '58mm');
     p += twoCol('Protocol:', 'ESC/POS');
     p += line();

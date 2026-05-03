@@ -684,9 +684,10 @@ export default function PurchaseScreen() {
         const data = filteredReportCollections.length > 0 ? filteredReportCollections : collections;
         const totals = filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals;
         if (data.length === 0) { showAlert('Info', 'No data to export'); return; }
+        const tPdf = getSlipLabels();
         const dateLabel = reportStartDate && reportEndDate
-            ? `${formatDateStr(reportStartDate)} to ${formatDateStr(reportEndDate)}`
-            : `${formatDate(entryDate)} (${entryShift === 'morning' ? 'AM' : 'PM'})`;
+            ? `${formatDateStr(reportStartDate)} ${tPdf.to} ${formatDateStr(reportEndDate)}`
+            : `${formatDate(entryDate)} (${entryShift === 'morning' ? tPdf.morningShort : tPdf.eveningShort})`;
         const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
             body{font-family:sans-serif;padding:16px;font-size:12px}
             h2{color:#22c55e;text-align:center}
