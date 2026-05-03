@@ -786,7 +786,7 @@ export default function AuthScreen() {
                 <FormCard>
                     <Text style={{ fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 2 }}>Enter OTP</Text>
                     <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Enter the OTP sent to your phone</Text>
-                    <OtpBoxes value={otp} onChange={setOtp} colors={colors} autoFocus />
+                    <OtpBoxes value={otp} onChange={setOtp} colors={colors} autoFocus={!modalVisible} />
                     <View style={{ height: 8 }} />
                     <PrimaryButton onPress={handleOtpLogin} label="Verify & Continue" loading={loading} colors={colors} />
                     <Pressable style={{ marginTop: 10, alignItems: 'center' }} onPress={handleSendLoginOtp}>
