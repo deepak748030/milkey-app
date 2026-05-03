@@ -21,7 +21,7 @@ import {
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { brandedFooter, brandedHeader, brandedHeaderHtml, brandedFooterHtml, center as fmtCenter, left as fmtLeft, twoCol, threeCol, line as fmtLine, doubleLine, feed, buildReceiptPayload } from '@/lib/printFormat';
-import { getSlipLabels } from '@/lib/printTranslations';
+import { getSlipLabels, getThermalSlipLabels } from '@/lib/printTranslations';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -305,10 +305,10 @@ export default function PurchaseScreen() {
     }, [printSettings]);
 
     const buildMilkSlipPayload = useCallback((entry: MilkCollection) => {
-        const t = getSlipLabels();
+        const t = getThermalSlipLabels();
         const dObj = new Date(entry.date);
         const dStr = `${String(dObj.getDate()).padStart(2, '0')}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getFullYear()).slice(-2)}`;
-        let payload = receiptHeader(t.collection);
+        let payload = receiptHeader();
         payload += `[L]${t.code} : ${entry.farmerCode || '-'}\n`;
         payload += `[L]${t.name} : ${entry.purchaseFarmer?.name || '-'}\n`;
         payload += `[L]${t.date} : ${dStr}[R]${t.shift} : ${entry.shift === 'morning' ? t.morningShort : t.eveningShort}\n`;

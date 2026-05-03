@@ -188,3 +188,118 @@ export function getSlipLabels(lang?: LanguageCode): SlipLabels {
     const code = lang || (getLanguage() as LanguageCode);
     return MAP[code] || en;
 }
+
+/* ------------------------------------------------------------------
+ * Thermal-printer (Latin-script) variants for hi / mr.
+ *
+ * Most cheap 58mm Bluetooth thermal printers (SR588, MTP-2, Rongta,
+ * XPrinter etc.) only ship with CP437 / Latin codepages and CANNOT
+ * render Devanagari glyphs — they print boxes / garbage. To still
+ * give Hindi / Marathi users a slip in their own language, we use
+ * a Roman-script ("Hinglish") transliteration for thermal printing.
+ *
+ * HTML / PDF / WhatsApp slips still use the proper Devanagari labels
+ * via getSlipLabels().
+ * ------------------------------------------------------------------ */
+
+const hiLatin: SlipLabels = {
+    collection: 'Sangrah',
+    paymentSlip: 'Payment Slip',
+    farmersList: 'Kisan List',
+    membersList: 'Sadasya List',
+    digitalMilkSlip: 'Digital Doodh Slip',
+    thankYou: 'Dhanyavaad!',
+    generatedDate: 'Jaari Tithi',
+    total: 'Kul',
+
+    from: 'Se',
+    till: 'Tak',
+    code: 'Code',
+    name: 'Naam',
+    farmerCode: 'Kisan Code',
+    member: 'Sadasya',
+    date: 'Dinank',
+    shift: 'Pali',
+    morning: 'Subah',
+    evening: 'Shaam',
+    morningShort: 'S',
+    eveningShort: 'Sh',
+    fat: 'Fat',
+    snf: 'SNF',
+    qty: 'Matra',
+    rate: 'Dar',
+    amount: 'Rashi',
+    mobile: 'Mobile',
+
+    lastPayment: 'Pichla Bhugtan',
+    milkAmount: 'Doodh Rashi',
+    milkQuantity: 'Doodh Matra',
+    milkRate: 'Doodh Dar',
+    advanceProduct: 'Advance / Product',
+    totalPayable: 'Kul Dey',
+    paidAmount: 'Bhugtan Rashi',
+    closingBalance: 'Shesh Rashi',
+    closingBal: 'Shesh',
+
+    dairy: 'Dairy',
+};
+
+const mrLatin: SlipLabels = {
+    collection: 'Sankalan',
+    paymentSlip: 'Payment Slip',
+    farmersList: 'Shetkari Yadi',
+    membersList: 'Sadasya Yadi',
+    digitalMilkSlip: 'Digital Doodh Slip',
+    thankYou: 'Dhanyavaad!',
+    generatedDate: 'Jaari Dinank',
+    total: 'Ekun',
+
+    from: 'Pasun',
+    till: 'Paryant',
+    code: 'Code',
+    name: 'Naav',
+    farmerCode: 'Shetkari Code',
+    member: 'Sadasya',
+    date: 'Dinank',
+    shift: 'Pali',
+    morning: 'Sakal',
+    evening: 'Sandhyakal',
+    morningShort: 'S',
+    eveningShort: 'Sn',
+    fat: 'Fat',
+    snf: 'SNF',
+    qty: 'Matra',
+    rate: 'Dar',
+    amount: 'Rakkam',
+    mobile: 'Mobile',
+
+    lastPayment: 'Magil Payment',
+    milkAmount: 'Doodh Rakkam',
+    milkQuantity: 'Doodh Matra',
+    milkRate: 'Doodh Dar',
+    advanceProduct: 'Advance / Utpadan',
+    totalPayable: 'Ekun Dey',
+    paidAmount: 'Dileli Rakkam',
+    closingBalance: 'Shillak Rakkam',
+    closingBal: 'Shillak',
+
+    dairy: 'Dairy',
+};
+
+const THERMAL_MAP: Record<LanguageCode, SlipLabels> = {
+    en,
+    hi: hiLatin,
+    mr: mrLatin,
+};
+
+/**
+ * Get slip labels safe for ESC/POS thermal printing.
+ *
+ * For English → returns English labels.
+ * For Hindi / Marathi → returns Roman-script transliterations so the
+ * printer's CP437/Latin codepage renders them correctly instead of boxes.
+ */
+export function getThermalSlipLabels(lang?: LanguageCode): SlipLabels {
+    const code = lang || (getLanguage() as LanguageCode);
+    return THERMAL_MAP[code] || en;
+}

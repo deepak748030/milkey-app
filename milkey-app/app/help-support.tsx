@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-na
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, FileQuestionMark as FileQuestion, MessageCircle, Mail, Phone, ChevronRight, ChevronDown } from 'lucide-react-native';
+// WhatsApp icon — use MessageCircle as a stand-in (lucide doesn't ship a brand icon).
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -18,13 +19,21 @@ export default function HelpSupportScreen() {
     Linking.openURL('mailto:fresh.milkley@gmail.com');
   };
 
+  const WHATSAPP_NUMBER = '919027599139'; // +91 9027599139, WhatsApp only
+  const handleWhatsAppPress = () => {
+    const url = `whatsapp://send?phone=${WHATSAPP_NUMBER}&text=${encodeURIComponent('Hi Milkey support, I need help.')}`;
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://wa.me/${WHATSAPP_NUMBER}`).catch(() => { });
+    });
+  };
+
   const contactOptions = [
-    // {
-    //   icon: MessageCircle,
-    //   title: 'Live Chat',
-    //   subtitle: 'Chat with our support team',
-    //   onPress: () => router.push('/submit-form'),
-    // },
+    {
+      icon: MessageCircle,
+      title: 'WhatsApp Support',
+      subtitle: '+91 9027599139 (WhatsApp only)',
+      onPress: handleWhatsAppPress,
+    },
     {
       icon: Mail,
       title: 'Email Us',

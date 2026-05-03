@@ -7,7 +7,7 @@
 import { brandedFooter, brandedHeader, twoCol, line as fmtLine } from './printFormat';
 import { left as fmtLeft, center as fmtCenter } from './printFormat';
 import type { Payment, MemberPayment, PrintSettings, Farmer, Member } from './milkeyApi';
-import { getSlipLabels } from './printTranslations';
+import { getThermalSlipLabels as getSlipLabels } from './printTranslations';
 
 const formatDateDDMMYYYY = (dateStr?: string): string => {
     if (!dateStr) return '';
