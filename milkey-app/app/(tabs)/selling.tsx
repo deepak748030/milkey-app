@@ -1494,7 +1494,6 @@ export default function SellingScreen() {
             payload += twoCol(`${tMS.from}:`, periodStart);
             payload += twoCol(`${tMS.till}:`, periodEnd);
             payload += fmtLeft(`${tMS.member}: ${selectedPaymentMember.name}`);
-            payload += feed(1);
             payload += fmtLine();
             payload += twoCol(`${tMS.lastBalance}:`, `Rs ${prevBal.toFixed(0)}`);
             payload += twoCol(`${tMS.milkQuantity}:`, `${totalLiters.toFixed(1)} L`);
@@ -2072,7 +2071,14 @@ export default function SellingScreen() {
                             ) : (
                                 <>
                                     <FileText size={14} color={colors.primary} />
-                                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>Full Detailed Entry</Text>
+                                    <Text
+                                        numberOfLines={1}
+                                        adjustsFontSizeToFit
+                                        minimumFontScale={0.7}
+                                        style={{ fontSize: 11, fontWeight: '700', color: colors.primary, flexShrink: 1 }}
+                                    >
+                                        Full Detailed Entry
+                                    </Text>
                                 </>
                             )}
                         </Pressable>

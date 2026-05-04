@@ -622,4 +622,100 @@ router.put('/:id', auth, requireSubscription('register'), async (req, res) => {
     }
 });
 
+// Helper: recalc payment netPayable & closingBalance from current totals
+function recalcPaymentTotals(payment) {
+    payment.netPayable = (payment.totalMilkAmount || 0) - (payment.totalAdvanceDeduction || 0) + (payment.previousBalance || 0);
+    payment.closingBalance = payment.netPayable - (payment.amount || 0);
+}
+
+// POST /api/payments/:id/advances - Add a new advance to an existing payment (already settled inside this payment)
+router.post('/:id/advances', auth, requireSubscription('register'), async (req, res) => {
+    try {
+        const { amount, note } = req.body;
+        const amt = parseFloat(amount);
+        if (!amt || amt <= 0) {
+            return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
+        }
+
+        const payment = await Payment.findOne({ _id: req.params.id, owner: req.userId });
+        if (!payment) return res.status(404).json({ success: false, message: 'Payment not found' });
+
+        const farmer = await Farmer.findById(payment.farmer);
+        if (!farmer) return res.status(404).json({ success: false, message: 'Farmer not found' });
+
+        // Create advance attached to this farmer, marked as already settled (deducted in this payment)
+        const advance = await Advance.create({
+            farmer: farmer._id,
+            owner: req.userId,
+            amount: amt,
+            settledAmount: amt,
+            status: 'settled',
+            note: (note || '').toString().trim(),
+            date: payment.date || new Date(),
+        });
+
+        // Update payment totals
+        payment.settledAdvances = [...(payment.settledAdvances || []), advance._id];
+        payment.totalAdvanceDeduction = (payment.totalAdvanceDeduction || 0) + amt;
+        recalcPaymentTotals(payment);
+        await payment.save();
+
+        // Adjust farmer current balance: deducting more reduces what farmer is owed (closing balance changed by -amt)
+        // closingBalance went down by amt, so farmer.currentBalance decreases by amt
+        farmer.currentBalance = (farmer.currentBalance || 0) - amt;
+        await farmer.save();
+
+        const populated = await Payment.findById(payment._id)
+            .populate('farmer', 'code name')
+            .populate('settledAdvances', 'amount date note status farmer')
+            .lean();
+
+        res.json({ success: true, message: 'Advance added to payment', response: populated });
+    } catch (error) {
+        console.error('Add advance to payment error:', error);
+        res.status(500).json({ success: false, message: 'Failed to add advance' });
+    }
+});
+
+// DELETE /api/payments/:id/advances/:advanceId - Permanently remove an advance from a payment and DB
+router.delete('/:id/advances/:advanceId', auth, requireSubscription('register'), async (req, res) => {
+    try {
+        const payment = await Payment.findOne({ _id: req.params.id, owner: req.userId });
+        if (!payment) return res.status(404).json({ success: false, message: 'Payment not found' });
+
+        const advance = await Advance.findOne({ _id: req.params.advanceId, owner: req.userId });
+        if (!advance) return res.status(404).json({ success: false, message: 'Advance not found' });
+
+        const advAmt = advance.amount || 0;
+
+        // Remove from settledAdvances on this payment
+        payment.settledAdvances = (payment.settledAdvances || []).filter(
+            (id) => id.toString() !== advance._id.toString()
+        );
+        payment.totalAdvanceDeduction = Math.max(0, (payment.totalAdvanceDeduction || 0) - advAmt);
+        recalcPaymentTotals(payment);
+        await payment.save();
+
+        // Permanently delete from DB
+        await Advance.findByIdAndDelete(advance._id);
+
+        // Reverse the farmer balance impact: closing balance went up by advAmt → farmer.currentBalance increases by advAmt
+        const farmer = await Farmer.findById(payment.farmer);
+        if (farmer) {
+            farmer.currentBalance = (farmer.currentBalance || 0) + advAmt;
+            await farmer.save();
+        }
+
+        const populated = await Payment.findById(payment._id)
+            .populate('farmer', 'code name')
+            .populate('settledAdvances', 'amount date note status farmer')
+            .lean();
+
+        res.json({ success: true, message: 'Advance deleted permanently', response: populated });
+    } catch (error) {
+        console.error('Delete advance from payment error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete advance' });
+    }
+});
+
 module.exports = router;

@@ -192,6 +192,12 @@ export default function RegisterScreen() {
     const [showEditEndDatePicker, setShowEditEndDatePicker] = useState(false);
     const [updatingPayment, setUpdatingPayment] = useState(false);
 
+    // Advance add/delete inside Edit Payment modal
+    const [newAdvAmount, setNewAdvAmount] = useState('');
+    const [newAdvNote, setNewAdvNote] = useState('');
+    const [addingAdvance, setAddingAdvance] = useState(false);
+    const [deletingAdvanceId, setDeletingAdvanceId] = useState<string | null>(null);
+
     // Compute blocked periods for edit modal (exclude the current payment being edited)
     const editBlockedPeriods = useMemo((): BlockedPeriod[] => {
         if (!editingPayment) return [];
@@ -702,6 +708,62 @@ export default function RegisterScreen() {
         setEditPeriodEnd('');
         setShowEditStartDatePicker(false);
         setShowEditEndDatePicker(false);
+        setNewAdvAmount('');
+        setNewAdvNote('');
+    };
+
+    // Add a new advance into the currently edited payment
+    const handleAddAdvanceToPayment = async () => {
+        if (!editingPayment) return;
+        const amt = parseFloat(newAdvAmount);
+        if (isNaN(amt) || amt <= 0) {
+            showAlert('Error', 'Please enter a valid advance amount');
+            return;
+        }
+        setAddingAdvance(true);
+        try {
+            const res = await paymentsApi.addAdvance(editingPayment._id, {
+                amount: amt,
+                note: newAdvNote.trim(),
+            });
+            if (res.success && res.response) {
+                setEditingPayment(res.response as Payment);
+                setNewAdvAmount('');
+                setNewAdvNote('');
+                fetchData();
+            } else {
+                showAlert('Error', res.message || 'Failed to add advance');
+            }
+        } catch (e) {
+            showAlert('Error', 'Failed to add advance');
+        } finally {
+            setAddingAdvance(false);
+        }
+    };
+
+    // Permanently delete an advance from the payment + DB
+    const handleDeleteAdvanceFromPayment = (advanceId: string) => {
+        if (!editingPayment) return;
+        showConfirm(
+            'Delete Advance',
+            'This will permanently delete this advance from the database. Continue?',
+            async () => {
+                setDeletingAdvanceId(advanceId);
+                try {
+                    const res = await paymentsApi.deleteAdvance(editingPayment._id, advanceId);
+                    if (res.success && res.response) {
+                        setEditingPayment(res.response as Payment);
+                        fetchData();
+                    } else {
+                        showAlert('Error', res.message || 'Failed to delete advance');
+                    }
+                } catch (e) {
+                    showAlert('Error', 'Failed to delete advance');
+                } finally {
+                    setDeletingAdvanceId(null);
+                }
+            }
+        );
     };
 
     // Lookup farmer name when code changes
@@ -2094,26 +2156,88 @@ export default function RegisterScreen() {
                                 </View>
 
                                 {/* Settled Advances Section */}
-                                {editingPayment.settledAdvances && editingPayment.settledAdvances.length > 0 && (
-                                    <View style={styles.settledAdvancesSection}>
-                                        <Text style={[styles.settledAdvancesTitle, { color: colors.primary }]}>Advance History</Text>
-                                        {editingPayment.settledAdvances.map((adv, index) => (
-                                            <View key={adv._id || index} style={[styles.settledAdvanceRow, { borderColor: colors.border }]}>
-                                                <View style={styles.settledAdvanceInfo}>
-                                                    <Text style={[styles.settledAdvanceCode, { color: colors.foreground }]}>
-                                                        {adv.farmer?.code || '-'} - {adv.farmer?.name || '-'}
-                                                    </Text>
-                                                    <Text style={[styles.settledAdvanceNote, { color: colors.mutedForeground }]}>
-                                                        {adv.note || 'No note'} • {new Date(adv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                                    </Text>
-                                                </View>
-                                                <Text style={[styles.settledAdvanceAmount, { color: colors.warning }]}>
-                                                    ₹{adv.amount.toLocaleString('en-IN')}
+                                <View style={styles.settledAdvancesSection}>
+                                    <Text style={[styles.settledAdvancesTitle, { color: colors.primary }]}>Advance History</Text>
+
+                                    {(!editingPayment.settledAdvances || editingPayment.settledAdvances.length === 0) && (
+                                        <Text style={{ color: colors.mutedForeground, fontSize: 12, textAlign: 'center', paddingVertical: 8 }}>
+                                            No advances on this payment
+                                        </Text>
+                                    )}
+
+                                    {editingPayment.settledAdvances?.map((adv, index) => (
+                                        <View key={adv._id || index} style={[styles.settledAdvanceRow, { borderColor: colors.border }]}>
+                                            <View style={styles.settledAdvanceInfo}>
+                                                <Text style={[styles.settledAdvanceCode, { color: colors.foreground }]}>
+                                                    {adv.farmer?.code || editingPayment.farmer?.code || '-'} - {adv.farmer?.name || editingPayment.farmer?.name || '-'}
+                                                </Text>
+                                                <Text style={[styles.settledAdvanceNote, { color: colors.mutedForeground }]}>
+                                                    {adv.note || 'No note'} • {new Date(adv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
                                                 </Text>
                                             </View>
-                                        ))}
+                                            <Text style={[styles.settledAdvanceAmount, { color: colors.warning, marginRight: 8 }]}>
+                                                ₹{adv.amount.toLocaleString('en-IN')}
+                                            </Text>
+                                            <Pressable
+                                                onPress={() => handleDeleteAdvanceFromPayment(adv._id!)}
+                                                disabled={deletingAdvanceId === adv._id}
+                                                style={{ padding: 6, borderRadius: 6, backgroundColor: colors.destructive + '15' }}
+                                                hitSlop={6}
+                                            >
+                                                {deletingAdvanceId === adv._id ? (
+                                                    <ActivityIndicator size="small" color={colors.destructive} />
+                                                ) : (
+                                                    <Trash2 size={14} color={colors.destructive} />
+                                                )}
+                                            </Pressable>
+                                        </View>
+                                    ))}
+
+                                    {/* Add Advance form (2 inputs: amount + note) */}
+                                    <View style={{ marginTop: 10, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background }}>
+                                        <Text style={{ fontSize: 12, fontWeight: '700', color: colors.foreground, marginBottom: 6 }}>
+                                            Add Advance
+                                        </Text>
+                                        <TextInput
+                                            style={[styles.editPaymentInput, { backgroundColor: colors.secondary, color: colors.foreground, marginBottom: 6 }]}
+                                            value={newAdvAmount}
+                                            onChangeText={setNewAdvAmount}
+                                            keyboardType="numeric"
+                                            placeholder="Amount (₹)"
+                                            placeholderTextColor={colors.mutedForeground}
+                                        />
+                                        <TextInput
+                                            style={[styles.editPaymentInput, { backgroundColor: colors.secondary, color: colors.foreground, marginBottom: 8 }]}
+                                            value={newAdvNote}
+                                            onChangeText={setNewAdvNote}
+                                            placeholder="Note (optional)"
+                                            placeholderTextColor={colors.mutedForeground}
+                                        />
+                                        <Pressable
+                                            onPress={handleAddAdvanceToPayment}
+                                            disabled={addingAdvance}
+                                            style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: 6,
+                                                backgroundColor: colors.primary,
+                                                paddingVertical: 9,
+                                                borderRadius: 6,
+                                                opacity: addingAdvance ? 0.7 : 1,
+                                            }}
+                                        >
+                                            {addingAdvance ? (
+                                                <ActivityIndicator size="small" color={colors.white} />
+                                            ) : (
+                                                <>
+                                                    <Plus size={14} color={colors.white} />
+                                                    <Text style={{ color: colors.white, fontSize: 13, fontWeight: '700' }}>Add Advance</Text>
+                                                </>
+                                            )}
+                                        </Pressable>
                                     </View>
-                                )}
+                                </View>
 
                                 <View style={styles.editPaymentSummary}>
                                     <View style={styles.editPaymentSummaryRow}>

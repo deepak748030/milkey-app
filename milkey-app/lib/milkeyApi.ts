@@ -758,6 +758,19 @@ export const paymentsApi = {
         const query = queryParams.toString();
         return apiRequest<{ paidOnDate: number; totalCurrentBalance: number }>(`/payments/summary-stats${query ? `?${query}` : ''}`);
     },
+
+    addAdvance: async (paymentId: string, data: { amount: number; note?: string }) => {
+        return apiRequest<Payment>(`/payments/${paymentId}/advances`, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    },
+
+    deleteAdvance: async (paymentId: string, advanceId: string) => {
+        return apiRequest<Payment>(`/payments/${paymentId}/advances/${advanceId}`, {
+            method: 'DELETE',
+        });
+    },
 };
 
 // Rate Charts API
