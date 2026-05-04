@@ -5,31 +5,21 @@ import {
     StyleSheet,
     Pressable,
     Modal,
+    Dimensions,
     ActivityIndicator,
     Alert,
+    Linking,
     Platform,
-    NativeModules,
 } from 'react-native';
-// Safe import — native module is null in Expo Go / web
-let RazorpayCheckout: any = null;
-try {
-    RazorpayCheckout = require('react-native-razorpay').default;
-    console.log('[Razorpay] Module loaded:', !!RazorpayCheckout, 'has open:', typeof RazorpayCheckout?.open);
-} catch (e) {
-    console.warn('[Razorpay] Failed to load native module:', e);
-}
+import { WebView, WebViewMessageEvent } from 'react-native-webview';
+import { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, AlertCircle, Clock, RefreshCw, ShieldAlert, ShieldCheck, Smartphone } from 'lucide-react-native';
+import { X, Check, AlertCircle, Clock, RefreshCw, ShieldAlert } from 'lucide-react-native';
 import { razorpayApi, userSubscriptionsApi } from '@/lib/milkeyApi';
 
-const PAYMENT_TIMEOUT = 10 * 60; // 10 minutes
-
-const isRazorpayNativeReady = () =>
-    Platform.OS !== 'web' &&
-    !!RazorpayCheckout &&
-    typeof RazorpayCheckout.open === 'function' &&
-    !!NativeModules.RNRazorpayCheckout;
+const { height } = Dimensions.get('window');
+const PAYMENT_TIMEOUT = 10 * 60; // 10 minutes in seconds
 
 interface RazorpayPaymentModalProps {
     visible: boolean;
@@ -42,7 +32,7 @@ interface RazorpayPaymentModalProps {
     customerPhone?: string;
     onSuccess: (paymentData: any) => void;
     onFailure?: (error: string) => void;
-    skipSubscriptionCheck?: boolean;
+    skipSubscriptionCheck?: boolean; // Skip subscription check for product orders
 }
 
 export default function RazorpayPaymentModal({
@@ -63,18 +53,22 @@ export default function RazorpayPaymentModal({
     const [isCreating, setIsCreating] = useState(false);
     const [orderData, setOrderData] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
-    const [verifying, setVerifying] = useState(false);
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [paymentResult, setPaymentResult] = useState<any>(null);
     const [timeRemaining, setTimeRemaining] = useState(PAYMENT_TIMEOUT);
     const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const webViewRef = useRef<WebView>(null);
+    const [webviewError, setWebviewError] = useState<string | null>(null);
     const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
     const [checkingSubscription, setCheckingSubscription] = useState(true);
-    const checkoutOpenedRef = useRef(false);
 
     const styles = createStyles(colors, isDark, insets);
 
+    // Check for active subscription when modal opens (only for subscription purchases)
     useEffect(() => {
         if (visible) {
             if (skipSubscriptionCheck) {
+                // Skip subscription check for product orders
                 setCheckingSubscription(false);
                 setHasActiveSubscription(false);
             } else {
@@ -83,7 +77,6 @@ export default function RazorpayPaymentModal({
         } else {
             setHasActiveSubscription(false);
             setCheckingSubscription(true);
-            checkoutOpenedRef.current = false;
         }
     }, [visible, skipSubscriptionCheck]);
 
@@ -93,11 +86,16 @@ export default function RazorpayPaymentModal({
             const response = await userSubscriptionsApi.getStatus();
             if (response.success && response.response) {
                 const { hasPurchase, hasSelling, hasRegister } = response.response;
-                setHasActiveSubscription(!!(hasPurchase || hasSelling || hasRegister));
+                // If user has ANY active subscription, block new purchase
+                if (hasPurchase || hasSelling || hasRegister) {
+                    setHasActiveSubscription(true);
+                } else {
+                    setHasActiveSubscription(false);
+                }
             } else {
                 setHasActiveSubscription(false);
             }
-        } catch {
+        } catch (err) {
             setHasActiveSubscription(false);
         } finally {
             setCheckingSubscription(false);
@@ -105,12 +103,16 @@ export default function RazorpayPaymentModal({
     };
 
     useEffect(() => {
+        // Only create order if no active subscription (or skipped) and amount/orderId are valid
         if (visible && amount > 0 && orderId && !hasActiveSubscription && !checkingSubscription) {
             setTimeRemaining(PAYMENT_TIMEOUT);
             createRazorpayOrder();
             startCountdownTimer();
         }
-        return () => clearTimer();
+
+        return () => {
+            clearTimer();
+        };
     }, [visible, amount, orderId, hasActiveSubscription, checkingSubscription]);
 
     const clearTimer = () => {
@@ -121,14 +123,19 @@ export default function RazorpayPaymentModal({
     };
 
     const startCountdownTimer = () => {
-        clearTimer();
+        if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+        }
+
         timerIntervalRef.current = setInterval(() => {
             setTimeRemaining((prev) => {
                 if (prev <= 1) {
                     clearTimer();
-                    Alert.alert('Payment Timeout', 'Payment time expired. Please try again.', [
-                        { text: 'OK', onPress: handleClose },
-                    ]);
+                    Alert.alert(
+                        'Payment Timeout',
+                        'Payment time expired. Please try again.',
+                        [{ text: 'OK', onPress: handleClose }]
+                    );
                     return 0;
                 }
                 return prev - 1;
@@ -146,108 +153,146 @@ export default function RazorpayPaymentModal({
         setIsCreating(true);
         setError(null);
         setOrderData(null);
+
         try {
             const response = await razorpayApi.createOrder({
-                amount, orderId, description, customerName, customerEmail, customerPhone,
+                amount,
+                orderId,
+                description,
+                customerName,
+                customerEmail,
+                customerPhone,
             });
+
             if (response.success && response.response) {
                 setOrderData(response.response);
             } else {
                 setError(response.message || 'Failed to create payment order');
             }
-        } catch {
+        } catch (err) {
             setError('Network error. Please try again.');
         } finally {
             setIsCreating(false);
         }
     };
 
-    const openRazorpayCheckout = async () => {
-        if (!orderData || checkoutOpenedRef.current) return;
-
-        if (!isRazorpayNativeReady()) {
-            console.error('[Razorpay] Native module not available', {
-                platform: Platform.OS,
-                hasCheckout: !!RazorpayCheckout,
-                openType: typeof RazorpayCheckout?.open,
-                hasNativeModule: !!NativeModules.RNRazorpayCheckout,
-                nativeModuleKeys: Object.keys(NativeModules).filter((key) => key.toLowerCase().includes('razorpay')),
-            });
-            Alert.alert(
-                'Payment Unavailable',
-                'Razorpay SDK is not linked in this app build. Please install a fresh development/production build after this update.',
-            );
-            return;
-        }
-
-        checkoutOpenedRef.current = true;
-        console.log('[Razorpay] Opening checkout with order:', orderData.razorpayOrderId);
-
-        const options = {
-            description,
-            currency: 'INR',
-            key: orderData.keyId,
-            amount: orderData.amount,
-            name: 'Milkey',
-            order_id: orderData.razorpayOrderId,
-            prefill: {
-                email: customerEmail || '',
-                contact: customerPhone || '',
-                name: customerName || '',
-            },
-            theme: { color: colors.primary },
-        };
-
+    const handleWebViewMessage = async (event: WebViewMessageEvent) => {
         try {
-            const data: any = await RazorpayCheckout.open(options);
-            // Verify payment server-side
-            setVerifying(true);
-            const verifyResponse = await razorpayApi.verifyPayment({
-                razorpay_order_id: data.razorpay_order_id,
-                razorpay_payment_id: data.razorpay_payment_id,
-                razorpay_signature: data.razorpay_signature,
-                orderId,
-            });
-            setVerifying(false);
-            clearTimer();
+            const data = JSON.parse(event.nativeEvent.data);
 
-            if (verifyResponse.success) {
-                const result = {
-                    paymentId: data.razorpay_payment_id,
-                    orderId: data.razorpay_order_id,
-                    signature: data.razorpay_signature,
-                };
-                resetState();
-                onSuccess(result);
-            } else {
-                Alert.alert('Payment Verification Failed', verifyResponse.message || 'Please contact support.');
-                onFailure?.(verifyResponse.message || 'Verification failed');
+            if (data.event === 'payment.success') {
+                clearTimer();
+
+                // Verify payment on server
+                const verifyResponse = await razorpayApi.verifyPayment({
+                    razorpay_order_id: data.razorpay_order_id,
+                    razorpay_payment_id: data.razorpay_payment_id,
+                    razorpay_signature: data.razorpay_signature,
+                    orderId: orderId,
+                });
+
+                if (verifyResponse.success) {
+                    const result = {
+                        paymentId: data.razorpay_payment_id,
+                        orderId: data.razorpay_order_id,
+                        signature: data.razorpay_signature,
+                    };
+                    // Auto-close and call success callback immediately
+                    setOrderData(null);
+                    setError(null);
+                    setShowSuccess(false);
+                    setPaymentResult(null);
+                    setTimeRemaining(PAYMENT_TIMEOUT);
+                    onSuccess(result);
+                } else {
+                    Alert.alert('Payment Verification Failed', verifyResponse.message || 'Please contact support.');
+                    onFailure?.(verifyResponse.message || 'Verification failed');
+                }
+            } else if (data.event === 'payment.failed') {
+                clearTimer();
+                Alert.alert('Payment Failed', data.error?.description || 'Payment was not successful.');
+                onFailure?.(data.error?.description || 'Payment failed');
+            } else if (data.event === 'payment.dismissed') {
+                // User dismissed the payment modal
+                // Don't close, let them retry
             }
-        } catch (err: any) {
-            setVerifying(false);
-            checkoutOpenedRef.current = false;
-            const code = err?.code;
-            const desc = err?.description || err?.message || 'Payment was cancelled';
-            // code 0 / 2 typically = user cancelled
-            if (code === 0 || code === 2) {
-                // Stay on modal so user can retry
-                return;
-            }
-            Alert.alert('Payment Failed', desc);
-            onFailure?.(desc);
+        } catch (err) {
+            // Silent fail for message parsing
         }
     };
 
-    const resetState = () => {
-        setOrderData(null);
-        setError(null);
-        setTimeRemaining(PAYMENT_TIMEOUT);
-        checkoutOpenedRef.current = false;
+    // Handle UPI intent URLs for opening payment apps
+    const handleIntentUrl = (request: ShouldStartLoadRequest): boolean => {
+        const { url } = request;
+
+        // List of all known UPI and payment app schemes
+        const paymentSchemes = [
+            'upi://',
+            'gpay://',
+            'phonepe://',
+            'paytm://',
+            'paytmmp://', // PayTM Merchant Payment
+            'intent://',
+            'tez://',
+            'bhim://',
+            'amazonpay://',
+            'cred://',
+            'mobikwik://',
+            'freecharge://',
+            'whatsapp://', // WhatsApp Pay
+        ];
+
+        // Check if URL starts with any payment scheme
+        const isPaymentUrl = paymentSchemes.some(scheme => url.startsWith(scheme));
+
+        if (isPaymentUrl) {
+            Linking.openURL(url).catch(() => {
+                Alert.alert(
+                    'Payment App Not Found',
+                    'Could not open the payment app. Please try another UPI option or enter UPI ID manually.',
+                    [{ text: 'OK' }]
+                );
+            });
+            return false; // Prevent WebView from loading the URL
+        }
+
+        // Allow other URLs to load in WebView
+        return true;
+    };
+
+    // Handle WebView errors
+    const handleWebViewError = (syntheticEvent: any) => {
+        const { nativeEvent } = syntheticEvent;
+        console.error('WebView error:', nativeEvent);
+        setWebviewError('Payment page failed to load. Please check your internet connection and try again.');
+    };
+
+    const handleWebViewHttpError = (syntheticEvent: any) => {
+        const { nativeEvent } = syntheticEvent;
+        console.error('WebView HTTP error:', nativeEvent);
+        if (nativeEvent.statusCode >= 400) {
+            setWebviewError('Payment service is temporarily unavailable. Please try again later.');
+        }
+    };
+
+    const retryWebView = () => {
+        setWebviewError(null);
+        createRazorpayOrder();
+    };
+
+    const handleSuccessClose = () => {
+        setShowSuccess(false);
+        clearTimer();
+        onSuccess(paymentResult);
     };
 
     const handleClose = () => {
         clearTimer();
-        resetState();
+        setOrderData(null);
+        setError(null);
+        setShowSuccess(false);
+        setPaymentResult(null);
+        setTimeRemaining(PAYMENT_TIMEOUT);
         onClose();
     };
 
@@ -257,17 +302,199 @@ export default function RazorpayPaymentModal({
         return colors.primary;
     };
 
+    // Razorpay Checkout HTML - UPI Only (no card, no EMI)
+    const getCheckoutHTML = () => {
+        if (!orderData) return '';
+
+        return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
+    <base href="https://checkout.razorpay.com/">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: ${isDark ? '#1a1a1a' : '#ffffff'};
+            color: ${isDark ? '#ffffff' : '#000000'};
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .loading {
+            text-align: center;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid ${isDark ? '#333' : '#e0e0e0'};
+            border-top-color: ${colors.primary};
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .message {
+            margin-top: 16px;
+            font-size: 14px;
+            color: ${isDark ? '#aaa' : '#666'};
+        }
+        .amount {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: ${colors.primary};
+        }
+        .pay-btn {
+            background: ${colors.primary};
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+        .pay-btn:active {
+            opacity: 0.8;
+        }
+        .pay-btn:disabled {
+            opacity: 0.6;
+        }
+        .upi-note {
+            margin-top: 16px;
+            font-size: 12px;
+            color: ${isDark ? '#888' : '#888'};
+            text-align: center;
+        }
+        .error-msg {
+            color: #EF4444;
+            font-size: 14px;
+            text-align: center;
+            margin-top: 16px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="amount">₹${amount}</div>
+    <div class="loading" id="loadingDiv">
+        <div class="spinner"></div>
+        <p class="message">Opening Razorpay...</p>
+    </div>
+    <button class="pay-btn" id="payBtn" style="display: none;">Pay ₹${amount}</button>
+    <p class="upi-note" id="upiNote" style="display: none;">Pay using UPI apps like GPay, PhonePe, Paytm</p>
+    
+    <script>
+        var options = {
+            "key": "${orderData.keyId}",
+            "amount": "${orderData.amount}",
+            "currency": "INR",
+            "name": "Milkey",
+            "description": "${description}",
+            "order_id": "${orderData.razorpayOrderId}",
+            "prefill": {
+                "name": "${customerName}",
+                "email": "${customerEmail}",
+                "contact": "${customerPhone}"
+            },
+            "config": {
+                "display": {
+                    "blocks": {
+                        "upi": {
+                            "name": "Pay using UPI",
+                            "instruments": [
+                                {
+                                    "method": "upi",
+                                    "flows": ["collect", "intent", "qr"]
+                                }
+                            ]
+                        }
+                    },
+                    "sequence": ["block.upi"],
+                    "preferences": {
+                        "show_default_blocks": false
+                    }
+                }
+            },
+            "theme": {
+                "color": "${colors.primary}"
+            },
+            "handler": function(response) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    event: 'payment.success',
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_signature: response.razorpay_signature
+                }));
+            },
+            "modal": {
+                "ondismiss": function() {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        event: 'payment.dismissed'
+                    }));
+                }
+            }
+        };
+        
+        var rzp = new Razorpay(options);
+        
+        rzp.on('payment.failed', function(response) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                event: 'payment.failed',
+                error: response.error
+            }));
+        });
+        
+        // Auto-open Razorpay checkout
+        setTimeout(function() {
+            rzp.open();
+            document.querySelector('.loading').style.display = 'none';
+            document.getElementById('payBtn').style.display = 'block';
+            document.getElementById('upiNote').style.display = 'block';
+        }, 500);
+        
+        // Manual pay button as fallback
+        document.getElementById('payBtn').onclick = function() {
+            rzp.open();
+        };
+    </script>
+</body>
+</html>
+        `;
+    };
+
     return (
-        <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+        <Modal
+            visible={visible}
+            transparent
+            animationType="slide"
+            onRequestClose={handleClose}
+        >
             <View style={styles.overlay}>
                 <Pressable style={styles.backdrop} onPress={handleClose} />
                 <View style={styles.sheet}>
                     <View style={styles.handle} />
 
                     <View style={styles.header}>
-                        <Text style={styles.title}>Secure Payment</Text>
+                        <Text style={styles.title}>UPI Payment</Text>
                         <View style={styles.headerRight}>
-                            {orderData && !verifying && (
+                            {orderData && !showSuccess && (
                                 <View style={[styles.timerBadge, { backgroundColor: getTimerColor() + '20' }]}>
                                     <Clock size={14} color={getTimerColor()} />
                                     <Text style={[styles.timerText, { color: getTimerColor() }]}>
@@ -284,14 +511,14 @@ export default function RazorpayPaymentModal({
                     {checkingSubscription ? (
                         <View style={styles.loadingContainer}>
                             <ActivityIndicator size="large" color={colors.primary} />
-                            <Text style={styles.loadingText}>Checking subscription...</Text>
+                            <Text style={styles.loadingText}>Checking subscription status...</Text>
                         </View>
                     ) : hasActiveSubscription ? (
                         <View style={styles.errorContainer}>
-                            <ShieldAlert size={48} color="#F59E0B" />
-                            <Text style={styles.errorTitle}>Active Subscription Found</Text>
+                            <ShieldAlert size={64} color={colors.primary} />
+                            <Text style={styles.errorTitle}>Already Subscribed</Text>
                             <Text style={styles.errorText}>
-                                You already have an active subscription. Please wait for it to expire before purchasing a new one.
+                                You already have an active subscription. You cannot purchase another subscription until your current one expires.
                             </Text>
                             <Pressable style={styles.retryBtn} onPress={handleClose}>
                                 <Text style={styles.retryBtnText}>Close</Text>
@@ -302,43 +529,62 @@ export default function RazorpayPaymentModal({
                             <ActivityIndicator size="large" color={colors.primary} />
                             <Text style={styles.loadingText}>Creating payment order...</Text>
                         </View>
-                    ) : verifying ? (
-                        <View style={styles.loadingContainer}>
-                            <ActivityIndicator size="large" color={colors.primary} />
-                            <Text style={styles.loadingText}>Verifying payment...</Text>
-                        </View>
                     ) : error ? (
                         <View style={styles.errorContainer}>
                             <AlertCircle size={48} color="#EF4444" />
                             <Text style={styles.errorTitle}>Payment Error</Text>
                             <Text style={styles.errorText}>{error}</Text>
                             <Pressable style={styles.retryBtn} onPress={createRazorpayOrder}>
-                                <RefreshCw size={18} color="#fff" />
+                                <Text style={styles.retryBtnText}>Retry</Text>
+                            </Pressable>
+                        </View>
+                    ) : webviewError ? (
+                        <View style={styles.errorContainer}>
+                            <AlertCircle size={48} color="#EF4444" />
+                            <Text style={styles.errorTitle}>Connection Error</Text>
+                            <Text style={styles.errorText}>{webviewError}</Text>
+                            <Pressable style={styles.retryBtn} onPress={retryWebView}>
+                                <RefreshCw size={16} color={colors.white} style={{ marginRight: 6 }} />
                                 <Text style={styles.retryBtnText}>Retry</Text>
                             </Pressable>
                         </View>
                     ) : orderData ? (
-                        <View style={styles.summaryContainer}>
-                            <View style={styles.amountCard}>
-                                <Text style={styles.amountLabel}>Amount Payable</Text>
-                                <Text style={styles.amountValue}>₹{amount}</Text>
-                                <Text style={styles.descText}>{description}</Text>
-                            </View>
+                        <View style={styles.webviewContainer}>
+                            <WebView
+                                ref={webViewRef}
+                                source={{ html: getCheckoutHTML() }}
+                                onMessage={handleWebViewMessage}
+                                style={styles.webview}
+                                javaScriptEnabled={true}
+                                domStorageEnabled={true}
+                                startInLoadingState={true}
 
-                            <View style={styles.infoRow}>
-                                <ShieldCheck size={18} color={colors.primary} />
-                                <Text style={styles.infoText}>Secure Razorpay Checkout</Text>
-                            </View>
-                            <View style={styles.infoRow}>
-                                <Smartphone size={18} color={colors.primary} />
-                                <Text style={styles.infoText}>UPI, Cards, Netbanking & Wallets</Text>
-                            </View>
+                                // Production fixes for Android/iOS
+                                thirdPartyCookiesEnabled={true}
+                                sharedCookiesEnabled={true}
+                                mixedContentMode="always"
+                                allowsInlineMediaPlayback={true}
+                                originWhitelist={['*']}
+                                allowUniversalAccessFromFileURLs={true}
+                                allowFileAccessFromFileURLs={true}
 
-                            <Pressable style={styles.payBtn} onPress={openRazorpayCheckout}>
-                                <Text style={styles.payBtnText}>Pay ₹{amount}</Text>
-                            </Pressable>
+                                // Handle UPI deep links
+                                onShouldStartLoadWithRequest={handleIntentUrl}
 
-                            <Text style={styles.poweredBy}>Powered by Razorpay</Text>
+                                // Error handling
+                                onError={handleWebViewError}
+                                onHttpError={handleWebViewHttpError}
+
+                                // Additional settings
+                                cacheEnabled={true}
+                                incognito={false}
+
+                                renderLoading={() => (
+                                    <View style={styles.webviewLoading}>
+                                        <ActivityIndicator size="large" color={colors.primary} />
+                                    </View>
+                                )}
+                            />
                         </View>
                     ) : null}
                 </View>
@@ -349,57 +595,166 @@ export default function RazorpayPaymentModal({
 
 const createStyles = (colors: any, isDark: boolean, insets: any) =>
     StyleSheet.create({
-        overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-        backdrop: { ...StyleSheet.absoluteFillObject },
+        overlay: {
+            flex: 1,
+            justifyContent: 'flex-end',
+        },
+        backdrop: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+        },
         sheet: {
-            backgroundColor: colors.background,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
+            backgroundColor: colors.card,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            paddingHorizontal: 16,
             paddingBottom: insets.bottom + 16,
-            maxHeight: '85%',
+            minHeight: height * 0.7,
+            maxHeight: height * 0.9,
         },
         handle: {
-            width: 40, height: 4, backgroundColor: colors.border,
-            borderRadius: 2, alignSelf: 'center', marginTop: 8, marginBottom: 4,
+            width: 40,
+            height: 4,
+            backgroundColor: colors.muted,
+            borderRadius: 2,
+            alignSelf: 'center',
+            marginTop: 10,
+            marginBottom: 12,
         },
         header: {
-            flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-            paddingHorizontal: 20, paddingVertical: 12,
-            borderBottomWidth: 1, borderBottomColor: colors.border,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 16,
         },
-        title: { fontSize: 18, fontWeight: '700', color: colors.foreground },
-        headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+        headerRight: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+        },
+        title: {
+            fontSize: 18,
+            fontWeight: '700',
+            color: colors.foreground,
+        },
         timerBadge: {
-            flexDirection: 'row', alignItems: 'center', gap: 4,
-            paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 20,
         },
-        timerText: { fontSize: 12, fontWeight: '700' },
-        closeBtn: { padding: 6, borderRadius: 999, backgroundColor: colors.muted },
-        loadingContainer: { padding: 40, alignItems: 'center', gap: 12 },
-        loadingText: { color: colors.mutedForeground, fontSize: 14 },
-        errorContainer: { padding: 32, alignItems: 'center', gap: 12 },
-        errorTitle: { fontSize: 18, fontWeight: '700', color: colors.foreground, marginTop: 8 },
-        errorText: { color: colors.mutedForeground, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+        timerText: {
+            fontSize: 14,
+            fontWeight: '700',
+        },
+        closeBtn: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: colors.muted,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        loadingContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 60,
+        },
+        loadingText: {
+            marginTop: 12,
+            fontSize: 14,
+            color: colors.mutedForeground,
+        },
+        errorContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 40,
+        },
+        errorTitle: {
+            fontSize: 18,
+            fontWeight: '600',
+            color: colors.foreground,
+            marginTop: 12,
+        },
+        errorText: {
+            fontSize: 14,
+            color: colors.mutedForeground,
+            textAlign: 'center',
+            marginTop: 8,
+            paddingHorizontal: 20,
+        },
         retryBtn: {
-            flexDirection: 'row', alignItems: 'center', gap: 8,
-            backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12,
-            borderRadius: 10, marginTop: 12,
+            marginTop: 20,
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            backgroundColor: colors.primary,
+            borderRadius: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
         },
-        retryBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-        summaryContainer: { padding: 20, gap: 14 },
-        amountCard: {
-            backgroundColor: colors.muted, borderRadius: 14, padding: 20, alignItems: 'center',
-            borderWidth: 1, borderColor: colors.border,
+        retryBtnText: {
+            color: colors.white,
+            fontWeight: '600',
         },
-        amountLabel: { fontSize: 13, color: colors.mutedForeground, fontWeight: '500' },
-        amountValue: { fontSize: 36, fontWeight: '800', color: colors.primary, marginTop: 4 },
-        descText: { fontSize: 13, color: colors.mutedForeground, marginTop: 6, textAlign: 'center' },
-        infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 },
-        infoText: { fontSize: 13, color: colors.foreground, fontWeight: '500' },
-        payBtn: {
-            backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 12,
-            alignItems: 'center', marginTop: 8,
+        webviewContainer: {
+            flex: 1,
+            minHeight: height * 0.5,
         },
-        payBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
-        poweredBy: { textAlign: 'center', fontSize: 11, color: colors.mutedForeground, marginTop: 4 },
+        webview: {
+            flex: 1,
+            backgroundColor: 'transparent',
+        },
+        webviewLoading: {
+            ...StyleSheet.absoluteFillObject,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.card,
+        },
+        successContainer: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 40,
+        },
+        successIcon: {
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: '#22C55E',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 20,
+        },
+        successTitle: {
+            fontSize: 22,
+            fontWeight: '700',
+            color: colors.foreground,
+            marginBottom: 8,
+        },
+        successSubtitle: {
+            fontSize: 14,
+            color: colors.mutedForeground,
+            marginBottom: 12,
+        },
+        successAmount: {
+            fontSize: 28,
+            fontWeight: '700',
+            color: '#22C55E',
+            marginBottom: 24,
+        },
+        doneBtn: {
+            paddingHorizontal: 40,
+            paddingVertical: 14,
+            backgroundColor: colors.primary,
+            borderRadius: 10,
+        },
+        doneBtnText: {
+            color: colors.white,
+            fontSize: 16,
+            fontWeight: '600',
+        },
     });
