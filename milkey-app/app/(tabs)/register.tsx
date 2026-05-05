@@ -2344,7 +2344,7 @@ export default function RegisterScreen() {
                             </View>
                         </Modal>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </View>
     );
