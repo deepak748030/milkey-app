@@ -3,6 +3,10 @@ import { Platform, PermissionsAndroid, Linking } from 'react-native';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import {
+    HindiPrintRendererHost,
+    preprocessPayloadForDevanagari,
+} from '../lib/hindiPrintRenderer';
 
 /**
  * Best-effort check whether the device's GPS / Location Services is ON.
@@ -761,6 +765,16 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         const charsPerLine = widthMM === 80 ? 48 : 32;
 
         try {
+            // Convert any Devanagari (Hindi/Marathi) lines into bitmaps the
+            // SR588-class printers can actually render. ASCII-only lines pass
+            // through untouched so English receipts keep native ESC/POS speed.
+            let finalPayload = payload;
+            try {
+                finalPayload = await preprocessPayloadForDevanagari(payload, widthMM);
+            } catch (preErr: any) {
+                console.warn('[BluetoothPrinter] Devanagari preprocess failed, sending raw payload:', preErr?.message || preErr);
+            }
+
             let refreshedBonded = lastBondedListRef.current;
             let activeDevice = state.connectedDevice && state.connectedDevice.id === mac
                 ? state.connectedDevice
@@ -768,7 +782,7 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
             const runPrintAttempt = async (macAddress: string) => {
                 await ThermalPrinter.printBluetooth(
-                    buildBluetoothPrintOptions(payload, widthMM, charsPerLine, macAddress),
+                    buildBluetoothPrintOptions(finalPayload, widthMM, charsPerLine, macAddress),
                 );
             };
 
@@ -1031,7 +1045,14 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
 export function BluetoothPrinterProvider({ children }: { children: React.ReactNode }) {
     const value = useBluetoothPrinterController();
-    return React.createElement(BluetoothPrinterContext.Provider, { value }, children);
+    return React.createElement(
+        BluetoothPrinterContext.Provider,
+        { value },
+        React.createElement(React.Fragment, null,
+            children,
+            React.createElement(HindiPrintRendererHost, null),
+        ),
+    );
 }
 
 export const useBluetoothPrinter = () => {
