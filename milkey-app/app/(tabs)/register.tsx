@@ -2086,10 +2086,22 @@ export default function RegisterScreen() {
                 animationType="slide"
                 onRequestClose={closeEditPaymentModal}
             >
-                <View style={styles.dateModalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.dateModalOverlay}
+                >
                     <Pressable style={{ flex: 1 }} onPress={closeEditPaymentModal} />
-                    <View style={[styles.editPaymentModalContent, { backgroundColor: colors.card }]}>
-                        <View style={styles.editPaymentModalHeader}>
+                    <View
+                        style={[
+                            styles.editPaymentModalContent,
+                            {
+                                backgroundColor: colors.card,
+                                paddingBottom: Math.max(insets.bottom, 12),
+                                maxHeight: '90%',
+                            },
+                        ]}
+                    >
+                        <View style={[styles.editPaymentModalHeader, { paddingTop: 14 }]}>
                             <Text style={[styles.editPaymentModalTitle, { color: colors.foreground }]}>Edit Payment</Text>
                             <Pressable onPress={closeEditPaymentModal} style={styles.dateModalClose}>
                                 <X size={20} color={colors.foreground} />
@@ -2097,7 +2109,12 @@ export default function RegisterScreen() {
                         </View>
 
                         {editingPayment && (
-                            <ScrollView style={styles.editPaymentModalBody} showsVerticalScrollIndicator={false}>
+                            <ScrollView
+                                style={styles.editPaymentModalBody}
+                                contentContainerStyle={{ paddingBottom: 16 }}
+                                showsVerticalScrollIndicator={false}
+                                keyboardShouldPersistTaps="handled"
+                            >
                                 <Text style={[styles.editPaymentFarmerInfo, { color: colors.primary }]}>
                                     {editingPayment.farmer?.code} - {editingPayment.farmer?.name}
                                 </Text>
