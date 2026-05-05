@@ -2102,7 +2102,7 @@ export default function RegisterScreen() {
                             },
                         ]}
                     >
-                        <View style={[styles.editPaymentModalHeader, { paddingTop: 14 + insets.top * 0 }]}>
+                        <View style={[styles.editPaymentModalHeader, { paddingTop: 14 }]}>
                             <Text style={[styles.editPaymentModalTitle, { color: colors.foreground }]}>Edit Payment</Text>
                             <Pressable onPress={closeEditPaymentModal} style={styles.dateModalClose}>
                                 <X size={20} color={colors.foreground} />
