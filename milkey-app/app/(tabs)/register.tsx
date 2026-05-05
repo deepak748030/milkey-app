@@ -2084,6 +2084,7 @@ export default function RegisterScreen() {
                 visible={editPaymentVisible}
                 transparent
                 animationType="slide"
+                statusBarTranslucent
                 onRequestClose={closeEditPaymentModal}
             >
                 <KeyboardAvoidingView
