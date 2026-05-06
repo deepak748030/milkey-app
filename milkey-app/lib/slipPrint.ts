@@ -65,6 +65,7 @@ export function buildSellingPaymentSlipPayload(
     payload += fmtLeft(`${t.from}:    ${formatDateDDMMYYYY(p.periodStart || p.date)}`);
     payload += fmtLeft(`${t.till}:    ${formatDateDDMMYYYY(p.periodEnd || p.date)}`);
     payload += fmtLeft(`${t.member}:  ${p.member?.name || '-'}`);
+    payload += fmtLine();
     payload += twoCol(`${t.lastPayment}:`, (p.previousBalance || 0).toFixed(0));
     payload += twoCol(`${t.qty}:`, milkQty + ' L');
     payload += twoCol(`${t.rate}:`, 'Rs ' + milkRate + '/L');

@@ -21,7 +21,7 @@
  * so re-prints don't re-capture the same bitmap.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, View, Text } from 'react-native';
+import { Platform, View, Text, PixelRatio } from 'react-native';
 import ViewShot from 'react-native-view-shot';
 
 // 58mm @ 203dpi ≈ 384 dots, 80mm @ 203dpi ≈ 576 dots.
@@ -213,7 +213,11 @@ export function HindiPrintRendererHost() {
     if (Platform.OS === 'web') return null;
 
     // Hidden but real — must be laid out so ViewShot can capture pixels.
-    // Position absolute off-screen with full target width.
+    // CRITICAL: the captured PNG must be EXACTLY `widthDots` physical pixels
+    // wide (384 for 58mm, 576 for 80mm). Otherwise the printer either scales
+    // the bitmap (Hindi text shrinks) or clips the right side. We achieve
+    // this by sizing the React View in DIPs = widthDots / PixelRatio, then
+    // forcing ViewShot's output to `widthDots` px via the `width` option.
     return (
         <View
             pointerEvents="none"
@@ -227,7 +231,12 @@ export function HindiPrintRendererHost() {
             {job ? (
                 <ViewShot
                     ref={shotRef}
-                    options={{ format: 'png', quality: 1, result: 'data-uri' }}
+                    options={{
+                        format: 'png',
+                        quality: 1,
+                        result: 'data-uri',
+                        width: job.widthDots,
+                    }}
                 >
                     <HindiLineCanvas job={job} />
                 </ViewShot>
@@ -237,7 +246,13 @@ export function HindiPrintRendererHost() {
 }
 
 function HindiLineCanvas({ job }: { job: RenderJob }) {
-    const fontSize = job.big ? 28 : 22;
+    // Convert physical printer dots into React Native DIPs so that after
+    // PixelRatio upscaling the captured bitmap lands on exactly widthDots.
+    const pr = PixelRatio.get() || 1;
+    const widthDip = job.widthDots / pr;
+    // Font sizes are in DIPs too — pick values that look right at the
+    // resulting pixel size on a 58mm receipt.
+    const fontSize = job.big ? 32 / pr : 26 / pr;
     const fontWeight = job.bold ? '700' : '400';
     const justifyContent =
         job.rightText !== undefined
@@ -251,33 +266,38 @@ function HindiLineCanvas({ job }: { job: RenderJob }) {
     return (
         <View
             style={{
-                width: job.widthDots,
+                width: widthDip,
                 backgroundColor: '#FFFFFF',
-                paddingVertical: 4,
-                paddingHorizontal: 4,
+                paddingVertical: 4 / pr,
+                paddingHorizontal: 6 / pr,
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent,
             }}
         >
             <Text
+                numberOfLines={1}
+                ellipsizeMode="clip"
                 style={{
                     color: '#000000',
                     fontSize,
                     fontWeight,
                     includeFontPadding: false,
+                    flexShrink: 1,
                 }}
             >
                 {job.text}
             </Text>
             {job.rightText !== undefined ? (
                 <Text
+                    numberOfLines={1}
+                    ellipsizeMode="clip"
                     style={{
                         color: '#000000',
                         fontSize,
                         fontWeight: job.rightBold ? '700' : fontWeight,
                         includeFontPadding: false,
-                        marginLeft: 8,
+                        marginLeft: 8 / pr,
                     }}
                 >
                     {job.rightText}

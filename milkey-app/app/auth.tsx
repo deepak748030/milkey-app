@@ -926,10 +926,6 @@ export default function AuthScreen() {
                 <Divider />
 
                 <GoogleButton label="Sign in with Google" onPress={() => { googleModeRef.current = 'login'; handleGoogleAuth(); }} />
-
-                <Pressable style={{ alignSelf: 'center', marginTop: 10 }} onPress={() => setScreen('forgot')}>
-                    <Text style={{ fontSize: 11, fontWeight: '500', color: colors.primary }}>Forgot Password?</Text>
-                </Pressable>
             </FormCard>
 
             <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 12, color: colors.mutedForeground, paddingHorizontal: 16 }}>

@@ -110,10 +110,7 @@
     },
     "newArchEnabled": true,
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "5105d798-655a-478f-9ff0-062ac18b4e0e"
-      }
+      "router": {}
     }
   }
 }
