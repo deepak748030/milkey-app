@@ -186,13 +186,16 @@ export function HindiPrintRendererHost() {
             try {
                 if (!shotRef.current?.capture) throw new Error('ViewShot ref not ready');
                 const result = await shotRef.current.capture();
-                let base64 = result || '';
-                // result format = 'data:image/png;base64,xxx' (we requested data-uri)
-                const idx = base64.indexOf('base64,');
-                if (idx >= 0) base64 = base64.slice(idx + 7);
+                // KEEP the full data URI (`data:image/png;base64,xxx`).
+                // react-native-thermal-printer v2.3.6 native bridge passes
+                // the content between <img>...</img> to Glide as a URL — and
+                // Glide's default model loader supports data URIs but NOT
+                // bare base64 strings. Stripping the prefix made every
+                // slip with Hindi silently fail to print.
+                const dataUri = result || '';
                 if (!cancelled) {
-                    cache.set(job.key, base64);
-                    job.resolve(base64);
+                    cache.set(job.key, dataUri);
+                    job.resolve(dataUri);
                 }
             } catch (e: any) {
                 if (!cancelled) job.reject(e instanceof Error ? e : new Error(String(e)));
