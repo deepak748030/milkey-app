@@ -395,6 +395,10 @@ router.get('/users', adminAuth, async (req, res) => {
             const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: sevenDaysAgo };
             query.isBlocked = false;
+        } else if (status === 'verified') {
+            query.isVerified = true;
+        } else if (status === 'unverified') {
+            query.isVerified = { $ne: true };
         }
 
         // Search filter - uses regex but can be optimized with text index
@@ -410,7 +414,7 @@ router.get('/users', adminAuth, async (req, res) => {
         const [total, users] = await Promise.all([
             User.countDocuments(query),
             User.find(query)
-                .select('_id name email phone avatar isBlocked createdAt role address referralCode referralEarnings totalReferralEarnings')
+                .select('_id name email phone avatar isBlocked createdAt role address referralCode referralEarnings totalReferralEarnings isVerified lastLogin')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -456,6 +460,10 @@ router.get('/users/export', adminAuth, async (req, res) => {
             const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: sevenDaysAgo };
             query.isBlocked = false;
+        } else if (status === 'verified') {
+            query.isVerified = true;
+        } else if (status === 'unverified') {
+            query.isVerified = { $ne: true };
         }
 
         if (search) {

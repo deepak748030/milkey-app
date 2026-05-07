@@ -2,7 +2,7 @@
   "expo": {
     "name": "Milkey",
     "slug": "milkey",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "milkey",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.milkey.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#0d3b1f"
@@ -110,7 +110,10 @@
     },
     "newArchEnabled": true,
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "5105d798-655a-478f-9ff0-062ac18b4e0e"
+      }
     }
   }
 }

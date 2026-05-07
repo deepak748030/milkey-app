@@ -1102,6 +1102,8 @@ export function UsersPage() {
                     <option value="new">New (last 7 days)</option>
                     <option value="active">Active</option>
                     <option value="blocked">Blocked</option>
+                    <option value="verified">Verified</option>
+                    <option value="unverified">Unverified</option>
                 </select>
 
                 <select
