@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "95043026756-tu7o1v2rtfg83s4etkqok5i52na30915.apps.googleusercontent.com",
+          "client_id": "95043026756-h4ifoafmnncm7r6ad47uf1sbak14uue8.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.milkey.app",
-            "certificate_hash": "cbff517acbcb5c2b92c33b7f20377ed4b37857c5"
+            "certificate_hash": "093e7057089d1af64c9a85ef3462b78f943285f3"
           }
         },
         {
