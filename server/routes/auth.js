@@ -252,7 +252,7 @@ router.post('/register', async (req, res) => {
             password: hashPassword(password),
             address: address ? address.trim() : '',
             referredBy: referrer?._id,
-            isVerified: true
+            // isVerified is a manual marketing-contacted flag set by admin only; do NOT auto-set on signup
         });
 
         await user.save();
@@ -1197,7 +1197,7 @@ router.post('/google', async (req, res) => {
                 phone: '',
                 password: hashPassword(crypto.randomBytes(16).toString('hex')),
                 avatar: decoded.picture || '',
-                isVerified: true
+                // isVerified is a manual marketing flag set by admin only
             });
             await user.save();
         }
@@ -1253,7 +1253,7 @@ router.post('/google-info', async (req, res) => {
                 phone: '',
                 password: hashPassword(crypto.randomBytes(16).toString('hex')),
                 avatar: picture || '',
-                isVerified: true
+                // isVerified is a manual marketing flag set by admin only
             });
             await user.save();
         }
@@ -1377,7 +1377,7 @@ router.post('/phone-register', async (req, res) => {
             state: state ? String(state).trim() : '',
             avatar: avatar || '',
             referredBy: referrer?._id,
-            isVerified: true,
+            // isVerified is a manual marketing flag set by admin only; do NOT auto-set on signup
         });
 
         await user.save();
