@@ -3498,37 +3498,68 @@ router.post('/users/:id/assign-subscription', adminAuth, async (req, res) => {
             applicableTabs: { $in: overlappingTabs }
         }).populate('subscription').lean();
 
+        // Calculate the new plan's duration as a date offset
+        const computeEndDate = (fromDate) => {
+            const d = new Date(fromDate);
+            if (subscription.durationType === 'days' || subscription.durationDays) {
+                const days = subscription.durationDays || (subscription.durationValue || 1) * 30;
+                d.setDate(d.getDate() + days);
+            } else if (subscription.durationType === 'years') {
+                const years = subscription.durationValue || 1;
+                d.setFullYear(d.getFullYear() + years);
+            } else {
+                const months = subscription.durationValue || subscription.durationMonths || 1;
+                d.setMonth(d.getMonth() + months);
+            }
+            return d;
+        };
+
+        // If user already has an active subscription on the same tabs,
+        // extend that existing subscription's endDate by the new plan's duration
+        // instead of creating a new one. App will keep showing the existing
+        // subscription with the additional days added.
         if (existingActiveSubscription) {
-            const existingSubName = existingActiveSubscription.subscription?.name || 'Unknown';
-            const existingEndDate = new Date(existingActiveSubscription.endDate).toLocaleDateString('en-IN', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric'
-            });
-            return res.status(400).json({
-                success: false,
-                message: `User already has an active subscription "${existingSubName}" for the same tabs, valid until ${existingEndDate}. Cannot assign another subscription while one is active.`
+            const existingDoc = await UserSubscription.findById(existingActiveSubscription._id);
+            if (!existingDoc) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Existing active subscription not found'
+                });
+            }
+
+            const previousEndDate = new Date(existingDoc.endDate);
+            const newEndDate = computeEndDate(previousEndDate);
+            existingDoc.endDate = newEndDate;
+            await existingDoc.save();
+            await existingDoc.populate('subscription');
+
+            // Notify user about the extension
+            await sendPushNotification(
+                userId,
+                '🎉 Subscription Extended!',
+                `Your "${existingDoc.lockedSubscriptionName || existingDoc.subscription?.name || 'subscription'}" has been extended. New validity: ${newEndDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}.`,
+                'subscription_extended',
+                {
+                    subscriptionId: existingDoc.subscription?._id || existingDoc.subscription,
+                    subscriptionName: existingDoc.lockedSubscriptionName || existingDoc.subscription?.name,
+                    previousEndDate,
+                    newEndDate
+                }
+            );
+
+            console.log(`Admin ${req.admin.name} extended subscription for user ${user.name || user.phone}: ${previousEndDate.toISOString()} -> ${newEndDate.toISOString()}`);
+
+            return res.status(200).json({
+                success: true,
+                message: `Existing subscription extended successfully. New validity until ${newEndDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}.`,
+                response: existingDoc,
+                extended: true
             });
         }
 
-        // Calculate dates based on subscription's actual duration settings
+        // No active subscription — create a new one normally
         const startDate = new Date();
-        const endDate = new Date();
-
-        // Use the subscription's duration settings properly
-        if (subscription.durationType === 'days' || subscription.durationDays) {
-            // Duration is in days
-            const days = subscription.durationDays || (subscription.durationValue || 1) * 30;
-            endDate.setDate(endDate.getDate() + days);
-        } else if (subscription.durationType === 'years') {
-            // Duration is in years
-            const years = subscription.durationValue || 1;
-            endDate.setFullYear(endDate.getFullYear() + years);
-        } else {
-            // Default: duration is in months
-            const months = subscription.durationValue || subscription.durationMonths || 1;
-            endDate.setMonth(endDate.getMonth() + months);
-        }
+        const endDate = computeEndDate(startDate);
 
         // Create user subscription with proper locked-in values
         const userSubscription = new UserSubscription({
