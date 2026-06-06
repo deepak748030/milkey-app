@@ -4055,7 +4055,7 @@ router.post('/whatsapp-settings/test', adminAuth, async (req, res) => {
             success: false,
             message: result?.reason === 'missing_api_key'
                 ? 'ZYPTOS_API_KEY is not configured on the server'
-                : 'Failed to send test message',
+                : result?.message || 'Failed to send test message',
             response: result
         });
     } catch (error) {

@@ -97,6 +97,13 @@ export function WhatsappSettingsPage() {
                 </div>
             )}
 
+            <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/25 rounded-lg text-blue-600 text-sm flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>
+                    Phone can be entered as <code>7489301982</code> or <code>+917489301982</code>; the server converts it to E.164. If Zyptos returns <strong>Public API access is currently disabled</strong>, enable Public API access in Zyptos Developer settings or regenerate a live key with WhatsApp API permissions.
+                </span>
+            </div>
+
             {message && (
                 <div className="mb-4 px-4 py-3 rounded-lg text-sm font-medium bg-green-500/10 text-green-500 border border-green-500/20">
                     {message}

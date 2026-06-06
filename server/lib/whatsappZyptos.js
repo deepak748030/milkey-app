@@ -31,6 +31,7 @@ function renderTemplate(template, vars = {}) {
 
 async function sendTextMessage({ to, message, connectionId }) {
     const { apiKey, baseUrl } = getConfig();
+    // console.log(apiKey, baseUrl, to, message, "connectionId", connectionId)
     if (!apiKey) {
         console.warn('[zyptos] ZYPTOS_API_KEY not configured — skipping WhatsApp send');
         return { skipped: true, reason: 'missing_api_key' };
@@ -61,7 +62,26 @@ async function sendTextMessage({ to, message, connectionId }) {
         try { data = JSON.parse(text); } catch { data = { raw: text }; }
         if (!res.ok) {
             console.error('[zyptos] send failed', res.status, data);
-            return { success: false, status: res.status, data };
+            const zyptosMessage = data?.message || data?.error || '';
+            if (res.status === 403 && /public api access/i.test(zyptosMessage)) {
+                return {
+                    success: false,
+                    status: res.status,
+                    reason: 'public_api_disabled',
+                    message: 'Zyptos Public API access is disabled for this workspace/API key. Enable Public API access in Zyptos Developer settings or generate a key with WhatsApp API access.',
+                    data
+                };
+            }
+            if (res.status === 401 || res.status === 403) {
+                return {
+                    success: false,
+                    status: res.status,
+                    reason: 'unauthorized',
+                    message: 'Zyptos rejected the API key. Check ZYPTOS_API_KEY and workspace permissions.',
+                    data
+                };
+            }
+            return { success: false, status: res.status, message: zyptosMessage || 'Zyptos send failed', data };
         }
         console.log('[zyptos] message sent to', body.to, data?.data?.message_id || '');
         return { success: true, data };
