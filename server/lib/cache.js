@@ -116,10 +116,108 @@ const wrap = async (key, ttlSeconds, loader) => {
     return fresh;
 };
 
+/**
+ * Route-prefix versioning. Mutating requests bump the version for their
+ * base path so all cached GET responses under that prefix are invalidated
+ * in O(1) without needing SCAN/DEL of many keys.
+ */
+const crypto = require('crypto');
+
+const routeBase = (url) => {
+    const path = (url || '').split('?')[0];
+    const m = path.match(/^(\/api\/[^/]+)/);
+    return m ? m[1] : path;
+};
+
+const versionCache = new Map(); // base -> { v, expiresAt }
+const VERSION_LOCAL_TTL = 2000;
+
+const getVersion = async (base) => {
+    const local = versionCache.get(base);
+    if (local && local.expiresAt > Date.now()) return local.v;
+    const v = (await get(`httpv:${base}`)) || 1;
+    versionCache.set(base, { v, expiresAt: Date.now() + VERSION_LOCAL_TTL });
+    return v;
+};
+
+const bumpVersion = async (base) => {
+    const cur = (await get(`httpv:${base}`)) || 1;
+    const next = cur + 1;
+    await set(`httpv:${base}`, next, 86400);
+    versionCache.set(base, { v: next, expiresAt: Date.now() + VERSION_LOCAL_TTL });
+};
+
+// Routes we must NEVER cache (auth flows, payment callbacks, seeds, realtime, etc.)
+const SKIP_BASES = new Set([
+    '/api/auth',
+    '/api/razorpay',
+    '/api/zapupi',
+    '/api/seed',
+    '/api/notifications', // realtime-ish; let it always be fresh
+]);
+
+/**
+ * Global HTTP cache middleware.
+ *  - Only caches successful GET responses.
+ *  - Keys are partitioned per Authorization token (hashed) so users never
+ *    see each other's data.
+ *  - Mutating requests (POST/PUT/PATCH/DELETE) bump a version counter for
+ *    their route prefix, invalidating all cached GETs under that prefix.
+ *  - Completely transparent when Redis is disabled or unreachable.
+ */
+const httpCache = ({ ttl = 30 } = {}) => async (req, res, next) => {
+    if (!ENABLED) return next();
+    try {
+        const base = routeBase(req.originalUrl || req.url);
+        if (SKIP_BASES.has(base)) return next();
+
+        const authHeader = req.headers.authorization || '';
+        const userPart = authHeader
+            ? 'a:' + crypto.createHash('sha1').update(authHeader).digest('hex').slice(0, 16)
+            : 'anon';
+
+        if (req.method === 'GET') {
+            const v = await getVersion(base);
+            const key = `http:${base}:v${v}:${userPart}:${req.originalUrl || req.url}`;
+            const hit = await get(key);
+            if (hit && hit.body !== undefined) {
+                res.set('X-Cache', 'HIT');
+                return res.status(hit.status || 200).json(hit.body);
+            }
+            const origJson = res.json.bind(res);
+            res.json = (body) => {
+                try {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        // fire-and-forget
+                        set(key, { status: res.statusCode, body }, ttl);
+                    }
+                } catch (_) { /* ignore */ }
+                res.set('X-Cache', 'MISS');
+                return origJson(body);
+            };
+            return next();
+        }
+
+        // Mutating method: bump prefix version once the response is sent OK
+        res.on('finish', () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                bumpVersion(base).catch(() => { });
+            }
+        });
+        return next();
+    } catch (_) {
+        // Never let cache logic break a request
+        return next();
+    }
+};
+
 module.exports = {
     enabled: ENABLED,
     get,
     set,
     del,
     wrap,
+    httpCache,
+    bumpVersion,
+    routeBase,
 };

@@ -34,6 +34,8 @@ const zapupiRoutes = require('./routes/zapupi');
 const razorpayRoutes = require('./routes/razorpay');
 const printSettingsRoutes = require('./routes/print-settings');
 
+const cache = require('./lib/cache');
+
 const app = express();
 
 // Security middleware
@@ -77,6 +79,10 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
+
+// Global HTTP response cache (per-Authorization, auto-invalidating).
+// Safe no-op when Upstash Redis env vars aren't set.
+app.use(cache.httpCache({ ttl: 30 }));
 
 // API Routes
 app.use('/api/auth', authRoutes);
