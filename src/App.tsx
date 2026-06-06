@@ -30,6 +30,7 @@ import { CollectionReportPage } from './pages/CollectionReportPage'
 import { CollectionFarmersPage } from './pages/CollectionFarmersPage'
 import { AppVersionPage } from './pages/AppVersionPage'
 import { PaymentSettingsPage } from './pages/PaymentSettingsPage'
+import { WhatsappSettingsPage } from './pages/WhatsappSettingsPage'
 
 function App() {
     return (
@@ -74,6 +75,7 @@ function App() {
                         <Route path="social-links" element={<SocialLinksPage />} />
                         <Route path="app-version" element={<AppVersionPage />} />
                         <Route path="payment-settings" element={<PaymentSettingsPage />} />
+                        <Route path="whatsapp-settings" element={<WhatsappSettingsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

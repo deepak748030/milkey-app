@@ -1957,4 +1957,20 @@ export const updatePaymentSettings = async (data: { codEnabled?: boolean; online
     return response.data
 }
 
+// WhatsApp (Zyptos) welcome message settings
+export const getWhatsappSettings = async () => {
+    const response = await api.get('/admin/whatsapp-settings')
+    return response.data
+}
+
+export const updateWhatsappSettings = async (data: { enabled?: boolean; welcomeMessage?: string; connectionId?: number }) => {
+    const response = await api.put('/admin/whatsapp-settings', data)
+    return response.data
+}
+
+export const sendWhatsappTest = async (data: { phone: string; name?: string }) => {
+    const response = await api.post('/admin/whatsapp-settings/test', data)
+    return response.data
+}
+
 export default api
