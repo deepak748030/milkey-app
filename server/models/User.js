@@ -94,7 +94,22 @@ userSchema.pre('save', async function (next) {
         const code = 'MLK' + this.phone.slice(-4) + Math.random().toString(36).substring(2, 6).toUpperCase();
         this.referralCode = code;
     }
+    // Flag new users so we can fire the WhatsApp welcome after save
+    this.$locals.wasNew = this.isNew;
     next();
+});
+
+// Fire WhatsApp welcome message on new user creation (non-blocking).
+userSchema.post('save', function (doc) {
+    try {
+        if (!doc?.$locals?.wasNew) return;
+        const { sendWelcomeMessage } = require('../lib/whatsappZyptos');
+        sendWelcomeMessage(doc).catch(err =>
+            console.error('[whatsapp] welcome send failed:', err?.message || err)
+        );
+    } catch (err) {
+        console.error('[whatsapp] post-save hook error:', err?.message || err);
+    }
 });
 
 
