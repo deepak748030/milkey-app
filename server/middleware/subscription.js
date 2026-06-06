@@ -1,4 +1,9 @@
 const UserSubscription = require('../models/UserSubscription');
+const cache = require('../lib/cache');
+
+const SUB_TTL = 30; // seconds
+const subKey = (userId, tab) => `sub:${userId}:${tab}`;
+const subAnyKey = (userId, tabs) => `sub:${userId}:any:${[...tabs].sort().join(',')}`;
 
 /**
  * Middleware to check if user has a valid subscription for a specific tab
@@ -15,15 +20,26 @@ const requireSubscription = (tab) => {
                 });
             }
 
-            // Check for valid subscription for the specified tab
-            const now = new Date();
-            const validSubscription = await UserSubscription.findOne({
-                user: req.userId,
-                isActive: true,
-                paymentStatus: 'completed',
-                endDate: { $gt: now },
-                applicableTabs: tab
-            });
+            // Cache subscription lookups briefly — they fire on every
+            // protected write/read, but rarely change.
+            const cacheKey = subKey(req.userId, tab);
+            let validSubscription = await cache.get(cacheKey);
+            let validUntil = validSubscription?.endDate ? new Date(validSubscription.endDate) : null;
+
+            if (!validSubscription || (validUntil && validUntil <= new Date())) {
+                const now = new Date();
+                validSubscription = await UserSubscription.findOne({
+                    user: req.userId,
+                    isActive: true,
+                    paymentStatus: 'completed',
+                    endDate: { $gt: now },
+                    applicableTabs: tab
+                }).lean();
+
+                if (validSubscription) {
+                    cache.set(cacheKey, validSubscription, SUB_TTL);
+                }
+            }
 
             if (!validSubscription) {
                 return res.status(403).json({
@@ -62,15 +78,24 @@ const requireAnySubscription = (tabs) => {
                 });
             }
 
-            // Check for valid subscription for any of the specified tabs
-            const now = new Date();
-            const validSubscription = await UserSubscription.findOne({
-                user: req.userId,
-                isActive: true,
-                paymentStatus: 'completed',
-                endDate: { $gt: now },
-                applicableTabs: { $in: tabs }
-            });
+            const cacheKey = subAnyKey(req.userId, tabs);
+            let validSubscription = await cache.get(cacheKey);
+            let validUntil = validSubscription?.endDate ? new Date(validSubscription.endDate) : null;
+
+            if (!validSubscription || (validUntil && validUntil <= new Date())) {
+                const now = new Date();
+                validSubscription = await UserSubscription.findOne({
+                    user: req.userId,
+                    isActive: true,
+                    paymentStatus: 'completed',
+                    endDate: { $gt: now },
+                    applicableTabs: { $in: tabs }
+                }).lean();
+
+                if (validSubscription) {
+                    cache.set(cacheKey, validSubscription, SUB_TTL);
+                }
+            }
 
             if (!validSubscription) {
                 return res.status(403).json({
