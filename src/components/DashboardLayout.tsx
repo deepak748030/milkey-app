@@ -29,6 +29,7 @@ import {
     BookOpen,
     Store,
     Smartphone,
+    MessageCircle,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -46,6 +47,7 @@ const mainNavItems = [
     { to: '/social-links', icon: Share2, label: 'Social Links' },
     { to: '/app-version', icon: Smartphone, label: 'App Version' },
     { to: '/payment-settings', icon: CreditCard, label: 'Payment Settings' },
+    { to: '/whatsapp-settings', icon: MessageCircle, label: 'WhatsApp Message' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 

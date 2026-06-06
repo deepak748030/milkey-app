@@ -7,6 +7,8 @@ const User = require('../models/User');
 const SocialLink = require('../models/SocialLink');
 const AppVersion = require('../models/AppVersion');
 const PaymentSettings = require('../models/PaymentSettings');
+const WhatsappSettings = require('../models/WhatsappSettings');
+const { sendTextMessage, sendWelcomeMessage, renderTemplate } = require('../lib/whatsappZyptos');
 const Order = require('../models/Order');
 const MilkCollection = require('../models/MilkCollection');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
@@ -3969,6 +3971,96 @@ router.get('/payment-settings/public', async (req, res) => {
         res.json({ success: true, response: { codEnabled: settings.codEnabled, onlineEnabled: settings.onlineEnabled } });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Failed to get payment settings' });
+    }
+});
+
+// ============ WhatsApp (Zyptos) Welcome Message Settings ============
+
+// GET /api/admin/whatsapp-settings
+router.get('/whatsapp-settings', adminAuth, async (req, res) => {
+    try {
+        let settings = await WhatsappSettings.findOne();
+        if (!settings) settings = await WhatsappSettings.create({});
+        res.json({
+            success: true,
+            response: {
+                enabled: settings.enabled,
+                welcomeMessage: settings.welcomeMessage,
+                connectionId: settings.connectionId,
+                apiKeyConfigured: !!process.env.ZYPTOS_API_KEY
+            }
+        });
+    } catch (error) {
+        console.error('Get whatsapp settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to load WhatsApp settings' });
+    }
+});
+
+// PUT /api/admin/whatsapp-settings
+router.put('/whatsapp-settings', adminAuth, async (req, res) => {
+    try {
+        const { enabled, welcomeMessage, connectionId } = req.body || {};
+        let settings = await WhatsappSettings.findOne();
+        if (!settings) settings = new WhatsappSettings();
+        if (enabled !== undefined) settings.enabled = !!enabled;
+        if (welcomeMessage !== undefined) {
+            if (typeof welcomeMessage !== 'string' || !welcomeMessage.trim()) {
+                return res.status(400).json({ success: false, message: 'Welcome message cannot be empty' });
+            }
+            settings.welcomeMessage = welcomeMessage.trim().slice(0, 4096);
+        }
+        if (connectionId !== undefined) settings.connectionId = Number(connectionId) || 0;
+        await settings.save();
+        res.json({
+            success: true,
+            message: 'WhatsApp settings updated',
+            response: {
+                enabled: settings.enabled,
+                welcomeMessage: settings.welcomeMessage,
+                connectionId: settings.connectionId,
+                apiKeyConfigured: !!process.env.ZYPTOS_API_KEY
+            }
+        });
+    } catch (error) {
+        console.error('Update whatsapp settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update WhatsApp settings' });
+    }
+});
+
+// POST /api/admin/whatsapp-settings/test
+// Body: { phone, name? } — sends the configured welcome message to the given phone.
+router.post('/whatsapp-settings/test', adminAuth, async (req, res) => {
+    try {
+        const { phone, name } = req.body || {};
+        if (!phone) {
+            return res.status(400).json({ success: false, message: 'Phone is required' });
+        }
+        let settings = await WhatsappSettings.findOne();
+        if (!settings) settings = await WhatsappSettings.create({});
+        const message = renderTemplate(settings.welcomeMessage, {
+            name: name || 'there',
+            phone,
+            referralCode: 'TEST1234',
+            email: ''
+        });
+        const result = await sendTextMessage({
+            to: phone,
+            message,
+            connectionId: settings.connectionId
+        });
+        if (result?.success) {
+            return res.json({ success: true, message: 'Test message sent', response: result.data });
+        }
+        return res.status(502).json({
+            success: false,
+            message: result?.reason === 'missing_api_key'
+                ? 'ZYPTOS_API_KEY is not configured on the server'
+                : 'Failed to send test message',
+            response: result
+        });
+    } catch (error) {
+        console.error('WhatsApp test send error:', error);
+        res.status(500).json({ success: false, message: 'Failed to send test message' });
     }
 });
 
