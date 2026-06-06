@@ -6,6 +6,8 @@
  *   accelerator, never a hard dependency.
  */
 const axios = require('axios');
+const https = require('https');
+const http = require('http');
 
 const URL = process.env.UPSTASH_REDIS_REST_URL;
 const TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -37,11 +39,18 @@ const microSet = (key, value) => {
 };
 const microDel = (key) => micro.delete(key);
 
+// Keep-alive agents so we reuse a single TLS connection to Upstash
+// instead of paying the TCP+TLS handshake on every cache op.
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 64 });
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 64 });
+
 const client = ENABLED
     ? axios.create({
         baseURL: URL,
         headers: { Authorization: `Bearer ${TOKEN}` },
         timeout: 1500,
+        httpsAgent,
+        httpAgent,
     })
     : null;
 
@@ -180,19 +189,26 @@ const httpCache = ({ ttl = 30 } = {}) => async (req, res, next) => {
             const v = await getVersion(base);
             const key = `http:${base}:v${v}:${userPart}:${req.originalUrl || req.url}`;
             const hit = await get(key);
-            if (hit && hit.body !== undefined) {
+            if (hit && hit.s !== undefined) {
+                // Serve pre-serialized JSON string directly — skip re-stringify.
                 res.set('X-Cache', 'HIT');
-                return res.status(hit.status || 200).json(hit.body);
+                res.set('Vary', 'Authorization, Accept-Encoding');
+                res.status(hit.status || 200).type('application/json').send(hit.s);
+                return;
             }
             const origJson = res.json.bind(res);
             res.json = (body) => {
                 try {
                     if (res.statusCode >= 200 && res.statusCode < 300) {
-                        // fire-and-forget
-                        set(key, { status: res.statusCode, body }, ttl);
+                        const s = JSON.stringify(body);
+                        // Skip caching very large payloads (>512KB) to keep Redis fast.
+                        if (s.length <= 512 * 1024) {
+                            set(key, { status: res.statusCode, s }, ttl);
+                        }
                     }
                 } catch (_) { /* ignore */ }
                 res.set('X-Cache', 'MISS');
+                res.set('Vary', 'Authorization, Accept-Encoding');
                 return origJson(body);
             };
             return next();

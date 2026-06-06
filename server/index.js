@@ -1,4 +1,15 @@
 require('dotenv').config();
+// Reuse outbound TCP sockets globally (Cloudinary, push, WhatsApp, Razorpay, etc.)
+// — saves a TLS handshake per outbound call.
+const http = require('http');
+const https = require('https');
+http.globalAgent.keepAlive = true;
+http.globalAgent.maxSockets = 128;
+https.globalAgent.keepAlive = true;
+https.globalAgent.maxSockets = 128;
+// Cache DNS lookups so repeat outbound calls skip the resolver round-trip.
+try { require('dns').setDefaultResultOrder('ipv4first'); } catch (_) { }
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -36,7 +47,20 @@ const printSettingsRoutes = require('./routes/print-settings');
 
 const cache = require('./lib/cache');
 
+// Mongoose tuning — safe, query results identical.
+mongoose.set('strictQuery', true);
+if (process.env.NODE_ENV === 'production') {
+    // Don't auto-build indexes on every boot in prod (huge cold-start win).
+    mongoose.set('autoIndex', false);
+}
+
 const app = express();
+
+// Trust the Vercel / proxy layer so req.ip / rate limit work correctly.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+// Strong ETags so conditional GETs (304) work for unchanged JSON.
+app.set('etag', 'strong');
 
 // Security middleware
 app.use(helmet());
@@ -48,8 +72,14 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Compression for better performance
-app.use(compression());
+// Compression for better performance (skip already-compressed payloads)
+app.use(compression({
+    threshold: 1024,
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+    }
+}));
 
 // Rate limiting - 100 requests per 15 minutes per IP
 const limiter = rateLimit({
@@ -136,9 +166,12 @@ app.use((err, req, res, next) => {
 const connectDB = async () => {
     try {
         const conn = await mongoose.connect(process.env.MONGODB_URI, {
-            maxPoolSize: 10,
+            maxPoolSize: 50,
+            minPoolSize: 5,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
+            // Faster writes with the same durability guarantees for our use case
+            retryWrites: true,
         });
         console.log(`MongoDB Connected: ${conn.connection.host}`);
     } catch (error) {
