@@ -31,6 +31,7 @@ import { CollectionFarmersPage } from './pages/CollectionFarmersPage'
 import { AppVersionPage } from './pages/AppVersionPage'
 import { PaymentSettingsPage } from './pages/PaymentSettingsPage'
 import { WhatsappSettingsPage } from './pages/WhatsappSettingsPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 
 function App() {
     return (
@@ -76,6 +77,7 @@ function App() {
                         <Route path="app-version" element={<AppVersionPage />} />
                         <Route path="payment-settings" element={<PaymentSettingsPage />} />
                         <Route path="whatsapp-settings" element={<WhatsappSettingsPage />} />
+                        <Route path="notifications" element={<NotificationsPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

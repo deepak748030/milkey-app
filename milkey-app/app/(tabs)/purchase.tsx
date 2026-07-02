@@ -45,7 +45,7 @@ export default function PurchaseScreen() {
         hasAccess, loading: subscriptionLoading, showSubscriptionModal,
         handleModalClose, handleSubscriptionSuccess
     } = useSubscriptionCheck('purchase');
-    const { printText, isPrinting } = useBluetoothPrinter();
+    const { printText, isPrinting, isConnected: isPrinterConnected } = useBluetoothPrinter();
 
     const { purchaseTab: activeTab, setPurchaseTab: setActiveTab } = useSubTabStore();
 
@@ -69,6 +69,7 @@ export default function PurchaseScreen() {
     const [snfValue, setSnfValue] = useState('');
     const [rateValue, setRateValue] = useState('');
     const [isZero, setIsZero] = useState(false);
+    const [noPrint, setNoPrint] = useState(false);
     const [saving, setSaving] = useState(false);
 
     // History state
@@ -360,8 +361,9 @@ export default function PurchaseScreen() {
             if (res.success) {
                 showAlert('Success', 'Entry saved');
 
-                // Auto-print entry slip if farmer's printEntrySlip is 'yes'
-                if (selectedCustomer.printEntrySlip === 'yes') {
+                // Auto-print entry slip when a Bluetooth printer is connected,
+                // unless the user explicitly disabled printing for this entry.
+                if (isPrinterConnected && !noPrint) {
                     const slipPayload = buildMilkSlipPayload({
                         _id: res.response?._id || '',
                         farmerCode: selectedCustomer.code,
@@ -382,6 +384,7 @@ export default function PurchaseScreen() {
 
                 setMilkQty(''); setFatValue(''); setSnfValue(''); setRateValue('');
                 setIsZero(false);
+                setNoPrint(false);
                 // Auto-deselect the farmer/code after save so user must re-select for next entry.
                 // This prevents accidental double entries on the same code.
                 setSelectedCustomer(null);
@@ -391,7 +394,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, openAlertApp, printText, buildMilkSlipPayload]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -715,7 +718,7 @@ export default function PurchaseScreen() {
         for (const r of rows) {
             const code = String(r.farmerCode || r.purchaseFarmer?.code || '-');
             if (!groups.has(code)) {
-                const farmerObj = r.purchaseFarmer || customers.find(c => c.code === code) || { code, name: r.purchaseFarmer?.name || '' };
+                const farmerObj = r.purchaseFarmer || customers.find(c => c.code === code) || { code, name: '' };
                 groups.set(code, { farmer: farmerObj, entries: [] });
             }
             groups.get(code)!.entries.push(r);
@@ -1012,6 +1015,15 @@ export default function PurchaseScreen() {
                             <Ban size={14} color={isZero ? '#fff' : colors.destructive} />
                             <Text style={[s.zeroText, isZero && { color: '#fff' }]}>{t.purchase.zeroEntry}</Text>
                         </Pressable>
+                        {isPrinterConnected && (
+                            <Pressable
+                                style={[s.noPrintToggle, noPrint && { backgroundColor: colors.mutedForeground, borderColor: colors.mutedForeground }]}
+                                onPress={() => setNoPrint(!noPrint)}
+                            >
+                                <Printer size={14} color={noPrint ? '#fff' : colors.mutedForeground} />
+                                <Text style={[s.noPrintText, noPrint && { color: '#fff' }]}>No Print</Text>
+                            </Pressable>
+                        )}
                         <Pressable style={[s.saveEntryBtn, saving && { opacity: 0.5 }]} onPress={handleSaveEntry} disabled={saving}>
                             {saving ? <ActivityIndicator size="small" color="#fff" /> : (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -1859,6 +1871,19 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         backgroundColor: colors.primary,
         borderRadius: 10,
     },
+    noPrintToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderWidth: 1.5,
+        borderColor: colors.mutedForeground,
+        backgroundColor: 'transparent',
+        borderRadius: 10,
+    },
+    noPrintText: { fontSize: 13, fontWeight: '800', color: colors.mutedForeground },
     saveEntryText: { fontSize: 16, fontWeight: '900', color: '#fff' },
 
     // Table

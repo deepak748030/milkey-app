@@ -307,22 +307,6 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             </View>
                         </View>
 
-                        {/* Print Entry Slip Card */}
-                        <View style={s.sectionCard}>
-                            <Text style={s.sectionTitle}>7. Print Entry Slip</Text>
-                            <View style={s.priceBasisRow}>
-                                {PRINT_SLIP_OPTIONS.map(opt => (
-                                    <Pressable
-                                        key={opt.value}
-                                        style={[s.priceBasisChip, printEntrySlip === opt.value && s.priceBasisChipActive]}
-                                        onPress={() => setPrintEntrySlip(opt.value as any)}
-                                    >
-                                        {printEntrySlip === opt.value && <Check size={14} color="#fff" style={{ marginRight: 4 }} />}
-                                        <Text style={[s.priceBasisText, printEntrySlip === opt.value && s.priceBasisTextActive]}>{opt.label}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        </View>
 
                         <View style={{ height: 20 }} />
                     </ScrollView>

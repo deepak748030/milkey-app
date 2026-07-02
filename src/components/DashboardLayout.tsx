@@ -30,6 +30,7 @@ import {
     Store,
     Smartphone,
     MessageCircle,
+    Bell,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuth } from '../context/AuthContext'
@@ -48,6 +49,7 @@ const mainNavItems = [
     { to: '/app-version', icon: Smartphone, label: 'App Version' },
     { to: '/payment-settings', icon: CreditCard, label: 'Payment Settings' },
     { to: '/whatsapp-settings', icon: MessageCircle, label: 'WhatsApp Message' },
+    { to: '/notifications', icon: Bell, label: 'Notifications' },
     { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
