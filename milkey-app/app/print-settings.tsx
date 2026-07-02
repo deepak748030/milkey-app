@@ -50,7 +50,7 @@ export default function PrintSettingsScreen() {
                     // Default the receipt note to "Thank You !" so a fresh user
                     // immediately sees the same footer as the printed slip.
                     extraInfo: res.response.extraInfo || 'Thank You !',
-                    digitalSlipName: res.response.digitalSlipName || '',
+                    digitalSlipName: res.response.digitalSlipName || res.response.dairyName || '',
                 });
             }
         } catch (e) {
@@ -63,7 +63,7 @@ export default function PrintSettingsScreen() {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const res = await printSettingsApi.update(settings);
+            const res = await printSettingsApi.update({ ...settings, digitalSlipName: settings.dairyName });
             if (res.success) {
                 showAlert('Success', 'Print settings saved successfully');
             } else {
@@ -126,16 +126,19 @@ export default function PrintSettingsScreen() {
                     <Text style={styles.iconLabel}>Receipt Configuration</Text>
                 </View>
 
-                {/* Dairy Name */}
+                {/* Dairy Name — single field used for both printed receipt and digital (WhatsApp/SMS) slip */}
                 <View style={styles.inputGroup}>
                     <Text style={styles.label}>Dairy Name</Text>
                     <TextInput
                         style={styles.input}
                         placeholder="Enter dairy name"
                         value={settings.dairyName}
-                        onChangeText={(v) => setSettings({ ...settings, dairyName: v })}
+                        onChangeText={(v) => setSettings({ ...settings, dairyName: v, digitalSlipName: v })}
                         placeholderTextColor={colors.mutedForeground}
                     />
+                    <Text style={[styles.phoneHint, { color: colors.mutedForeground, marginTop: 4 }]}>
+                        Used on printed receipt and digital slip
+                    </Text>
                 </View>
 
                 {/* Village / Address */}
@@ -187,17 +190,8 @@ export default function PrintSettingsScreen() {
                     </Text>
                 </View>
 
-                {/* Digital slip dairy name */}
-                <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Digital slip - Dairy name</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Name shown on WhatsApp / SMS slip"
-                        value={settings.digitalSlipName || ''}
-                        onChangeText={(v) => setSettings({ ...settings, digitalSlipName: v })}
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                </View>
+                {/* Digital slip dairy name is now auto-synced from Dairy Name above */}
+
 
                 {/* Extra note (footer) */}
                 <View style={styles.inputGroup}>

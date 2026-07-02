@@ -310,6 +310,49 @@ export default function RegisterScreen() {
         }
     }, [blockedPeriods, paymentFarmer]);
 
+    // Auto-select default Calculation Period based on last payment for this farmer.
+    // Logic: next period starts the day after the last payment's periodEnd, with the
+    // same duration. If the tentative end exceeds the month's last day (28/30/31),
+    // clamp it to the month end so the last cycle of the month is auto-selected.
+    // If there is no previous payment, keep the existing default (start of month → today).
+    useEffect(() => {
+        if (!paymentFarmer) return;
+
+        const farmerCode = paymentFarmer.farmer.code;
+        const prior = payments
+            .filter(p => p.farmer?.code === farmerCode && p.periodStart && p.periodEnd)
+            .sort((a, b) => new Date(b.periodEnd!).getTime() - new Date(a.periodEnd!).getTime());
+
+        if (prior.length === 0) return;
+
+        const last = prior[0];
+        const lastStart = new Date(last.periodStart!);
+        const lastEnd = new Date(last.periodEnd!);
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const duration = Math.max(1, Math.round((lastEnd.getTime() - lastStart.getTime()) / msPerDay) + 1);
+
+        const newStart = new Date(lastEnd);
+        newStart.setDate(newStart.getDate() + 1);
+
+        const tentativeEnd = new Date(newStart);
+        tentativeEnd.setDate(tentativeEnd.getDate() + duration - 1);
+
+        // Clamp end to the last day of newStart's month so month-end cycles auto-fit.
+        const monthEnd = new Date(newStart.getFullYear(), newStart.getMonth() + 1, 0);
+        const finalEnd = tentativeEnd > monthEnd ? monthEnd : tentativeEnd;
+
+        // Skip if the computed range overlaps an existing settled period.
+        const overlaps = blockedPeriods.some(period => {
+            const bs = new Date(period.startDate);
+            const be = new Date(period.endDate);
+            return newStart <= be && finalEnd >= bs;
+        });
+        if (overlaps) return;
+
+        setDateStart(newStart.toISOString().split('T')[0]);
+        setDateEnd(finalEnd.toISOString().split('T')[0]);
+    }, [paymentFarmer, payments]);
+
     // Fetch advances with server-side pagination
     const fetchAdvances = async (page: number = 1, search: string = '', append: boolean = false) => {
         try {

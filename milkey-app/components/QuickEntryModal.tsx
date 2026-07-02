@@ -299,6 +299,34 @@ export function QuickEntryModal({ isVisible, onClose, onSuccess }: QuickEntryMod
                                     </View>
                                 </View>
 
+                                {/* Rate row - member default rate, tap to change for today only */}
+                                {selectedMember && (
+                                    <View style={styles.rateRow}>
+                                        <Text style={styles.rateLabel}>Rate (₹/L)</Text>
+                                        <View style={{ flex: 1 }}>
+                                            <TextInput
+                                                style={styles.rateInput}
+                                                value={rate}
+                                                onChangeText={setRate}
+                                                onFocus={() => setRate('')}
+                                                onBlur={() => {
+                                                    if (!rate || parseFloat(rate) <= 0) {
+                                                        setRate(selectedMember.ratePerLiter?.toString() || '50');
+                                                    }
+                                                }}
+                                                keyboardType="decimal-pad"
+                                                placeholder={(selectedMember.ratePerLiter ?? 50).toString()}
+                                                placeholderTextColor={colors.mutedForeground}
+                                                selectTextOnFocus
+                                            />
+                                            <Text style={styles.rateHint}>
+                                                Default ₹{selectedMember.ratePerLiter}/L · tap to change today only
+                                            </Text>
+                                        </View>
+                                    </View>
+                                )}
+
+
                                 {/* Total and Save */}
                                 <View style={styles.totalRow}>
                                     <View style={styles.totalBox}>
@@ -533,6 +561,39 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         backgroundColor: colors.background,
         color: colors.foreground,
         textAlign: 'center',
+    },
+    rateRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        backgroundColor: colors.secondary,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    rateLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.foreground,
+    },
+    rateInput: {
+        borderWidth: 1,
+        borderColor: colors.primary,
+        borderRadius: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        fontSize: 15,
+        fontWeight: '700',
+        color: colors.primary,
+        backgroundColor: colors.background,
+    },
+    rateHint: {
+        fontSize: 10,
+        color: colors.mutedForeground,
+        marginTop: 2,
     },
     totalRow: {
         flexDirection: 'row',
