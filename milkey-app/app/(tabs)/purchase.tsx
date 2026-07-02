@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
     View, Text, StyleSheet, Pressable, TextInput, FlatList,
     ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking, Platform
@@ -515,16 +515,20 @@ export default function PurchaseScreen() {
     }, [filteredReportCollections, collections]);
 
     // Full Summary Print
-    const handleFullSummaryPrint = useCallback(async (source?: 'purchase' | 'report') => {
-        setShowPrintTypeModal(false);
+    const handleFullSummaryPrint = useCallback(async (
+        source?: 'purchase' | 'report',
+        overrides?: { data?: any[]; totals?: { quantity: number; amount: number }; farmer?: any; silent?: boolean }
+    ) => {
+        if (!overrides?.silent) setShowPrintTypeModal(false);
         const resolvedSource = source ?? printSource;
         const isReport = resolvedSource === 'report';
-        const data = isReport
+        const data = overrides?.data ?? (isReport
             ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
-            : collections;
-        const totals = isReport
+            : collections);
+        const totals = overrides?.totals ?? (isReport
             ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
-            : historyTotals;
+            : historyTotals);
+        const farmerForHeader = overrides?.farmer ?? selectedReportFarmer;
 
         const tFull = getThermalSlipLabels();
         const dateLabel = isReport && reportStartDate && reportEndDate
@@ -535,9 +539,9 @@ export default function PurchaseScreen() {
         if (isReport) {
             // Date range line — left-aligned per user request.
             payload += fmtLeft(dateLabel);
-            if (selectedReportFarmer) {
-                payload += fmtLeft(`${tFull.code} : ${selectedReportFarmer.code}`);
-                payload += fmtLeft(`${tFull.name} : ${selectedReportFarmer.name}`);
+            if (farmerForHeader) {
+                payload += fmtLeft(`${tFull.code} : ${farmerForHeader.code}`);
+                payload += fmtLeft(`${tFull.name} : ${farmerForHeader.name}`);
             }
         } else {
             payload += `[L]${formatDateStr(`${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`)}[C]${tFull.fullSummary}[R]${entryShift === 'morning' ? tFull.morningShort : tFull.eveningShort}\n`;
@@ -631,24 +635,30 @@ export default function PurchaseScreen() {
         payload += receiptFooter();
 
         const success = await printText(payload);
+        if (overrides?.silent) return success;
         if (success) {
             showAlert('Success', 'Full summary printed!');
-            return;
+            return true;
         }
 
         showAlert('Printer Not Ready', 'Connect your Bluetooth thermal printer from the top bar, then try printing again.');
+        return false;
     }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printText, selectedReportFarmer, receiptHeader, receiptFooter]);
 
-    const handleShortSummaryPrint = useCallback(async (source?: 'purchase' | 'report') => {
-        setShowPrintTypeModal(false);
+    const handleShortSummaryPrint = useCallback(async (
+        source?: 'purchase' | 'report',
+        overrides?: { data?: any[]; totals?: { quantity: number; amount: number }; farmer?: any; silent?: boolean }
+    ) => {
+        if (!overrides?.silent) setShowPrintTypeModal(false);
         const resolvedSource = source ?? printSource;
         const isReport = resolvedSource === 'report';
-        const data = isReport
+        const data = overrides?.data ?? (isReport
             ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
-            : collections;
-        const totals = isReport
+            : collections);
+        const totals = overrides?.totals ?? (isReport
             ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
-            : historyTotals;
+            : historyTotals);
+        const farmerForHeader = overrides?.farmer ?? selectedReportFarmer;
 
         const tShort = getThermalSlipLabels();
         const dateLabel = isReport && reportStartDate && reportEndDate
@@ -664,9 +674,9 @@ export default function PurchaseScreen() {
         if (isReport) {
             // Date range line — left-aligned per user request.
             payload += fmtLeft(dateLabel);
-            if (selectedReportFarmer) {
-                payload += fmtLeft(`${tShort.code} : ${selectedReportFarmer.code}`);
-                payload += fmtLeft(`${tShort.name} : ${selectedReportFarmer.name}`);
+            if (farmerForHeader) {
+                payload += fmtLeft(`${tShort.code} : ${farmerForHeader.code}`);
+                payload += fmtLeft(`${tShort.name} : ${farmerForHeader.name}`);
             }
         } else {
             payload += `[L]${formatDateStr(`${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`)}[C]${tShort.shortSummary}[R]${entryShift === 'morning' ? tShort.morningShort : tShort.eveningShort}\n`;
@@ -681,15 +691,82 @@ export default function PurchaseScreen() {
         payload += receiptFooter();
 
         const success = await printText(payload);
+        if (overrides?.silent) return success;
         if (success) {
             showAlert('Success', 'Short summary printed!');
-            return;
+            return true;
         }
 
         showAlert('Printer Not Ready', 'Connect your Bluetooth thermal printer from the top bar, then try printing again.');
+        return false;
     }, [printSource, filteredReportCollections, collections, filteredReportTotals, historyTotals, entryDate, entryShift, reportStartDate, reportEndDate, printText, selectedReportFarmer, receiptHeader, receiptFooter]);
 
-    // Export PDF for report
+    // Batch print state — for All-Farmers report print
+    const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; farmerName: string } | null>(null);
+    const batchCancelRef = useRef(false);
+
+    const handleReportBatchPrint = useCallback(async (kind: 'full' | 'short') => {
+        setShowPrintTypeModal(false);
+        const rows = reportCollections;
+        if (rows.length === 0) { showAlert('Info', 'No data to print'); return; }
+
+        // Group entries by farmer code
+        const groups = new Map<string, { farmer: any; entries: any[] }>();
+        for (const r of rows) {
+            const code = String(r.farmerCode || r.purchaseFarmer?.code || '-');
+            if (!groups.has(code)) {
+                const farmerObj = r.purchaseFarmer || customers.find(c => c.code === code) || { code, name: r.purchaseFarmer?.name || '' };
+                groups.set(code, { farmer: farmerObj, entries: [] });
+            }
+            groups.get(code)!.entries.push(r);
+        }
+
+        // Sort by farmer code ascending (numeric-aware)
+        const sortedCodes = Array.from(groups.keys()).sort((a, b) => {
+            const na = parseInt(a, 10);
+            const nb = parseInt(b, 10);
+            if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+            return a.localeCompare(b);
+        });
+
+        batchCancelRef.current = false;
+        const total = sortedCodes.length;
+
+        for (let i = 0; i < sortedCodes.length; i++) {
+            if (batchCancelRef.current) break;
+            const code = sortedCodes[i];
+            const group = groups.get(code)!;
+            const totals = {
+                quantity: group.entries.reduce((s, e) => s + (e.quantity || 0), 0),
+                amount: group.entries.reduce((s, e) => s + (e.amount || 0), 0),
+            };
+            setBatchProgress({ current: i + 1, total, farmerName: group.farmer?.name || code });
+
+            const fn = kind === 'full' ? handleFullSummaryPrint : handleShortSummaryPrint;
+            const ok = await fn('report', {
+                data: group.entries,
+                totals,
+                farmer: group.farmer,
+                silent: true,
+            });
+            if (!ok) {
+                setBatchProgress(null);
+                showAlert('Printer Not Ready', `Failed at farmer ${code}. Reconnect printer and try again.`);
+                return;
+            }
+            // Small gap between slips so the printer buffer flushes
+            await new Promise(res => setTimeout(res, 400));
+        }
+
+        setBatchProgress(null);
+        if (batchCancelRef.current) {
+            showAlert('Cancelled', 'Batch print cancelled.');
+        } else {
+            showAlert('Success', `Printed ${total} slips.`);
+        }
+    }, [reportCollections, customers, handleFullSummaryPrint, handleShortSummaryPrint]);
+
+
     const handleExportReportPdf = useCallback(async () => {
         const data = filteredReportCollections.length > 0 ? filteredReportCollections : collections;
         const totals = filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals;
@@ -1099,7 +1176,11 @@ export default function PurchaseScreen() {
                     style={[s.exportReportBtn, { flex: 1, backgroundColor: colors.primary }, isPrinting && { opacity: 0.6 }]}
                     onPress={() => {
                         setPrintSource('report');
-                        handleFullSummaryPrint('report');
+                        if (!reportFarmerFilter) {
+                            handleReportBatchPrint('full');
+                        } else {
+                            handleFullSummaryPrint('report');
+                        }
                     }}
                     disabled={isPrinting}
                 >
@@ -1110,7 +1191,11 @@ export default function PurchaseScreen() {
                     style={[s.exportReportBtn, { flex: 1, backgroundColor: '#f59e0b' }, isPrinting && { opacity: 0.6 }]}
                     onPress={() => {
                         setPrintSource('report');
-                        handleShortSummaryPrint('report');
+                        if (!reportFarmerFilter) {
+                            handleReportBatchPrint('short');
+                        } else {
+                            handleShortSummaryPrint('report');
+                        }
                     }}
                     disabled={isPrinting}
                 >
@@ -1578,6 +1663,27 @@ export default function PurchaseScreen() {
 
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />
             <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
+
+            {/* Batch print progress */}
+            <Modal visible={!!batchProgress} transparent animationType="fade">
+                <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+                    <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 20, width: '100%', maxWidth: 340, borderWidth: 1, borderColor: colors.border, alignItems: 'center', gap: 10 }}>
+                        <ActivityIndicator size="large" color={colors.primary} />
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>
+                            Printing {batchProgress?.current} / {batchProgress?.total}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: 'center' }} numberOfLines={2}>
+                            {batchProgress?.farmerName}
+                        </Text>
+                        <Pressable
+                            onPress={() => { batchCancelRef.current = true; }}
+                            style={{ marginTop: 6, backgroundColor: colors.destructive, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 6 }}
+                        >
+                            <Text style={{ color: '#fff', fontWeight: '700' }}>Cancel</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }

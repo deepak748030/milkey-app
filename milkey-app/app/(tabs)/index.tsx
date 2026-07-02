@@ -14,6 +14,8 @@ import { QuickEntryModal } from '@/components/QuickEntryModal';
 import { QuickAdvanceModal } from '@/components/QuickAdvanceModal';
 import { useSubscriptionStore, shouldShowSubscriptionModal, markSubscriptionModalShown } from '@/lib/subscriptionStore';
 import { SuccessModal } from '@/components/SuccessModal';
+import { OverviewRangeModal } from '@/components/OverviewRangeModal';
+import { useSubTabStore } from '@/lib/subTabStore';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width - 12;
@@ -49,8 +51,12 @@ export default function HomeScreen() {
   // Quick Advance modal state
   const [showQuickAdvanceModal, setShowQuickAdvanceModal] = useState(false);
 
+  // Overview range modal state (collection / selling breakdown by date range)
+  const [overviewRangeKind, setOverviewRangeKind] = useState<'collection' | 'selling' | null>(null);
+
   // Get subscription store - must be before useEffects that use status
   const { fetchStatus, preloadAllTabs, status, initializeFromStorage } = useSubscriptionStore();
+  const { setSellingTab, setPurchaseTab, setRegisterTab } = useSubTabStore();
 
   useEffect(() => {
     loadCart();
@@ -291,33 +297,51 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>{t.home.quickOverview}</Text>
         <View style={styles.overviewCard}>
           <View style={styles.overviewMain}>
-            <View>
+            <Pressable style={styles.overviewCollectionCol} onPress={() => setOverviewRangeKind('collection')}>
               <Text style={styles.overviewLabel}>{t.home.today}</Text>
               <Text style={styles.overviewSubLabel}>{t.home.milkCollection}</Text>
-              <Text style={styles.overviewValue}>₹{homeStats?.today.amount.toFixed(0) || '0'}</Text>
-            </View>
+              {(() => {
+                const qty = homeStats?.today.quantity || 0;
+                const amt = homeStats?.today.amount || 0;
+                const rate = qty > 0 ? amt / qty : 0;
+                return (
+                  <Text style={styles.overviewFormula}>
+                    {qty.toFixed(1)} × {rate.toFixed(2)}
+                  </Text>
+                );
+              })()}
+              <Text style={styles.overviewValue}>₹{(homeStats?.today.amount || 0).toFixed(0)}</Text>
+            </Pressable>
             <View style={styles.overviewDivider} />
-            <View style={styles.overviewStat}>
-              <Text style={styles.overviewStatValue}>{homeStats?.todaySell.quantity.toFixed(1) || '0'}L</Text>
+            <Pressable style={styles.overviewStat} onPress={() => setOverviewRangeKind('selling')}>
+              <Text style={styles.overviewStatValue}>{(homeStats?.todaySell.quantity || 0).toFixed(1)}L</Text>
               <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.sellQty}</Text>
-            </View>
+              <Text style={[styles.overviewStatSubValue, { color: colors.primary }]}>₹{(homeStats?.todaySell.amount || 0).toFixed(0)}</Text>
+            </Pressable>
             <View style={styles.overviewDivider} />
-            <View style={styles.overviewStat}>
+            <Pressable style={styles.overviewStat} onPress={() => { setSellingTab('Member'); router.push('/(tabs)/selling?tab=Member'); }}>
               <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{homeStats?.totalMembers || 0}</Text>
               <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.members}</Text>
-            </View>
+            </Pressable>
             <View style={styles.overviewDivider} />
-            <View style={styles.overviewStat}>
+            <Pressable style={styles.overviewStat} onPress={() => { setPurchaseTab('C-Farmer'); router.push('/(tabs)/purchase'); }}>
               <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{homeStats?.totalCollectionFarmers || 0}</Text>
               <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.cFarmer}</Text>
-            </View>
+            </Pressable>
             <View style={styles.overviewDivider} />
-            <View style={styles.overviewStat}>
+            <Pressable style={styles.overviewStat} onPress={() => { setRegisterTab('R-Farmer'); router.push('/(tabs)/register'); }}>
               <Text style={[styles.overviewStatValue, { color: colors.destructive }]}>{homeStats?.totalFarmers || 0}</Text>
               <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.rFarmer}</Text>
-            </View>
+            </Pressable>
           </View>
         </View>
+
+        <OverviewRangeModal
+          visible={overviewRangeKind !== null}
+          kind={overviewRangeKind || 'collection'}
+          onClose={() => setOverviewRangeKind(null)}
+        />
+
 
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>{t.home.quickActions}</Text>
@@ -551,6 +575,20 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.primary,
+  },
+  overviewCollectionCol: {
+    justifyContent: 'center',
+  },
+  overviewFormula: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.mutedForeground,
+    marginTop: 1,
+  },
+  overviewStatSubValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
   },
   overviewDivider: {
     width: 1,

@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAuthToken } from './authStore';
 
 // API Base URL - Vercel deployed server
-// const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
-const API_BASE_URL = 'http://localhost:5000/api'
+const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
+// const API_BASE_URL = 'http://localhost:5000/api'
 
 export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
 
