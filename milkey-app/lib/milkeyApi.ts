@@ -56,6 +56,7 @@ export interface SellingEntry {
     amount: number;
     isPaid: boolean;
     notes: string;
+    entryCount?: number;
 }
 
 export interface PurchaseFarmer {
@@ -1271,6 +1272,21 @@ export const sellingEntriesApi = {
     delete: async (id: string) => {
         return apiRequest<void>(`/selling-entries/${id}`, {
             method: 'DELETE',
+        });
+    },
+
+    update: async (
+        id: string,
+        data: {
+            morningQuantity?: number;
+            eveningQuantity?: number;
+            rate?: number;
+            notes?: string;
+        }
+    ) => {
+        return apiRequest<SellingEntry>(`/selling-entries/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
         });
     },
 };

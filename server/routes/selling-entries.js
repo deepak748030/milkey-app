@@ -260,4 +260,96 @@ router.delete('/:id', auth, requireSubscription('selling'), async (req, res) => 
     }
 });
 
+// PUT /api/selling-entries/:id — update morning/evening/rate/notes (requires selling subscription)
+router.put('/:id', auth, requireSubscription('selling'), async (req, res) => {
+    try {
+        const { morningQuantity, eveningQuantity, rate, notes } = req.body || {};
+
+        const entry = await SellingEntry.findOne({
+            _id: req.params.id,
+            owner: req.userId
+        });
+
+        if (!entry) {
+            return res.status(404).json({
+                success: false,
+                message: 'Entry not found'
+            });
+        }
+
+        // Capture old totals so we can compute the delta to apply to the member
+        const oldTotalQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+        const oldAmount = Number(entry.amount || 0);
+
+        if (morningQuantity !== undefined && morningQuantity !== null && morningQuantity !== '') {
+            const mv = parseFloat(morningQuantity);
+            if (Number.isNaN(mv) || mv < 0) {
+                return res.status(400).json({ success: false, message: 'Invalid morning quantity' });
+            }
+            entry.morningQuantity = mv;
+        }
+
+        if (eveningQuantity !== undefined && eveningQuantity !== null && eveningQuantity !== '') {
+            const ev = parseFloat(eveningQuantity);
+            if (Number.isNaN(ev) || ev < 0) {
+                return res.status(400).json({ success: false, message: 'Invalid evening quantity' });
+            }
+            entry.eveningQuantity = ev;
+        }
+
+        if (rate !== undefined && rate !== null && rate !== '') {
+            const rv = parseFloat(rate);
+            if (Number.isNaN(rv) || rv < 0) {
+                return res.status(400).json({ success: false, message: 'Invalid rate' });
+            }
+            entry.rate = rv;
+        }
+
+        if (notes !== undefined) {
+            entry.notes = String(notes || '').trim();
+        }
+
+        // Must have at least one non-zero quantity
+        if (Number(entry.morningQuantity || 0) <= 0 && Number(entry.eveningQuantity || 0) <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Morning or evening quantity is required'
+            });
+        }
+
+        // pre('validate') recalculates amount from morning+evening+rate
+        await entry.save();
+
+        const newTotalQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+        const newAmount = Number(entry.amount || 0);
+        const deltaLiters = newTotalQty - oldTotalQty;
+        const deltaAmount = newAmount - oldAmount;
+
+        // Mirror the pattern used by DELETE / POST: adjust member totals by the delta.
+        // pendingAmount is adjusted for unpaid entries; for already-paid entries we
+        // do NOT touch pendingAmount because it wasn't in the pending bucket.
+        const inc = { totalLiters: deltaLiters, totalAmount: deltaAmount };
+        if (!entry.isPaid) {
+            inc.pendingAmount = deltaAmount;
+        }
+        await Member.findByIdAndUpdate(entry.member, { $inc: inc });
+
+        const populated = await SellingEntry.findById(entry._id)
+            .populate('member', 'name mobile ratePerLiter')
+            .lean();
+
+        res.json({
+            success: true,
+            message: 'Entry updated successfully',
+            response: populated
+        });
+    } catch (error) {
+        console.error('Update selling entry error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update entry'
+        });
+    }
+});
+
 module.exports = router;

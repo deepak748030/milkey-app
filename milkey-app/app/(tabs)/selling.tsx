@@ -2063,24 +2063,32 @@ export default function SellingScreen() {
                                 borderRadius: 6,
                                 paddingVertical: 8,
                             }}
-                            onPress={handleDownloadPaymentMemberEntriesPDF}
-                            disabled={paymentEntriesPdfLoading}
+                            onPress={() => {
+                                if (!selectedPaymentMember) {
+                                    showAlert('Error', 'Please select a member first');
+                                    return;
+                                }
+                                router.push({
+                                    pathname: '/view-entries',
+                                    params: {
+                                        memberId: selectedPaymentMember._id,
+                                        memberName: selectedPaymentMember.name,
+                                        startDate: calcStartDate || '',
+                                        endDate: calcEndDate || '',
+                                        rate: String(selectedPaymentMember.ratePerLiter ?? ''),
+                                    },
+                                });
+                            }}
                         >
-                            {paymentEntriesPdfLoading ? (
-                                <ActivityIndicator size="small" color={colors.primary} />
-                            ) : (
-                                <>
-                                    <FileText size={14} color={colors.primary} />
-                                    <Text
-                                        numberOfLines={1}
-                                        adjustsFontSizeToFit
-                                        minimumFontScale={0.7}
-                                        style={{ fontSize: 11, fontWeight: '700', color: colors.primary, flexShrink: 1 }}
-                                    >
-                                        Full Detailed Entry
-                                    </Text>
-                                </>
-                            )}
+                            <FileText size={14} color={colors.primary} />
+                            <Text
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                minimumFontScale={0.7}
+                                style={{ fontSize: 11, fontWeight: '700', color: colors.primary, flexShrink: 1 }}
+                            >
+                                View Detailed Entry
+                            </Text>
                         </Pressable>
                         <Pressable
                             style={{
