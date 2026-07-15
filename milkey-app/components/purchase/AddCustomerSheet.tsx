@@ -122,8 +122,8 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 cowRate: parseFloat(cowRate) || 0, buffaloRate: parseFloat(buffaloRate) || 0,
                 cowFat: parseFloat(cowFat) || 0, buffaloFat: parseFloat(buffaloFat) || 0,
                 alertMethod, printEntrySlip,
-                // Rate Chart icon: always on when priceBasis is Rate Chart, otherwise per toggle
-                showRateChart: priceBasis === 'fat_snf' ? true : showRateChart,
+                // Rate Chart icon: user-controlled toggle applies for every price basis
+                showRateChart: !!showRateChart,
             };
             const res = editingFarmer
                 ? await purchaseFarmersApi.update(editingFarmer._id, data)
@@ -262,27 +262,25 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             </View>
                         </View>
 
-                        {/* Show Rate Chart Icon toggle (hidden when priceBasis is Rate Chart, since it's implicit) */}
-                        {priceBasis !== 'fat_snf' && (
-                            <View style={s.sectionCard}>
-                                <Text style={s.sectionTitle}>Show Rate Chart Icon</Text>
-                                <View style={s.priceBasisRow}>
-                                    {[
-                                        { value: true, label: 'Yes' },
-                                        { value: false, label: 'No' },
-                                    ].map(opt => (
-                                        <Pressable
-                                            key={String(opt.value)}
-                                            style={[s.priceBasisChip, showRateChart === opt.value && s.priceBasisChipActive]}
-                                            onPress={() => setShowRateChart(opt.value)}
-                                        >
-                                            {showRateChart === opt.value && <Check size={14} color="#fff" style={{ marginRight: 4 }} />}
-                                            <Text style={[s.priceBasisText, showRateChart === opt.value && s.priceBasisTextActive]}>{opt.label}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
+                        {/* Show Rate Chart Icon toggle — always visible so user can decide, incl. when Rate Chart price basis is selected */}
+                        <View style={s.sectionCard}>
+                            <Text style={s.sectionTitle}>Show Rate Chart Icon</Text>
+                            <View style={s.priceBasisRow}>
+                                {[
+                                    { value: true, label: 'Yes' },
+                                    { value: false, label: 'No' },
+                                ].map(opt => (
+                                    <Pressable
+                                        key={String(opt.value)}
+                                        style={[s.priceBasisChip, showRateChart === opt.value && s.priceBasisChipActive]}
+                                        onPress={() => setShowRateChart(opt.value)}
+                                    >
+                                        {showRateChart === opt.value && <Check size={14} color="#fff" style={{ marginRight: 4 }} />}
+                                        <Text style={[s.priceBasisText, showRateChart === opt.value && s.priceBasisTextActive]}>{opt.label}</Text>
+                                    </Pressable>
+                                ))}
                             </View>
-                        )}
+                        </View>
 
                         {/* Buffalo Milk Card — hidden when Rate Chart is the pricing mode */}
                         {priceBasis !== 'fat_snf' && buffaloEnabled && (

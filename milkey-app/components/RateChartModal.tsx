@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     View, Text, Modal, Pressable, TextInput, ScrollView, StyleSheet, Platform,
+    ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, RefreshCw, Table as TableIcon } from 'lucide-react-native';
@@ -38,6 +39,7 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
     // Step is locked to 0.1 (hidden from UI)
     const step = '0.1';
     const [advanced, setAdvanced] = useState(false);
+    const [saving, setSaving] = useState(false);
     const hydratedRef = React.useRef(false);
 
     // Load persisted settings — try server first, fall back to AsyncStorage.
@@ -77,6 +79,7 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
     // Persist on change (visible only) — write to both local cache and server.
     useEffect(() => {
         if (!visible || !hydratedRef.current) return;
+        setSaving(true);
         const t = setTimeout(() => {
             const payload = {
                 rate: rateText, fatMin, fatMax, snfMin, snfMax, step, presetKey,
@@ -90,7 +93,9 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                 snfMax: parseFloat(snfMax) || 0,
                 step: parseFloat(step) || 0.1,
                 presetKey,
-            }).catch(() => { /* offline-safe */ });
+            })
+                .catch(() => { /* offline-safe */ })
+                .finally(() => setSaving(false));
         }, 600);
         return () => clearTimeout(t);
     }, [visible, rateText, fatMin, fatMax, snfMin, snfMax, step, presetKey]);
@@ -141,6 +146,12 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                             <Text style={s.headerTitle}>Rate Chart</Text>
                             <Text style={s.headerSub}>FAT × SNF calculator</Text>
                         </View>
+                        {saving && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                                <Text style={{ color: colors.mutedForeground, fontSize: 11, fontWeight: '600' }}>Saving…</Text>
+                            </View>
+                        )}
                     </View>
                     <Pressable onPress={onClose} style={s.closeBtn} hitSlop={10}>
                         <X size={20} color={colors.foreground} />
@@ -175,26 +186,34 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                         </Pressable>
                     </View>
                     {advanced && (
-                        <View style={s.advGrid}>
-                            <View style={s.advCell}>
-                                <Text style={s.label}>FAT Min</Text>
-                                <TextInput style={s.smallInput} value={fatMin} onChangeText={setFatMin}
-                                    keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
+                        <View>
+                            <View style={s.advRow}>
+                                <View style={s.advCell}>
+                                    <Text style={s.label}>FAT Min</Text>
+                                    <TextInput style={s.smallInput} value={fatMin} onChangeText={setFatMin}
+                                        keyboardType="decimal-pad" placeholder="1"
+                                        placeholderTextColor={colors.mutedForeground} />
+                                </View>
+                                <View style={s.advCell}>
+                                    <Text style={s.label}>FAT Max</Text>
+                                    <TextInput style={s.smallInput} value={fatMax} onChangeText={setFatMax}
+                                        keyboardType="decimal-pad" placeholder="15"
+                                        placeholderTextColor={colors.mutedForeground} />
+                                </View>
                             </View>
-                            <View style={s.advCell}>
-                                <Text style={s.label}>FAT Max</Text>
-                                <TextInput style={s.smallInput} value={fatMax} onChangeText={setFatMax}
-                                    keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
-                            </View>
-                            <View style={s.advCell}>
-                                <Text style={s.label}>SNF Min</Text>
-                                <TextInput style={s.smallInput} value={snfMin} onChangeText={setSnfMin}
-                                    keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
-                            </View>
-                            <View style={s.advCell}>
-                                <Text style={s.label}>SNF Max</Text>
-                                <TextInput style={s.smallInput} value={snfMax} onChangeText={setSnfMax}
-                                    keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
+                            <View style={[s.advRow, { marginTop: 8 }]}>
+                                <View style={s.advCell}>
+                                    <Text style={s.label}>SNF Min</Text>
+                                    <TextInput style={s.smallInput} value={snfMin} onChangeText={setSnfMin}
+                                        keyboardType="decimal-pad" placeholder="1"
+                                        placeholderTextColor={colors.mutedForeground} />
+                                </View>
+                                <View style={s.advCell}>
+                                    <Text style={s.label}>SNF Max</Text>
+                                    <TextInput style={s.smallInput} value={snfMax} onChangeText={setSnfMax}
+                                        keyboardType="decimal-pad" placeholder="15"
+                                        placeholderTextColor={colors.mutedForeground} />
+                                </View>
                             </View>
                             {/* Step is intentionally hidden — locked at 0.1 */}
                         </View>
@@ -320,7 +339,8 @@ function makeStyles(colors: any, isDark: boolean) {
         chipTextActive: { color: '#fff' },
 
         advGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-        advCell: { minWidth: 90, flexGrow: 1 },
+        advRow: { flexDirection: 'row', gap: 8 },
+        advCell: { flex: 1, minWidth: 90 },
         smallInput: {
             backgroundColor: colors.input, color: colors.foreground,
             borderRadius: 8, borderWidth: 1, borderColor: colors.border,

@@ -132,7 +132,7 @@ router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
             buffaloSnf: parseFloat(buffaloSnf) || 0,
             alertMethod: alertMethod || 'none',
             printEntrySlip: printEntrySlip || 'default',
-            showRateChart: showRateChart === true || priceBasis === 'fat_snf',
+            showRateChart: showRateChart === true,
         });
 
         res.status(201).json({ success: true, message: 'Customer added successfully', response: farmer });
