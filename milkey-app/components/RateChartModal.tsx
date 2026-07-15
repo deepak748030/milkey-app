@@ -17,8 +17,6 @@ interface Props {
 }
 
 const PRESETS: Record<string, { fatMin: number; fatMax: number; snfMin: number; snfMax: number; step: number; label: string }> = {
-    small: { fatMin: 1, fatMax: 2, snfMin: 1, snfMax: 2, step: 0.1, label: 'Small (1–2)' },
-    standard: { fatMin: 3, fatMax: 9, snfMin: 8, snfMax: 10, step: 0.1, label: 'Standard' },
     full: { fatMin: 1, fatMax: 15, snfMin: 1, snfMax: 15, step: 0.1, label: 'Full (1–15)' },
 };
 
@@ -32,13 +30,13 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
     const s = makeStyles(colors, isDark);
 
     const [rateText, setRateText] = useState(initialRate || '60');
-    const [presetKey, setPresetKey] = useState<keyof typeof PRESETS>('standard');
-    const [fatMin, setFatMin] = useState('3');
-    const [fatMax, setFatMax] = useState('9');
-    const [snfMin, setSnfMin] = useState('8');
-    const [snfMax, setSnfMax] = useState('10');
-    const [step, setStep] = useState('0.1');
-    const [advanced, setAdvanced] = useState(false);
+    const [presetKey, setPresetKey] = useState<keyof typeof PRESETS>('full');
+    const [fatMin, setFatMin] = useState('1');
+    const [fatMax, setFatMax] = useState('15');
+    const [snfMin, setSnfMin] = useState('1');
+    const [snfMax, setSnfMax] = useState('15');
+    // Step is locked to 0.1 (hidden from UI)
+    const step = '0.1';
     const hydratedRef = React.useRef(false);
 
     // Load persisted settings — try server first, fall back to AsyncStorage.
@@ -53,8 +51,8 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                     if (d.fatMax != null) setFatMax(String(d.fatMax));
                     if (d.snfMin != null) setSnfMin(String(d.snfMin));
                     if (d.snfMax != null) setSnfMax(String(d.snfMax));
-                    if (d.step != null) setStep(String(d.step));
-                    if (d.presetKey) setPresetKey(d.presetKey);
+                    // step is locked; ignore persisted value
+                    if (d.presetKey && PRESETS[d.presetKey]) setPresetKey(d.presetKey);
                     hydratedRef.current = true;
                     return;
                 }
@@ -68,8 +66,7 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                     if (st.fatMax != null) setFatMax(String(st.fatMax));
                     if (st.snfMin != null) setSnfMin(String(st.snfMin));
                     if (st.snfMax != null) setSnfMax(String(st.snfMax));
-                    if (st.step) setStep(String(st.step));
-                    if (st.presetKey) setPresetKey(st.presetKey);
+                    if (st.presetKey && PRESETS[st.presetKey]) setPresetKey(st.presetKey);
                 }
             } catch { /* noop */ }
             hydratedRef.current = true;
@@ -109,7 +106,6 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
         setFatMax(String(p.fatMax));
         setSnfMin(String(p.snfMin));
         setSnfMax(String(p.snfMax));
-        setStep(String(p.step));
     };
 
     const chart = useMemo(() => buildChart({
@@ -123,7 +119,7 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
 
     const reset = () => {
         setRateText('60');
-        applyPreset('standard');
+        applyPreset('full');
     };
 
     // Match highlighted cell (rounded to nearest step)
@@ -164,53 +160,10 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                                 placeholderTextColor={colors.mutedForeground}
                             />
                         </View>
-                        <View style={s.derivedBox}>
-                            <Text style={s.derivedLbl}>Fat Rate</Text>
-                            <Text style={s.derivedVal}>{chart.fatRate.toFixed(3)}</Text>
-                        </View>
-                        <View style={s.derivedBox}>
-                            <Text style={s.derivedLbl}>SNF Rate</Text>
-                            <Text style={s.derivedVal}>{chart.snfRate.toFixed(3)}</Text>
-                        </View>
+                        {/* Fat Rate / SNF Rate hidden intentionally — locked internal formula */}
                     </View>
-
-                    <View style={s.presetRow}>
-                        {(Object.keys(PRESETS) as (keyof typeof PRESETS)[]).map((k) => (
-                            <Pressable
-                                key={k}
-                                onPress={() => applyPreset(k)}
-                                style={[s.chip, presetKey === k && s.chipActive]}
-                            >
-                                <Text style={[s.chipText, presetKey === k && s.chipTextActive]}>{PRESETS[k].label}</Text>
-                            </Pressable>
-                        ))}
-                        <Pressable onPress={() => setAdvanced((v) => !v)} style={[s.chip, s.chipGhost]}>
-                            <Text style={[s.chipText, { color: colors.primary }]}>{advanced ? 'Hide' : 'Advanced'}</Text>
-                        </Pressable>
-                    </View>
-
-                    {advanced && (
-                        <View style={s.advGrid}>
-                            {[
-                                { l: 'FAT min', v: fatMin, set: setFatMin },
-                                { l: 'FAT max', v: fatMax, set: setFatMax },
-                                { l: 'SNF min', v: snfMin, set: setSnfMin },
-                                { l: 'SNF max', v: snfMax, set: setSnfMax },
-                                { l: 'Step', v: step, set: setStep },
-                            ].map((f) => (
-                                <View key={f.l} style={s.advCell}>
-                                    <Text style={s.label}>{f.l}</Text>
-                                    <TextInput
-                                        style={s.smallInput}
-                                        value={f.v}
-                                        onChangeText={f.set}
-                                        keyboardType="decimal-pad"
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                </View>
-                            ))}
-                        </View>
-                    )}
+                    {/* Presets, Advanced controls and Fat/SNF rate boxes are hidden;
+                        the chart always renders with the locked Full (1–15) range at step 0.1. */}
                 </View>
 
                 {/* Table */}

@@ -2246,8 +2246,13 @@ export default function SellingScreen() {
                     return true;
                 });
                 // Filter payments by member if one is selected
+                // When a member is selected, hide fully-settled payments (closingBalance <= 0)
+                // so only records with outstanding/pending balance are shown.
                 const filteredPayments = selectedPaymentMember
-                    ? uniquePayments.filter(p => p.member?._id === selectedPaymentMember._id)
+                    ? uniquePayments.filter(p =>
+                        p.member?._id === selectedPaymentMember._id &&
+                        Number(p.closingBalance ?? 0) > 0
+                    )
                     : uniquePayments;
 
                 if (filteredPayments.length === 0) {

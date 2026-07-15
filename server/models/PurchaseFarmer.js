@@ -98,6 +98,11 @@ const purchaseFarmerSchema = new mongoose.Schema({
         enum: ['default', 'yes', 'no'],
         default: 'default'
     },
+    // Whether the Rate Chart icon should be shown in Purchase for this customer
+    showRateChart: {
+        type: Boolean,
+        default: false
+    },
     isActive: {
         type: Boolean,
         default: true

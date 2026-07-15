@@ -81,6 +81,7 @@ export interface PurchaseFarmer {
     isActive: boolean;
     alertMethod?: 'sms' | 'whatsapp' | 'none';
     printEntrySlip?: 'default' | 'yes' | 'no';
+    showRateChart?: boolean;
 }
 
 export interface Advance {

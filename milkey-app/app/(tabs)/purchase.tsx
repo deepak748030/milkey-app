@@ -73,6 +73,22 @@ export default function PurchaseScreen() {
     const [noPrint, setNoPrint] = useState(false);
     const [saving, setSaving] = useState(false);
     const [showRateChart, setShowRateChart] = useState(false);
+    const [todayRate, setTodayRate] = useState<number>(0);
+
+    // Fetch the current Rate Chart "today rate" (from persisted quick settings)
+    // so it can be displayed in the summary bar for rate-chart customers.
+    React.useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await rateChartsApi.getQuickSettings();
+                if (!cancelled && res?.success && res.response && (res.response as any).rate != null) {
+                    setTodayRate(Number((res.response as any).rate) || 0);
+                }
+            } catch { /* offline-safe */ }
+        })();
+        return () => { cancelled = true; };
+    }, [showRateChart]);
 
     // History state
     const [collections, setCollections] = useState<MilkCollection[]>([]);
@@ -857,13 +873,15 @@ export default function PurchaseScreen() {
                         <Edit2 size={16} color="#fff" />
                     </Pressable>
                 )}
-                <Pressable
-                    style={[s.addCustTopBtn, { backgroundColor: colors.secondary, marginLeft: 6 }]}
-                    onPress={() => setShowRateChart(true)}
-                    accessibilityLabel="Rate Chart"
-                >
-                    <TableIcon size={16} color={colors.primary} />
-                </Pressable>
+                {selectedCustomer && (selectedCustomer as any).showRateChart === true && (
+                    <Pressable
+                        style={[s.addCustTopBtn, { backgroundColor: colors.secondary, marginLeft: 6 }]}
+                        onPress={() => setShowRateChart(true)}
+                        accessibilityLabel="Rate Chart"
+                    >
+                        <TableIcon size={16} color={colors.primary} />
+                    </Pressable>
+                )}
             </View>
 
             {/* Summary Bar */}
@@ -891,6 +909,20 @@ export default function PurchaseScreen() {
                         <Text style={s.summaryLbl}>{t.common.amount}</Text>
                     </View>
                 </View>
+                {selectedCustomer && (selectedCustomer as any).showRateChart === true && (
+                    <>
+                        <View style={s.summaryDivider} />
+                        <View style={s.summaryCell}>
+                            <TableIcon size={14} color={colors.primary} />
+                            <View>
+                                <Text style={[s.summaryVal, { color: colors.primary }]}>
+                                    ₹{Number(todayRate || 0).toFixed(2)}
+                                </Text>
+                                <Text style={s.summaryLbl}>Today Rate</Text>
+                            </View>
+                        </View>
+                    </>
+                )}
             </View>
 
             {/* Inline Farmer Search - replaces the old pressable box */}

@@ -18,7 +18,7 @@ interface AddCustomerSheetProps {
 const PRICE_BASIS_OPTIONS = [
     { value: 'fat', label: 'Fat' },
     { value: 'rate', label: 'Rate' },
-    { value: 'fat_snf', label: 'Fat/SNF' },
+    { value: 'fat_snf', label: 'Rate Chart' },
 ];
 
 const ALERT_METHOD_OPTIONS = [
@@ -41,6 +41,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
     const [cowEnabled, setCowEnabled] = useState(true);
     const [buffaloEnabled, setBuffaloEnabled] = useState(true);
     const [priceBasis, setPriceBasis] = useState<'rate' | 'fat' | 'fat_snf'>('rate');
+    const [showRateChart, setShowRateChart] = useState(false);
     const [buffaloRate, setBuffaloRate] = useState('');
     const [cowRate, setCowRate] = useState('');
     const [buffaloFat, setBuffaloFat] = useState('');
@@ -67,6 +68,10 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 setCowEnabled(editingFarmer.cowEnabled ?? true);
                 setBuffaloEnabled(editingFarmer.buffaloEnabled ?? true);
                 setPriceBasis(editingFarmer.priceBasis || 'rate');
+                setShowRateChart(
+                    (editingFarmer as any).showRateChart === true ||
+                    editingFarmer.priceBasis === 'fat_snf'
+                );
                 setBuffaloRate(editingFarmer.buffaloRate ? String(editingFarmer.buffaloRate) : '');
                 setCowRate(editingFarmer.cowRate ? String(editingFarmer.cowRate) : '');
                 setBuffaloFat(editingFarmer.buffaloFat ? String(editingFarmer.buffaloFat) : '');
@@ -89,6 +94,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
     const resetForm = () => {
         setCode(''); setName(''); setPhone(''); setDefaultMilk('buffalo');
         setCowEnabled(true); setBuffaloEnabled(true); setPriceBasis('rate');
+        setShowRateChart(false);
         setBuffaloRate(''); setCowRate(''); setBuffaloFat(''); setCowFat('');
         setAlertMethod('none'); setPrintEntrySlip('default');
         setCodeAvailable(null);
@@ -116,6 +122,8 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 cowRate: parseFloat(cowRate) || 0, buffaloRate: parseFloat(buffaloRate) || 0,
                 cowFat: parseFloat(cowFat) || 0, buffaloFat: parseFloat(buffaloFat) || 0,
                 alertMethod, printEntrySlip,
+                // Rate Chart icon: always on when priceBasis is Rate Chart, otherwise per toggle
+                showRateChart: priceBasis === 'fat_snf' ? true : showRateChart,
             };
             const res = editingFarmer
                 ? await purchaseFarmersApi.update(editingFarmer._id, data)
@@ -254,8 +262,30 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             </View>
                         </View>
 
-                        {/* Buffalo Milk Card */}
-                        {buffaloEnabled && (
+                        {/* Show Rate Chart Icon toggle (hidden when priceBasis is Rate Chart, since it's implicit) */}
+                        {priceBasis !== 'fat_snf' && (
+                            <View style={s.sectionCard}>
+                                <Text style={s.sectionTitle}>Show Rate Chart Icon</Text>
+                                <View style={s.priceBasisRow}>
+                                    {[
+                                        { value: true, label: 'Yes' },
+                                        { value: false, label: 'No' },
+                                    ].map(opt => (
+                                        <Pressable
+                                            key={String(opt.value)}
+                                            style={[s.priceBasisChip, showRateChart === opt.value && s.priceBasisChipActive]}
+                                            onPress={() => setShowRateChart(opt.value)}
+                                        >
+                                            {showRateChart === opt.value && <Check size={14} color="#fff" style={{ marginRight: 4 }} />}
+                                            <Text style={[s.priceBasisText, showRateChart === opt.value && s.priceBasisTextActive]}>{opt.label}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Buffalo Milk Card — hidden when Rate Chart is the pricing mode */}
+                        {priceBasis !== 'fat_snf' && buffaloEnabled && (
                             <View style={s.sectionCard}>
                                 <Text style={s.sectionTitle}>🐃 Buffalo Milk</Text>
                                 <View style={s.inputRow}>
@@ -272,8 +302,8 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             </View>
                         )}
 
-                        {/* Cow Milk Card */}
-                        {cowEnabled && (
+                        {/* Cow Milk Card — hidden when Rate Chart is the pricing mode */}
+                        {priceBasis !== 'fat_snf' && cowEnabled && (
                             <View style={s.sectionCard}>
                                 <Text style={s.sectionTitle}>🐄 Cow Milk</Text>
                                 <View style={s.inputRow}>
