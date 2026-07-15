@@ -37,6 +37,7 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
     const [snfMax, setSnfMax] = useState('15');
     // Step is locked to 0.1 (hidden from UI)
     const step = '0.1';
+    const [advanced, setAdvanced] = useState(false);
     const hydratedRef = React.useRef(false);
 
     // Load persisted settings — try server first, fall back to AsyncStorage.
@@ -162,8 +163,42 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                         </View>
                         {/* Fat Rate / SNF Rate hidden intentionally — locked internal formula */}
                     </View>
-                    {/* Presets, Advanced controls and Fat/SNF rate boxes are hidden;
-                        the chart always renders with the locked Full (1–15) range at step 0.1. */}
+                    {/* Advanced toggle — lets user tweak FAT/SNF ranges. Step is locked at 0.1. */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                        <Pressable
+                            onPress={() => setAdvanced(a => !a)}
+                            style={[s.chip, advanced && s.chipActive]}
+                        >
+                            <Text style={[s.chipText, advanced && s.chipTextActive]}>
+                                {advanced ? 'Hide Advanced' : 'Advanced'}
+                            </Text>
+                        </Pressable>
+                    </View>
+                    {advanced && (
+                        <View style={s.advGrid}>
+                            <View style={s.advCell}>
+                                <Text style={s.label}>FAT Min</Text>
+                                <TextInput style={s.smallInput} value={fatMin} onChangeText={setFatMin}
+                                    keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
+                            </View>
+                            <View style={s.advCell}>
+                                <Text style={s.label}>FAT Max</Text>
+                                <TextInput style={s.smallInput} value={fatMax} onChangeText={setFatMax}
+                                    keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
+                            </View>
+                            <View style={s.advCell}>
+                                <Text style={s.label}>SNF Min</Text>
+                                <TextInput style={s.smallInput} value={snfMin} onChangeText={setSnfMin}
+                                    keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
+                            </View>
+                            <View style={s.advCell}>
+                                <Text style={s.label}>SNF Max</Text>
+                                <TextInput style={s.smallInput} value={snfMax} onChangeText={setSnfMax}
+                                    keyboardType="decimal-pad" placeholderTextColor={colors.mutedForeground} />
+                            </View>
+                            {/* Step is intentionally hidden — locked at 0.1 */}
+                        </View>
+                    )}
                 </View>
 
                 {/* Table */}
