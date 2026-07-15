@@ -818,6 +818,43 @@ export const rateChartsApi = {
             `/rate-charts/table${query ? `?${query}` : ''}`
         );
     },
+
+    getQuickSettings: async () => {
+        return apiRequest<{
+            _id: string;
+            rate: number;
+            fatMin: number;
+            fatMax: number;
+            snfMin: number;
+            snfMax: number;
+            step: number;
+            presetKey: string;
+        }>('/rate-charts/quick-settings');
+    },
+
+    updateQuickSettings: async (data: {
+        rate?: number;
+        fatMin?: number;
+        fatMax?: number;
+        snfMin?: number;
+        snfMax?: number;
+        step?: number;
+        presetKey?: string;
+    }) => {
+        return apiRequest<{
+            _id: string;
+            rate: number;
+            fatMin: number;
+            fatMax: number;
+            snfMin: number;
+            snfMax: number;
+            step: number;
+            presetKey: string;
+        }>('/rate-charts/quick-settings', {
+            method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
 };
 
 // Reports API

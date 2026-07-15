@@ -1973,4 +1973,69 @@ export const sendWhatsappTest = async (data: { phone: string; name?: string }) =
     return response.data
 }
 
+// ==================== NOTIFICATION CAMPAIGNS APIs ====================
+
+export interface NotificationCampaign {
+    _id: string
+    title?: string
+    message?: string
+    type?: string
+    audience?: 'all' | 'phone' | 'users'
+    targetPhones?: string[]
+    targetUserIds?: string[]
+    totalTargets?: number
+    successful?: number
+    failed?: number
+    pushDelivered?: number
+    status?: 'pending' | 'sending' | 'completed' | 'partial' | 'failed'
+    resendOf?: string | null
+    sentBy?: { _id: string; name?: string; email?: string } | string
+    targetUsers?: Array<{ _id: string; name?: string; phone?: string }>
+    createdAt?: string
+    updatedAt?: string
+}
+
+export const lookupUserByPhone = async (phone: string) => {
+    const response = await api.get('/admin/notifications/lookup-user', { params: { phone } })
+    return response.data
+}
+
+export const sendNotification = async (payload: {
+    title: string
+    message: string
+    type?: string
+    audience: 'all' | 'phone' | 'users'
+    phone?: string
+    userIds?: string[]
+}) => {
+    const response = await api.post('/admin/notifications/send', payload)
+    return response.data
+}
+
+export const listNotificationCampaigns = async (params: {
+    page?: number
+    limit?: number
+    q?: string
+    audience?: string
+    status?: string
+}) => {
+    const response = await api.get('/admin/notifications/campaigns', { params })
+    return response.data
+}
+
+export const getNotificationCampaign = async (id: string) => {
+    const response = await api.get(`/admin/notifications/campaigns/${id}`)
+    return response.data
+}
+
+export const resendNotificationCampaign = async (id: string) => {
+    const response = await api.post(`/admin/notifications/campaigns/${id}/resend`)
+    return response.data
+}
+
+export const deleteNotificationCampaign = async (id: string) => {
+    const response = await api.delete(`/admin/notifications/campaigns/${id}`)
+    return response.data
+}
+
 export default api

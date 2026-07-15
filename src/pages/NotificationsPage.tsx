@@ -443,7 +443,7 @@ export function NotificationsPage() {
                                         >
                                             <div className="flex items-center flex-wrap gap-2 mb-1">
                                                 <h3 className="font-semibold text-foreground text-sm sm:text-base truncate">{c.title}</h3>
-                                                <StatusBadge status={c.status} />
+                                                <StatusBadge status={c.status || 'pending'} />
                                                 {c.resendOf && (
                                                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-500 border border-blue-500/20">
                                                         <RefreshCw className="w-2.5 h-2.5" /> resend
@@ -458,10 +458,10 @@ export function NotificationsPage() {
                                                     {c.audience === 'users' && <Users className="w-3 h-3" />}
                                                     {c.audience}
                                                 </span>
-                                                <span>{c.successful}/{c.totalTargets} sent</span>
-                                                {c.pushDelivered > 0 && <span>{c.pushDelivered} push</span>}
-                                                {c.failed > 0 && <span className="text-red-500">{c.failed} failed</span>}
-                                                <span>{new Date(c.createdAt).toLocaleString()}</span>
+                                                <span>{c.successful ?? 0}/{c.totalTargets ?? 0} sent</span>
+                                                {(c.pushDelivered ?? 0) > 0 && <span>{c.pushDelivered} push</span>}
+                                                {(c.failed ?? 0) > 0 && <span className="text-red-500">{c.failed} failed</span>}
+                                                <span>{c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</span>
                                             </div>
                                         </button>
                                         <div className="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">

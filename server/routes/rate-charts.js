@@ -1,7 +1,57 @@
 const express = require('express');
 const router = express.Router();
 const RateChart = require('../models/RateChart');
+const RateChartSettings = require('../models/RateChartSettings');
 const auth = require('../middleware/auth');
+
+// ─── Quick rate-chart settings (per-user) ───
+// Used by the mobile Collection tab's Rate Chart modal.
+// Client computes the grid; server just stores the user's inputs.
+
+const clampNum = (v, def, min, max) => {
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    if (!Number.isFinite(n)) return def;
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+};
+
+router.get('/quick-settings', auth, async (req, res) => {
+    try {
+        let doc = await RateChartSettings.findOne({ owner: req.user._id });
+        if (!doc) {
+            doc = await RateChartSettings.create({ owner: req.user._id });
+        }
+        res.json({ success: true, response: doc });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+router.put('/quick-settings', auth, async (req, res) => {
+    try {
+        const { rate, fatMin, fatMax, snfMin, snfMax, step, presetKey } = req.body || {};
+        const update = {
+            rate: clampNum(rate, 60, 0, 100000),
+            fatMin: clampNum(fatMin, 3, 0, 100),
+            fatMax: clampNum(fatMax, 9, 0, 100),
+            snfMin: clampNum(snfMin, 8, 0, 100),
+            snfMax: clampNum(snfMax, 10, 0, 100),
+            step: clampNum(step, 0.1, 0.01, 5),
+            presetKey: typeof presetKey === 'string' ? presetKey.slice(0, 32) : 'standard',
+        };
+        if (update.fatMax < update.fatMin) update.fatMax = update.fatMin;
+        if (update.snfMax < update.snfMin) update.snfMax = update.snfMin;
+        const doc = await RateChartSettings.findOneAndUpdate(
+            { owner: req.user._id },
+            { $set: update },
+            { new: true, upsert: true, setDefaultsOnInsert: true }
+        );
+        res.json({ success: true, response: doc });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
 
 // Get all rate charts
 router.get('/', auth, async (req, res) => {

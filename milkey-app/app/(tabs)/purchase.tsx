@@ -11,7 +11,7 @@ import {
     Plus, Edit2, Trash2, Calendar as CalendarIcon, Search, X,
     ChevronDown, FileText, User, Sun, Moon,
     Droplets, CircleDot, Download, Check, Printer, Milk, Ban,
-    MoreVertical, Share2
+    MoreVertical, Share2, Table as TableIcon
 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import {
@@ -32,6 +32,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
+import RateChartModal from '@/components/RateChartModal';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 
 type TabType = PurchaseTab;
@@ -71,6 +72,7 @@ export default function PurchaseScreen() {
     const [isZero, setIsZero] = useState(false);
     const [noPrint, setNoPrint] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [showRateChart, setShowRateChart] = useState(false);
 
     // History state
     const [collections, setCollections] = useState<MilkCollection[]>([]);
@@ -855,6 +857,13 @@ export default function PurchaseScreen() {
                         <Edit2 size={16} color="#fff" />
                     </Pressable>
                 )}
+                <Pressable
+                    style={[s.addCustTopBtn, { backgroundColor: colors.secondary, marginLeft: 6 }]}
+                    onPress={() => setShowRateChart(true)}
+                    accessibilityLabel="Rate Chart"
+                >
+                    <TableIcon size={16} color={colors.primary} />
+                </Pressable>
             </View>
 
             {/* Summary Bar */}
@@ -1675,6 +1684,14 @@ export default function PurchaseScreen() {
 
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />
             <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
+
+            <RateChartModal
+                visible={showRateChart}
+                onClose={() => setShowRateChart(false)}
+                initialRate={rateValue}
+                highlightFat={parseFloat(fatValue) || undefined}
+                highlightSnf={parseFloat(snfValue) || undefined}
+            />
 
             {/* Batch print progress */}
             <Modal visible={!!batchProgress} transparent animationType="fade">
