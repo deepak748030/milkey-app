@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, memo, useCallback } from 'react';
 import {
     View, Text, Modal, Pressable, TextInput, ScrollView, StyleSheet, Platform,
-    ActivityIndicator,
+    ActivityIndicator, FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, RefreshCw, Table as TableIcon } from 'lucide-react-native';
@@ -226,42 +226,58 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                     )}
                 </View>
 
-                {/* Table */}
-                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12 }}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator>
-                        <View>
-                            {/* Header row: SNF values */}
-                            <View style={s.row}>
-                                <View style={[s.cellLabel, { width: LABEL_W, backgroundColor: colors.primary }]}>
-                                    <Text style={[s.cellLabelText, { color: '#fff' }]}>FAT\SNF</Text>
-                                </View>
-                                {chart.snfValues.map((snf) => {
-                                    const isH = hSnf != null && Math.abs(snf - hSnf) < 1e-6;
-                                    return (
-                                        <View key={snf} style={[s.cellHead, isH && s.cellHeadActive]}>
-                                            <Text style={[s.cellHeadText, isH && { color: '#fff' }]}>{snf.toFixed(1)}</Text>
-                                        </View>
-                                    );
-                                })}
+                {/* Table — horizontal ScrollView wraps a vertical FlatList so
+                    rows are virtualized (only visible ~15 mount at a time),
+                    letting us render 1–15 × 1–15 @ step 0.1 (~20k cells) without
+                    crashing native RN. */}
+                <ScrollView horizontal showsHorizontalScrollIndicator style={{ flex: 1 }} contentContainerStyle={{ padding: 12 }}>
+                    <View style={{ flex: 1 }}>
+                        {/* Sticky-style header row: SNF values */}
+                        <View style={s.row}>
+                            <View style={[s.cellLabel, { width: LABEL_W, backgroundColor: colors.primary }]}>
+                                <Text style={[s.cellLabelText, { color: '#fff' }]}>FAT\SNF</Text>
                             </View>
-                            {chart.rows.map((r) => (
-                                <ChartRow
-                                    key={r.fat}
-                                    fat={r.fat}
-                                    cells={r.cells}
-                                    snfValues={chart.snfValues}
-                                    hFat={hFat}
-                                    hSnf={hSnf}
-                                    styles={s}
-                                />
-                            ))}
-                            {chart.rows.length === 0 && (
-                                <Text style={{ color: colors.mutedForeground, padding: 24 }}>
-                                    Adjust the ranges to see the chart.
-                                </Text>
-                            )}
+                            {chart.snfValues.map((snf) => {
+                                const isH = hSnf != null && Math.abs(snf - hSnf) < 1e-6;
+                                return (
+                                    <View key={snf} style={[s.cellHead, isH && s.cellHeadActive]}>
+                                        <Text style={[s.cellHeadText, isH && { color: '#fff' }]}>{snf.toFixed(1)}</Text>
+                                    </View>
+                                );
+                            })}
                         </View>
-                    </ScrollView>
+                        {chart.rows.length === 0 ? (
+                            <Text style={{ color: colors.mutedForeground, padding: 24 }}>
+                                Adjust the ranges to see the chart.
+                            </Text>
+                        ) : (
+                            <FlatList
+                                data={chart.rows}
+                                keyExtractor={(r) => String(r.fat)}
+                                getItemLayout={(_, index) => ({ length: CELL_H, offset: CELL_H * index, index })}
+                                initialNumToRender={20}
+                                maxToRenderPerBatch={16}
+                                windowSize={7}
+                                removeClippedSubviews
+                                initialScrollIndex={
+                                    hFat != null
+                                        ? Math.max(0, chart.rows.findIndex(r => Math.abs(r.fat - hFat) < 1e-6) - 4)
+                                        : 0
+                                }
+                                renderItem={({ item }) => (
+                                    <ChartRow
+                                        fat={item.fat}
+                                        cells={item.cells}
+                                        snfValues={chart.snfValues}
+                                        hFat={hFat}
+                                        hSnf={hSnf}
+                                        styles={s}
+                                    />
+                                )}
+                                style={{ flex: 1 }}
+                            />
+                        )}
+                    </View>
                 </ScrollView>
 
                 {/* Footer */}
