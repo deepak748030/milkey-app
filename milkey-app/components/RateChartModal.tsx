@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, memo, useCallback } from 'react';
 import {
     View, Text, Modal, Pressable, TextInput, ScrollView, StyleSheet, Platform,
     ActivityIndicator,
@@ -114,14 +114,20 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
         setSnfMax(String(p.snfMax));
     };
 
-    const chart = useMemo(() => buildChart({
-        rate: parseFloat(rateText) || 0,
-        fatMin: parseFloat(fatMin) || 0,
-        fatMax: parseFloat(fatMax) || 0,
-        snfMin: parseFloat(snfMin) || 0,
-        snfMax: parseFloat(snfMax) || 0,
-        step: parseFloat(step) || 0.1,
-    }), [rateText, fatMin, fatMax, snfMin, snfMax, step]);
+    // Skip heavy chart build entirely while the modal is closed — the
+    // component stays mounted inside a parent screen, so we don't want to
+    // recompute a 14×14+ grid every time inputs change off-screen.
+    const chart = useMemo(() => {
+        if (!visible) return { fatValues: [], snfValues: [], rows: [], fatRate: 0, snfRate: 0 };
+        return buildChart({
+            rate: parseFloat(rateText) || 0,
+            fatMin: parseFloat(fatMin) || 0,
+            fatMax: parseFloat(fatMax) || 0,
+            snfMin: parseFloat(snfMin) || 0,
+            snfMax: parseFloat(snfMax) || 0,
+            step: parseFloat(step) || 0.1,
+        });
+    }, [visible, rateText, fatMin, fatMax, snfMin, snfMax, step]);
 
     const reset = () => {
         setRateText('60');
@@ -238,40 +244,17 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
                                     );
                                 })}
                             </View>
-                            {chart.rows.map((r) => {
-                                const rowH = hFat != null && Math.abs(r.fat - hFat) < 1e-6;
-                                return (
-                                    <View key={r.fat} style={s.row}>
-                                        <View style={[s.cellLabel, { width: LABEL_W }, rowH && s.cellHeadActive]}>
-                                            <Text style={[s.cellLabelText, rowH && { color: '#fff' }]}>{r.fat.toFixed(1)}</Text>
-                                        </View>
-                                        {r.cells.map((v, i) => {
-                                            const snf = chart.snfValues[i];
-                                            const colH = hSnf != null && Math.abs(snf - hSnf) < 1e-6;
-                                            const cellH = rowH && colH;
-                                            return (
-                                                <View
-                                                    key={i}
-                                                    style={[
-                                                        s.cell,
-                                                        (rowH || colH) && s.cellHi,
-                                                        cellH && s.cellHiStrong,
-                                                    ]}
-                                                >
-                                                    <Text
-                                                        style={[
-                                                            s.cellText,
-                                                            cellH && { color: '#fff', fontWeight: '800' },
-                                                        ]}
-                                                    >
-                                                        {v.toFixed(2)}
-                                                    </Text>
-                                                </View>
-                                            );
-                                        })}
-                                    </View>
-                                );
-                            })}
+                            {chart.rows.map((r) => (
+                                <ChartRow
+                                    key={r.fat}
+                                    fat={r.fat}
+                                    cells={r.cells}
+                                    snfValues={chart.snfValues}
+                                    hFat={hFat}
+                                    hSnf={hSnf}
+                                    styles={s}
+                                />
+                            ))}
                             {chart.rows.length === 0 && (
                                 <Text style={{ color: colors.mutedForeground, padding: 24 }}>
                                     Adjust the ranges to see the chart.
@@ -297,6 +280,51 @@ export default function RateChartModal({ visible, onClose, initialRate, highligh
 }
 
 function makeStyles(colors: any, isDark: boolean) {
+    return _makeStyles(colors, isDark);
+}
+
+// Memoized row — avoids re-rendering hundreds of cells when only the highlight
+// or an unrelated input changes. Cells shallow-compare via primitive props.
+const ChartRow = memo(function ChartRow({
+    fat, cells, snfValues, hFat, hSnf, styles: s,
+}: {
+    fat: number;
+    cells: number[];
+    snfValues: number[];
+    hFat: number | null;
+    hSnf: number | null;
+    styles: any;
+}) {
+    const rowH = hFat != null && Math.abs(fat - hFat) < 1e-6;
+    return (
+        <View style={s.row}>
+            <View style={[s.cellLabel, { width: LABEL_W }, rowH && s.cellHeadActive]}>
+                <Text style={[s.cellLabelText, rowH && { color: '#fff' }]}>{fat.toFixed(1)}</Text>
+            </View>
+            {cells.map((v, i) => {
+                const snf = snfValues[i];
+                const colH = hSnf != null && Math.abs(snf - hSnf) < 1e-6;
+                const cellH = rowH && colH;
+                return (
+                    <View
+                        key={i}
+                        style={[
+                            s.cell,
+                            (rowH || colH) && s.cellHi,
+                            cellH && s.cellHiStrong,
+                        ]}
+                    >
+                        <Text style={[s.cellText, cellH && { color: '#fff', fontWeight: '800' }]}>
+                            {v.toFixed(2)}
+                        </Text>
+                    </View>
+                );
+            })}
+        </View>
+    );
+});
+
+function _makeStyles(colors: any, isDark: boolean) {
     return StyleSheet.create({
         root: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'ios' ? 50 : 30 },
         header: {

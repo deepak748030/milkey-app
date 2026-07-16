@@ -33,6 +33,7 @@ import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
 import RateChartModal from '@/components/RateChartModal';
+import { FAT_RATIO, SNF_RATIO } from '@/lib/rateChart';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 
 type TabType = PurchaseTab;
@@ -270,6 +271,18 @@ export default function PurchaseScreen() {
         const rate = fat * fatRate;
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
     }, [fatValue, selectedCustomer, milkType]);
+
+    // For rate-chart customers: auto-compute rate from FAT + SNF using the
+    // saved rate chart's "today rate" (FatRate = rate*0.08, SnfRate = rate*0.053333).
+    // rate = fat * fatRate + snf * snfRate
+    useEffect(() => {
+        if (!selectedCustomer || (selectedCustomer as any).showRateChart !== true) return;
+        const fat = parseFloat(fatValue) || 0;
+        const snf = parseFloat(snfValue) || 0;
+        if (fat <= 0 || snf <= 0 || todayRate <= 0) { setRateValue(''); return; }
+        const rate = fat * (todayRate * FAT_RATIO) + snf * (todayRate * SNF_RATIO);
+        setRateValue(rate > 0 ? rate.toFixed(2) : '');
+    }, [fatValue, snfValue, selectedCustomer, todayRate]);
 
     const computeAmount = (): number => {
         if (isZero) return 0;
@@ -967,13 +980,13 @@ export default function PurchaseScreen() {
                     </Pressable>
                 )}
 
-                {selectedCustomer && showCow && (
+                {selectedCustomer && showCow && (selectedCustomer as any).showRateChart !== true && (
                     <Pressable onPress={() => setMilkType('cow')} style={[s.milkToggleBtn, milkType === 'cow' && s.milkToggleBtnActive]}>
                         <Milk size={14} color={milkType === 'cow' ? '#fff' : colors.foreground} />
                         <Text style={[s.milkToggleBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
                     </Pressable>
                 )}
-                {selectedCustomer && showBuffalo && (
+                {selectedCustomer && showBuffalo && (selectedCustomer as any).showRateChart !== true && (
                     <Pressable onPress={() => setMilkType('buffalo')} style={[s.milkToggleBtn, milkType === 'buffalo' && s.milkToggleBtnActive]}>
                         <Milk size={14} color={milkType === 'buffalo' ? '#fff' : colors.foreground} />
                         <Text style={[s.milkToggleBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>

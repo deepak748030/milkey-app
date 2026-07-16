@@ -15,11 +15,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
-import { ArrowLeft, Trash2, Edit2, X, Save, Calendar as CalendarIcon } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Edit2, X, Save, Calendar as CalendarIcon, Download, Share2 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { sellingEntriesApi, SellingEntry } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system';
 
 // Simple DD/MM/YYYY formatter used across the screen
 const formatDate = (iso?: string) => {
@@ -71,6 +74,7 @@ export default function ViewEntriesScreen() {
     const [editRate, setEditRate] = useState('');
     const [editNotes, setEditNotes] = useState('');
     const [saving, setSaving] = useState(false);
+    const [pdfBusy, setPdfBusy] = useState<null | 'download' | 'share'>(null);
 
     // Alert + confirm modals (reused from the app's shared components)
     const [alertVisible, setAlertVisible] = useState(false);
@@ -132,11 +136,15 @@ export default function ViewEntriesScreen() {
     const totals = useMemo(() => {
         let liters = 0;
         let amount = 0;
+        let paid = 0;
+        let unpaid = 0;
         entries.forEach((e) => {
             liters += Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0);
-            amount += Number(e.amount || 0);
+            const amt = Number(e.amount || 0);
+            amount += amt;
+            if (e.isPaid) paid += amt; else unpaid += amt;
         });
-        return { liters, amount, count: entries.length };
+        return { liters, amount, paid, unpaid, count: entries.length };
     }, [entries]);
 
     // ─── Edit ───
@@ -215,6 +223,121 @@ export default function ViewEntriesScreen() {
         }
     };
 
+    // ─── PDF (Download / Share) ───
+    const buildPdfHtml = () => {
+        const rows = entries.map((e) => {
+            const qty = Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0);
+            const amt = Number(e.amount || 0);
+            const paidCell = e.isPaid
+                ? `<span style="color:#16a34a;font-weight:700">₹${amt.toFixed(2)}</span>`
+                : `<span style="color:#dc2626">-</span>`;
+            const status = e.isPaid
+                ? '<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700">PAID</span>'
+                : '<span style="background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700">UNPAID</span>';
+            return `
+                <tr>
+                    <td>${formatDate(e.date)}</td>
+                    <td style="text-align:center">${e.morningQuantity > 0 ? Number(e.morningQuantity).toFixed(2) : '-'}</td>
+                    <td style="text-align:center">${e.eveningQuantity > 0 ? Number(e.eveningQuantity).toFixed(2) : '-'}</td>
+                    <td style="text-align:center">${qty.toFixed(2)}</td>
+                    <td style="text-align:right">₹${Number(e.rate || 0).toFixed(2)}</td>
+                    <td style="text-align:right;font-weight:700">₹${amt.toFixed(2)}</td>
+                    <td style="text-align:right">${paidCell}</td>
+                    <td style="text-align:center">${status}</td>
+                </tr>`;
+        }).join('');
+
+        return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+            <style>
+                *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif}
+                body{padding:20px;color:#111}
+                h1{margin:0 0 4px 0;font-size:20px}
+                .sub{color:#6b7280;font-size:12px;margin-bottom:14px}
+                .cards{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+                .card{flex:1;min-width:120px;border:1px solid #e5e7eb;border-radius:8px;padding:10px}
+                .card .l{font-size:11px;color:#6b7280;text-transform:uppercase}
+                .card .v{font-size:16px;font-weight:700;margin-top:2px}
+                table{width:100%;border-collapse:collapse;font-size:12px}
+                th,td{padding:8px 6px;border-bottom:1px solid #e5e7eb}
+                th{background:#f3f4f6;text-align:left;font-size:11px;text-transform:uppercase;color:#374151}
+                tfoot td{font-weight:700;background:#f9fafb;border-top:2px solid #111}
+            </style></head><body>
+            <h1>${memberName}</h1>
+            <div class="sub">Period: ${prettyPeriod(startDate, endDate)} &nbsp;•&nbsp; Generated: ${formatDate(new Date().toISOString())}</div>
+            <div class="cards">
+                <div class="card"><div class="l">Entries</div><div class="v">${totals.count}</div></div>
+                <div class="card"><div class="l">Total Qty (L)</div><div class="v">${totals.liters.toFixed(2)}</div></div>
+                <div class="card"><div class="l">Total Amount</div><div class="v">₹${totals.amount.toFixed(2)}</div></div>
+                <div class="card"><div class="l">Paid Amount</div><div class="v" style="color:#16a34a">₹${totals.paid.toFixed(2)}</div></div>
+                <div class="card"><div class="l">Unpaid Amount</div><div class="v" style="color:#dc2626">₹${totals.unpaid.toFixed(2)}</div></div>
+            </div>
+            <table>
+                <thead><tr>
+                    <th>Date</th><th style="text-align:center">Morn (L)</th><th style="text-align:center">Eve (L)</th>
+                    <th style="text-align:center">Qty (L)</th><th style="text-align:right">Rate</th>
+                    <th style="text-align:right">Amount</th><th style="text-align:right">Paid Amt</th>
+                    <th style="text-align:center">Status</th>
+                </tr></thead>
+                <tbody>${rows || '<tr><td colspan="8" style="text-align:center;padding:20px;color:#6b7280">No entries</td></tr>'}</tbody>
+                <tfoot><tr>
+                    <td colspan="3">Totals</td>
+                    <td style="text-align:center">${totals.liters.toFixed(2)}</td>
+                    <td></td>
+                    <td style="text-align:right">₹${totals.amount.toFixed(2)}</td>
+                    <td style="text-align:right;color:#16a34a">₹${totals.paid.toFixed(2)}</td>
+                    <td></td>
+                </tr></tfoot>
+            </table>
+        </body></html>`;
+    };
+
+    const safeFileName = () =>
+        `${memberName.replace(/[^a-zA-Z0-9]+/g, '_')}_entries_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+    const handleDownloadPdf = async () => {
+        if (entries.length === 0) { showAlert('No data', 'Nothing to export'); return; }
+        setPdfBusy('download');
+        try {
+            const { uri } = await Print.printToFileAsync({ html: buildPdfHtml() });
+            const target = (FileSystem.documentDirectory || '') + safeFileName();
+            try { await FileSystem.copyAsync({ from: uri, to: target }); } catch { /* fall back to uri */ }
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(target || uri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: `${memberName} - Save PDF`,
+                    UTI: 'com.adobe.pdf',
+                });
+            } else {
+                toast('PDF saved: ' + (target || uri));
+            }
+        } catch (err: any) {
+            showAlert('Error', err?.message || 'Failed to generate PDF');
+        } finally {
+            setPdfBusy(null);
+        }
+    };
+
+    const handleSharePdf = async () => {
+        if (entries.length === 0) { showAlert('No data', 'Nothing to share'); return; }
+        setPdfBusy('share');
+        try {
+            const { uri } = await Print.printToFileAsync({ html: buildPdfHtml() });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: `${memberName} - Milk Entries`,
+                    UTI: 'com.adobe.pdf',
+                });
+            } else {
+                showAlert('Not supported', 'Sharing is not available on this device');
+            }
+        } catch (err: any) {
+            showAlert('Error', err?.message || 'Failed to share PDF');
+        } finally {
+            setPdfBusy(null);
+        }
+    };
+
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
             <Stack.Screen options={{ headerShown: false }} />
@@ -260,6 +383,48 @@ export default function ViewEntriesScreen() {
                 </View>
             </View>
 
+            {/* ── Paid / Unpaid + PDF actions ── */}
+            <View style={styles.actionsRow}>
+                <View style={[styles.pill, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Text style={[styles.pillLabel, { color: colors.mutedForeground }]}>Paid</Text>
+                    <Text style={[styles.pillVal, { color: colors.success }]}>₹{totals.paid.toFixed(2)}</Text>
+                </View>
+                <View style={[styles.pill, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    <Text style={[styles.pillLabel, { color: colors.mutedForeground }]}>Unpaid</Text>
+                    <Text style={[styles.pillVal, { color: colors.destructive }]}>₹{totals.unpaid.toFixed(2)}</Text>
+                </View>
+                <Pressable
+                    onPress={handleDownloadPdf}
+                    disabled={pdfBusy !== null}
+                    style={[styles.pdfBtn, { backgroundColor: colors.primary, opacity: pdfBusy ? 0.7 : 1 }]}
+                    hitSlop={4}
+                >
+                    {pdfBusy === 'download' ? (
+                        <ActivityIndicator size="small" color={colors.white} />
+                    ) : (
+                        <>
+                            <Download size={14} color={colors.white} />
+                            <Text style={styles.pdfBtnText}>PDF</Text>
+                        </>
+                    )}
+                </Pressable>
+                <Pressable
+                    onPress={handleSharePdf}
+                    disabled={pdfBusy !== null}
+                    style={[styles.pdfBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.primary, opacity: pdfBusy ? 0.7 : 1 }]}
+                    hitSlop={4}
+                >
+                    {pdfBusy === 'share' ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                        <>
+                            <Share2 size={14} color={colors.primary} />
+                            <Text style={[styles.pdfBtnText, { color: colors.primary }]}>Share</Text>
+                        </>
+                    )}
+                </Pressable>
+            </View>
+
             {/* ── Body ── */}
             {loading ? (
                 <View style={styles.centerBox}>
@@ -290,6 +455,7 @@ export default function ViewEntriesScreen() {
                         <Text style={[styles.th, { flex: 1, textAlign: 'center', color: colors.mutedForeground }]}>M / E</Text>
                         <Text style={[styles.th, { flex: 0.7, textAlign: 'center', color: colors.mutedForeground }]}>Rate</Text>
                         <Text style={[styles.th, { flex: 0.9, textAlign: 'right', color: colors.mutedForeground }]}>Amt</Text>
+                        <Text style={[styles.th, { flex: 0.9, textAlign: 'right', color: colors.mutedForeground }]}>Paid</Text>
                         <Text style={[styles.th, { width: 68, textAlign: 'center', color: colors.mutedForeground }]}>Action</Text>
                     </View>
 
@@ -328,6 +494,11 @@ export default function ViewEntriesScreen() {
                                     style={[styles.td, { flex: 0.9, textAlign: 'right', color: colors.primary, fontWeight: '700' }]}
                                 >
                                     ₹{Number(e.amount || 0).toFixed(0)}
+                                </Text>
+                                <Text
+                                    style={[styles.td, { flex: 0.9, textAlign: 'right', fontWeight: '700', color: e.isPaid ? colors.success : colors.destructive }]}
+                                >
+                                    {e.isPaid ? `₹${Number(e.amount || 0).toFixed(0)}` : '-'}
                                 </Text>
                                 <View style={{ width: 68, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
                                     <Pressable
@@ -520,6 +691,35 @@ const styles = StyleSheet.create({
     summaryDivider: { width: 1, height: 28 },
     summaryLabel: { fontSize: 11, marginBottom: 2 },
     summaryVal: { fontSize: 15, fontWeight: '700' },
+
+    actionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        marginBottom: 6,
+    },
+    pill: {
+        flex: 1,
+        borderWidth: 1,
+        borderRadius: 8,
+        paddingVertical: 6,
+        paddingHorizontal: 8,
+        alignItems: 'center',
+    },
+    pillLabel: { fontSize: 10, textTransform: 'uppercase', fontWeight: '600' },
+    pillVal: { fontSize: 13, fontWeight: '700', marginTop: 1 },
+    pdfBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        minWidth: 68,
+    },
+    pdfBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
 
     centerBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
     retryBtn: { marginTop: 12, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },

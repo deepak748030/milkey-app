@@ -18,6 +18,7 @@ const Subscription = require('../models/Subscription');
 const Farmer = require('../models/Farmer');
 const Banner = require('../models/Banner');
 const Product = require('../models/Product');
+const RateChartSettings = require('../models/RateChartSettings');
 const { uploadToCloudinary } = require('../lib/cloudinary');
 const Payment = require('../models/Payment');
 const Advance = require('../models/Advance');
@@ -1715,6 +1716,64 @@ router.delete('/purchase-farmers/:id/permanent', adminAuth, async (req, res) => 
     }
 });
 
+
+// ─── Rate Chart Settings (admin view) ─────────────────────────────────
+// GET /api/admin/rate-chart-settings — list all users' Collection Rate Chart quick settings.
+// Also returns per-user counts of how many purchase farmers have the Rate Chart icon enabled.
+router.get('/rate-chart-settings', adminAuth, async (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+        const skip = (page - 1) * limit;
+        const search = (req.query.search || '').trim();
+        const userId = req.query.userId || '';
+
+        const query = {};
+        if (userId) query.owner = userId;
+
+        if (search && !userId) {
+            const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            const matched = await User.find({ $or: [{ name: rx }, { phone: rx }, { email: rx }] })
+                .select('_id').lean();
+            query.owner = { $in: matched.map(u => u._id) };
+        }
+
+        const [total, settings] = await Promise.all([
+            RateChartSettings.countDocuments(query),
+            RateChartSettings.find(query)
+                .populate('owner', 'name email phone')
+                .sort({ updatedAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+        ]);
+
+        const ownerIds = settings.map(s => s.owner?._id).filter(Boolean);
+        const counts = ownerIds.length
+            ? await PurchaseFarmer.aggregate([
+                { $match: { owner: { $in: ownerIds }, showRateChart: true, isActive: true } },
+                { $group: { _id: '$owner', count: { $sum: 1 } } },
+            ])
+            : [];
+        const countMap = new Map(counts.map(c => [String(c._id), c.count]));
+
+        const enriched = settings.map(s => ({
+            ...s,
+            rateChartFarmersCount: countMap.get(String(s.owner?._id)) || 0,
+        }));
+
+        res.json({
+            success: true,
+            response: {
+                data: enriched,
+                pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+            },
+        });
+    } catch (error) {
+        console.error('Admin get rate-chart settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch rate chart settings' });
+    }
+});
 
 router.get('/users-list', adminAuth, async (req, res) => {
     try {

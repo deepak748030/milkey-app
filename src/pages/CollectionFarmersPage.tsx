@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Search, RefreshCw, UserPlus, Trash2, RotateCcw, AlertTriangle } from 'lucide-react'
+import { Search, RefreshCw, UserPlus, Trash2, RotateCcw, AlertTriangle, TableProperties, ChevronDown } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
-import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, restoreAdminPurchaseFarmer, permanentDeleteAdminPurchaseFarmer, type AdminPurchaseFarmer } from '@/lib/api'
+import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, restoreAdminPurchaseFarmer, permanentDeleteAdminPurchaseFarmer, getAdminRateChartSettings, type AdminPurchaseFarmer, type AdminRateChartSetting } from '@/lib/api'
+
+const FAT_RATIO = 0.08
+const SNF_RATIO = 0.053333333
 
 export function CollectionFarmersPage() {
     const [farmers, setFarmers] = useState<AdminPurchaseFarmer[]>([])
@@ -13,6 +16,9 @@ export function CollectionFarmersPage() {
     const [page, setPage] = useState(1)
     const [pagination, setPagination] = useState({ total: 0, pages: 1 })
     const [actionLoading, setActionLoading] = useState(false)
+    const [rateSettings, setRateSettings] = useState<AdminRateChartSetting[]>([])
+    const [rateLoading, setRateLoading] = useState(false)
+    const [rateOpen, setRateOpen] = useState(true)
 
     const fetchUsers = useCallback(async () => {
         try {
@@ -43,6 +49,25 @@ export function CollectionFarmersPage() {
         const t = setTimeout(fetchFarmers, 300)
         return () => clearTimeout(t)
     }, [fetchFarmers])
+
+    const fetchRateSettings = useCallback(async () => {
+        setRateLoading(true)
+        try {
+            const res = await getAdminRateChartSettings({
+                page: 1, limit: 50,
+                search: search || undefined,
+                userId: userId || undefined,
+            })
+            if (res.success) setRateSettings(res.response.data)
+        } catch (e) { console.error(e) }
+        finally { setRateLoading(false) }
+    }, [search, userId])
+
+    useEffect(() => {
+        if (!rateOpen) return
+        const t = setTimeout(fetchRateSettings, 300)
+        return () => clearTimeout(t)
+    }, [fetchRateSettings, rateOpen])
 
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to delete this farmer?')) return
@@ -120,6 +145,83 @@ export function CollectionFarmersPage() {
                 </div>
             </div>
 
+            {/* Rate Chart Settings (embedded) */}
+            <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <button
+                    onClick={() => setRateOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        <TableProperties className="w-5 h-5 text-primary" />
+                        <div className="text-left">
+                            <p className="font-semibold text-foreground">Rate Chart Settings</p>
+                            <p className="text-xs text-muted-foreground">Per-user quick settings from mobile Collection tab</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground hidden sm:inline">{rateSettings.length} users</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${rateOpen ? '' : '-rotate-90'}`} />
+                    </div>
+                </button>
+                {rateOpen && (
+                    <div className="border-t border-border overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-muted/40">
+                                <tr>
+                                    <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">User</th>
+                                    <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Today Rate</th>
+                                    <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Fat Rate</th>
+                                    <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Snf Rate</th>
+                                    <th className="px-4 py-2 text-center text-xs font-medium text-muted-foreground">FAT</th>
+                                    <th className="px-4 py-2 text-center text-xs font-medium text-muted-foreground">SNF</th>
+                                    <th className="px-4 py-2 text-center text-xs font-medium text-muted-foreground">Farmers</th>
+                                    <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {rateLoading ? (
+                                    Array.from({ length: 3 }).map((_, i) => (
+                                        <tr key={i} className="animate-pulse">
+                                            {Array.from({ length: 8 }).map((_, j) => (
+                                                <td key={j} className="px-4 py-2"><div className="h-3 bg-muted rounded w-16" /></td>
+                                            ))}
+                                        </tr>
+                                    ))
+                                ) : rateSettings.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">No rate chart settings</td>
+                                    </tr>
+                                ) : (
+                                    rateSettings.map(r => {
+                                        const fatRate = (r.rate || 0) * FAT_RATIO
+                                        const snfRate = (r.rate || 0) * SNF_RATIO
+                                        return (
+                                            <tr key={r._id} className="hover:bg-muted/20">
+                                                <td className="px-4 py-2 text-sm">
+                                                    <div className="font-medium">{r.owner?.name || '—'}</div>
+                                                    <div className="text-xs text-muted-foreground">{r.owner?.phone || ''}</div>
+                                                </td>
+                                                <td className="px-4 py-2 text-sm text-right font-semibold text-green-600">₹{(r.rate || 0).toFixed(2)}</td>
+                                                <td className="px-4 py-2 text-sm text-right">₹{fatRate.toFixed(3)}</td>
+                                                <td className="px-4 py-2 text-sm text-right">₹{snfRate.toFixed(3)}</td>
+                                                <td className="px-4 py-2 text-xs text-center">{r.fatMin}–{r.fatMax}</td>
+                                                <td className="px-4 py-2 text-xs text-center">{r.snfMin}–{r.snfMax}</td>
+                                                <td className="px-4 py-2 text-center">
+                                                    <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{r.rateChartFarmersCount}</span>
+                                                </td>
+                                                <td className="px-4 py-2 text-xs text-muted-foreground">
+                                                    {r.updatedAt ? new Date(r.updatedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
             {/* Mobile Cards */}
             <div className="md:hidden space-y-3">
                 {loading ? (
@@ -148,6 +250,9 @@ export function CollectionFarmersPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{f.defaultMilk}</span>
+                                    {f.showRateChart && (
+                                        <span className="px-2 py-0.5 bg-primary/15 text-primary rounded-full text-xs font-medium">Rate Chart</span>
+                                    )}
                                     {f.isActive === false && (
                                         <span className="px-2 py-0.5 bg-destructive/10 text-destructive rounded-full text-xs font-medium">Deleted</span>
                                     )}
@@ -195,6 +300,7 @@ export function CollectionFarmersPage() {
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Owner</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Milk Type</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Rate Basis</th>
+                                <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Rate Chart</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Total Qty</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Total Amount</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Last Purchase</th>
@@ -206,14 +312,14 @@ export function CollectionFarmersPage() {
                             {loading ? (
                                 Array.from({ length: 5 }).map((_, i) => (
                                     <tr key={i} className="animate-pulse">
-                                        {Array.from({ length: 11 }).map((_, j) => (
+                                        {Array.from({ length: 12 }).map((_, j) => (
                                             <td key={j} className="px-4 py-3"><div className="h-4 bg-muted rounded w-20"></div></td>
                                         ))}
                                     </tr>
                                 ))
                             ) : farmers.length === 0 ? (
                                 <tr>
-                                    <td colSpan={11} className="px-4 py-12 text-center text-muted-foreground">
+                                    <td colSpan={12} className="px-4 py-12 text-center text-muted-foreground">
                                         <UserPlus className="w-12 h-12 mx-auto mb-2 opacity-50" />
                                         No farmers found
                                     </td>
@@ -234,6 +340,13 @@ export function CollectionFarmersPage() {
                                             </span>
                                         </td>
                                         <td className="px-4 py-3 text-sm capitalize">{f.priceBasis || 'rate'}</td>
+                                        <td className="px-4 py-3 text-center">
+                                            {f.showRateChart ? (
+                                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/15 text-primary">Yes</span>
+                                            ) : (
+                                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">No</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3 text-sm font-medium text-primary">{(f.totalQuantity || 0).toFixed(1)} L</td>
                                         <td className="px-4 py-3 text-sm font-semibold text-green-600">₹{(f.totalAmount || 0).toFixed(2)}</td>
                                         <td className="px-4 py-3 text-sm">{formatDate(f.lastPurchaseDate)}</td>

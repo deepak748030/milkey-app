@@ -1161,6 +1161,7 @@ export interface AdminPurchaseFarmer {
     lastPurchaseDate: string
     createdAt: string
     isActive?: boolean
+    showRateChart?: boolean
 }
 
 export const getAdminPurchaseFarmers = async (params: {
@@ -1187,6 +1188,38 @@ export const restoreAdminPurchaseFarmer = async (id: string) => {
 export const permanentDeleteAdminPurchaseFarmer = async (id: string) => {
     const response = await api.delete(`/admin/purchase-farmers/${id}/permanent`)
     return response.data
+}
+
+// ─── Admin: Rate Chart Settings ───────────────────────────────────────
+export interface AdminRateChartSetting {
+    _id: string
+    owner: { _id: string; name: string; email: string; phone: string } | null
+    rate: number
+    fatMin: number
+    fatMax: number
+    snfMin: number
+    snfMax: number
+    step: number
+    presetKey: string
+    rateChartFarmersCount: number
+    createdAt: string
+    updatedAt: string
+}
+
+export const getAdminRateChartSettings = async (params: {
+    page?: number
+    limit?: number
+    search?: string
+    userId?: string
+}) => {
+    const response = await api.get('/admin/rate-chart-settings', { params })
+    return response.data as {
+        success: boolean
+        response: {
+            data: AdminRateChartSetting[]
+            pagination: { page: number; limit: number; total: number; pages: number }
+        }
+    }
 }
 
 
