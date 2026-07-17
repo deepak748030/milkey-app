@@ -276,7 +276,11 @@ export default function PurchaseScreen() {
     // saved rate chart's "today rate" (FatRate = rate*0.08, SnfRate = rate*0.053333).
     // rate = fat * fatRate + snf * snfRate
     useEffect(() => {
-        if (!selectedCustomer || (selectedCustomer as any).showRateChart !== true) return;
+        if (!selectedCustomer) return;
+        const isRateChart =
+            (selectedCustomer as any).showRateChart === true ||
+            selectedCustomer.priceBasis === 'fat_snf';
+        if (!isRateChart) return;
         const fat = parseFloat(fatValue) || 0;
         const snf = parseFloat(snfValue) || 0;
         if (fat <= 0 || snf <= 0 || todayRate <= 0) { setRateValue(''); return; }
@@ -1033,21 +1037,21 @@ export default function PurchaseScreen() {
                     <View style={s.fieldsRow}>
                         <View style={s.fieldBox}>
                             <Text style={s.fieldLabel}>{t.purchase.qty}</Text>
-                            <TextInput style={s.fieldInput} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                            <TextInput style={s.fieldInput} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '00.00' : '0.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                         </View>
                         {selectedCustomer.priceBasis !== 'rate' && (
                             <View style={s.fieldBox}>
                                 <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
-                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
+                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '6.5' : '0.0'} placeholderTextColor={colors.mutedForeground} />
                             </View>
                         )}
                         {selectedCustomer.priceBasis === 'fat_snf' && (
                             <View style={s.fieldBox}>
                                 <Text style={s.fieldLabel}>SNF</Text>
-                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} />
+                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="9.0" placeholderTextColor={colors.mutedForeground} />
                             </View>
                         )}
-                        {(selectedCustomer.priceBasis === 'rate' || selectedCustomer.priceBasis === 'fat_snf') && (
+                        {selectedCustomer.priceBasis === 'rate' && (
                             <View style={s.fieldBox}>
                                 <Text style={s.fieldLabel}>{t.common.rate}</Text>
                                 <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
@@ -1057,7 +1061,7 @@ export default function PurchaseScreen() {
 
                     {/* Computed Values Display */}
                     <View style={s.computedRow}>
-                        {selectedCustomer.priceBasis === 'fat' && (
+                        {(selectedCustomer.priceBasis === 'fat' || selectedCustomer.priceBasis === 'fat_snf') && (
                             <Text style={s.computedText}>{t.common.rate}: <Text style={s.computedValue}>{rateValue || '0'}</Text></Text>
                         )}
                         <Text style={s.computedText}>{t.common.amount}: <Text style={[s.computedValue, { color: colors.primary }]}>₹{computeAmount().toFixed(1)}</Text></Text>

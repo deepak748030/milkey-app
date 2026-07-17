@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, ScrollView
 import { X } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { DateRangePicker } from '@/components/DateRangePicker';
-import { reportsApi, sellingEntriesApi } from '@/lib/milkeyApi';
+import { milkCollectionsApi, sellingEntriesApi } from '@/lib/milkeyApi';
 
 type Kind = 'collection' | 'selling';
 
@@ -41,13 +41,15 @@ export function OverviewRangeModal({ visible, kind, onClose }: Props) {
             setLoading(true);
             try {
                 if (kind === 'collection') {
-                    const res = await reportsApi.getMilkCollections({ startDate, endDate });
+                    const res = await milkCollectionsApi.getAll({ startDate, endDate, limit: 1 });
                     if (!cancelled && res?.success && res.response) {
-                        const s = res.response.summary;
+                        const t = res.response.totals || { quantity: 0, amount: 0 };
+                        const qty = t.quantity || 0;
+                        const amt = t.amount || 0;
                         setTotals({
-                            quantity: s.totalQuantity || 0,
-                            amount: s.totalAmount || 0,
-                            avgRate: s.avgRate || (s.totalQuantity ? s.totalAmount / s.totalQuantity : 0),
+                            quantity: qty,
+                            amount: amt,
+                            avgRate: qty ? amt / qty : 0,
                         });
                     }
                 } else {
@@ -100,7 +102,7 @@ export function OverviewRangeModal({ visible, kind, onClose }: Props) {
                             <View style={styles.loadingWrap}>
                                 <ActivityIndicator color={colors.primary} />
                             </View>
-                        ) : totals ? (
+                        ) : totals && totals.quantity > 0 ? (
                             <View style={styles.rowsWrap}>
                                 <Row label="Quantity" value={`${totals.quantity.toFixed(2)} L`} colors={colors} />
                                 <Row label="Average Rate" value={`₹ ${totals.avgRate.toFixed(2)}`} colors={colors} />

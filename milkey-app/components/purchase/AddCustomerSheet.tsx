@@ -69,8 +69,8 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 setBuffaloEnabled(editingFarmer.buffaloEnabled ?? true);
                 setPriceBasis(editingFarmer.priceBasis || 'rate');
                 setShowRateChart(
-                    (editingFarmer as any).showRateChart === true ||
-                    editingFarmer.priceBasis === 'fat_snf'
+                    (editingFarmer as any).showRateChart === true &&
+                    editingFarmer.priceBasis === 'rate'
                 );
                 setBuffaloRate(editingFarmer.buffaloRate ? String(editingFarmer.buffaloRate) : '');
                 setCowRate(editingFarmer.cowRate ? String(editingFarmer.cowRate) : '');
@@ -262,7 +262,8 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             </View>
                         </View>
 
-                        {/* Show Rate Chart Icon toggle — always visible so user can decide, incl. when Rate Chart price basis is selected */}
+                        {/* Show Rate Chart Icon toggle — only for Rate-based pricing */}
+                        {priceBasis === 'rate' && (
                         <View style={s.sectionCard}>
                             <Text style={s.sectionTitle}>Show Rate Chart Icon</Text>
                             <View style={s.priceBasisRow}>
@@ -281,6 +282,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                                 ))}
                             </View>
                         </View>
+                        )}
 
                         {/* Buffalo Milk Card — hidden when Rate Chart is the pricing mode */}
                         {priceBasis !== 'fat_snf' && buffaloEnabled && (

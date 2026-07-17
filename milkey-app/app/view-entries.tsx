@@ -136,16 +136,17 @@ export default function ViewEntriesScreen() {
     const totals = useMemo(() => {
         let liters = 0;
         let amount = 0;
-        let paid = 0;
-        let unpaid = 0;
-        entries.forEach((e) => {
+        const visible = entries.filter((e) => !e.isPaid);
+        visible.forEach((e) => {
             liters += Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0);
             const amt = Number(e.amount || 0);
             amount += amt;
-            if (e.isPaid) paid += amt; else unpaid += amt;
         });
-        return { liters, amount, paid, unpaid, count: entries.length };
+        return { liters, amount, count: visible.length };
     }, [entries]);
+
+    // Only unpaid entries are shown / exported
+    const visibleEntries = useMemo(() => entries.filter((e) => !e.isPaid), [entries]);
 
     // ─── Edit ───
     const openEdit = (entry: SellingEntry) => {
@@ -225,15 +226,9 @@ export default function ViewEntriesScreen() {
 
     // ─── PDF (Download / Share) ───
     const buildPdfHtml = () => {
-        const rows = entries.map((e) => {
+        const rows = visibleEntries.map((e) => {
             const qty = Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0);
             const amt = Number(e.amount || 0);
-            const paidCell = e.isPaid
-                ? `<span style="color:#16a34a;font-weight:700">₹${amt.toFixed(2)}</span>`
-                : `<span style="color:#dc2626">-</span>`;
-            const status = e.isPaid
-                ? '<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700">PAID</span>'
-                : '<span style="background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700">UNPAID</span>';
             return `
                 <tr>
                     <td>${formatDate(e.date)}</td>
@@ -242,8 +237,6 @@ export default function ViewEntriesScreen() {
                     <td style="text-align:center">${qty.toFixed(2)}</td>
                     <td style="text-align:right">₹${Number(e.rate || 0).toFixed(2)}</td>
                     <td style="text-align:right;font-weight:700">₹${amt.toFixed(2)}</td>
-                    <td style="text-align:right">${paidCell}</td>
-                    <td style="text-align:center">${status}</td>
                 </tr>`;
         }).join('');
 
@@ -268,24 +261,19 @@ export default function ViewEntriesScreen() {
                 <div class="card"><div class="l">Entries</div><div class="v">${totals.count}</div></div>
                 <div class="card"><div class="l">Total Qty (L)</div><div class="v">${totals.liters.toFixed(2)}</div></div>
                 <div class="card"><div class="l">Total Amount</div><div class="v">₹${totals.amount.toFixed(2)}</div></div>
-                <div class="card"><div class="l">Paid Amount</div><div class="v" style="color:#16a34a">₹${totals.paid.toFixed(2)}</div></div>
-                <div class="card"><div class="l">Unpaid Amount</div><div class="v" style="color:#dc2626">₹${totals.unpaid.toFixed(2)}</div></div>
             </div>
             <table>
                 <thead><tr>
                     <th>Date</th><th style="text-align:center">Morn (L)</th><th style="text-align:center">Eve (L)</th>
                     <th style="text-align:center">Qty (L)</th><th style="text-align:right">Rate</th>
-                    <th style="text-align:right">Amount</th><th style="text-align:right">Paid Amt</th>
-                    <th style="text-align:center">Status</th>
+                    <th style="text-align:right">Amount</th>
                 </tr></thead>
-                <tbody>${rows || '<tr><td colspan="8" style="text-align:center;padding:20px;color:#6b7280">No entries</td></tr>'}</tbody>
+                <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#6b7280">No entries</td></tr>'}</tbody>
                 <tfoot><tr>
                     <td colspan="3">Totals</td>
                     <td style="text-align:center">${totals.liters.toFixed(2)}</td>
                     <td></td>
                     <td style="text-align:right">₹${totals.amount.toFixed(2)}</td>
-                    <td style="text-align:right;color:#16a34a">₹${totals.paid.toFixed(2)}</td>
-                    <td></td>
                 </tr></tfoot>
             </table>
         </body></html>`;
@@ -295,7 +283,7 @@ export default function ViewEntriesScreen() {
         `${memberName.replace(/[^a-zA-Z0-9]+/g, '_')}_entries_${new Date().toISOString().slice(0, 10)}.pdf`;
 
     const handleDownloadPdf = async () => {
-        if (entries.length === 0) { showAlert('No data', 'Nothing to export'); return; }
+        if (visibleEntries.length === 0) { showAlert('No data', 'Nothing to export'); return; }
         setPdfBusy('download');
         try {
             const { uri } = await Print.printToFileAsync({ html: buildPdfHtml() });
@@ -318,7 +306,7 @@ export default function ViewEntriesScreen() {
     };
 
     const handleSharePdf = async () => {
-        if (entries.length === 0) { showAlert('No data', 'Nothing to share'); return; }
+        if (visibleEntries.length === 0) { showAlert('No data', 'Nothing to share'); return; }
         setPdfBusy('share');
         try {
             const { uri } = await Print.printToFileAsync({ html: buildPdfHtml() });
@@ -383,16 +371,8 @@ export default function ViewEntriesScreen() {
                 </View>
             </View>
 
-            {/* ── Paid / Unpaid + PDF actions ── */}
+            {/* ── PDF actions ── */}
             <View style={styles.actionsRow}>
-                <View style={[styles.pill, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <Text style={[styles.pillLabel, { color: colors.mutedForeground }]}>Paid</Text>
-                    <Text style={[styles.pillVal, { color: colors.success }]}>₹{totals.paid.toFixed(2)}</Text>
-                </View>
-                <View style={[styles.pill, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                    <Text style={[styles.pillLabel, { color: colors.mutedForeground }]}>Unpaid</Text>
-                    <Text style={[styles.pillVal, { color: colors.destructive }]}>₹{totals.unpaid.toFixed(2)}</Text>
-                </View>
                 <Pressable
                     onPress={handleDownloadPdf}
                     disabled={pdfBusy !== null}
@@ -441,7 +421,7 @@ export default function ViewEntriesScreen() {
                         <Text style={{ color: colors.white, fontWeight: '700' }}>Retry</Text>
                     </Pressable>
                 </View>
-            ) : entries.length === 0 ? (
+            ) : visibleEntries.length === 0 ? (
                 <View style={styles.centerBox}>
                     <Text style={{ color: colors.mutedForeground }}>No entries found for this period</Text>
                 </View>
@@ -455,11 +435,10 @@ export default function ViewEntriesScreen() {
                         <Text style={[styles.th, { flex: 1, textAlign: 'center', color: colors.mutedForeground }]}>M / E</Text>
                         <Text style={[styles.th, { flex: 0.7, textAlign: 'center', color: colors.mutedForeground }]}>Rate</Text>
                         <Text style={[styles.th, { flex: 0.9, textAlign: 'right', color: colors.mutedForeground }]}>Amt</Text>
-                        <Text style={[styles.th, { flex: 0.9, textAlign: 'right', color: colors.mutedForeground }]}>Paid</Text>
                         <Text style={[styles.th, { width: 68, textAlign: 'center', color: colors.mutedForeground }]}>Action</Text>
                     </View>
 
-                    {entries.map((e) => {
+                    {visibleEntries.map((e) => {
                         const qty = Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0);
                         return (
                             <View
@@ -474,9 +453,6 @@ export default function ViewEntriesScreen() {
                                         <Text style={{ fontSize: 10, color: colors.primary, marginTop: 2 }}>
                                             {e.entryCount} entries
                                         </Text>
-                                    ) : null}
-                                    {e.isPaid ? (
-                                        <Text style={{ fontSize: 10, color: colors.success, marginTop: 2 }}>PAID</Text>
                                     ) : null}
                                 </View>
                                 <View style={{ flex: 1, alignItems: 'center' }}>
@@ -494,11 +470,6 @@ export default function ViewEntriesScreen() {
                                     style={[styles.td, { flex: 0.9, textAlign: 'right', color: colors.primary, fontWeight: '700' }]}
                                 >
                                     ₹{Number(e.amount || 0).toFixed(0)}
-                                </Text>
-                                <Text
-                                    style={[styles.td, { flex: 0.9, textAlign: 'right', fontWeight: '700', color: e.isPaid ? colors.success : colors.destructive }]}
-                                >
-                                    {e.isPaid ? `₹${Number(e.amount || 0).toFixed(0)}` : '-'}
                                 </Text>
                                 <View style={{ width: 68, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
                                     <Pressable
