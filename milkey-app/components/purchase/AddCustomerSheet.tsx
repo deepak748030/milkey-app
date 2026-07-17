@@ -262,8 +262,8 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                             </View>
                         </View>
 
-                        {/* Show Rate Chart Icon toggle — only for Rate-based pricing */}
-                        {priceBasis === 'rate' && (
+                        {/* Show Rate Chart Icon toggle — only for Rate Chart (fat_snf) pricing */}
+                        {priceBasis === 'fat_snf' && (
                         <View style={s.sectionCard}>
                             <Text style={s.sectionTitle}>Show Rate Chart Icon</Text>
                             <View style={s.priceBasisRow}>
