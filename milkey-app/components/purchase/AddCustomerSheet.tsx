@@ -1,6 +1,6 @@
 import React, { useState, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, Switch, FlatList } from 'react-native';
-import { X, Check, ChevronDown, Search } from 'lucide-react-native';
+import { X, Check, ChevronDown, Search, RotateCcw } from 'lucide-react-native';
 import { PurchaseFarmer, purchaseFarmersApi } from '@/lib/milkeyApi';
 import { SuccessModal } from '../SuccessModal';
 import { ConfirmationModal } from '../ConfirmationModal';
@@ -142,6 +142,19 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
     };
 
     const s = createSheetStyles(colors, isDark);
+
+    // Reset everything EXCEPT code, name, phone back to defaults.
+    const resetOtherSettings = () => {
+        setDefaultMilk('buffalo');
+        setCowEnabled(true);
+        setBuffaloEnabled(true);
+        setPriceBasis('rate');
+        setShowRateChart(false);
+        setBuffaloRate(''); setCowRate('');
+        setBuffaloFat(''); setCowFat('');
+        setAlertMethod('none');
+        setPrintEntrySlip('default');
+    };
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -339,6 +352,17 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
 
 
                         <View style={{ height: 20 }} />
+
+                        {/* Reset Settings — clears everything except Code, Name, Phone */}
+                        <Pressable style={s.resetBtn} onPress={resetOtherSettings}>
+                            <RotateCcw size={16} color="#ef4444" />
+                            <Text style={s.resetBtnText}>Reset Settings</Text>
+                        </Pressable>
+                        <Text style={s.resetHint}>
+                            Resets Milk, Rate, Alerts and Print settings. Code, Name and Phone are kept.
+                        </Text>
+
+                        <View style={{ height: 20 }} />
                     </ScrollView>
                 </View>
             </View>
@@ -383,4 +407,12 @@ const createSheetStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     cancelBtnText: { fontSize: 14, fontWeight: '600', color: colors.foreground },
     saveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.primary },
     saveBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+    resetBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        gap: 8, paddingVertical: 12, borderRadius: 10,
+        borderWidth: 1.5, borderColor: '#ef4444',
+        backgroundColor: '#ef444410', marginTop: 4,
+    },
+    resetBtnText: { fontSize: 14, fontWeight: '700', color: '#ef4444' },
+    resetHint: { fontSize: 11, color: colors.mutedForeground, marginTop: 6, textAlign: 'center' },
 });
