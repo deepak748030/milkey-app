@@ -69,9 +69,9 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 setBuffaloEnabled(editingFarmer.buffaloEnabled ?? true);
                 setPriceBasis(editingFarmer.priceBasis || 'rate');
                 setShowRateChart(
-                    (editingFarmer as any).showRateChart === true &&
-                    editingFarmer.priceBasis === 'rate'
+                    (editingFarmer as any).showRateChart === true
                 );
+
                 setBuffaloRate(editingFarmer.buffaloRate ? String(editingFarmer.buffaloRate) : '');
                 setCowRate(editingFarmer.cowRate ? String(editingFarmer.cowRate) : '');
                 setBuffaloFat(editingFarmer.buffaloFat ? String(editingFarmer.buffaloFat) : '');
@@ -237,6 +237,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                                 <TextInput style={s.input} value={phone} onChangeText={setPhone} placeholder="Mobile number" placeholderTextColor={colors.mutedForeground} keyboardType="phone-pad" maxLength={10} />
                             </View>
 
+                            {priceBasis !== 'fat_snf' && (
                             <View style={s.field}>
                                 <Text style={s.fieldLabel}>4. Default Milk</Text>
                                 <View style={s.toggleRow}>
@@ -256,6 +257,8 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                                     </Pressable>
                                 </View>
                             </View>
+                            )}
+
                         </View>
 
                         {/* Price Basis Card */}

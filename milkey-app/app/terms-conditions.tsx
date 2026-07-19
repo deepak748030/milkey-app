@@ -21,7 +21,7 @@ export default function TermsConditionsScreen() {
         {
             icon: CreditCard,
             title: '2. Subscription',
-            description: 'Subscription is billed on a monthly basis (₹449/month). Subscription is auto-renewable unless cancelled by the user. User can cancel the subscription anytime from their account or by contacting support.',
+            description: 'Subscription is billed on a monthly basis. Subscription is auto-renewable unless cancelled by the user. User can cancel the subscription anytime from their account or by contacting support.',
         },
         {
             icon: User,
