@@ -2,7 +2,7 @@
   "expo": {
     "name": "Milkey",
     "slug": "milkey",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "milkey",
@@ -14,7 +14,7 @@
     },
     "android": {
       "package": "com.milkey.app",
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#0d3b1f"
