@@ -12,7 +12,9 @@ const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`,
 // GET /api/milk-collections - Get all collections with filters
 router.get('/', auth, async (req, res) => {
     try {
-        const { farmerId, farmerCode, date, startDate, endDate, shift, isPaid, limit = 50, page = 1 } = req.query;
+        // FIX: increase default limit from 50 to 500 so Purchase tab's Sale Entries table doesn't truncate early
+        // and leave large blank white space (as seen in screenshot) when user has many entries per day
+        const { farmerId, farmerCode, date, startDate, endDate, shift, isPaid, limit = 500, page = 1 } = req.query;
 
         const query = { owner: req.userId };
 
@@ -50,11 +52,16 @@ router.get('/', auth, async (req, res) => {
             }
         }
 
+        // FIX: clamp limit to 1000 to avoid blank truncation while protecting DB
+        let parsedLimit = parseInt(limit) || 500;
+        parsedLimit = Math.min(1000, Math.max(1, parsedLimit));
+        const parsedPage = Math.max(1, parseInt(page) || 1);
+
         const collections = await MilkCollection.find(query)
             .populate('purchaseFarmer', 'code name mobile')
             .sort({ date: -1, shift: -1 })
-            .limit(parseInt(limit))
-            .skip((parseInt(page) - 1) * parseInt(limit))
+            .limit(parsedLimit)
+            .skip((parsedPage - 1) * parsedLimit)
             .lean();
 
         // Calculate totals
@@ -81,10 +88,10 @@ router.get('/', auth, async (req, res) => {
                     amount: totals[0]?.totalAmount || 0
                 },
                 pagination: {
-                    page: parseInt(page),
-                    limit: parseInt(limit),
+                    page: parsedPage,
+                    limit: parsedLimit,
                     total,
-                    pages: Math.ceil(total / parseInt(limit))
+                    pages: Math.ceil(total / parsedLimit) || 1
                 }
             }
         });

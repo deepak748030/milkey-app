@@ -157,12 +157,19 @@ const bumpVersion = async (base) => {
 };
 
 // Routes we must NEVER cache (auth flows, payment callbacks, seeds, realtime, etc.)
+// FIX: added /api/purchase-farmers and /api/milk-collections and /api/members to prevent stale blank list
+// The mobile app's C-Farmer tab was showing blank white space because cached empty/limited responses were served
 const SKIP_BASES = new Set([
     '/api/auth',
     '/api/razorpay',
     '/api/zapupi',
     '/api/seed',
     '/api/notifications', // realtime-ish; let it always be fresh
+    '/api/purchase-farmers',
+    '/api/milk-collections',
+    '/api/members',
+    '/api/selling-entries',
+    '/api/member-payments',
 ]);
 
 /**
