@@ -143,6 +143,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // GET /api/payments/farmer-summary/:farmerCode - Get pending summary for a farmer
+// FIX: ensure currentBalance always equals last closing balance (fixes 690 vs 877 mismatch)
 router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
@@ -157,6 +158,23 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
                 success: false,
                 message: 'Farmer not found'
             });
+        }
+
+        // FIX: compute true currentBalance from latest payment's closingBalance
+        // This fixes drift where farmer.currentBalance (690) != last closing (877)
+        const latestPaymentForBalance = await Payment.findOne({
+            farmer: farmer._id,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('closingBalance')
+            .lean();
+
+        const trueCurrentBalance = latestPaymentForBalance ? (latestPaymentForBalance.closingBalance || 0) : (farmer.currentBalance || 0);
+
+        // If drift detected, auto-heal farmer document (fire-and-forget)
+        if (latestPaymentForBalance && Math.abs((farmer.currentBalance || 0) - trueCurrentBalance) > 0.01) {
+            Farmer.findByIdAndUpdate(farmer._id, { currentBalance: trueCurrentBalance }).catch(() => {});
         }
 
         // Build date filter for milk collections
@@ -212,7 +230,7 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
                     code: farmer.code,
                     name: farmer.name,
                     mobile: farmer.mobile,
-                    currentBalance: farmer.currentBalance || 0
+                    currentBalance: trueCurrentBalance
                 },
                 milk: {
                     totalQuantity: milkData.totalQuantity,
@@ -603,9 +621,10 @@ router.put('/:id', auth, requireSubscription('register'), async (req, res) => {
 
         await payment.save();
 
-        // FIX: Only update farmer.currentBalance if this payment is the latest payment for this farmer.
-        // This keeps last closing balance same after editing older settlements (as requested).
-        // Latest = max periodEnd, then date, then createdAt
+        // FIX: Ensure last closing balance and current balance stay in sync
+        // - If edited payment IS latest, currentBalance = its new closing
+        // - If edited payment is older, currentBalance = latest's closing (keeps last closing same after edit)
+        // This fixes 690 vs 877 mismatch where current and last closing differed
         const latestPayment = await Payment.findOne({
             farmer: payment.farmer,
             owner: req.userId
@@ -614,20 +633,17 @@ router.put('/:id', auth, requireSubscription('register'), async (req, res) => {
             .select('_id closingBalance')
             .lean();
 
-        if (latestPayment && latestPayment._id.toString() === payment._id.toString()) {
-            // This is the latest settlement - its closing balance IS the current balance
-            farmer.currentBalance = newClosingBalance;
+        if (latestPayment) {
+            if (latestPayment._id.toString() === payment._id.toString()) {
+                farmer.currentBalance = newClosingBalance;
+            } else {
+                // Edited an older settlement - keep currentBalance = latest's closing (last closing stays same)
+                farmer.currentBalance = latestPayment.closingBalance || 0;
+            }
             await farmer.save();
         } else {
-            // Not latest - do NOT touch farmer.currentBalance, keeps last closing (e.g., 690) stable
-            // Optional: recalculate currentBalance from latest payment to ensure consistency
-            if (latestPayment) {
-                // Ensure farmer.currentBalance matches latest payment's closingBalance if drifted
-                // Only if latest is not the one we just edited (already handled) and currentBalance is out of sync
-                // We leave it as is to avoid side effects, but we could sync:
-                // farmer.currentBalance = latestPayment.closingBalance;
-                // await farmer.save();
-            }
+            farmer.currentBalance = newClosingBalance;
+            await farmer.save();
         }
 
         const populatedPayment = await Payment.findById(payment._id)
@@ -655,7 +671,7 @@ function recalcPaymentTotals(payment) {
 }
 
 // POST /api/payments/:id/advances - Add a new advance to an existing payment (already settled inside this payment)
-// FIX: only affect currentBalance if this is latest payment
+// FIX: ensure currentBalance = latest closing after add
 router.post('/:id/advances', auth, requireSubscription('register'), async (req, res) => {
     try {
         const { amount, note } = req.body;
@@ -687,17 +703,17 @@ router.post('/:id/advances', auth, requireSubscription('register'), async (req, 
         recalcPaymentTotals(payment);
         await payment.save();
 
-        // FIX: only adjust farmer.currentBalance if this payment is latest
+        // FIX: sync farmer.currentBalance to latest closing (fixes drift 690 vs 877)
         const latestPayment = await Payment.findOne({
             farmer: payment.farmer,
             owner: req.userId
         })
             .sort({ periodEnd: -1, date: -1, createdAt: -1 })
-            .select('_id')
+            .select('_id closingBalance')
             .lean();
 
-        if (latestPayment && latestPayment._id.toString() === payment._id.toString()) {
-            farmer.currentBalance = (farmer.currentBalance || 0) - amt;
+        if (latestPayment) {
+            farmer.currentBalance = latestPayment.closingBalance || 0;
             await farmer.save();
         }
 
@@ -714,7 +730,7 @@ router.post('/:id/advances', auth, requireSubscription('register'), async (req, 
 });
 
 // DELETE /api/payments/:id/advances/:advanceId - Permanently remove an advance from a payment and DB
-// FIX: only affect currentBalance if this is latest payment
+// FIX: ensure currentBalance = latest closing after delete
 router.delete('/:id/advances/:advanceId', auth, requireSubscription('register'), async (req, res) => {
     try {
         const payment = await Payment.findOne({ _id: req.params.id, owner: req.userId });
@@ -736,19 +752,19 @@ router.delete('/:id/advances/:advanceId', auth, requireSubscription('register'),
         // Permanently delete from DB
         await Advance.findByIdAndDelete(advance._id);
 
-        // FIX: only reverse farmer balance if this payment is latest
+        // FIX: sync to latest closing
         const latestPayment = await Payment.findOne({
             farmer: payment.farmer,
             owner: req.userId
         })
             .sort({ periodEnd: -1, date: -1, createdAt: -1 })
-            .select('_id')
+            .select('_id closingBalance')
             .lean();
 
-        if (latestPayment && latestPayment._id.toString() === payment._id.toString()) {
+        if (latestPayment) {
             const farmer = await Farmer.findById(payment.farmer);
             if (farmer) {
-                farmer.currentBalance = (farmer.currentBalance || 0) + advAmt;
+                farmer.currentBalance = latestPayment.closingBalance || 0;
                 await farmer.save();
             }
         }
