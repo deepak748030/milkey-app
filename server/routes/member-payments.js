@@ -417,6 +417,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // PUT /api/member-payments/:id - Update member payment
+// FIX: same closing balance bug as register payments - only update current balance if latest
 router.put('/:id', auth, async (req, res) => {
     try {
         const { amount, paymentMethod, reference, notes, totalSellAmount, periodStart, periodEnd } = req.body;
@@ -445,7 +446,6 @@ router.put('/:id', auth, async (req, res) => {
         // Calculate the difference in payment amount
         const oldPaymentAmount = payment.amount;
         const newPaymentAmount = amount !== undefined ? parseFloat(amount) : oldPaymentAmount;
-        const paymentDifference = newPaymentAmount - oldPaymentAmount;
 
         // Recalculate closing balance if amount or milk amount changes
         const newMilkAmount = totalSellAmount !== undefined ? parseFloat(totalSellAmount) : payment.totalSellAmount;
@@ -471,9 +471,19 @@ router.put('/:id', auth, async (req, res) => {
 
         await payment.save();
 
-        // Update member's current balance based on payment difference
-        member.sellingPaymentBalance = (member.sellingPaymentBalance || 0) - paymentDifference;
-        await member.save();
+        // FIX: only update member's current balance if this is latest payment
+        const latestPayment = await MemberPayment.findOne({
+            member: payment.member,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('_id closingBalance')
+            .lean();
+
+        if (latestPayment && latestPayment._id.toString() === payment._id.toString()) {
+            member.sellingPaymentBalance = newClosingBalance;
+            await member.save();
+        }
 
         const populatedPayment = await MemberPayment.findById(payment._id)
             .populate('member', 'name mobile')
