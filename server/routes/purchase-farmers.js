@@ -4,20 +4,26 @@ const PurchaseFarmer = require('../models/PurchaseFarmer');
 const auth = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
 
-const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegExp = (str) => String(str).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
 const normalizeCode = (code) => String(code || '').trim().toUpperCase();
 const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`, 'i');
 
 // GET /api/purchase-farmers
 router.get('/', auth, async (req, res) => {
     try {
-        // FIX: increase default limit so C-Farmer list doesn't get truncated and leave blank white space.
-        // Mobile app requests limit=100, but users can have 500+ farmers. Cap at 1000 to still protect DB.
-        const { search, page = 1, limit = 1000, includeInactive } = req.query;
+        // FIX: C-Farmer missing codes (e.g., 164 visible in admin but not in app)
+        // App sends limit=100, but users have 164+ farmers. Old code respected client limit,
+        // so codes >100 truncated. Force minimum 1000 on server to always return full list.
+        // Admin route /api/admin/purchase-farmers is separate and keeps its own pagination.
+        const { search, page = 1, limit, includeInactive } = req.query;
         const parsedPage = Math.max(1, parseInt(page) || 1);
-        let parsedLimit = parseInt(limit) || 1000;
-        // Clamp: at least 1, at most 1000 - prevents accidental huge scans but allows full list
-        parsedLimit = Math.min(1000, Math.max(1, parsedLimit));
+        const clientLimit = parseInt(limit) || 0;
+        // Always return at least 1000, up to 5000, ignoring small client limits (100) that cause missing codes like 164
+        let parsedLimit = Math.min(5000, Math.max(1000, clientLimit || 1000));
+        // If searching, still return up to 1000 to show all matches
+        if (search) {
+            parsedLimit = Math.min(5000, Math.max(1000, clientLimit || 1000));
+        }
 
         const query = { owner: req.userId };
 
@@ -40,12 +46,6 @@ router.get('/', auth, async (req, res) => {
         }
 
         const total = await PurchaseFarmer.countDocuments(query);
-        // Sort by code numerically (ascending). Codes are stored as strings,
-        // so we use an aggregation that converts the code to a number when
-        // possible, falling back to a high value for non-numeric codes so
-        // they sort to the end. Active farmers first, then by numeric code.
-        // FIX: use literal 999999999 instead of Number.MAX_SAFE_INTEGER for MongoDB safety
-        // and ensure _codeNum is always numeric.
         const farmers = await PurchaseFarmer.aggregate([
             { $match: query },
             {
@@ -60,8 +60,6 @@ router.get('/', auth, async (req, res) => {
                     },
                 },
             },
-            // FIX: keep active first but ensure stable numeric ordering - this fills the blank gap
-            // that appeared when codes were missing due to inactive sorting + low limit
             { $sort: { isActive: -1, _codeNum: 1, code: 1 } },
             { $skip: (parsedPage - 1) * parsedLimit },
             { $limit: parsedLimit },
@@ -125,13 +123,9 @@ router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
             return res.status(400).json({ success: false, message: 'Code and name are required' });
         }
 
-        // FIX: check only active for duplicate, and if inactive exists with same code, restore it.
-        // This prevents "code gayab" gaps (e.g., 145,148,149 missing) because soft-deleted codes were blocking reuse,
-        // leaving blank space in the list and confusing the app.
         const existing = await PurchaseFarmer.findOne({ code: codeRegex(normalizedCode), owner: req.userId });
         if (existing) {
             if (existing.isActive === false) {
-                // Restore and update the soft-deleted farmer
                 existing.name = String(name).trim();
                 existing.mobile = mobile?.trim() || '';
                 existing.address = address?.trim() || '';
@@ -179,7 +173,6 @@ router.post('/', auth, requireSubscription('purchase'), async (req, res) => {
         res.status(201).json({ success: true, message: 'Customer added successfully', response: farmer });
     } catch (error) {
         console.error('Create purchase farmer error:', error);
-        // Handle duplicate key error from unique index (code+owner)
         if (error.code === 11000) {
             return res.status(400).json({ success: false, message: 'Customer with this code already exists' });
         }
