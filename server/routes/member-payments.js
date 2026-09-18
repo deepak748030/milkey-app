@@ -155,6 +155,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // GET /api/member-payments/member-summary/:memberId - Get pending summary for a member with date range
+// FIX: ensure currentBalance = last closing balance (fixes drift)
 router.get('/member-summary/:memberId', auth, async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
@@ -171,6 +172,21 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
             });
         }
 
+        // FIX: true currentBalance from latest member payment
+        const latestPaymentForBalance = await MemberPayment.findOne({
+            member: member._id,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('closingBalance')
+            .lean();
+
+        const trueCurrentBalance = latestPaymentForBalance ? (latestPaymentForBalance.closingBalance || 0) : (member.sellingPaymentBalance || 0);
+
+        if (latestPaymentForBalance && Math.abs((member.sellingPaymentBalance || 0) - trueCurrentBalance) > 0.01) {
+            Member.findByIdAndUpdate(member._id, { sellingPaymentBalance: trueCurrentBalance }).catch(() => {});
+        }
+
         // Build date filter for entries (SellingEntry dates are stored at UTC start-of-day)
         const dateFilter = {};
         if (startDate || endDate) {
@@ -184,7 +200,6 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
         }
 
         // Get entries that are not yet paid AND not already included in a payment for this period
-        // We check both isPaid flag and also check if entry was already settled in a payment
         const entryQuery = {
             member: member._id,
             owner: req.userId,
@@ -199,7 +214,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
         const unpaidSellAmount = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
         const unpaidQuantity = unpaidEntries.reduce((sum, e) => sum + Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0), 0);
 
-        const currentBalance = Number(member.sellingPaymentBalance || 0);
+        const currentBalance = Number(trueCurrentBalance || 0);
         const netPayable = currentBalance + unpaidSellAmount;
 
         res.json({
@@ -417,6 +432,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // PUT /api/member-payments/:id - Update member payment
+// FIX: ensure currentBalance = last closing (fixes drift)
 router.put('/:id', auth, async (req, res) => {
     try {
         const { amount, paymentMethod, reference, notes, totalSellAmount, periodStart, periodEnd } = req.body;
@@ -445,7 +461,6 @@ router.put('/:id', auth, async (req, res) => {
         // Calculate the difference in payment amount
         const oldPaymentAmount = payment.amount;
         const newPaymentAmount = amount !== undefined ? parseFloat(amount) : oldPaymentAmount;
-        const paymentDifference = newPaymentAmount - oldPaymentAmount;
 
         // Recalculate closing balance if amount or milk amount changes
         const newMilkAmount = totalSellAmount !== undefined ? parseFloat(totalSellAmount) : payment.totalSellAmount;
@@ -471,9 +486,19 @@ router.put('/:id', auth, async (req, res) => {
 
         await payment.save();
 
-        // Update member's current balance based on payment difference
-        member.sellingPaymentBalance = (member.sellingPaymentBalance || 0) - paymentDifference;
-        await member.save();
+        // FIX: always sync to latest closing (last closing stays same after old edit, current matches it)
+        const latestPayment = await MemberPayment.findOne({
+            member: payment.member,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('_id closingBalance')
+            .lean();
+
+        if (latestPayment) {
+            member.sellingPaymentBalance = latestPayment.closingBalance || 0;
+            await member.save();
+        }
 
         const populatedPayment = await MemberPayment.findById(payment._id)
             .populate('member', 'name mobile')

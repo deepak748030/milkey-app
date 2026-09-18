@@ -9,6 +9,7 @@ const normalizeCode = (code) => String(code || '').trim().toUpperCase();
 const codeRegex = (code) => new RegExp(`^${escapeRegExp(normalizeCode(code))}$`, 'i');
 
 // GET /api/farmers - Get all farmers for current user (optionally filter by type and search)
+// FIX: numeric code sorting and includeInactive handling to prevent blank gaps
 router.get('/', auth, async (req, res) => {
     try {
         const { type, search, includeInactive } = req.query;
@@ -23,14 +24,32 @@ router.get('/', auth, async (req, res) => {
             query.type = type;
         }
 
-        // Search by exact code only (no regex)
+        // Search by exact code only (no regex) - trimmed and uppercased
         if (search) {
-            query.code = normalizeCode(search);
+            const trimmed = String(search).trim();
+            if (trimmed) {
+                query.code = normalizeCode(trimmed);
+            }
         }
 
-        const farmers = await Farmer.find(query)
-            .sort({ isActive: -1, code: 1 })
-            .lean();
+        // Use aggregation for numeric code sorting (same as purchase-farmers)
+        const farmers = await Farmer.aggregate([
+            { $match: query },
+            {
+                $addFields: {
+                    _codeNum: {
+                        $convert: {
+                            input: { $trim: { input: '$code' } },
+                            to: 'double',
+                            onError: 999999999,
+                            onNull: 999999999,
+                        },
+                    },
+                },
+            },
+            { $sort: { isActive: -1, _codeNum: 1, code: 1 } },
+            { $project: { _codeNum: 0 } },
+        ]);
 
         res.json({
             success: true,
@@ -106,6 +125,7 @@ router.get('/code/:code', auth, async (req, res) => {
 });
 
 // POST /api/farmers (requires register subscription)
+// FIX: allow reuse of soft-deleted codes by restoring inactive farmer (prevents gaps like 179 missing)
 router.post('/', auth, requireSubscription('register'), async (req, res) => {
     try {
         const { code, name, mobile, address, type = 'farmer' } = req.body;
@@ -128,6 +148,19 @@ router.post('/', auth, requireSubscription('register'), async (req, res) => {
         });
 
         if (existingFarmer) {
+            if (existingFarmer.isActive === false) {
+                // Restore soft-deleted farmer
+                existingFarmer.name = String(name).trim();
+                existingFarmer.mobile = String(mobile).trim();
+                existingFarmer.address = address?.trim() || '';
+                existingFarmer.isActive = true;
+                await existingFarmer.save();
+                return res.status(200).json({
+                    success: true,
+                    message: `${validType === 'member' ? 'Member' : 'Farmer'} restored successfully`,
+                    response: existingFarmer
+                });
+            }
             return res.status(400).json({
                 success: false,
                 message: `${validType === 'member' ? 'Member' : 'Farmer'} with this code already exists`
@@ -150,6 +183,9 @@ router.post('/', auth, requireSubscription('register'), async (req, res) => {
         });
     } catch (error) {
         console.error('Create farmer error:', error);
+        if (error.code === 11000) {
+            return res.status(400).json({ success: false, message: 'Farmer with this code already exists' });
+        }
         res.status(500).json({
             success: false,
             message: 'Failed to add'
