@@ -187,6 +187,28 @@ router.post('/verify-payment', auth, async (req, res) => {
 
         if (expectedSignature !== razorpay_signature) {
             console.error('Razorpay signature verification failed');
+
+            // Best-effort WhatsApp payment-failed message (dedup-safe, non-blocking)
+            try {
+                UserSubscription.findOne({ transactionId: orderId, user: userId })
+                    .populate('subscription')
+                    .then(sub => {
+                        if (!sub) return;
+                        const { sendPaymentStatusMessage } = require('../lib/whatsappZyptos');
+                        return sendPaymentStatusMessage({
+                            status: 'failed',
+                            user: req.user,
+                            amount: sub.amount,
+                            plan: sub.lockedSubscriptionName || sub.subscription?.name || 'Subscription',
+                            transactionId: orderId,
+                            eventId: String(sub._id)
+                        });
+                    })
+                    .catch(err => console.error('[whatsapp] payment failed send error:', err?.message || err));
+            } catch (waErr) {
+                console.error('[whatsapp] payment failed hook error:', waErr?.message || waErr);
+            }
+
             return res.status(400).json({
                 success: false,
                 message: 'Payment verification failed - invalid signature'
@@ -227,6 +249,21 @@ router.post('/verify-payment', auth, async (req, res) => {
                 console.log(`[Razorpay] Notification sent for subscription: ${subscriptionName}`);
             } catch (notifyError) {
                 console.error('[Razorpay] Error sending subscription notification:', notifyError);
+            }
+
+            // WhatsApp payment success message (dedup-safe, non-blocking)
+            try {
+                const { sendPaymentStatusMessage } = require('../lib/whatsappZyptos');
+                sendPaymentStatusMessage({
+                    status: 'success',
+                    user: req.user,
+                    amount: subscription.amount,
+                    plan: subscriptionName,
+                    transactionId: subscription.transactionId || orderId,
+                    eventId: String(subscription._id)
+                }).catch(err => console.error('[whatsapp] payment success send failed:', err?.message || err));
+            } catch (waErr) {
+                console.error('[whatsapp] payment success hook error:', waErr?.message || waErr);
             }
 
             // Process referral commission
@@ -351,6 +388,21 @@ router.post('/check-order-status', auth, async (req, res) => {
                         console.log(`[Razorpay] Notification sent for subscription: ${subscriptionName}`);
                     } catch (notifyError) {
                         console.error('[Razorpay] Error sending subscription notification:', notifyError);
+                    }
+
+                    // WhatsApp payment success message (dedup-safe, non-blocking)
+                    try {
+                        const { sendPaymentStatusMessage } = require('../lib/whatsappZyptos');
+                        sendPaymentStatusMessage({
+                            status: 'success',
+                            user: req.user,
+                            amount: subscription.amount,
+                            plan: subscriptionName,
+                            transactionId: subscription.transactionId || internalOrderId,
+                            eventId: String(subscription._id)
+                        }).catch(err => console.error('[whatsapp] payment success send failed:', err?.message || err));
+                    } catch (waErr) {
+                        console.error('[whatsapp] payment success hook error:', waErr?.message || waErr);
                     }
 
                     // Process referral commission

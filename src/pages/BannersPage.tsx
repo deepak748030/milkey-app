@@ -682,6 +682,43 @@ export function BannersPage() {
                                 />
                             </div>
 
+                            {/* Banner Link (clickable banner) */}
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    Banner Link (optional)
+                                </label>
+                                <select
+                                    value={formData.linkType}
+                                    onChange={(e) => setFormData(prev => ({
+                                        ...prev,
+                                        linkType: e.target.value as BannerFormData['linkType'],
+                                        linkValue: e.target.value === 'none' ? '' : prev.linkValue
+                                    }))}
+                                    className="w-full px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring appearance-none cursor-pointer"
+                                >
+                                    <option value="none">None (not clickable)</option>
+                                    <option value="url">URL (YouTube video, website, etc.)</option>
+                                    <option value="product">Product</option>
+                                    <option value="category">Category</option>
+                                </select>
+                                {formData.linkType !== 'none' && (
+                                    <input
+                                        type="text"
+                                        value={formData.linkValue}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, linkValue: e.target.value }))}
+                                        placeholder={formData.linkType === 'url'
+                                            ? 'https://www.youtube.com/watch?v=...'
+                                            : formData.linkType === 'product'
+                                                ? 'Product ID or name'
+                                                : 'Category name'}
+                                        className="w-full mt-2 px-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    />
+                                )}
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Users tap the banner in the app and go directly to this link (e.g. your YouTube tutorial video).
+                                </p>
+                            </div>
+
                             {/* Gradient */}
                             <div>
                                 <label className="block text-sm font-medium text-foreground mb-2">

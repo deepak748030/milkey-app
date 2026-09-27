@@ -220,6 +220,270 @@ router.post('/', auth, requireSubscription('selling'), async (req, res) => {
     }
 });
 
+// GET /api/selling-entries/bulk-list?date=YYYY-MM-DD&session=morning|evening
+// Returns all Daily Auto Entry members with their default quantity/rate prefilled
+// and flags entries that already exist for the given date + session (duplicates).
+router.get('/bulk-list', auth, async (req, res) => {
+    try {
+        const { date, session } = req.query;
+
+        const normalizedSession = String(session || '').toLowerCase();
+        if (!['morning', 'evening'].includes(normalizedSession)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Session must be morning or evening'
+            });
+        }
+
+        const entryDate = normalizeToUtcStartOfDay(date);
+
+        // All active members with Daily Auto Entry enabled
+        const members = await Member.find({
+            owner: req.userId,
+            isActive: true,
+            dailyAutoEntry: true
+        })
+            .sort({ name: 1 })
+            .lean();
+
+        // Existing entries for this date (to detect already-entered sessions)
+        const existingEntries = await SellingEntry.find({
+            owner: req.userId,
+            date: entryDate
+        })
+            .select('member morningQuantity eveningQuantity rate notes')
+            .lean();
+
+        const existingByMember = new Map(
+            existingEntries.map(e => [String(e.member), e])
+        );
+
+        const list = members.map(m => {
+            const existing = existingByMember.get(String(m._id));
+            const sessionQty = normalizedSession === 'morning'
+                ? Number(existing?.morningQuantity || 0)
+                : Number(existing?.eveningQuantity || 0);
+            const alreadyEntered = !!existing && sessionQty > 0;
+
+            return {
+                memberId: m._id,
+                name: m.name,
+                mobile: m.mobile,
+                ratePerLiter: m.ratePerLiter,
+                defaultQuantity: normalizedSession === 'morning'
+                    ? Number(m.defaultMorningQuantity || 0)
+                    : Number(m.defaultEveningQuantity || 0),
+                defaultNotes: m.defaultNotes || '',
+                alreadyEntered,
+                existingEntryId: existing?._id || null,
+                existingQuantity: alreadyEntered ? sessionQty : 0,
+                existingRate: existing?.rate ?? null
+            };
+        });
+
+        res.json({
+            success: true,
+            response: {
+                date: entryDate,
+                session: normalizedSession,
+                data: list,
+                count: list.length
+            }
+        });
+    } catch (error) {
+        console.error('Get bulk list error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get bulk entry list'
+        });
+    }
+});
+
+// POST /api/selling-entries/bulk (requires selling subscription)
+// Save one whole session's entries in a single call.
+// Body: {
+//   date: 'YYYY-MM-DD',
+//   session: 'morning' | 'evening',
+//   entries: [{ memberId, quantity, rate?, notes? }]
+// }
+// Members whose entry for the same date + session already exists are SKIPPED
+// (no duplicate entries are created).
+router.post('/bulk', auth, requireSubscription('selling'), async (req, res) => {
+    try {
+        const { date, session, entries } = req.body || {};
+
+        const normalizedSession = String(session || '').toLowerCase();
+        if (!['morning', 'evening'].includes(normalizedSession)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Session must be morning or evening'
+            });
+        }
+
+        if (!Array.isArray(entries) || entries.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Entries are required'
+            });
+        }
+
+        const entryDate = normalizeToUtcStartOfDay(date);
+        const isMorning = normalizedSession === 'morning';
+
+        const saved = [];
+        const skipped = [];
+
+        for (const item of entries) {
+            try {
+                const memberId = item?.memberId;
+                if (!memberId) {
+                    skipped.push({ memberId: null, name: item?.name || '', reason: 'member_required' });
+                    continue;
+                }
+
+                const quantityRaw = parseFloat(item?.quantity);
+                const quantity = Number.isNaN(quantityRaw) ? 0 : Math.max(0, quantityRaw);
+                if (quantity <= 0) {
+                    skipped.push({ memberId, name: item?.name || '', reason: 'zero_quantity' });
+                    continue;
+                }
+
+                const member = await Member.findOne({
+                    _id: memberId,
+                    owner: req.userId,
+                    isActive: true
+                });
+
+                if (!member) {
+                    skipped.push({ memberId, name: item?.name || '', reason: 'member_not_found' });
+                    continue;
+                }
+
+                const rateRaw = parseFloat(item?.rate);
+                const entryRate = Number.isNaN(rateRaw) || rateRaw <= 0
+                    ? Number(member.ratePerLiter) || 0
+                    : rateRaw;
+
+                // One entry per owner+member+date: create or merge into existing
+                let entry = await SellingEntry.findOne({
+                    owner: req.userId,
+                    member: memberId,
+                    date: entryDate
+                });
+
+                if (entry) {
+                    const existingSessionQty = isMorning
+                        ? Number(entry.morningQuantity || 0)
+                        : Number(entry.eveningQuantity || 0);
+
+                    // Duplicate protection: same date + session already entered
+                    if (existingSessionQty > 0) {
+                        skipped.push({
+                            memberId,
+                            name: member.name,
+                            reason: 'already_exists'
+                        });
+                        continue;
+                    }
+
+                    const oldTotalQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+                    const oldAmount = Number(entry.amount || 0);
+
+                    if (isMorning) {
+                        entry.morningQuantity = quantity;
+                    } else {
+                        entry.eveningQuantity = quantity;
+                    }
+                    entry.rate = entryRate;
+                    entry.entryCount = (entry.entryCount || 1) + 1;
+                    if (item?.notes !== undefined) entry.notes = String(item.notes || '').trim();
+
+                    await entry.save();
+
+                    const newTotalQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+                    const newAmount = Number(entry.amount || 0);
+                    const deltaLiters = newTotalQty - oldTotalQty;
+                    const deltaAmount = newAmount - oldAmount;
+
+                    const inc = { totalLiters: deltaLiters, totalAmount: deltaAmount };
+                    if (!entry.isPaid) {
+                        inc.pendingAmount = deltaAmount;
+                    }
+                    await Member.findByIdAndUpdate(memberId, { $inc: inc });
+
+                    saved.push({
+                        memberId,
+                        name: member.name,
+                        entryId: entry._id,
+                        quantity,
+                        rate: entryRate,
+                        amount: Number(entry.amount || 0),
+                        updated: true
+                    });
+                } else {
+                    const created = await SellingEntry.create({
+                        member: memberId,
+                        owner: req.userId,
+                        date: entryDate,
+                        morningQuantity: isMorning ? quantity : 0,
+                        eveningQuantity: isMorning ? 0 : quantity,
+                        rate: entryRate,
+                        notes: String(item?.notes || '').trim() || member.defaultNotes || '',
+                        entryCount: 1
+                    });
+
+                    const deltaLiters = quantity;
+                    const deltaAmount = Number(created.amount || 0);
+
+                    await Member.findByIdAndUpdate(memberId, {
+                        $inc: {
+                            totalLiters: deltaLiters,
+                            totalAmount: deltaAmount,
+                            pendingAmount: deltaAmount
+                        }
+                    });
+
+                    saved.push({
+                        memberId,
+                        name: member.name,
+                        entryId: created._id,
+                        quantity,
+                        rate: entryRate,
+                        amount: Number(created.amount || 0),
+                        updated: false
+                    });
+                }
+            } catch (itemError) {
+                console.error('Bulk entry item error:', itemError);
+                skipped.push({
+                    memberId: item?.memberId || null,
+                    name: item?.name || '',
+                    reason: 'error'
+                });
+            }
+        }
+
+        res.status(201).json({
+            success: true,
+            message: `${saved.length} entries saved${skipped.length ? `, ${skipped.length} skipped` : ''}`,
+            response: {
+                date: entryDate,
+                session: normalizedSession,
+                saved,
+                skipped,
+                savedCount: saved.length,
+                skippedCount: skipped.length
+            }
+        });
+    } catch (error) {
+        console.error('Bulk create selling entries error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to save bulk entries'
+        });
+    }
+});
+
 // DELETE /api/selling-entries/:id (requires selling subscription)
 router.delete('/:id', auth, requireSubscription('selling'), async (req, res) => {
     try {

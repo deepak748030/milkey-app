@@ -202,7 +202,16 @@ router.get('/:id', auth, async (req, res) => {
 // POST /api/members (requires selling subscription)
 router.post('/', auth, requireSubscription('selling'), async (req, res) => {
     try {
-        const { name, mobile, address, ratePerLiter = 50 } = req.body;
+        const {
+            name,
+            mobile,
+            address,
+            ratePerLiter = 50,
+            dailyAutoEntry,
+            defaultMorningQuantity,
+            defaultEveningQuantity,
+            defaultNotes
+        } = req.body;
 
         if (!name || !mobile) {
             return res.status(400).json({
@@ -216,8 +225,22 @@ router.post('/', auth, requireSubscription('selling'), async (req, res) => {
             mobile: String(mobile).trim(),
             address: address?.trim() || '',
             ratePerLiter: parseFloat(ratePerLiter) || 50,
+            dailyAutoEntry: !!dailyAutoEntry,
+            defaultMorningQuantity: Math.max(0, parseFloat(defaultMorningQuantity) || 0),
+            defaultEveningQuantity: Math.max(0, parseFloat(defaultEveningQuantity) || 0),
+            defaultNotes: defaultNotes?.trim() || '',
             owner: req.userId
         });
+
+        // Non-blocking WhatsApp welcome to the new member (dedup-safe)
+        try {
+            const { sendMemberWelcome } = require('../lib/whatsappZyptos');
+            sendMemberWelcome(member).catch(err =>
+                console.error('[whatsapp] member welcome send failed:', err?.message || err)
+            );
+        } catch (waErr) {
+            console.error('[whatsapp] member welcome hook error:', waErr?.message || waErr);
+        }
 
         res.status(201).json({
             success: true,
@@ -236,13 +259,17 @@ router.post('/', auth, requireSubscription('selling'), async (req, res) => {
 // PUT /api/members/:id (requires selling subscription)
 router.put('/:id', auth, requireSubscription('selling'), async (req, res) => {
     try {
-        const { name, mobile, address, ratePerLiter } = req.body;
+        const { name, mobile, address, ratePerLiter, dailyAutoEntry, defaultMorningQuantity, defaultEveningQuantity, defaultNotes } = req.body;
 
         const updateData = {};
         if (name) updateData.name = String(name).trim();
         if (mobile) updateData.mobile = String(mobile).trim();
         if (address !== undefined) updateData.address = address?.trim() || '';
         if (ratePerLiter !== undefined) updateData.ratePerLiter = parseFloat(ratePerLiter) || 50;
+        if (dailyAutoEntry !== undefined) updateData.dailyAutoEntry = !!dailyAutoEntry;
+        if (defaultMorningQuantity !== undefined) updateData.defaultMorningQuantity = Math.max(0, parseFloat(defaultMorningQuantity) || 0);
+        if (defaultEveningQuantity !== undefined) updateData.defaultEveningQuantity = Math.max(0, parseFloat(defaultEveningQuantity) || 0);
+        if (defaultNotes !== undefined) updateData.defaultNotes = String(defaultNotes || '').trim();
 
         const member = await Member.findOneAndUpdate(
             { _id: req.params.id, owner: req.userId },

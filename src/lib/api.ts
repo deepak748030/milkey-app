@@ -1996,7 +1996,14 @@ export const getWhatsappSettings = async () => {
     return response.data
 }
 
-export const updateWhatsappSettings = async (data: { enabled?: boolean; welcomeMessage?: string; connectionId?: number }) => {
+export const updateWhatsappSettings = async (data: {
+    enabled?: boolean
+    welcomeMessage?: string
+    memberWelcomeMessage?: string
+    paymentSuccessMessage?: string
+    paymentFailedMessage?: string
+    connectionId?: number
+}) => {
     const response = await api.put('/admin/whatsapp-settings', data)
     return response.data
 }

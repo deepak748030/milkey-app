@@ -456,6 +456,24 @@ router.post('/activate-pending', auth, async (req, res) => {
             userSubscription.endDate
         ).catch(err => console.error('Error sending subscription notification:', err));
 
+        // WhatsApp payment success message (dedup-safe, non-blocking)
+        try {
+            const { sendPaymentStatusMessage } = require('../lib/whatsappZyptos');
+            User.findById(req.userId).lean().then(buyer => {
+                if (!buyer) return;
+                return sendPaymentStatusMessage({
+                    status: 'success',
+                    user: buyer,
+                    amount: userSubscription.amount,
+                    plan: subscription.name || 'Subscription',
+                    transactionId: userSubscription.transactionId,
+                    eventId: String(userSubscription._id)
+                });
+            }).catch(err => console.error('[whatsapp] payment success send failed:', err?.message || err));
+        } catch (waErr) {
+            console.error('[whatsapp] payment success hook error:', waErr?.message || waErr);
+        }
+
         res.json({
             success: true,
             message: 'Subscription activated successfully!',
@@ -516,6 +534,24 @@ router.get('/check-pending', auth, async (req, res) => {
                     });
 
                     console.log(`[check-pending] Auto-activated subscription ${pending._id} via status check`);
+
+                    // WhatsApp payment success message (dedup-safe, non-blocking)
+                    try {
+                        const { sendPaymentStatusMessage } = require('../lib/whatsappZyptos');
+                        User.findById(pending.user).lean().then(buyer => {
+                            if (!buyer) return;
+                            return sendPaymentStatusMessage({
+                                status: 'success',
+                                user: buyer,
+                                amount: pending.amount,
+                                plan: pending.lockedSubscriptionName || pending.subscription?.name || 'Subscription',
+                                transactionId: pending.transactionId,
+                                eventId: String(pending._id)
+                            });
+                        }).catch(err => console.error('[whatsapp] payment success send failed:', err?.message || err));
+                    } catch (waErr) {
+                        console.error('[whatsapp] payment success hook error:', waErr?.message || waErr);
+                    }
                 } else if (paymentStatus === 'Failed' || paymentStatus === 'FAILED') {
                     // Mark as failed
                     await UserSubscription.findByIdAndUpdate(pending._id, {
@@ -527,6 +563,24 @@ router.get('/check-pending', auth, async (req, res) => {
                         name: pending.subscription?.name,
                         status: 'failed'
                     });
+
+                    // WhatsApp payment failed message (dedup-safe, non-blocking)
+                    try {
+                        const { sendPaymentStatusMessage } = require('../lib/whatsappZyptos');
+                        User.findById(pending.user).lean().then(buyer => {
+                            if (!buyer) return;
+                            return sendPaymentStatusMessage({
+                                status: 'failed',
+                                user: buyer,
+                                amount: pending.amount,
+                                plan: pending.lockedSubscriptionName || pending.subscription?.name || 'Subscription',
+                                transactionId: pending.transactionId,
+                                eventId: String(pending._id)
+                            });
+                        }).catch(err => console.error('[whatsapp] payment failed send failed:', err?.message || err));
+                    } catch (waErr) {
+                        console.error('[whatsapp] payment failed hook error:', waErr?.message || waErr);
+                    }
                 }
                 // If still pending on ZapUPI side, leave as is
             } catch (verifyError) {

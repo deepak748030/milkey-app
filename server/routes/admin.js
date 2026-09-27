@@ -4045,6 +4045,9 @@ router.get('/whatsapp-settings', adminAuth, async (req, res) => {
             response: {
                 enabled: settings.enabled,
                 welcomeMessage: settings.welcomeMessage,
+                memberWelcomeMessage: settings.memberWelcomeMessage,
+                paymentSuccessMessage: settings.paymentSuccessMessage,
+                paymentFailedMessage: settings.paymentFailedMessage,
                 connectionId: settings.connectionId,
                 apiKeyConfigured: !!process.env.ZYPTOS_API_KEY
             }
@@ -4058,16 +4061,33 @@ router.get('/whatsapp-settings', adminAuth, async (req, res) => {
 // PUT /api/admin/whatsapp-settings
 router.put('/whatsapp-settings', adminAuth, async (req, res) => {
     try {
-        const { enabled, welcomeMessage, connectionId } = req.body || {};
+        const {
+            enabled,
+            welcomeMessage,
+            memberWelcomeMessage,
+            paymentSuccessMessage,
+            paymentFailedMessage,
+            connectionId
+        } = req.body || {};
         let settings = await WhatsappSettings.findOne();
         if (!settings) settings = new WhatsappSettings();
         if (enabled !== undefined) settings.enabled = !!enabled;
-        if (welcomeMessage !== undefined) {
-            if (typeof welcomeMessage !== 'string' || !welcomeMessage.trim()) {
-                return res.status(400).json({ success: false, message: 'Welcome message cannot be empty' });
+
+        const messageFields = [
+            { key: 'welcomeMessage', value: welcomeMessage, label: 'Welcome message' },
+            { key: 'memberWelcomeMessage', value: memberWelcomeMessage, label: 'Member welcome message' },
+            { key: 'paymentSuccessMessage', value: paymentSuccessMessage, label: 'Payment success message' },
+            { key: 'paymentFailedMessage', value: paymentFailedMessage, label: 'Payment failed message' }
+        ];
+        for (const field of messageFields) {
+            if (field.value !== undefined) {
+                if (typeof field.value !== 'string' || !field.value.trim()) {
+                    return res.status(400).json({ success: false, message: `${field.label} cannot be empty` });
+                }
+                settings[field.key] = field.value.trim().slice(0, 4096);
             }
-            settings.welcomeMessage = welcomeMessage.trim().slice(0, 4096);
         }
+
         if (connectionId !== undefined) settings.connectionId = Number(connectionId) || 0;
         await settings.save();
         res.json({
@@ -4076,6 +4096,9 @@ router.put('/whatsapp-settings', adminAuth, async (req, res) => {
             response: {
                 enabled: settings.enabled,
                 welcomeMessage: settings.welcomeMessage,
+                memberWelcomeMessage: settings.memberWelcomeMessage,
+                paymentSuccessMessage: settings.paymentSuccessMessage,
+                paymentFailedMessage: settings.paymentFailedMessage,
                 connectionId: settings.connectionId,
                 apiKeyConfigured: !!process.env.ZYPTOS_API_KEY
             }

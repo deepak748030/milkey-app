@@ -11,6 +11,9 @@ export function WhatsappSettingsPage() {
 
     const [enabled, setEnabled] = useState(true)
     const [welcomeMessage, setWelcomeMessage] = useState('')
+    const [memberWelcomeMessage, setMemberWelcomeMessage] = useState('')
+    const [paymentSuccessMessage, setPaymentSuccessMessage] = useState('')
+    const [paymentFailedMessage, setPaymentFailedMessage] = useState('')
     const [connectionId, setConnectionId] = useState<number>(0)
     const [apiKeyConfigured, setApiKeyConfigured] = useState(false)
 
@@ -25,6 +28,9 @@ export function WhatsappSettingsPage() {
             if (res.success && res.response) {
                 setEnabled(res.response.enabled)
                 setWelcomeMessage(res.response.welcomeMessage || '')
+                setMemberWelcomeMessage(res.response.memberWelcomeMessage || '')
+                setPaymentSuccessMessage(res.response.paymentSuccessMessage || '')
+                setPaymentFailedMessage(res.response.paymentFailedMessage || '')
                 setConnectionId(res.response.connectionId || 0)
                 setApiKeyConfigured(!!res.response.apiKeyConfigured)
             }
@@ -42,9 +48,19 @@ export function WhatsappSettingsPage() {
 
     const handleSave = async () => {
         if (!welcomeMessage.trim()) { flash('Welcome message cannot be empty', true); return }
+        if (!memberWelcomeMessage.trim()) { flash('Member welcome message cannot be empty', true); return }
+        if (!paymentSuccessMessage.trim()) { flash('Payment success message cannot be empty', true); return }
+        if (!paymentFailedMessage.trim()) { flash('Payment failed message cannot be empty', true); return }
         setSaving(true)
         try {
-            const res = await updateWhatsappSettings({ enabled, welcomeMessage, connectionId })
+            const res = await updateWhatsappSettings({
+                enabled,
+                welcomeMessage,
+                memberWelcomeMessage,
+                paymentSuccessMessage,
+                paymentFailedMessage,
+                connectionId
+            })
             if (res.success) flash('Settings saved successfully')
             else flash(res.message || 'Failed to save', true)
         } catch (e: any) {
@@ -83,9 +99,9 @@ export function WhatsappSettingsPage() {
                     <MessageCircle className="w-6 h-6" />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground">WhatsApp Welcome Message</h1>
+                    <h1 className="text-2xl font-bold text-foreground">WhatsApp Automation</h1>
                     <p className="text-muted-foreground text-sm mt-0.5">
-                        Sent automatically to a user's WhatsApp number when they register. Powered by Zyptos.
+                        Automatic WhatsApp messages for new users, new members and payment success/failed events. Powered by Zyptos.
                     </p>
                 </div>
             </div>
@@ -130,7 +146,7 @@ export function WhatsappSettingsPage() {
                 </div>
 
                 <div>
-                    <label className="block text-sm font-medium text-foreground mb-1.5">Welcome Message</label>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Welcome Message (New User Registration)</label>
                     <textarea
                         value={welcomeMessage}
                         onChange={e => setWelcomeMessage(e.target.value)}
@@ -141,6 +157,51 @@ export function WhatsappSettingsPage() {
                     />
                     <p className="text-xs text-muted-foreground mt-1.5">
                         Available variables: <code>{'{{name}}'}</code>, <code>{'{{phone}}'}</code>, <code>{'{{referralCode}}'}</code>, <code>{'{{email}}'}</code>
+                    </p>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Member Welcome Message (New Member Added)</label>
+                    <textarea
+                        value={memberWelcomeMessage}
+                        onChange={e => setMemberWelcomeMessage(e.target.value)}
+                        rows={4}
+                        maxLength={4096}
+                        placeholder="Hi {{name}}, you have been added as a member on Milkey."
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                        Sent to the member's WhatsApp when a new member/customer is added. Variables: <code>{'{{name}}'}</code>, <code>{'{{phone}}'}</code>
+                    </p>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Payment Success Message</label>
+                    <textarea
+                        value={paymentSuccessMessage}
+                        onChange={e => setPaymentSuccessMessage(e.target.value)}
+                        rows={4}
+                        maxLength={4096}
+                        placeholder="Hi {{name}}, your payment of ₹{{amount}} for {{plan}} was successful."
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                        Sent when a payment/subscription transaction succeeds. Variables: <code>{'{{name}}'}</code>, <code>{'{{phone}}'}</code>, <code>{'{{amount}}'}</code>, <code>{'{{plan}}'}</code>, <code>{'{{transactionId}}'}</code>, <code>{'{{date}}'}</code>
+                    </p>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-foreground mb-1.5">Payment Failed Message</label>
+                    <textarea
+                        value={paymentFailedMessage}
+                        onChange={e => setPaymentFailedMessage(e.target.value)}
+                        rows={4}
+                        maxLength={4096}
+                        placeholder="Hi {{name}}, your payment could not be completed. Please try again."
+                        className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                        Sent when a payment/subscription transaction fails. Variables: <code>{'{{name}}'}</code>, <code>{'{{phone}}'}</code>, <code>{'{{amount}}'}</code>, <code>{'{{plan}}'}</code>, <code>{'{{transactionId}}'}</code>, <code>{'{{date}}'}</code>
                     </p>
                 </div>
 

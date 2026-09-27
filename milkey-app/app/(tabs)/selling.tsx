@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndic
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X } from 'lucide-react-native';
+import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X, Zap } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
 import { SellingPaymentCalendar } from '@/components/SellingPaymentCalendar';
@@ -16,6 +16,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { BulkEntryModal } from '@/components/BulkEntryModal';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
@@ -182,8 +183,14 @@ export default function SellingScreen() {
     const [memberMobile, setMemberMobile] = useState('');
     const [memberAddress, setMemberAddress] = useState('');
     const [memberRatePerLiter, setMemberRatePerLiter] = useState('50');
+    const [memberDailyAutoEntry, setMemberDailyAutoEntry] = useState(false);
+    const [memberDefaultMorning, setMemberDefaultMorning] = useState('');
+    const [memberDefaultEvening, setMemberDefaultEvening] = useState('');
+    const [memberDefaultNotes, setMemberDefaultNotes] = useState('');
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [showMemberModal, setShowMemberModal] = useState(false);
+    // Bulk (one session) entry modal
+    const [showBulkEntryModal, setShowBulkEntryModal] = useState(false);
     const [memberTabSearch, setMemberTabSearch] = useState('');
     const [memberSearchLoading, setMemberSearchLoading] = useState(false);
 
@@ -706,7 +713,11 @@ export default function SellingScreen() {
                     name: memberName,
                     mobile: memberMobile,
                     address: memberAddress,
-                    ratePerLiter: parseFloat(memberRatePerLiter) || 50
+                    ratePerLiter: parseFloat(memberRatePerLiter) || 50,
+                    dailyAutoEntry: memberDailyAutoEntry,
+                    defaultMorningQuantity: parseFloat(memberDefaultMorning) || 0,
+                    defaultEveningQuantity: parseFloat(memberDefaultEvening) || 0,
+                    defaultNotes: memberDefaultNotes
                 });
                 if (res.success) {
                     showAlert('Success', 'Member updated successfully');
@@ -721,7 +732,11 @@ export default function SellingScreen() {
                     name: memberName,
                     mobile: memberMobile,
                     address: memberAddress,
-                    ratePerLiter: parseFloat(memberRatePerLiter) || 50
+                    ratePerLiter: parseFloat(memberRatePerLiter) || 50,
+                    dailyAutoEntry: memberDailyAutoEntry,
+                    defaultMorningQuantity: parseFloat(memberDefaultMorning) || 0,
+                    defaultEveningQuantity: parseFloat(memberDefaultEvening) || 0,
+                    defaultNotes: memberDefaultNotes
                 });
                 if (res.success) {
                     showAlert('Success', 'Member added successfully');
@@ -744,6 +759,10 @@ export default function SellingScreen() {
         setMemberMobile('');
         setMemberAddress('');
         setMemberRatePerLiter('50');
+        setMemberDailyAutoEntry(false);
+        setMemberDefaultMorning('');
+        setMemberDefaultEvening('');
+        setMemberDefaultNotes('');
         setEditingMember(null);
     };
 
@@ -753,6 +772,10 @@ export default function SellingScreen() {
         setMemberMobile(member.mobile);
         setMemberAddress(member.address || '');
         setMemberRatePerLiter(member.ratePerLiter?.toString() || '50');
+        setMemberDailyAutoEntry(!!member.dailyAutoEntry);
+        setMemberDefaultMorning(member.defaultMorningQuantity ? String(member.defaultMorningQuantity) : '');
+        setMemberDefaultEvening(member.defaultEveningQuantity ? String(member.defaultEveningQuantity) : '');
+        setMemberDefaultNotes(member.defaultNotes || '');
         setShowMemberModal(true);
     };
 
@@ -1670,7 +1693,13 @@ export default function SellingScreen() {
 
     const renderEntryTab = () => (
         <View>
-            <Text style={styles.sectionTitle}>Milk Selling Entry</Text>
+            <View style={styles.entryHeaderRow}>
+                <Text style={styles.sectionTitle}>Milk Selling Entry</Text>
+                <Pressable style={styles.bulkEntryBtn} onPress={() => setShowBulkEntryModal(true)}>
+                    <Zap size={14} color={colors.white} />
+                    <Text style={styles.bulkEntryBtnText}>Bulk Entry</Text>
+                </Pressable>
+            </View>
 
             <View style={styles.inputGroup}>
                 <Text style={styles.label}>Member (Customer)</Text>
@@ -2814,6 +2843,61 @@ export default function SellingScreen() {
                                         multiline
                                     />
                                 </View>
+
+                                {/* Daily Auto Entry toggle + defaults for bulk/quick session entry */}
+                                <View style={styles.autoEntryRow}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.label}>Daily Auto Entry</Text>
+                                        <Text style={styles.autoEntryHint}>
+                                            ON karne par ye member Bulk Entry (session) list me automatically aayega
+                                        </Text>
+                                    </View>
+                                    <Pressable
+                                        style={[styles.toggleTrack, memberDailyAutoEntry && styles.toggleTrackOn]}
+                                        onPress={() => setMemberDailyAutoEntry(v => !v)}
+                                    >
+                                        <View style={[styles.toggleThumb, memberDailyAutoEntry && styles.toggleThumbOn]} />
+                                    </Pressable>
+                                </View>
+
+                                {memberDailyAutoEntry && (
+                                    <>
+                                        <View style={styles.row}>
+                                            <View style={[styles.modalInputGroup, { flex: 1 }]}>
+                                                <Text style={styles.label}>Default Morning (L)</Text>
+                                                <TextInput
+                                                    style={styles.modalInput}
+                                                    placeholder="0"
+                                                    value={memberDefaultMorning}
+                                                    onChangeText={setMemberDefaultMorning}
+                                                    keyboardType="decimal-pad"
+                                                    placeholderTextColor={colors.mutedForeground}
+                                                />
+                                            </View>
+                                            <View style={[styles.modalInputGroup, { flex: 1 }]}>
+                                                <Text style={styles.label}>Default Evening (L)</Text>
+                                                <TextInput
+                                                    style={styles.modalInput}
+                                                    placeholder="0"
+                                                    value={memberDefaultEvening}
+                                                    onChangeText={setMemberDefaultEvening}
+                                                    keyboardType="decimal-pad"
+                                                    placeholderTextColor={colors.mutedForeground}
+                                                />
+                                            </View>
+                                        </View>
+                                        <View style={styles.modalInputGroup}>
+                                            <Text style={styles.label}>Default Note (optional)</Text>
+                                            <TextInput
+                                                style={styles.modalInput}
+                                                placeholder="Entry details / note"
+                                                value={memberDefaultNotes}
+                                                onChangeText={setMemberDefaultNotes}
+                                                placeholderTextColor={colors.mutedForeground}
+                                            />
+                                        </View>
+                                    </>
+                                )}
                             </View>
                         </ScrollView>
 
@@ -3152,6 +3236,13 @@ export default function SellingScreen() {
             </Modal>
 
             {renderMemberModal()}
+
+            {/* Bulk (one session) entry modal */}
+            <BulkEntryModal
+                isVisible={showBulkEntryModal}
+                onClose={() => setShowBulkEntryModal(false)}
+                onSuccess={fetchData}
+            />
         </View>
     );
 }
@@ -3401,6 +3492,25 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 6,
+    },
+    entryHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    bulkEntryBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        backgroundColor: colors.primary,
+        borderRadius: 8,
+    },
+    bulkEntryBtnText: {
+        fontSize: 12.5,
+        fontWeight: '700',
+        color: colors.white,
     },
     lastCount: {
         fontSize: 11,
@@ -4075,6 +4185,44 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         paddingVertical: 12,
         fontSize: 15,
         color: colors.foreground,
+    },
+    autoEntryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 16,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: colors.secondary,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    autoEntryHint: {
+        fontSize: 10.5,
+        color: colors.mutedForeground,
+        lineHeight: 14,
+        marginTop: 2,
+    },
+    toggleTrack: {
+        width: 46,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: colors.mutedForeground,
+        padding: 3,
+        justifyContent: 'center',
+    },
+    toggleTrackOn: {
+        backgroundColor: colors.primary,
+    },
+    toggleThumb: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: colors.white,
+    },
+    toggleThumbOn: {
+        alignSelf: 'flex-end',
     },
     memberModalFooter: {
         flexDirection: 'row',
