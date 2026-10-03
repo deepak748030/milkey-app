@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
-import { ArrowLeft, Trash2, Edit2, X, Save, Calendar as CalendarIcon, Download, Share2, Sun, Moon, Zap } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Edit2, X, Save, Calendar as CalendarIcon, Download, Share2, Zap } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { sellingEntriesApi, SellingEntry } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
@@ -88,8 +88,8 @@ export default function ViewEntriesScreen() {
     // Quick entry modal state (single member, isi page se)
     const [quickVisible, setQuickVisible] = useState(false);
     const [quickDate, setQuickDate] = useState('');
-    const [quickSession, setQuickSession] = useState<'morning' | 'evening'>('morning');
-    const [quickQty, setQuickQty] = useState('');
+    const [quickMorn, setQuickMorn] = useState('');
+    const [quickEve, setQuickEve] = useState('');
     const [quickRate, setQuickRate] = useState('');
     const [quickSaving, setQuickSaving] = useState(false);
     const [quickDatePicker, setQuickDatePicker] = useState(false);
@@ -246,8 +246,8 @@ export default function ViewEntriesScreen() {
     // ─── Quick entry (yahi member, isi page se) ───
     const openQuick = () => {
         setQuickDate(toISODate(new Date()));
-        setQuickSession('morning');
-        setQuickQty('');
+        setQuickMorn('');
+        setQuickEve('');
         setQuickRate(defaultRate || '');
         setQuickVisible(true);
     };
@@ -261,14 +261,15 @@ export default function ViewEntriesScreen() {
     };
 
     const handleQuickSave = async () => {
-        const q = parseFloat(quickQty || '0');
+        const m = parseFloat(quickMorn || '0') || 0;
+        const e = parseFloat(quickEve || '0') || 0;
         const r = parseFloat(quickRate || '0');
         if (!quickDate) {
             showAlert('Error', 'Select a date');
             return;
         }
-        if (!q || q <= 0 || Number.isNaN(q)) {
-            showAlert('Error', 'Enter quantity (L)');
+        if (m <= 0 && e <= 0) {
+            showAlert('Error', 'Enter quantity (L) for Morning or Evening');
             return;
         }
         if (!r || r <= 0 || Number.isNaN(r)) {
@@ -281,8 +282,8 @@ export default function ViewEntriesScreen() {
                 memberId,
                 date: quickDate,
                 rate: r,
-                morningQuantity: quickSession === 'morning' ? q : 0,
-                eveningQuantity: quickSession === 'evening' ? q : 0,
+                morningQuantity: Math.max(0, m),
+                eveningQuantity: Math.max(0, e),
             });
             if (res.success) {
                 toast('Entry added');
@@ -730,52 +731,30 @@ export default function ViewEntriesScreen() {
                                 </Pressable>
                             </View>
 
-                            {/* Session - Morning / Evening */}
-                            <View>
-                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Session</Text>
-                                <View style={{ flexDirection: 'row', gap: 10 }}>
-                                    <Pressable
-                                        style={[
-                                            styles.qeSessionBtn,
-                                            quickSession === 'morning'
-                                                ? { backgroundColor: colors.warning, borderColor: colors.warning }
-                                                : { borderColor: colors.border },
-                                        ]}
-                                        onPress={() => setQuickSession('morning')}
-                                    >
-                                        <Sun size={16} color={quickSession === 'morning' ? colors.white : colors.warning} />
-                                        <Text style={{ fontSize: 13, fontWeight: '700', color: quickSession === 'morning' ? colors.white : colors.foreground }}>
-                                            Morning
-                                        </Text>
-                                    </Pressable>
-                                    <Pressable
-                                        style={[
-                                            styles.qeSessionBtn,
-                                            quickSession === 'evening'
-                                                ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                                                : { borderColor: colors.border },
-                                        ]}
-                                        onPress={() => setQuickSession('evening')}
-                                    >
-                                        <Moon size={16} color={quickSession === 'evening' ? colors.white : colors.primary} />
-                                        <Text style={{ fontSize: 13, fontWeight: '700', color: quickSession === 'evening' ? colors.white : colors.foreground }}>
-                                            Evening
-                                        </Text>
-                                    </Pressable>
+                            {/* Morning + Evening qty */}
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Morning (L)</Text>
+                                    <TextInput
+                                        value={quickMorn}
+                                        onChangeText={setQuickMorn}
+                                        placeholder="0"
+                                        placeholderTextColor={colors.mutedForeground}
+                                        keyboardType="decimal-pad"
+                                        style={[styles.input, { color: colors.foreground, backgroundColor: colors.input, borderColor: colors.border }]}
+                                    />
                                 </View>
-                            </View>
-
-                            {/* Qty */}
-                            <View>
-                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Qty (L)</Text>
-                                <TextInput
-                                    value={quickQty}
-                                    onChangeText={setQuickQty}
-                                    placeholder="0"
-                                    placeholderTextColor={colors.mutedForeground}
-                                    keyboardType="decimal-pad"
-                                    style={[styles.input, { color: colors.foreground, backgroundColor: colors.input, borderColor: colors.border }]}
-                                />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={[styles.label, { color: colors.mutedForeground }]}>Evening (L)</Text>
+                                    <TextInput
+                                        value={quickEve}
+                                        onChangeText={setQuickEve}
+                                        placeholder="0"
+                                        placeholderTextColor={colors.mutedForeground}
+                                        keyboardType="decimal-pad"
+                                        style={[styles.input, { color: colors.foreground, backgroundColor: colors.input, borderColor: colors.border }]}
+                                    />
+                                </View>
                             </View>
 
                             {/* Rate - member default, editable */}
@@ -800,7 +779,7 @@ export default function ViewEntriesScreen() {
                             <View style={[styles.preview, { backgroundColor: colors.secondary }]}>
                                 <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>Amount</Text>
                                 <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '700' }}>
-                                    ₹{((parseFloat(quickQty || '0') || 0) * (parseFloat(quickRate || '0') || 0)).toFixed(2)}
+                                    ₹{(((parseFloat(quickMorn || '0') || 0) + (parseFloat(quickEve || '0') || 0)) * (parseFloat(quickRate || '0') || 0)).toFixed(2)}
                                 </Text>
                             </View>
 
@@ -990,16 +969,6 @@ const styles = StyleSheet.create({
         gap: 6,
     },
 
-    qeSessionBtn: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingVertical: 10,
-        borderRadius: 8,
-        borderWidth: 1,
-    },
     datePickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
     datePickerModal: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 20, overflow: 'hidden' },
     datePickerHeader: {
