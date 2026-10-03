@@ -416,66 +416,11 @@ export default function HomeScreen() {
         />
 
         {/* Products */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>{t.home.products}</Text>
-          <Pressable style={styles.viewProductsBtn} onPress={() => router.push('/products')}>
-            <Package size={13} color={colors.primary} />
-            <Text style={styles.viewProductsBtnText}>{t.home.product}</Text>
-            <ChevronRight size={13} color={colors.primary} />
-          </Pressable>
-        </View>
         <Pressable style={styles.productPageBox} onPress={() => router.push('/products')}>
           <Package size={16} color={colors.primary} />
           <Text style={styles.productPageBoxText}>{t.home.product}</Text>
           <ChevronRight size={16} color={colors.primary} />
         </Pressable>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : (
-          <View style={styles.productsGrid}>
-            {products.map((product) => (
-              <View key={product._id} style={styles.productCard}>
-                {product.image ? (
-                  <Image
-                    source={{ uri: product.image }}
-                    style={styles.productImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.productIconContainer}>
-                    <Text style={styles.productIcon}>{product.icon}</Text>
-                  </View>
-                )}
-                <View style={styles.productContent}>
-                  <Text style={styles.productName}>{product.name}</Text>
-                  <Text style={styles.productPrice}>₹{product.price}</Text>
-
-                  <View style={styles.quantityRow}>
-                    <Pressable
-                      style={styles.quantityBtn}
-                      onPress={() => updateQuantity(product._id, -1)}
-                    >
-                      <Text style={styles.quantityBtnText}>-</Text>
-                    </Pressable>
-                    <Text style={styles.quantityText}>{quantities[product._id] || 1}</Text>
-                    <Pressable
-                      style={styles.quantityBtn}
-                      onPress={() => updateQuantity(product._id, 1)}
-                    >
-                      <Text style={styles.quantityBtnText}>+</Text>
-                    </Pressable>
-                  </View>
-
-                  <Pressable style={styles.addToCartBtn} onPress={() => handleAddToCart(product)}>
-                    <Text style={styles.addToCartText}>{t.home.addToCart}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
       </ScrollView>
 
       {/* Cart Added Success Modal */}
