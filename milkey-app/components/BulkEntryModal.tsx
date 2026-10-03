@@ -25,8 +25,8 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     const { colors, isDark } = useTheme();
 
     // State
-    // Morning + Evening dono sessions by-default selected (user toggle kar sakta hai)
-    const [sessions, setSessions] = useState<BulkSession[]>(['morning', 'evening']);
+    // Default me koi session pre-selected nahi — user ko Morning/Evening choose karna hoga
+    const [sessions, setSessions] = useState<BulkSession[]>([]);
     const [showList, setShowList] = useState(false);
     const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
     const [rows, setRows] = useState<BulkRow[]>([]);
@@ -61,7 +61,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     };
 
     const resetState = () => {
-        setSessions(['morning', 'evening']);
+        setSessions([]);
         setShowList(false);
         setEntryDate(formatLocalDate(new Date()));
         setRows([]);
