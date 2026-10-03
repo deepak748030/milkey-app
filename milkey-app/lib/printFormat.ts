@@ -26,8 +26,27 @@ function safe(text: string | number | undefined | null): string {
 }
 
 /** Single horizontal separator line. */
-export function line(width: number = COLUMN_WIDTH_58, char: string = '.'): string {
-    return `[L]${char.repeat(width)}` + NEW_LINE;
+export function line(width: number = COLUMN_WIDTH_58, char: string = '.', command: string = ''): string {
+    return `[L]${command}${char.repeat(width)}` + NEW_LINE;
+}
+
+/**
+ * ESC/POS raw-command passthrough helpers.
+ *
+ * The DantSu payload syntax has no line-spacing tag, but raw ESC/POS
+ * command bytes embedded in a line's text are forwarded to the printer
+ * unchanged. They count toward the column's character width, so only
+ * attach them to full-width separator lines (padding there is already 0).
+ */
+
+/** ESC 3 n — set line spacing to `dots` (e.g. 48 ≈ 1.5x of the default 32-dot pitch). */
+export function setLineSpacing(dots: number): string {
+    return '\x1B\x33' + String.fromCharCode(Math.max(0, Math.min(255, Math.round(dots))));
+}
+
+/** ESC 2 — restore the printer's default line spacing. */
+export function resetLineSpacing(): string {
+    return '\x1B\x32';
 }
 
 /** Bold double separator line. */
@@ -63,6 +82,13 @@ export interface ReceiptBrandingOptions {
     address?: string;
     showMobileOnReceipt?: boolean;
     width?: number;
+    /**
+     * Raw ESC/POS command bytes placed on the closing divider line
+     * (e.g. `setLineSpacing(n)`), so everything below prints with that
+     * line pitch. Use ASCII-only commands — Devanagari preprocessing
+     * keeps these lines as native text.
+     */
+    lineCommand?: string;
 }
 
 /** Common thermal receipt top: Dairy name + optional address + mobile. */
@@ -72,7 +98,7 @@ export function brandedHeader(opts: ReceiptBrandingOptions = {}): string {
     p += headerTitle(opts.dairyName || 'MILKEY DAIRY', w);
     if (opts.address) p += center(opts.address);
     if (opts.showMobileOnReceipt !== false && opts.mobileNumber) p += center('PH: ' + opts.mobileNumber);
-    p += line(w);
+    p += line(w, '.', opts.lineCommand || '');
     return p;
 }
 
@@ -80,9 +106,11 @@ export function brandedHeader(opts: ReceiptBrandingOptions = {}): string {
  * Common thermal receipt bottom: a single closing note line.
  * The user-configured `extraInfo` is treated as the footer text and falls
  * back to "Thank You !" when empty, matching the Print Settings default.
+ * `lineCommand` places raw ESC/POS bytes on the opening divider line
+ * (e.g. `resetLineSpacing()` to restore the default pitch for the footer).
  */
-export function brandedFooter(extraInfo?: string, width: number = COLUMN_WIDTH_58): string {
-    let p = line(width);
+export function brandedFooter(extraInfo?: string, width: number = COLUMN_WIDTH_58, lineCommand: string = ''): string {
+    let p = line(width, '.', lineCommand);
     const note = safe(extraInfo).trim() || 'Thank You !';
     p += center(note);
     p += feed(4);
