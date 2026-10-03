@@ -424,6 +424,11 @@ export default function HomeScreen() {
             <ChevronRight size={13} color={colors.primary} />
           </Pressable>
         </View>
+        <Pressable style={styles.productPageBox} onPress={() => router.push('/products')}>
+          <Package size={16} color={colors.primary} />
+          <Text style={styles.productPageBoxText}>{t.home.product}</Text>
+          <ChevronRight size={16} color={colors.primary} />
+        </Pressable>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -775,5 +780,24 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     color: colors.white,
     fontSize: 11,
     fontWeight: '600',
+  },
+  productPageBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.secondary,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  productPageBoxText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });
