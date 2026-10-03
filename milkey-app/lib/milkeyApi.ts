@@ -44,6 +44,11 @@ export interface Member {
     pendingAmount: number;
     sellingPaymentBalance: number;
     isActive: boolean;
+    // Daily auto entry (bulk/quick session entry) settings
+    dailyAutoEntry?: boolean;
+    defaultMorningQuantity?: number;
+    defaultEveningQuantity?: number;
+    defaultNotes?: string;
 }
 
 export interface SellingEntry {
@@ -1256,14 +1261,32 @@ export const membersApi = {
         return apiRequest<{ data: MemberBalanceReport[]; summary: BalanceReportSummary }>('/members/balance-report');
     },
 
-    create: async (data: { name: string; mobile: string; address?: string; ratePerLiter: number }) => {
+    create: async (data: {
+        name: string;
+        mobile: string;
+        address?: string;
+        ratePerLiter: number;
+        dailyAutoEntry?: boolean;
+        defaultMorningQuantity?: number;
+        defaultEveningQuantity?: number;
+        defaultNotes?: string;
+    }) => {
         return apiRequest<Member>('/members', {
             method: 'POST',
             body: JSON.stringify(data),
         });
     },
 
-    update: async (id: string, data: { name?: string; mobile?: string; address?: string; ratePerLiter?: number }) => {
+    update: async (id: string, data: {
+        name?: string;
+        mobile?: string;
+        address?: string;
+        ratePerLiter?: number;
+        dailyAutoEntry?: boolean;
+        defaultMorningQuantity?: number;
+        defaultEveningQuantity?: number;
+        defaultNotes?: string;
+    }) => {
         return apiRequest<Member>(`/members/${id}`, {
             method: 'PUT',
             body: JSON.stringify(data),
@@ -1278,6 +1301,37 @@ export const membersApi = {
 };
 
 // Selling Entries API (for Selling tab)
+export type BulkSession = 'morning' | 'evening';
+
+export interface BulkEntryMember {
+    memberId: string;
+    name: string;
+    mobile: string;
+    ratePerLiter: number;
+    defaultQuantity: number;
+    defaultNotes: string;
+    alreadyEntered: boolean;
+    existingEntryId: string | null;
+    existingQuantity: number;
+    existingRate: number | null;
+}
+
+export interface BulkEntryPayloadItem {
+    memberId: string;
+    quantity: number;
+    rate?: number;
+    notes?: string;
+}
+
+export interface BulkEntryResult {
+    date: string;
+    session: BulkSession;
+    saved: { memberId: string; name: string; entryId: string; quantity: number; rate: number; amount: number; updated: boolean }[];
+    skipped: { memberId: string | null; name: string; reason: string }[];
+    savedCount: number;
+    skippedCount: number;
+}
+
 export const sellingEntriesApi = {
     getAll: async (params?: { memberId?: string; startDate?: string; endDate?: string; limit?: number; page?: number }) => {
         const queryParams = new URLSearchParams();
@@ -1324,6 +1378,24 @@ export const sellingEntriesApi = {
     ) => {
         return apiRequest<SellingEntry>(`/selling-entries/${id}`, {
             method: 'PUT',
+            body: JSON.stringify(data),
+        });
+    },
+
+    // Bulk/Quick entry: list Daily Auto Entry members for a session
+    bulkList: async (params: { date: string; session: BulkSession }) => {
+        const queryParams = new URLSearchParams();
+        queryParams.append('date', params.date);
+        queryParams.append('session', params.session);
+        return apiRequest<{ date: string; session: BulkSession; data: BulkEntryMember[]; count: number }>(
+            `/selling-entries/bulk-list?${queryParams.toString()}`
+        );
+    },
+
+    // Bulk/Quick entry: submit a whole session's entries at once
+    bulkCreate: async (data: { date: string; session: BulkSession; entries: BulkEntryPayloadItem[] }) => {
+        return apiRequest<BulkEntryResult>('/selling-entries/bulk', {
+            method: 'POST',
             body: JSON.stringify(data),
         });
     },
@@ -1586,9 +1658,12 @@ export const userSubscriptionsApi = {
 export interface Banner {
     _id: string;
     title: string;
+    subtitle?: string;
     image: string;
     badge?: string;
     type?: 'event' | 'category';
+    linkType?: 'category' | 'product' | 'url' | 'none';
+    linkValue?: string;
     order?: number;
     isActive?: boolean;
 }

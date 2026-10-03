@@ -20,7 +20,7 @@ import {
 } from '@/lib/milkeyApi';
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { brandedFooter, brandedHeader, brandedHeaderHtml, brandedFooterHtml, center as fmtCenter, left as fmtLeft, twoCol, threeCol, line as fmtLine, doubleLine, feed, buildReceiptPayload } from '@/lib/printFormat';
+import { brandedFooter, brandedHeader, brandedHeaderHtml, brandedFooterHtml, center as fmtCenter, left as fmtLeft, twoCol, threeCol, line as fmtLine, doubleLine, feed, buildReceiptPayload, setLineSpacing, resetLineSpacing } from '@/lib/printFormat';
 import { getSlipLabels, getThermalSlipLabels } from '@/lib/printTranslations';
 import * as Sharing from 'expo-sharing';
 import { SuccessModal } from '@/components/SuccessModal';
@@ -324,7 +324,7 @@ export default function PurchaseScreen() {
         }
     }, [entryDate, entryShift, printSettings]);
 
-    const receiptHeader = useCallback((label?: string) => {
+    const receiptHeader = useCallback((label?: string, lineCommand?: string) => {
         let payload = '';
         if (label) payload += fmtCenter(label);
         payload += brandedHeader({
@@ -332,26 +332,33 @@ export default function PurchaseScreen() {
             address: printSettings?.address || '',
             mobileNumber: printSettings?.mobileNumber || '',
             showMobileOnReceipt: printSettings?.showMobileOnReceipt !== false,
+            lineCommand,
         });
         return payload;
     }, [printSettings]);
 
-    const receiptFooter = useCallback(() => {
-        return brandedFooter(printSettings?.extraInfo?.trim());
+    const receiptFooter = useCallback((lineCommand?: string) => {
+        return brandedFooter(printSettings?.extraInfo?.trim(), undefined, lineCommand || '');
     }, [printSettings]);
+
+    // 1.5x line spacing (top-to-bottom gap) for the milk-slip body rows.
+    // ESC 3 n sets the line pitch in dots; 48 = 1.5x the printer's default
+    // 32-dot pitch. Applied via the header divider so English text rows AND
+    // Hindi bitmap rows both get the wider gap; the footer divider resets it.
+    const MILK_SLIP_LINE_SPACING_DOTS = 48;
 
     const buildMilkSlipPayload = useCallback((entry: MilkCollection) => {
         const t = getThermalSlipLabels();
         const dObj = new Date(entry.date);
         const dStr = `${String(dObj.getDate()).padStart(2, '0')}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getFullYear()).slice(-2)}`;
-        let payload = receiptHeader();
+        let payload = receiptHeader(undefined, setLineSpacing(MILK_SLIP_LINE_SPACING_DOTS));
         payload += `[L]${t.code} : ${entry.farmerCode || '-'}\n`;
         payload += `[L]${t.name} : ${entry.purchaseFarmer?.name || '-'}\n`;
         payload += `[L]${t.date} : ${dStr}[R]${t.shift} : ${entry.shift === 'morning' ? t.morningShort : t.eveningShort}\n`;
         payload += `[L]${t.fat} : ${(entry.fat || 0).toFixed(1)}[R]${t.snf} : ${((entry as any).snf || 0).toFixed(1)}\n`;
         payload += `[L]${t.qty} : ${Number(entry.quantity).toFixed(2)}[R]${t.rate} : ${Number(entry.rate).toFixed(1)}\n`;
         payload += `[L]${t.amount} : ${Number(entry.amount).toFixed(2)}\n`;
-        payload += receiptFooter();
+        payload += receiptFooter(resetLineSpacing());
         return payload;
     }, [receiptHeader, receiptFooter]);
 

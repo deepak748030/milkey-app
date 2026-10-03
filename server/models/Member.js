@@ -23,6 +23,26 @@ const memberSchema = new mongoose.Schema({
         min: [0, 'Rate cannot be negative'],
         default: 50
     },
+    // Daily auto entry (bulk/quick session entry) settings
+    dailyAutoEntry: {
+        type: Boolean,
+        default: false
+    },
+    defaultMorningQuantity: {
+        type: Number,
+        default: 0,
+        min: [0, 'Default morning quantity cannot be negative']
+    },
+    defaultEveningQuantity: {
+        type: Number,
+        default: 0,
+        min: [0, 'Default evening quantity cannot be negative']
+    },
+    defaultNotes: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     owner: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',

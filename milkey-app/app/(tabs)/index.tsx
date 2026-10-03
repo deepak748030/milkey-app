@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, ActivityIndicator, RefreshControl, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, ActivityIndicator, RefreshControl, Animated, Linking } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -7,11 +7,12 @@ import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
 import { productsApi, reportsApi, bannersApi, Product, HomeStats, Banner } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
-import { Plus, Wallet } from 'lucide-react-native';
+import { Plus, Wallet, Zap, ChevronRight, Package } from 'lucide-react-native';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useTranslation } from '@/hooks/useTranslation';
 import { QuickEntryModal } from '@/components/QuickEntryModal';
 import { QuickAdvanceModal } from '@/components/QuickAdvanceModal';
+import { BulkEntryModal } from '@/components/BulkEntryModal';
 import { useSubscriptionStore, shouldShowSubscriptionModal, markSubscriptionModalShown } from '@/lib/subscriptionStore';
 import { SuccessModal } from '@/components/SuccessModal';
 import { OverviewRangeModal } from '@/components/OverviewRangeModal';
@@ -50,6 +51,9 @@ export default function HomeScreen() {
 
   // Quick Advance modal state
   const [showQuickAdvanceModal, setShowQuickAdvanceModal] = useState(false);
+
+  // Bulk (one session) entry modal state
+  const [showBulkEntryModal, setShowBulkEntryModal] = useState(false);
 
   // Overview range modal state (collection / selling breakdown by date range)
   const [overviewRangeKind, setOverviewRangeKind] = useState<'collection' | 'selling' | null>(null);
@@ -222,6 +226,20 @@ export default function HomeScreen() {
     setCartSuccessVisible(true);
   };
 
+  // Open banner hyperlink (e.g. YouTube tutorial video / any URL)
+  const handleBannerPress = async (banner: Banner) => {
+    const url = (banner.linkValue || '').trim();
+    if (!url) return;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      // Silent — invalid or unsupported URL
+    }
+  };
+
   const styles = createStyles(colors, isDark);
 
   return (
@@ -264,7 +282,11 @@ export default function HomeScreen() {
               contentContainerStyle={styles.bannerScrollContainer}
             >
               {banners.map((banner) => (
-                <View key={banner._id} style={styles.banner}>
+                <Pressable
+                  key={banner._id}
+                  style={styles.banner}
+                  onPress={() => handleBannerPress(banner)}
+                >
                   <Image
                     source={{ uri: banner.image }}
                     style={styles.bannerImage}
@@ -275,7 +297,12 @@ export default function HomeScreen() {
                       <Text style={styles.bannerTitle}>{banner.title}</Text>
                     </View>
                   )}
-                </View>
+                  {!!banner.linkValue && (
+                    <View style={styles.bannerLinkBadge}>
+                      <Text style={styles.bannerLinkBadgeText}>🔗 Link</Text>
+                    </View>
+                  )}
+                </Pressable>
               ))}
             </ScrollView>
 
@@ -357,6 +384,15 @@ export default function HomeScreen() {
           </Pressable>
           <Pressable
             style={styles.quickActionCard}
+            onPress={() => setShowBulkEntryModal(true)}
+          >
+            <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
+              <Zap size={20} color={colors.primary} />
+            </View>
+            <Text style={styles.quickActionText}>{t.home.bulkEntry}</Text>
+          </Pressable>
+          <Pressable
+            style={styles.quickActionCard}
             onPress={() => setShowQuickAdvanceModal(true)}
           >
             <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
@@ -380,8 +416,22 @@ export default function HomeScreen() {
           onSuccess={() => fetchHomeStats()}
         />
 
+        {/* Bulk (one session) Entry Modal */}
+        <BulkEntryModal
+          isVisible={showBulkEntryModal}
+          onClose={() => setShowBulkEntryModal(false)}
+          onSuccess={() => fetchHomeStats()}
+        />
+
         {/* Products */}
-        <Text style={styles.sectionTitle}>{t.home.products}</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>{t.home.products}</Text>
+          <Pressable style={styles.viewProductsBtn} onPress={() => router.push('/products')}>
+            <Package size={13} color={colors.primary} />
+            <Text style={styles.viewProductsBtnText}>{t.home.product}</Text>
+            <ChevronRight size={13} color={colors.primary} />
+          </Pressable>
+        </View>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -521,6 +571,43 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     color: colors.foreground,
     marginBottom: 8,
     marginTop: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  viewProductsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.secondary,
+    marginBottom: 8,
+    marginTop: 6,
+  },
+  viewProductsBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  bannerLinkBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  bannerLinkBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
   },
   overviewCard: {
     backgroundColor: colors.card,

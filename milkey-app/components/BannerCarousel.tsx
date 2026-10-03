@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Image, Text, StyleSheet, Pressable, ScrollView, Dimensions, Animated } from 'react-native';
+import { View, Image, Text, StyleSheet, Pressable, ScrollView, Dimensions, Animated, Linking } from 'react-native';
 import { colors } from '@/lib/colors';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -11,6 +11,8 @@ interface Banner {
   title: string;
   image: string;
   badge?: string;
+  linkType?: 'category' | 'product' | 'url' | 'none';
+  linkValue?: string;
 }
 
 export default function BannerCarousel() {
@@ -79,6 +81,20 @@ export default function BannerCarousel() {
     setCurrentIndex(index);
   };
 
+  // Open banner hyperlink (e.g. YouTube tutorial video / any URL)
+  const handleBannerPress = async (banner: Banner) => {
+    const url = (banner.linkValue || '').trim();
+    if (!url) return;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      // Silent — invalid or unsupported URL
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={styles.skeletonOuter}>
@@ -102,7 +118,7 @@ export default function BannerCarousel() {
         scrollEventThrottle={16}
       >
         {banners.map((banner) => (
-          <Pressable key={banner._id} style={styles.bannerContainer}>
+          <Pressable key={banner._id} style={styles.bannerContainer} onPress={() => handleBannerPress(banner)}>
             <Image source={{ uri: banner.image }} style={styles.bannerImage} />
             {banner.badge && (
               <View style={styles.badgeContainer}>
