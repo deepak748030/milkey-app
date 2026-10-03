@@ -246,21 +246,23 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
         const rt = parseFloat(row.rate) || 0;
         const amount = qty * rt;
         return (
-            <Pressable
+            <View
                 key={`${row.session}-${row.memberId}`}
                 style={[styles.memberRow, row.alreadyEntered && styles.memberRowDone]}
-                onPress={() => toggleRow(row.session, row.memberId)}
             >
                 <View style={styles.memberRowTop}>
                     <View style={styles.memberInfo}>
-                        <View style={[
-                            styles.checkbox,
-                            row.included && !row.alreadyEntered && styles.checkboxChecked
-                        ]}>
+                        <Pressable
+                            style={[
+                                styles.checkbox,
+                                row.included && !row.alreadyEntered && styles.checkboxChecked
+                            ]}
+                            onPress={() => toggleRow(row.session, row.memberId)}
+                        >
                             {(row.included || row.alreadyEntered) && (
                                 <Check size={12} color={colors.white} />
                             )}
-                        </View>
+                        </Pressable>
                         <View style={{ flex: 1 }}>
                             <Text style={[styles.memberName, row.alreadyEntered && styles.memberNameDone]} numberOfLines={1}>
                                 {row.name}
@@ -307,7 +309,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                         </View>
                     </View>
                 )}
-            </Pressable>
+            </View>
         );
     };
 
