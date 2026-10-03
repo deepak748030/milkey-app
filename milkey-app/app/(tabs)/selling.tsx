@@ -2728,6 +2728,7 @@ export default function SellingScreen() {
                         <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Rate</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>Name</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Mobile</Text>
+                        <Text style={[styles.tableHeaderCell, { flex: 0.65 }]}>Bulk Entry</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.6 }]}>Actions</Text>
                     </View>
                     {members.map((item) => {
@@ -2744,6 +2745,11 @@ export default function SellingScreen() {
                                     )}
                                 </View>
                                 <Text style={[styles.tableCell, { flex: 1 }]}>{item.mobile}</Text>
+                                <View style={{ flex: 0.65, alignItems: 'center', justifyContent: 'center' }}>
+                                    {item.dailyAutoEntry ? (
+                                        <Check size={14} color={colors.success} strokeWidth={3} />
+                                    ) : null}
+                                </View>
                                 <View style={{ flex: 0.6, flexDirection: 'row', justifyContent: 'center', gap: 6 }}>
                                     <Pressable style={styles.editBtn} onPress={() => handleEditMember(item)}>
                                         <Edit2 size={12} color={colors.primary} />
