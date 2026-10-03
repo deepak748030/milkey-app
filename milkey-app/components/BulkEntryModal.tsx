@@ -15,6 +15,7 @@ interface BulkEntryModalProps {
 }
 
 interface BulkRow extends BulkEntryMember {
+    session: BulkSession;
     included: boolean;
     quantity: string;
     rate: string;
@@ -24,7 +25,8 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     const { colors, isDark } = useTheme();
 
     // State
-    const [session, setSession] = useState<BulkSession | null>(null);
+    const [sessions, setSessions] = useState<BulkSession[]>(['morning']);
+    const [showList, setShowList] = useState(false);
     const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
     const [rows, setRows] = useState<BulkRow[]>([]);
     const [loading, setLoading] = useState(false);
@@ -58,7 +60,8 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     };
 
     const resetState = () => {
-        setSession(null);
+        setSessions(['morning']);
+        setShowList(false);
         setEntryDate(formatLocalDate(new Date()));
         setRows([]);
         setSearch('');
@@ -71,29 +74,40 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
         }
     }, [isVisible]);
 
-    // Load members whenever session or date changes
+    // Load members for all selected sessions after OK (and whenever session or date changes)
     const loadList = useCallback(async () => {
-        if (!session) return;
+        if (!showList || sessions.length === 0) {
+            setRows([]);
+            return;
+        }
         setLoading(true);
         try {
-            const res = await sellingEntriesApi.bulkList({ date: entryDate, session });
-            if (res.success && res.response?.data) {
-                setRows(res.response.data.map(m => ({
-                    ...m,
-                    included: !m.alreadyEntered,
-                    quantity: (m.alreadyEntered ? m.existingQuantity : m.defaultQuantity).toString(),
-                    rate: (m.alreadyEntered && m.existingRate ? m.existingRate : m.ratePerLiter).toString(),
-                })));
-            } else {
-                setRows([]);
-            }
+            const results = await Promise.all(
+                sessions.map(s => sellingEntriesApi.bulkList({ date: entryDate, session: s }))
+            );
+            const merged: BulkRow[] = [];
+            results.forEach((res, index) => {
+                const sessionKey = sessions[index];
+                if (res.success && res.response?.data) {
+                    res.response.data.forEach(m => {
+                        merged.push({
+                            ...m,
+                            session: sessionKey,
+                            included: !m.alreadyEntered,
+                            quantity: (m.alreadyEntered ? m.existingQuantity : m.defaultQuantity).toString(),
+                            rate: (m.alreadyEntered && m.existingRate ? m.existingRate : m.ratePerLiter).toString(),
+                        });
+                    });
+                }
+            });
+            setRows(merged);
         } catch (error) {
             console.error('Failed to load bulk list:', error);
             setRows([]);
         } finally {
             setLoading(false);
         }
-    }, [session, entryDate]);
+    }, [showList, sessions, entryDate]);
 
     useEffect(() => {
         loadList();
@@ -105,28 +119,42 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
         return rows.filter(r => r.name.toLowerCase().includes(q) || (r.mobile || '').includes(q));
     }, [rows, search]);
 
-    // Rows that will actually be submitted
-    const submitRows = useMemo(() =>
-        rows.filter(r => r.included && !r.alreadyEntered && (parseFloat(r.quantity) || 0) > 0),
-        [rows]
+    // Rows that will actually be submitted (grouped per session)
+    const submitGroups = useMemo(() =>
+        sessions
+            .map(s => ({
+                session: s,
+                rows: rows.filter(r => r.session === s && r.included && !r.alreadyEntered && (parseFloat(r.quantity) || 0) > 0),
+            }))
+            .filter(g => g.rows.length > 0),
+        [rows, sessions]
+    );
+
+    const submitRows = useMemo(
+        () => submitGroups.reduce((acc, g) => acc.concat(g.rows), [] as BulkRow[]),
+        [submitGroups]
     );
 
     const totalQuantity = submitRows.reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0);
     const totalAmount = submitRows.reduce((s, r) => s + (parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0), 0);
 
-    const updateRow = (memberId: string, patch: Partial<BulkRow>) => {
-        setRows(prev => prev.map(r => (r.memberId === memberId ? { ...r, ...patch } : r)));
+    const updateRow = (sessionKey: BulkSession, memberId: string, patch: Partial<BulkRow>) => {
+        setRows(prev => prev.map(r => (r.session === sessionKey && r.memberId === memberId ? { ...r, ...patch } : r)));
     };
 
-    const toggleRow = (memberId: string) => {
+    const toggleRow = (sessionKey: BulkSession, memberId: string) => {
         setRows(prev => prev.map(r => {
-            if (r.memberId !== memberId || r.alreadyEntered) return r;
+            if (r.session !== sessionKey || r.memberId !== memberId || r.alreadyEntered) return r;
             return { ...r, included: !r.included };
         }));
     };
 
-    const handleSelectSession = (value: BulkSession) => {
-        setSession(value);
+    // Multi-select: morning + evening dono select ho sakte hain (canonical order morning → evening)
+    const toggleSession = (value: BulkSession) => {
+        setSessions(prev => {
+            const next = prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value];
+            return (['morning', 'evening'] as BulkSession[]).filter(s => next.includes(s));
+        });
     };
 
     const handleDateSelect = (date: Date | null) => {
@@ -138,7 +166,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     };
 
     const handleSubmitAll = async () => {
-        if (submitting || !session) return;
+        if (submitting || sessions.length === 0) return;
 
         // Check subscription first
         const currentStatus = status || await fetchStatus();
@@ -155,25 +183,42 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
 
         setSubmitting(true);
         try {
-            const entries: BulkEntryPayloadItem[] = submitRows.map(r => ({
-                memberId: r.memberId,
-                quantity: parseFloat(r.quantity) || 0,
-                rate: parseFloat(r.rate) || r.ratePerLiter,
-                notes: r.defaultNotes,
+            // Submit each selected session (morning / evening) in one go
+            const results = await Promise.all(submitGroups.map(group => {
+                const entries: BulkEntryPayloadItem[] = group.rows.map(r => ({
+                    memberId: r.memberId,
+                    quantity: parseFloat(r.quantity) || 0,
+                    rate: parseFloat(r.rate) || r.ratePerLiter,
+                    notes: r.defaultNotes,
+                }));
+                return sellingEntriesApi.bulkCreate({ date: entryDate, session: group.session, entries });
             }));
 
-            const res = await sellingEntriesApi.bulkCreate({ date: entryDate, session, entries });
-            if (res.success && res.response) {
+            const savedParts: string[] = [];
+            let savedTotal = 0;
+            let skippedTotal = 0;
+            let failedCount = 0;
+
+            results.forEach((res, index) => {
+                if (!res.success || !res.response) {
+                    failedCount++;
+                    return;
+                }
                 const { savedCount, skippedCount } = res.response;
+                savedTotal += savedCount;
+                skippedTotal += skippedCount;
+                if (savedCount > 0) savedParts.push(`${savedCount} ${submitGroups[index].session}`);
+            });
+
+            if (failedCount === results.length) {
+                setSuccessMessage({ title: 'Error', message: 'Failed to save bulk entries' });
+            } else {
                 setSuccessMessage({
                     title: 'Success',
-                    message: `${savedCount} ${session} ${savedCount === 1 ? 'entry' : 'entries'} saved${skippedCount ? `, ${skippedCount} skipped (already entered)` : ''}!`
+                    message: `${savedParts.join(' + ') || savedTotal} ${savedTotal === 1 ? 'entry' : 'entries'} saved${skippedTotal ? `, ${skippedTotal} skipped (already entered)` : ''}!`
                 });
-                setShowSuccessModal(true);
-            } else {
-                setSuccessMessage({ title: 'Error', message: res.message || 'Failed to save bulk entries' });
-                setShowSuccessModal(true);
             }
+            setShowSuccessModal(true);
         } catch (error) {
             setSuccessMessage({ title: 'Error', message: 'Failed to save bulk entries' });
             setShowSuccessModal(true);
@@ -192,6 +237,76 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
 
     const styles = createStyles(colors, isDark);
     const alreadyCount = rows.filter(r => r.alreadyEntered).length;
+
+    const renderMemberRow = (row: BulkRow) => {
+        const qty = parseFloat(row.quantity) || 0;
+        const rt = parseFloat(row.rate) || 0;
+        const amount = qty * rt;
+        return (
+            <Pressable
+                key={`${row.session}-${row.memberId}`}
+                style={[styles.memberRow, row.alreadyEntered && styles.memberRowDone]}
+                onPress={() => toggleRow(row.session, row.memberId)}
+            >
+                <View style={styles.memberRowTop}>
+                    <View style={styles.memberInfo}>
+                        <View style={[
+                            styles.checkbox,
+                            row.included && !row.alreadyEntered && styles.checkboxChecked
+                        ]}>
+                            {(row.included || row.alreadyEntered) && (
+                                <Check size={12} color={colors.white} />
+                            )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.memberName, row.alreadyEntered && styles.memberNameDone]} numberOfLines={1}>
+                                {row.name}
+                            </Text>
+                            <Text style={styles.memberMobile}>{row.mobile}</Text>
+                        </View>
+                    </View>
+                    {row.alreadyEntered ? (
+                        <View style={styles.doneBadge}>
+                            <Check size={10} color={colors.white} />
+                            <Text style={styles.doneBadgeText}>Entered</Text>
+                        </View>
+                    ) : (
+                        <Text style={styles.rowAmount}>₹{amount.toFixed(2)}</Text>
+                    )}
+                </View>
+
+                {!row.alreadyEntered && (
+                    <View style={styles.memberRowInputs}>
+                        <View style={styles.qtyWrap}>
+                            <Text style={styles.inputCaption}>Qty (L)</Text>
+                            <TextInput
+                                style={styles.qtyInput}
+                                value={row.quantity}
+                                onChangeText={(text) => updateRow(row.session, row.memberId, { quantity: text })}
+                                keyboardType="decimal-pad"
+                                placeholder="0"
+                                placeholderTextColor={colors.mutedForeground}
+                                selectTextOnFocus
+                            />
+                        </View>
+                        <Text style={styles.multiplySign}>×</Text>
+                        <View style={styles.qtyWrap}>
+                            <Text style={styles.inputCaption}>Rate (₹/L)</Text>
+                            <TextInput
+                                style={styles.qtyInput}
+                                value={row.rate}
+                                onChangeText={(text) => updateRow(row.session, row.memberId, { rate: text })}
+                                keyboardType="decimal-pad"
+                                placeholder="0"
+                                placeholderTextColor={colors.mutedForeground}
+                                selectTextOnFocus
+                            />
+                        </View>
+                    </View>
+                )}
+            </Pressable>
+        );
+    };
 
     return (
         <Modal
@@ -237,20 +352,20 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                             <Text style={styles.label}>Select Session <Text style={{ color: colors.destructive }}>*</Text></Text>
                             <View style={styles.sessionRow}>
                                 <Pressable
-                                    style={[styles.sessionBtn, session === 'morning' && styles.sessionBtnActiveMorning]}
-                                    onPress={() => handleSelectSession('morning')}
+                                    style={[styles.sessionBtn, sessions.includes('morning') && styles.sessionBtnActiveMorning]}
+                                    onPress={() => toggleSession('morning')}
                                 >
-                                    <Sun size={18} color={session === 'morning' ? colors.white : colors.warning} />
-                                    <Text style={[styles.sessionBtnText, session === 'morning' && styles.sessionBtnTextActive]}>
+                                    <Sun size={18} color={sessions.includes('morning') ? colors.white : colors.warning} />
+                                    <Text style={[styles.sessionBtnText, sessions.includes('morning') && styles.sessionBtnTextActive]}>
                                         Morning
                                     </Text>
                                 </Pressable>
                                 <Pressable
-                                    style={[styles.sessionBtn, session === 'evening' && styles.sessionBtnActiveEvening]}
-                                    onPress={() => handleSelectSession('evening')}
+                                    style={[styles.sessionBtn, sessions.includes('evening') && styles.sessionBtnActiveEvening]}
+                                    onPress={() => toggleSession('evening')}
                                 >
-                                    <Moon size={18} color={session === 'evening' ? colors.white : colors.primary} />
-                                    <Text style={[styles.sessionBtnText, session === 'evening' && styles.sessionBtnTextActive]}>
+                                    <Moon size={18} color={sessions.includes('evening') ? colors.white : colors.primary} />
+                                    <Text style={[styles.sessionBtnText, sessions.includes('evening') && styles.sessionBtnTextActive]}>
                                         Evening
                                     </Text>
                                 </Pressable>
@@ -258,7 +373,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                         </View>
 
                         {/* Members list */}
-                        {session && (
+                        {showList && sessions.length > 0 && (
                             <>
                                 <View style={styles.listHeaderRow}>
                                     <View style={styles.listHeaderLeft}>
@@ -299,83 +414,41 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                                                 : 'No members match your search.'}
                                         </Text>
                                     </View>
-                                ) : (
-                                    filteredRows.map((row) => {
-                                        const qty = parseFloat(row.quantity) || 0;
-                                        const rt = parseFloat(row.rate) || 0;
-                                        const amount = qty * rt;
+                                ) : sessions.length > 1 ? (
+                                    sessions.map(sessionKey => {
+                                        const groupRows = filteredRows.filter(r => r.session === sessionKey);
+                                        if (groupRows.length === 0) return null;
                                         return (
-                                            <Pressable
-                                                key={row.memberId}
-                                                style={[styles.memberRow, row.alreadyEntered && styles.memberRowDone]}
-                                                onPress={() => toggleRow(row.memberId)}
-                                            >
-                                                <View style={styles.memberRowTop}>
-                                                    <View style={styles.memberInfo}>
-                                                        <View style={[
-                                                            styles.checkbox,
-                                                            row.included && !row.alreadyEntered && styles.checkboxChecked
-                                                        ]}>
-                                                            {(row.included || row.alreadyEntered) && (
-                                                                <Check size={12} color={colors.white} />
-                                                            )}
-                                                        </View>
-                                                        <View style={{ flex: 1 }}>
-                                                            <Text style={[styles.memberName, row.alreadyEntered && styles.memberNameDone]} numberOfLines={1}>
-                                                                {row.name}
-                                                            </Text>
-                                                            <Text style={styles.memberMobile}>{row.mobile}</Text>
-                                                        </View>
-                                                    </View>
-                                                    {row.alreadyEntered ? (
-                                                        <View style={styles.doneBadge}>
-                                                            <Check size={10} color={colors.white} />
-                                                            <Text style={styles.doneBadgeText}>Entered</Text>
-                                                        </View>
-                                                    ) : (
-                                                        <Text style={styles.rowAmount}>₹{amount.toFixed(2)}</Text>
-                                                    )}
-                                                </View>
-
-                                                {!row.alreadyEntered && (
-                                                    <View style={styles.memberRowInputs}>
-                                                        <View style={styles.qtyWrap}>
-                                                            <Text style={styles.inputCaption}>Qty (L)</Text>
-                                                            <TextInput
-                                                                style={styles.qtyInput}
-                                                                value={row.quantity}
-                                                                onChangeText={(text) => updateRow(row.memberId, { quantity: text })}
-                                                                keyboardType="decimal-pad"
-                                                                placeholder="0"
-                                                                placeholderTextColor={colors.mutedForeground}
-                                                                selectTextOnFocus
-                                                            />
-                                                        </View>
-                                                        <Text style={styles.multiplySign}>×</Text>
-                                                        <View style={styles.qtyWrap}>
-                                                            <Text style={styles.inputCaption}>Rate (₹/L)</Text>
-                                                            <TextInput
-                                                                style={styles.qtyInput}
-                                                                value={row.rate}
-                                                                onChangeText={(text) => updateRow(row.memberId, { rate: text })}
-                                                                keyboardType="decimal-pad"
-                                                                placeholder="0"
-                                                                placeholderTextColor={colors.mutedForeground}
-                                                                selectTextOnFocus
-                                                            />
-                                                        </View>
-                                                    </View>
-                                                )}
-                                            </Pressable>
+                                            <View key={sessionKey}>
+                                                <Text style={[
+                                                    styles.sessionGroupTitle,
+                                                    { color: sessionKey === 'morning' ? colors.warning : colors.primary }
+                                                ]}>
+                                                    {sessionKey === 'morning' ? 'Morning' : 'Evening'} ({groupRows.length})
+                                                </Text>
+                                                {groupRows.map(renderMemberRow)}
+                                            </View>
                                         );
                                     })
+                                ) : (
+                                    filteredRows.map(renderMemberRow)
                                 )}
                             </>
                         )}
                     </ScrollView>
 
-                    {/* Footer */}
-                    {session && (
+                    {/* Footer - OK (bottom right) before proceeding, then summary + submit */}
+                    {!showList ? (
+                        <View style={styles.footer}>
+                            <Pressable
+                                style={[styles.okBtn, sessions.length === 0 && styles.okBtnDisabled]}
+                                onPress={() => setShowList(true)}
+                                disabled={sessions.length === 0}
+                            >
+                                <Text style={styles.okBtnText}>OK</Text>
+                            </Pressable>
+                        </View>
+                    ) : (
                         <View style={styles.footer}>
                             <View style={styles.summaryRow}>
                                 <View style={styles.summaryItem}>
@@ -782,6 +855,31 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.white,
         fontSize: 14.5,
         fontWeight: '700',
+    },
+    okBtn: {
+        alignSelf: 'flex-end',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.primary,
+        borderRadius: 10,
+        paddingHorizontal: 30,
+        paddingVertical: 11,
+        minWidth: 96,
+    },
+    okBtnDisabled: {
+        opacity: 0.5,
+    },
+    okBtnText: {
+        color: colors.white,
+        fontSize: 14.5,
+        fontWeight: '700',
+    },
+    sessionGroupTitle: {
+        fontSize: 12,
+        fontWeight: '800',
+        letterSpacing: 0.4,
+        marginBottom: 6,
+        marginTop: 2,
     },
     // Date picker
     datePickerOverlay: {

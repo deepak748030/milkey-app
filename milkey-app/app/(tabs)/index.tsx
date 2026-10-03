@@ -7,7 +7,7 @@ import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
 import { productsApi, reportsApi, bannersApi, Product, HomeStats, Banner } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
-import { Plus, Wallet, Zap, ChevronRight, Package } from 'lucide-react-native';
+import { Plus, Wallet, ChevronRight, Package } from 'lucide-react-native';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useTranslation } from '@/hooks/useTranslation';
 import { QuickEntryModal } from '@/components/QuickEntryModal';
@@ -384,15 +384,6 @@ export default function HomeScreen() {
           </Pressable>
           <Pressable
             style={styles.quickActionCard}
-            onPress={() => setShowBulkEntryModal(true)}
-          >
-            <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
-              <Zap size={20} color={colors.primary} />
-            </View>
-            <Text style={styles.quickActionText}>{t.home.bulkEntry}</Text>
-          </Pressable>
-          <Pressable
-            style={styles.quickActionCard}
             onPress={() => setShowQuickAdvanceModal(true)}
           >
             <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
@@ -407,6 +398,7 @@ export default function HomeScreen() {
           isVisible={showQuickEntryModal}
           onClose={() => setShowQuickEntryModal(false)}
           onSuccess={() => fetchHomeStats()}
+          onBulkEntryPress={() => setShowBulkEntryModal(true)}
         />
 
         {/* Quick Advance Modal */}
