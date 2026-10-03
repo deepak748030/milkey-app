@@ -25,7 +25,8 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     const { colors, isDark } = useTheme();
 
     // State
-    const [sessions, setSessions] = useState<BulkSession[]>(['morning']);
+    // Morning + Evening dono sessions by-default selected (user toggle kar sakta hai)
+    const [sessions, setSessions] = useState<BulkSession[]>(['morning', 'evening']);
     const [showList, setShowList] = useState(false);
     const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
     const [rows, setRows] = useState<BulkRow[]>([]);
@@ -60,7 +61,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     };
 
     const resetState = () => {
-        setSessions(['morning']);
+        setSessions(['morning', 'evening']);
         setShowList(false);
         setEntryDate(formatLocalDate(new Date()));
         setRows([]);
@@ -135,7 +136,9 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
         [submitGroups]
     );
 
-    const totalQuantity = submitRows.reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0);
+    // Morning + Evening quantity alag-alag taaki summary me dono dikhein
+    const morningQuantity = submitRows.filter(r => r.session === 'morning').reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0);
+    const eveningQuantity = submitRows.filter(r => r.session === 'evening').reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0);
     const totalAmount = submitRows.reduce((s, r) => s + (parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0), 0);
 
     const updateRow = (sessionKey: BulkSession, memberId: string, patch: Partial<BulkRow>) => {
@@ -457,8 +460,8 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                                 </View>
                                 <View style={styles.summaryDivider} />
                                 <View style={styles.summaryItem}>
-                                    <Text style={styles.summaryValue}>{totalQuantity.toFixed(1)} L</Text>
-                                    <Text style={styles.summaryLabel}>Quantity</Text>
+                                    <Text style={styles.summaryQtyValue}>{morningQuantity.toFixed(1)} + {eveningQuantity.toFixed(1)} L</Text>
+                                    <Text style={styles.summaryLabel}>Quantity (M + E)</Text>
                                 </View>
                                 <View style={styles.summaryDivider} />
                                 <View style={styles.summaryItem}>
@@ -826,6 +829,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     summaryValue: {
         fontSize: 15,
+        fontWeight: '800',
+        color: colors.foreground,
+    },
+    summaryQtyValue: {
+        fontSize: 13,
         fontWeight: '800',
         color: colors.foreground,
     },
