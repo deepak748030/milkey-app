@@ -15,11 +15,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
-import { ArrowLeft, Trash2, Edit2, X, Save, Calendar as CalendarIcon, Download, Share2 } from 'lucide-react-native';
+import { ArrowLeft, Trash2, Edit2, X, Save, Calendar as CalendarIcon, Download, Share2, Sun, Moon, Zap } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { sellingEntriesApi, SellingEntry } from '@/lib/milkeyApi';
 import { SuccessModal } from '@/components/SuccessModal';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { Calendar } from '@/components/Calendar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
@@ -33,6 +34,14 @@ const formatDate = (iso?: string) => {
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const yyyy = d.getFullYear();
     return `${dd}/${mm}/${yyyy}`;
+};
+
+// Local YYYY-MM-DD string (Quick entry default date)
+const toISODate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
 };
 
 // User passes ISO-ish dates (YYYY-MM-DD) through params. Format them for header.
@@ -75,6 +84,16 @@ export default function ViewEntriesScreen() {
     const [editNotes, setEditNotes] = useState('');
     const [saving, setSaving] = useState(false);
     const [pdfBusy, setPdfBusy] = useState<null | 'download' | 'share'>(null);
+
+    // Quick entry modal state (single member, isi page se)
+    const [quickVisible, setQuickVisible] = useState(false);
+    const [quickDate, setQuickDate] = useState('');
+    const [quickSession, setQuickSession] = useState<'morning' | 'evening'>('morning');
+    const [quickQty, setQuickQty] = useState('');
+    const [quickRate, setQuickRate] = useState('');
+    const [quickSaving, setQuickSaving] = useState(false);
+    const [quickDatePicker, setQuickDatePicker] = useState(false);
+    const [quickTempDate, setQuickTempDate] = useState<Date | null>(new Date());
 
     // Alert + confirm modals (reused from the app's shared components)
     const [alertVisible, setAlertVisible] = useState(false);
@@ -221,6 +240,61 @@ export default function ViewEntriesScreen() {
             }
         } catch (err: any) {
             showAlert('Error', err?.message || 'Failed to delete entry');
+        }
+    };
+
+    // ─── Quick entry (yahi member, isi page se) ───
+    const openQuick = () => {
+        setQuickDate(toISODate(new Date()));
+        setQuickSession('morning');
+        setQuickQty('');
+        setQuickRate(defaultRate || '');
+        setQuickVisible(true);
+    };
+
+    const handleQuickDateSelect = (date: Date | null) => {
+        if (date) {
+            setQuickDate(toISODate(date));
+            setQuickTempDate(date);
+        }
+        setQuickDatePicker(false);
+    };
+
+    const handleQuickSave = async () => {
+        const q = parseFloat(quickQty || '0');
+        const r = parseFloat(quickRate || '0');
+        if (!quickDate) {
+            showAlert('Error', 'Select a date');
+            return;
+        }
+        if (!q || q <= 0 || Number.isNaN(q)) {
+            showAlert('Error', 'Enter quantity (L)');
+            return;
+        }
+        if (!r || r <= 0 || Number.isNaN(r)) {
+            showAlert('Error', 'Enter a valid rate');
+            return;
+        }
+        setQuickSaving(true);
+        try {
+            const res = await sellingEntriesApi.create({
+                memberId,
+                date: quickDate,
+                rate: r,
+                morningQuantity: quickSession === 'morning' ? q : 0,
+                eveningQuantity: quickSession === 'evening' ? q : 0,
+            });
+            if (res.success) {
+                toast('Entry added');
+                setQuickVisible(false);
+                fetchEntries();
+            } else {
+                showAlert('Error', res.message || 'Failed to add entry');
+            }
+        } catch (err: any) {
+            showAlert('Error', err?.message || 'Failed to add entry');
+        } finally {
+            setQuickSaving(false);
         }
     };
 
@@ -402,6 +476,14 @@ export default function ViewEntriesScreen() {
                             <Text style={[styles.pdfBtnText, { color: colors.primary }]}>Share</Text>
                         </>
                     )}
+                </Pressable>
+                <Pressable
+                    onPress={openQuick}
+                    style={[styles.pdfBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.primary, marginLeft: 'auto' }]}
+                    hitSlop={4}
+                >
+                    <Zap size={14} color={colors.primary} />
+                    <Text style={[styles.pdfBtnText, { color: colors.primary }]}>Quick entry</Text>
                 </Pressable>
             </View>
 
@@ -610,6 +692,162 @@ export default function ViewEntriesScreen() {
                 </KeyboardAvoidingView>
             </Modal>
 
+            {/* ── Quick entry modal ── */}
+            <Modal visible={quickVisible} transparent animationType="slide" onRequestClose={() => setQuickVisible(false)} statusBarTranslucent>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.modalOverlay}
+                >
+                    <Pressable style={{ flex: 1 }} onPress={() => setQuickVisible(false)} />
+                    <View
+                        style={[
+                            styles.modalSheet,
+                            { backgroundColor: colors.card, paddingBottom: Math.max(insets.bottom, 12) + 8 },
+                        ]}
+                    >
+                        <View style={styles.modalHeader}>
+                            <Text style={[styles.modalTitle, { color: colors.foreground }]}>Quick Entry</Text>
+                            <Pressable onPress={() => setQuickVisible(false)} hitSlop={8}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+
+                        <View style={{ paddingHorizontal: 16, gap: 10 }}>
+                            <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{memberName}</Text>
+
+                            {/* Date - default today, editable */}
+                            <View>
+                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Date</Text>
+                                <Pressable
+                                    style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                                    onPress={() => {
+                                        setQuickTempDate(new Date(quickDate + 'T00:00:00'));
+                                        setQuickDatePicker(true);
+                                    }}
+                                >
+                                    <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: '600' }}>{formatDate(quickDate)}</Text>
+                                    <CalendarIcon size={16} color={colors.mutedForeground} />
+                                </Pressable>
+                            </View>
+
+                            {/* Session - Morning / Evening */}
+                            <View>
+                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Session</Text>
+                                <View style={{ flexDirection: 'row', gap: 10 }}>
+                                    <Pressable
+                                        style={[
+                                            styles.qeSessionBtn,
+                                            quickSession === 'morning'
+                                                ? { backgroundColor: colors.warning, borderColor: colors.warning }
+                                                : { borderColor: colors.border },
+                                        ]}
+                                        onPress={() => setQuickSession('morning')}
+                                    >
+                                        <Sun size={16} color={quickSession === 'morning' ? colors.white : colors.warning} />
+                                        <Text style={{ fontSize: 13, fontWeight: '700', color: quickSession === 'morning' ? colors.white : colors.foreground }}>
+                                            Morning
+                                        </Text>
+                                    </Pressable>
+                                    <Pressable
+                                        style={[
+                                            styles.qeSessionBtn,
+                                            quickSession === 'evening'
+                                                ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                                                : { borderColor: colors.border },
+                                        ]}
+                                        onPress={() => setQuickSession('evening')}
+                                    >
+                                        <Moon size={16} color={quickSession === 'evening' ? colors.white : colors.primary} />
+                                        <Text style={{ fontSize: 13, fontWeight: '700', color: quickSession === 'evening' ? colors.white : colors.foreground }}>
+                                            Evening
+                                        </Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+
+                            {/* Qty */}
+                            <View>
+                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Qty (L)</Text>
+                                <TextInput
+                                    value={quickQty}
+                                    onChangeText={setQuickQty}
+                                    placeholder="0"
+                                    placeholderTextColor={colors.mutedForeground}
+                                    keyboardType="decimal-pad"
+                                    style={[styles.input, { color: colors.foreground, backgroundColor: colors.input, borderColor: colors.border }]}
+                                />
+                            </View>
+
+                            {/* Rate - member default, editable */}
+                            <View>
+                                <Text style={[styles.label, { color: colors.mutedForeground }]}>Rate (₹/L)</Text>
+                                <TextInput
+                                    value={quickRate}
+                                    onChangeText={setQuickRate}
+                                    placeholder={defaultRate || '50'}
+                                    placeholderTextColor={colors.mutedForeground}
+                                    keyboardType="decimal-pad"
+                                    style={[styles.input, { color: colors.foreground, backgroundColor: colors.input, borderColor: colors.border }]}
+                                />
+                                {defaultRate ? (
+                                    <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>
+                                        Default ₹{defaultRate}/L · editable
+                                    </Text>
+                                ) : null}
+                            </View>
+
+                            {/* Live amount preview */}
+                            <View style={[styles.preview, { backgroundColor: colors.secondary }]}>
+                                <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>Amount</Text>
+                                <Text style={{ color: colors.primary, fontSize: 16, fontWeight: '700' }}>
+                                    ₹{((parseFloat(quickQty || '0') || 0) * (parseFloat(quickRate || '0') || 0)).toFixed(2)}
+                                </Text>
+                            </View>
+
+                            <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+                                <Pressable
+                                    onPress={() => setQuickVisible(false)}
+                                    style={[styles.btnGhost, { borderColor: colors.border }]}
+                                >
+                                    <Text style={{ color: colors.foreground, fontWeight: '600' }}>Cancel</Text>
+                                </Pressable>
+                                <Pressable
+                                    onPress={handleQuickSave}
+                                    disabled={quickSaving}
+                                    style={[styles.btnPrimary, { backgroundColor: colors.primary, opacity: quickSaving ? 0.7 : 1 }]}
+                                >
+                                    {quickSaving ? (
+                                        <ActivityIndicator size="small" color={colors.white} />
+                                    ) : (
+                                        <>
+                                            <Zap size={14} color={colors.white} />
+                                            <Text style={{ color: colors.white, fontWeight: '700' }}>Add Entry</Text>
+                                        </>
+                                    )}
+                                </Pressable>
+                            </View>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
+
+            {/* ── Quick entry date picker ── */}
+            <Modal visible={quickDatePicker} transparent animationType="slide" onRequestClose={() => setQuickDatePicker(false)} statusBarTranslucent>
+                <View style={styles.datePickerOverlay}>
+                    <View style={[styles.datePickerModal, { backgroundColor: colors.card }]}>
+                        <View style={[styles.datePickerHeader, { borderBottomColor: colors.border }]}>
+                            <Text style={[styles.datePickerTitle, { color: colors.foreground }]}>Select Date</Text>
+                            <Pressable onPress={() => setQuickDatePicker(false)}>
+                                <X size={20} color={colors.foreground} />
+                            </Pressable>
+                        </View>
+                        <View style={{ padding: 12 }}>
+                            <Calendar onDateSelect={handleQuickDateSelect} selectedDate={quickTempDate} />
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
             <SuccessModal
                 isVisible={alertVisible}
                 onClose={() => setAlertVisible(false)}
@@ -751,4 +989,26 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 6,
     },
+
+    qeSessionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        paddingVertical: 10,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    datePickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+    datePickerModal: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 20, overflow: 'hidden' },
+    datePickerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+    },
+    datePickerTitle: { fontSize: 16, fontWeight: '600' },
 });
