@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Modal, ScrollView, ActivityIndicator } from 'react-native';
-import { X, Search, Check, Plus, Calendar as CalendarIcon } from 'lucide-react-native';
+import { X, Search, Check, Plus, Zap, Calendar as CalendarIcon } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { membersApi, sellingEntriesApi, Member } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
@@ -13,9 +13,10 @@ interface QuickEntryModalProps {
     isVisible: boolean;
     onClose: () => void;
     onSuccess?: () => void;
+    onBulkEntryPress?: () => void;
 }
 
-export function QuickEntryModal({ isVisible, onClose, onSuccess }: QuickEntryModalProps) {
+export function QuickEntryModal({ isVisible, onClose, onSuccess, onBulkEntryPress }: QuickEntryModalProps) {
     const { colors, isDark } = useTheme();
 
     // State
@@ -106,6 +107,13 @@ export function QuickEntryModal({ isVisible, onClose, onSuccess }: QuickEntryMod
         setSearchMember(member.name);
         setRate(member.ratePerLiter?.toString() || '50');
         setShowSuggestions(false);
+    };
+
+    // Open Bulk Entry: close this modal first, then open the bulk (one session) entry modal
+    const handleBulkEntryPress = () => {
+        if (!onBulkEntryPress) return;
+        onClose();
+        setTimeout(() => onBulkEntryPress(), 300);
     };
 
     const handleSaveEntry = async () => {
@@ -208,7 +216,19 @@ export function QuickEntryModal({ isVisible, onClose, onSuccess }: QuickEntryMod
                             <>
                                 {/* Member Search */}
                                 <View style={styles.inputGroup}>
-                                    <Text style={styles.label}>Member (Customer)</Text>
+                                    <View style={styles.labelRow}>
+                                        <Text style={[styles.label, { marginBottom: 0 }]}>Member (Customer)</Text>
+                                        {onBulkEntryPress && (
+                                            <Pressable
+                                                style={styles.bulkEntryBtn}
+                                                onPress={handleBulkEntryPress}
+                                                hitSlop={8}
+                                            >
+                                                <Zap size={12} color={colors.primary} />
+                                                <Text style={styles.bulkEntryBtnText}>Bulk Entry</Text>
+                                            </Pressable>
+                                        )}
+                                    </View>
                                     <Pressable
                                         style={styles.searchInput}
                                         onPress={() => setShowSuggestions(true)}
@@ -461,6 +481,26 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         fontWeight: '600',
         color: colors.foreground,
         marginBottom: 6,
+    },
+    labelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 6,
+    },
+    bulkEntryBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: colors.secondary,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 999,
+    },
+    bulkEntryBtnText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: colors.primary,
     },
     searchInput: {
         flexDirection: 'row',
