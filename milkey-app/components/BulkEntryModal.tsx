@@ -25,8 +25,8 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     const { colors, isDark } = useTheme();
 
     // State
-    // Morning + Evening dono sessions by-default selected (user toggle kar sakta hai)
-    const [sessions, setSessions] = useState<BulkSession[]>(['morning', 'evening']);
+    // Default me koi session pre-selected nahi — user ko Morning/Evening choose karna hoga
+    const [sessions, setSessions] = useState<BulkSession[]>([]);
     const [showList, setShowList] = useState(false);
     const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
     const [rows, setRows] = useState<BulkRow[]>([]);
@@ -61,7 +61,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     };
 
     const resetState = () => {
-        setSessions(['morning', 'evening']);
+        setSessions([]);
         setShowList(false);
         setEntryDate(formatLocalDate(new Date()));
         setRows([]);
@@ -120,6 +120,15 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
         return rows.filter(r => r.name.toLowerCase().includes(q) || (r.mobile || '').includes(q));
     }, [rows, search]);
 
+    // Unique members (Morning + Evening rows merged into one card per member)
+    const uniqueMemberIds = useMemo(() => {
+        const ids: string[] = [];
+        filteredRows.forEach(r => {
+            if (!ids.includes(r.memberId)) ids.push(r.memberId);
+        });
+        return ids;
+    }, [filteredRows]);
+
     // Rows that will actually be submitted (grouped per session)
     const submitGroups = useMemo(() =>
         sessions
@@ -136,6 +145,12 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
         [submitGroups]
     );
 
+    // Unique members being submitted (M + E rows of one member count once)
+    const submitMemberCount = useMemo(
+        () => new Set(submitRows.map(r => r.memberId)).size,
+        [submitRows]
+    );
+
     // Morning + Evening quantity alag-alag taaki summary me dono dikhein
     const morningQuantity = submitRows.filter(r => r.session === 'morning').reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0);
     const eveningQuantity = submitRows.filter(r => r.session === 'evening').reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0);
@@ -150,6 +165,23 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
             if (r.session !== sessionKey || r.memberId !== memberId || r.alreadyEntered) return r;
             return { ...r, included: !r.included };
         }));
+    };
+
+    // Combined member card (Morning + Evening): one checkbox toggles all sessions of that member
+    const toggleMember = (memberId: string) => {
+        setRows(prev => {
+            const active = prev.filter(r => r.memberId === memberId && !r.alreadyEntered);
+            if (active.length === 0) return prev;
+            const anyIncluded = active.some(r => r.included);
+            return prev.map(r =>
+                r.memberId === memberId && !r.alreadyEntered ? { ...r, included: !anyIncluded } : r
+            );
+        });
+    };
+
+    // Shared rate input updates all session rows of the member
+    const updateMemberRate = (memberId: string, text: string) => {
+        setRows(prev => prev.map(r => (r.memberId === memberId ? { ...r, rate: text } : r)));
     };
 
     // Multi-select: morning + evening dono select ho sakte hain (canonical order morning → evening)
@@ -239,7 +271,18 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
     };
 
     const styles = createStyles(colors, isDark);
-    const alreadyCount = rows.filter(r => r.alreadyEntered).length;
+    const alreadyCount = useMemo(() => {
+        const byMember = new Map<string, { total: number; done: number }>();
+        rows.forEach(r => {
+            const e = byMember.get(r.memberId) || { total: 0, done: 0 };
+            e.total += 1;
+            if (r.alreadyEntered) e.done += 1;
+            byMember.set(r.memberId, e);
+        });
+        let count = 0;
+        byMember.forEach(e => { if (e.done === e.total) count += 1; });
+        return count;
+    }, [rows]);
 
     const renderMemberRow = (row: BulkRow) => {
         const qty = parseFloat(row.quantity) || 0;
@@ -309,6 +352,89 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                         </View>
                     </View>
                 )}
+            </View>
+        );
+    };
+
+    // Combined card: (Morning qty + Evening qty) x Rate — one card per member
+    const renderCombinedMember = (memberId: string) => {
+        const memberRows = filteredRows.filter(r => r.memberId === memberId);
+        const morningRow = memberRows.find(r => r.session === 'morning');
+        const eveningRow = memberRows.find(r => r.session === 'evening');
+        const qtyRows = [morningRow, eveningRow].filter((r): r is BulkRow => Boolean(r));
+        if (qtyRows.length === 0) return null;
+        const allEntered = qtyRows.every(r => r.alreadyEntered);
+        const anyIncluded = qtyRows.some(r => r.included && !r.alreadyEntered);
+        const total = qtyRows.reduce((s, r) => s + (parseFloat(r.quantity) || 0) * (parseFloat(r.rate) || 0), 0);
+        const rateRow = qtyRows.find(r => !r.alreadyEntered) || qtyRows[0];
+
+        const renderQtyBox = (row: BulkRow, caption: string) => (
+            <View style={styles.qtyWrap} key={row.session}>
+                <Text style={styles.inputCaption}>{caption}</Text>
+                <TextInput
+                    style={[styles.qtyInput, row.alreadyEntered && styles.qtyInputDone]}
+                    value={row.quantity}
+                    onChangeText={(text) => updateRow(row.session, memberId, { quantity: text })}
+                    keyboardType="decimal-pad"
+                    placeholder="0"
+                    placeholderTextColor={colors.mutedForeground}
+                    selectTextOnFocus
+                    editable={!row.alreadyEntered}
+                />
+            </View>
+        );
+
+        return (
+            <View key={memberId} style={[styles.memberRow, allEntered && styles.memberRowDone]}>
+                <View style={styles.memberRowTop}>
+                    <View style={styles.memberInfo}>
+                        <Pressable
+                            style={[
+                                styles.checkbox,
+                                anyIncluded && styles.checkboxChecked
+                            ]}
+                            onPress={() => toggleMember(memberId)}
+                        >
+                            {(anyIncluded || allEntered) && (
+                                <Check size={12} color={colors.white} />
+                            )}
+                        </Pressable>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.memberName, allEntered && styles.memberNameDone]} numberOfLines={1}>
+                                {qtyRows[0].name}
+                            </Text>
+                            <Text style={styles.memberMobile}>{qtyRows[0].mobile}</Text>
+                        </View>
+                    </View>
+                    {allEntered ? (
+                        <View style={styles.doneBadge}>
+                            <Check size={10} color={colors.white} />
+                            <Text style={styles.doneBadgeText}>Entered</Text>
+                        </View>
+                    ) : (
+                        <Text style={styles.rowAmount}>₹{total.toFixed(2)}</Text>
+                    )}
+                </View>
+
+                <View style={styles.memberRowInputs}>
+                    {morningRow && renderQtyBox(morningRow, 'Morn (L)')}
+                    {morningRow && eveningRow && <Text style={styles.multiplySign}>+</Text>}
+                    {eveningRow && renderQtyBox(eveningRow, 'Eve (L)')}
+                    <Text style={styles.multiplySign}>×</Text>
+                    <View style={styles.qtyWrap}>
+                        <Text style={styles.inputCaption}>Rate (₹/L)</Text>
+                        <TextInput
+                            style={[styles.qtyInput, allEntered && styles.qtyInputDone]}
+                            value={rateRow.rate}
+                            onChangeText={(text) => updateMemberRate(memberId, text)}
+                            keyboardType="decimal-pad"
+                            placeholder="0"
+                            placeholderTextColor={colors.mutedForeground}
+                            selectTextOnFocus
+                            editable={!allEntered}
+                        />
+                    </View>
+                </View>
             </View>
         );
     };
@@ -384,7 +510,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                                     <View style={styles.listHeaderLeft}>
                                         <Users size={14} color={colors.primary} />
                                         <Text style={styles.listHeaderText}>
-                                            Daily Auto Entry Members ({filteredRows.length})
+                                            Daily Auto Entry Members ({uniqueMemberIds.length})
                                         </Text>
                                     </View>
                                     {alreadyCount > 0 && (
@@ -420,21 +546,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                                         </Text>
                                     </View>
                                 ) : sessions.length > 1 ? (
-                                    sessions.map(sessionKey => {
-                                        const groupRows = filteredRows.filter(r => r.session === sessionKey);
-                                        if (groupRows.length === 0) return null;
-                                        return (
-                                            <View key={sessionKey}>
-                                                <Text style={[
-                                                    styles.sessionGroupTitle,
-                                                    { color: sessionKey === 'morning' ? colors.warning : colors.primary }
-                                                ]}>
-                                                    {sessionKey === 'morning' ? 'Morning' : 'Evening'} ({groupRows.length})
-                                                </Text>
-                                                {groupRows.map(renderMemberRow)}
-                                            </View>
-                                        );
-                                    })
+                                    uniqueMemberIds.map(renderCombinedMember)
                                 ) : (
                                     filteredRows.map(renderMemberRow)
                                 )}
@@ -457,7 +569,7 @@ export function BulkEntryModal({ isVisible, onClose, onSuccess }: BulkEntryModal
                         <View style={styles.footer}>
                             <View style={styles.summaryRow}>
                                 <View style={styles.summaryItem}>
-                                    <Text style={styles.summaryValue}>{submitRows.length}</Text>
+                                    <Text style={styles.summaryValue}>{submitMemberCount}</Text>
                                     <Text style={styles.summaryLabel}>Members</Text>
                                 </View>
                                 <View style={styles.summaryDivider} />
@@ -806,6 +918,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         backgroundColor: colors.card,
         color: colors.foreground,
         textAlign: 'center',
+    },
+    qtyInputDone: {
+        backgroundColor: colors.muted,
+        color: colors.mutedForeground,
     },
     multiplySign: {
         fontSize: 13,
