@@ -22,13 +22,22 @@ router.get('/', auth, async (req, res) => {
         if (shift) query.shift = shift;
         if (isPaid !== undefined) query.isPaid = isPaid === 'true';
 
-        // Date filters
+        // Date filters. The app sends date-only values (YYYY-MM-DD), which are
+        // calendar dates, so use UTC boundaries instead of server-local hours.
         if (date) {
-            const dayStart = new Date(date);
-            dayStart.setHours(0, 0, 0, 0);
-            const dayEnd = new Date(date);
-            dayEnd.setHours(23, 59, 59, 999);
-            query.date = { $gte: dayStart, $lte: dayEnd };
+            const dateKey = String(date);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+                const dayStart = new Date(`${dateKey}T00:00:00.000Z`);
+                const nextDay = new Date(dayStart);
+                nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+                query.date = { $gte: dayStart, $lt: nextDay };
+            } else {
+                const dayStart = new Date(dateKey);
+                dayStart.setHours(0, 0, 0, 0);
+                const dayEnd = new Date(dateKey);
+                dayEnd.setHours(23, 59, 59, 999);
+                query.date = { $gte: dayStart, $lte: dayEnd };
+            }
         } else if (startDate || endDate) {
             query.date = {};
             if (startDate) query.date.$gte = new Date(startDate);
