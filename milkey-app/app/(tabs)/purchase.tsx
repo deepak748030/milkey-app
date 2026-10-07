@@ -97,6 +97,7 @@ export default function PurchaseScreen() {
     const [historyPage, setHistoryPage] = useState(1);
     const [hasMoreHistory, setHasMoreHistory] = useState(true);
     const [historyTotals, setHistoryTotals] = useState({ quantity: 0, amount: 0 });
+    const collectionsRequestIdRef = useRef(0);
 
     // Report state
     const [reportStartDate, setReportStartDate] = useState('');
@@ -153,19 +154,25 @@ export default function PurchaseScreen() {
     }, []);
 
     const fetchCollections = useCallback(async (page = 1, append = false) => {
+        const requestId = ++collectionsRequestIdRef.current;
         setHistoryLoading(true);
         try {
             const dateStr = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`;
-            const res = await milkCollectionsApi.getAll({ date: dateStr, shift: entryShift, limit: 50, page });
-            if (res.success) {
+            const res = await milkCollectionsApi.getAll({
+                date: dateStr,
+                shift: entryShift,
+                limit: 1000,
+                page,
+            });
+            if (requestId === collectionsRequestIdRef.current && res.success) {
                 const data = res.response?.data || [];
                 setCollections(prev => append ? [...prev, ...data] : data);
                 setHistoryTotals(res.response?.totals || { quantity: 0, amount: 0 });
-                setHasMoreHistory(data.length === 50);
+                setHasMoreHistory(data.length === 1000);
                 setHistoryPage(page);
             }
         } catch { }
-        setHistoryLoading(false);
+        if (requestId === collectionsRequestIdRef.current) setHistoryLoading(false);
     }, [entryDate, entryShift]);
 
     const fetchReportData = useCallback(async () => {
@@ -204,7 +211,7 @@ export default function PurchaseScreen() {
                 .catch(() => { });
         }, [])
     );
-    useEffect(() => { fetchCollections(1); }, [entryDate, entryShift]);
+    useEffect(() => { fetchCollections(1); }, [fetchCollections]);
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
     useEffect(() => { if (reportStartDate && reportEndDate) fetchReportData(); }, [reportStartDate, reportEndDate]);
 
@@ -1113,10 +1120,13 @@ export default function PurchaseScreen() {
             if (at !== bt) return bt - at;
             return String(b._id).localeCompare(String(a._id));
         });
-        const q = saleEntrySearch.trim().toUpperCase();
-        const visible = q
-            ? sorted.filter(it => String(it.farmerCode || '').toUpperCase().includes(q))
-            : sorted;
+        const selectedCode = selectedCustomer?.code.toUpperCase();
+        const q = selectedCode || saleEntrySearch.trim().toUpperCase();
+        const visible = selectedCode
+            ? sorted.filter(it => String(it.farmerCode || it.purchaseFarmer?.code || '').toUpperCase() === selectedCode)
+            : q
+                ? sorted.filter(it => String(it.farmerCode || it.purchaseFarmer?.code || '').toUpperCase().includes(q))
+                : sorted;
 
         return (
             <View style={s.tableBottomWrap}>
@@ -1125,7 +1135,7 @@ export default function PurchaseScreen() {
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                             <FileText size={13} color={colors.primary} />
                             <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
-                            <View style={s.badge}><Text style={s.badgeText}>{collections.length}</Text></View>
+                            <View style={s.badge}><Text style={s.badgeText}>{visible.length}</Text></View>
                         </View>
 
                         {/* Code search bar */}
