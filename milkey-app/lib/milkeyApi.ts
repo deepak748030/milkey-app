@@ -648,6 +648,10 @@ export const milkCollectionsApi = {
         isPaid?: boolean;
         limit?: number;
         page?: number;
+        /** Device timezone as minutes AHEAD of UTC (IST = 330). Lets the server
+         *  treat the picked calendar day as the user's local day, so rows that were
+         *  bulk-filled/imported with a local time (or as strings) still show up. */
+        tzOffsetMinutes?: number;
     }) => {
         const queryParams = new URLSearchParams();
         if (params?.farmerCode) queryParams.append('farmerCode', params.farmerCode);
@@ -658,6 +662,7 @@ export const milkCollectionsApi = {
         if (params?.isPaid !== undefined) queryParams.append('isPaid', String(params.isPaid));
         if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.page) queryParams.append('page', params.page.toString());
+        if (params?.tzOffsetMinutes !== undefined) queryParams.append('tzOffsetMinutes', String(params.tzOffsetMinutes));
         const query = queryParams.toString();
 
         return apiRequest<{ data: MilkCollection[]; count: number; totals: { quantity: number; amount: number } }>(

@@ -39,6 +39,18 @@ import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 type TabType = PurchaseTab;
 const TAB_ORDER: TabType[] = ['Purchase', 'Report', 'C-Farmer'];
 
+// Device timezone as minutes AHEAD of UTC (IST = +330). Sent with every collection
+// request so the server treats the picked calendar day as the *user's local day*.
+// Without it, rows that were bulk-filled/imported with a local time (e.g. stored as
+// 18:30Z of the previous day for IST) or as date strings never matched the query and
+// silently went missing from the Collection tab.
+const TZ_OFFSET_MINUTES = -new Date().getTimezoneOffset();
+// Server caps a single page at 1000 rows, so page through them instead of truncating.
+const COLLECTIONS_PAGE_SIZE = 1000;
+const REPORT_PAGE_SIZE = 1000;
+// Safety cap for the report table (rows are rendered + printed together).
+const REPORT_MAX_ROWS = 3000;
+
 export default function PurchaseScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useTranslation();
@@ -98,6 +110,7 @@ export default function PurchaseScreen() {
     const [hasMoreHistory, setHasMoreHistory] = useState(true);
     const [historyTotals, setHistoryTotals] = useState({ quantity: 0, amount: 0 });
     const collectionsRequestIdRef = useRef(0);
+    const reportRequestIdRef = useRef(0);
 
     // Report state
     const [reportStartDate, setReportStartDate] = useState('');
@@ -107,6 +120,7 @@ export default function PurchaseScreen() {
     const [reportCollections, setReportCollections] = useState<MilkCollection[]>([]);
     const [reportLoading, setReportLoading] = useState(false);
     const [reportTotals, setReportTotals] = useState({ quantity: 0, amount: 0 });
+    const [reportTotalCount, setReportTotalCount] = useState(0);
     const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
 
     // Farmer tab state
@@ -153,40 +167,74 @@ export default function PurchaseScreen() {
         } catch { }
     }, []);
 
-    const fetchCollections = useCallback(async (page = 1, append = false) => {
+    const fetchCollections = useCallback(async () => {
         const requestId = ++collectionsRequestIdRef.current;
         setHistoryLoading(true);
         try {
             const dateStr = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`;
-            const res = await milkCollectionsApi.getAll({
-                date: dateStr,
-                shift: entryShift,
-                limit: 1000,
-                page,
-            });
-            if (requestId === collectionsRequestIdRef.current && res.success) {
+            // Fetch EVERY page for the selected day + shift. Picking a single page
+            // (the old behaviour) silently dropped rows once a day held more entries
+            // than one page — which is exactly what happened after bulk data fills.
+            let rows: MilkCollection[] = [];
+            let totals = { quantity: 0, amount: 0 };
+            let totalCount = 0;
+            for (let page = 1; page <= 10; page++) {
+                const res = await milkCollectionsApi.getAll({
+                    date: dateStr,
+                    shift: entryShift,
+                    limit: COLLECTIONS_PAGE_SIZE,
+                    page,
+                    tzOffsetMinutes: TZ_OFFSET_MINUTES,
+                });
+                if (requestId !== collectionsRequestIdRef.current) return;
+                if (!res.success) break;
                 const data = res.response?.data || [];
-                setCollections(prev => append ? [...prev, ...data] : data);
-                setHistoryTotals(res.response?.totals || { quantity: 0, amount: 0 });
-                setHasMoreHistory(data.length === 1000);
-                setHistoryPage(page);
+                rows = rows.concat(data);
+                totals = res.response?.totals || totals;
+                totalCount = res.response?.count ?? rows.length;
+                if (data.length < COLLECTIONS_PAGE_SIZE) break;
             }
+            if (requestId !== collectionsRequestIdRef.current) return;
+            setCollections(rows);
+            setHistoryTotals(totals);
+            setHasMoreHistory(rows.length < totalCount);
+            setHistoryPage(1);
         } catch { }
         if (requestId === collectionsRequestIdRef.current) setHistoryLoading(false);
     }, [entryDate, entryShift]);
 
     const fetchReportData = useCallback(async () => {
         if (!reportStartDate || !reportEndDate) return;
+        const requestId = ++reportRequestIdRef.current;
         setReportLoading(true);
         try {
-            const res = await milkCollectionsApi.getAll({ startDate: reportStartDate, endDate: reportEndDate, limit: 500 });
-            if (res.success) {
+            // Load the range across pages (the old single request was capped at 500
+            // rows, newest first — so older entries of the range never came).
+            let rows: MilkCollection[] = [];
+            let totals = { quantity: 0, amount: 0 };
+            let totalCount = 0;
+            for (let page = 1; rows.length < REPORT_MAX_ROWS; page++) {
+                const res = await milkCollectionsApi.getAll({
+                    startDate: reportStartDate,
+                    endDate: reportEndDate,
+                    limit: REPORT_PAGE_SIZE,
+                    page,
+                    tzOffsetMinutes: TZ_OFFSET_MINUTES,
+                });
+                if (requestId !== reportRequestIdRef.current) return;
+                if (!res.success) break;
                 const data = res.response?.data || [];
-                setReportCollections(data);
-                setReportTotals(res.response?.totals || { quantity: 0, amount: 0 });
+                rows = rows.concat(data);
+                totals = res.response?.totals || totals;
+                totalCount = res.response?.count ?? rows.length;
+                if (data.length < REPORT_PAGE_SIZE) break;
             }
+            if (requestId !== reportRequestIdRef.current) return;
+            setReportCollections(rows);
+            setReportTotals(totals);
+            setReportTotalCount(totalCount);
         } catch { }
-        setReportLoading(false);
+        if (requestId === reportRequestIdRef.current) setReportLoading(false);
     }, [reportStartDate, reportEndDate]);
 
     useEffect(() => {
@@ -211,7 +259,7 @@ export default function PurchaseScreen() {
                 .catch(() => { });
         }, [])
     );
-    useEffect(() => { fetchCollections(1); }, [fetchCollections]);
+    useEffect(() => { fetchCollections(); }, [fetchCollections]);
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
     useEffect(() => { if (reportStartDate && reportEndDate) fetchReportData(); }, [reportStartDate, reportEndDate]);
 
@@ -437,7 +485,7 @@ export default function PurchaseScreen() {
                 // Auto-deselect the farmer/code after save so user must re-select for next entry.
                 // This prevents accidental double entries on the same code.
                 setSelectedCustomer(null);
-                fetchCollections(1);
+                fetchCollections();
             } else {
                 showAlert('Error', res.message || 'Failed to save');
             }
@@ -451,7 +499,7 @@ export default function PurchaseScreen() {
             setDeletingId(id);
             try {
                 const res = await milkCollectionsApi.delete(id);
-                if (res.success) { showAlert('Success', 'Entry deleted'); fetchCollections(1); }
+                if (res.success) { showAlert('Success', 'Entry deleted'); fetchCollections(); }
                 else showAlert('Error', res.message || 'Failed');
             } catch { showAlert('Error', 'Failed to delete'); }
             setDeletingId(null);
@@ -517,7 +565,7 @@ export default function PurchaseScreen() {
         if (activeTab === 'C-Farmer') {
             await fetchCustomersWithInactive();
         } else {
-            await Promise.all([fetchCustomers(), fetchCollections(1)]);
+            await Promise.all([fetchCustomers(), fetchCollections()]);
         }
         setRefreshing(false);
     }, [fetchCustomers, fetchCollections, activeTab]);
@@ -1295,6 +1343,14 @@ export default function PurchaseScreen() {
                 <Text style={[s.exportReportBtnText, { color: colors.foreground }]}>Download PDF</Text>
             </Pressable>
 
+            {/* Row-cap note: the totals above always cover the full range, the table
+                below renders the newest rows (capped) — say so instead of staying silent */}
+            {!reportLoading && reportStartDate && reportEndDate && reportTotalCount > reportCollections.length && (
+                <Text style={s.reportCapNote}>
+                    Showing latest {reportCollections.length} of {reportTotalCount} entries — select a smaller date range to see older entries.
+                </Text>
+            )}
+
             {/* Report Table */}
             {reportLoading ? (
                 <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
@@ -1725,7 +1781,7 @@ export default function PurchaseScreen() {
                                         setEntryShift(e.shift);
                                     }
                                     // Delete the old entry silently
-                                    milkCollectionsApi.delete(e._id).then(() => fetchCollections(1)).catch(() => { });
+                                    milkCollectionsApi.delete(e._id).then(() => fetchCollections()).catch(() => { });
                                 }
                             },
                             {
@@ -2048,6 +2104,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     reportSummaryLabel: { fontSize: 10, color: colors.mutedForeground, fontWeight: '500' },
     reportSummaryValue: { fontSize: 15, fontWeight: '800', color: colors.foreground, marginTop: 2 },
     reportSummaryDivider: { width: 1, height: 30, backgroundColor: colors.border },
+    reportCapNote: { fontSize: 10, fontWeight: '600', color: colors.warning, textAlign: 'center', marginBottom: 6 },
     exportReportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.primary, paddingVertical: 12, borderRadius: 10, marginBottom: 8 },
     exportReportBtnText: { fontSize: 13, fontWeight: '700', color: '#fff' },
 
