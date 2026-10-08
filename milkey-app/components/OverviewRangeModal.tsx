@@ -41,7 +41,15 @@ export function OverviewRangeModal({ visible, kind, onClose }: Props) {
             setLoading(true);
             try {
                 if (kind === 'collection') {
-                    const res = await milkCollectionsApi.getAll({ startDate, endDate, limit: 1 });
+                    // Totals come from the server aggregation, so limit: 1 is enough.
+                    // tzOffsetMinutes makes the range a *local* date range (bulk-filled
+                    // rows stored with a local time are counted too).
+                    const res = await milkCollectionsApi.getAll({
+                        startDate,
+                        endDate,
+                        limit: 1,
+                        tzOffsetMinutes: -new Date().getTimezoneOffset(),
+                    });
                     if (!cancelled && res?.success && res.response) {
                         const t = res.response.totals || { quantity: 0, amount: 0 };
                         const qty = t.quantity || 0;
