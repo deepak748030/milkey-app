@@ -1,8 +1,20 @@
 import { Stack } from 'expo-router';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { StatusBar as RNStatusBar, View } from 'react-native';
+import { StatusBar as RNStatusBar, View, LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
+
+// suppress noisy Expo Go warnings & noisy app logs in production
+LogBox.ignoreLogs([
+  'expo-notifications',
+  'Push notifications',
+  'Expo Go detected',
+  'BluetoothPrinter',
+  '[subs]',
+  '[push]',
+  '[PendingSync]',
+  'Version check failed',
+]);
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { usePendingSubscriptionSync } from '@/hooks/usePendingSubscriptionSync';
 import { BluetoothPrinterProvider } from '@/hooks/useBluetoothPrinter';

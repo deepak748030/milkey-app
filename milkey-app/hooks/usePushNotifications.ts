@@ -21,7 +21,6 @@ try {
         }),
     });
 } catch (e) {
-    console.warn('[push] expo-notifications native module not available (Expo Go) — push disabled', (e as any)?.message);
 }
 
 const IS_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -101,13 +100,11 @@ export function usePushNotifications() {
             if (authToken) {
                 const result = await authApi.updatePushToken(token);
                 if (result.success) {
-                    console.log('Push token updated on server');
                 } else {
-                    console.error('Failed to update push token:', result.message);
                 }
             }
         } catch (error) {
-            console.error('Error updating push token on server:', error);
+        }
         }
     }
 
@@ -158,7 +155,6 @@ export async function sendLocalNotification(
     data?: Record<string, unknown>
 ) {
     if (!notificationsAvailable || !Notifications || IS_EXPO_GO) {
-        console.log('[push] sendLocalNotification skipped — notifications unavailable in Expo Go');
         return;
     }
     try {
@@ -171,6 +167,5 @@ export async function sendLocalNotification(
             trigger: null,
         });
     } catch (e) {
-        console.warn('[push] schedule failed', e);
     }
 }

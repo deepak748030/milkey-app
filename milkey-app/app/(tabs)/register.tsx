@@ -680,7 +680,6 @@ export default function RegisterScreen() {
         setSavingPayment(true);
         try {
             const milkAmountValue = purchaseAmount + (parseFloat(milkAmount) || 0);
-            console.log('Creating payment with period:', { periodStart: dateStart, periodEnd: dateEnd });
             const res = await paymentsApi.create({
                 farmerCode: paymentFarmer.farmer.code,
                 amount,
@@ -689,7 +688,6 @@ export default function RegisterScreen() {
                 periodStart: dateStart,
                 periodEnd: dateEnd,
             });
-            console.log('Payment response:', JSON.stringify(res));
 
             if (res.success) {
                 if (res.response) {

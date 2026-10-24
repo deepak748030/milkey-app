@@ -212,28 +212,17 @@ export default function SubscriptionsScreen() {
 
     const fetchData = useCallback(async () => {
         try {
-            // Fetch user's subscriptions
             const mySubsResponse = await userSubscriptionsApi.getMy();
-            console.log('[subs] getMy:', mySubsResponse);
             if (mySubsResponse.success && mySubsResponse.response) {
                 setActiveSubscriptions(mySubsResponse.response.active || []);
-            } else {
-                console.warn('[subs] getMy failed:', mySubsResponse?.message);
             }
 
-            // Fetch available subscriptions
             const availableResponse = await userSubscriptionsApi.getAvailable();
-            console.log('[subs] getAvailable:', JSON.stringify(availableResponse).slice(0, 2000));
             if (availableResponse.success && availableResponse.response) {
                 const subs = (availableResponse.response as any).subscriptions || (availableResponse.response as any).data || [];
-                console.log(`[subs] available count=${subs.length} isNewUser=${(availableResponse.response as any).isNewUser} totalInDb=${(availableResponse.response as any).totalInDb}`);
                 setAvailableSubscriptions(subs);
                 setIsNewUser((availableResponse.response as any).isNewUser || false);
-                if (!subs.length) {
-                    console.warn('[subs] EMPTY available — check server DB subscriptions collection and isActive flag');
-                }
-            } else {
-                console.warn('[subs] getAvailable failed:', availableResponse?.message);
+            }
                 // keep previous if any, don't blank
             }
         } catch (error) {

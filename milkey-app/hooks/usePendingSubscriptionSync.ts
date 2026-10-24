@@ -32,7 +32,6 @@ export function usePendingSubscriptionSync() {
                     // If any subscriptions were activated, refresh the subscription cache
                     const activatedCount = synced.filter(s => s.status === 'activated').length;
                     if (activatedCount > 0) {
-                        console.log(`[PendingSync] Auto-activated ${activatedCount} subscription(s)`);
                         // Clear cache to force refresh
                         useSubscriptionStore.getState().clearCache();
                         await useSubscriptionStore.getState().fetchStatus();
@@ -40,7 +39,6 @@ export function usePendingSubscriptionSync() {
                 }
             } catch (error) {
                 // Silent fail - this is a background sync
-                console.log('[PendingSync] Error syncing pending subscriptions:', error);
             }
         };
 

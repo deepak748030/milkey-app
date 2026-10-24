@@ -76,7 +76,7 @@ export default function TabLayout() {
             setShowUpdate(true);
           }
         }
-      } catch (e) { console.log('Version check failed', e); }
+      } catch (e) {  // version check silent
     })();
   }, []);
 
