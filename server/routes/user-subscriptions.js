@@ -59,16 +59,21 @@ router.get('/available', auth, async (req, res) => {
         const purchasedSubscriptionIds = userSubscriptions.map(us => us.subscription?._id?.toString());
 
         // Filter subscriptions based on user status
-        const availableSubscriptions = subscriptions.filter(sub => {
+        let availableSubscriptions = subscriptions.filter(sub => {
             // If free subscription for new users only, check conditions
             if (sub.isFree && sub.forNewUsers) {
                 // Only show if user is new AND hasn't purchased this already
                 if (!isNewUser) return false;
                 if (purchasedSubscriptionIds.includes(sub._id.toString())) return false;
             }
-
             return true;
         });
+
+        // Fallback: agar filter ne sab hata diye aur DB me plans hai, to paid/combined dikha do taaki screen blank na rahe
+        if (availableSubscriptions.length === 0 && subscriptions.length > 0) {
+            console.warn(`[available] filtered 0/${subscriptions.length} for user ${userId} isNewUser=${isNewUser} purchased=${purchasedSubscriptionIds.length} — returning fallback`);
+            availableSubscriptions = subscriptions;
+        }
 
         // Mark which ones are already purchased
         const subscriptionsWithStatus = availableSubscriptions.map(sub => ({
@@ -76,12 +81,15 @@ router.get('/available', auth, async (req, res) => {
             isPurchased: purchasedSubscriptionIds.includes(sub._id.toString())
         }));
 
+        console.log(`[available] user ${userId} isNewUser=${isNewUser} raw=${subscriptions.length} filtered=${availableSubscriptions.length} activeSubs=${userSubscriptions.length}`);
+
         res.json({
             success: true,
             response: {
                 subscriptions: subscriptionsWithStatus,
                 isNewUser,
-                hasActiveSubscription: userSubscriptions.length > 0
+                hasActiveSubscription: userSubscriptions.length > 0,
+                totalInDb: subscriptions.length
             }
         });
     } catch (error) {
@@ -188,6 +196,10 @@ router.get('/check/:tab', auth, async (req, res) => {
                 }
                 return true;
             });
+            if (availableSubscriptions.length === 0 && subs.length > 0) {
+                console.warn(`[check:${tab}] filtered 0/${subs.length} for user ${req.userId} — fallback`);
+                availableSubscriptions = subs;
+            }
         }
 
         res.json({
@@ -917,6 +929,21 @@ router.get('/status', auth, async (req, res) => {
             sub.applicableTabs?.forEach(tab => coveredTabs.add(tab));
         });
 
+        // Compute nearest expiry for banner (fixes empty red-mark gap when status.expiryDate missing)
+        let expiryDate = null;
+        let daysLeft = null;
+        if (activeSubscriptions.length > 0) {
+            let earliest = null;
+            activeSubscriptions.forEach(s => {
+                const d = s.endDate ? new Date(s.endDate) : null;
+                if (d && (!earliest || d < earliest)) earliest = d;
+            });
+            if (earliest) {
+                expiryDate = earliest;
+                daysLeft = Math.ceil((earliest.getTime() - Date.now()) / 86400000);
+            }
+        }
+
         res.json({
             success: true,
             response: {
@@ -926,7 +953,9 @@ router.get('/status', auth, async (req, res) => {
                 hasPurchase: coveredTabs.has('purchase'),
                 hasSelling: coveredTabs.has('selling'),
                 hasRegister: coveredTabs.has('register'),
-                subscriptions: activeSubscriptions
+                subscriptions: activeSubscriptions,
+                expiryDate,
+                daysLeft
             }
         });
     } catch (error) {
