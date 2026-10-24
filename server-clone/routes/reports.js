@@ -386,10 +386,13 @@ router.get('/dashboard', auth, async (req, res) => {
 // Home screen stats - includes sell quantity from SellingEntry and member count from Member model
 router.get('/home-stats', auth, async (req, res) => {
     try {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayEnd = new Date(today);
-        todayEnd.setHours(23, 59, 59, 999);
+        // Fix: use client's timezone (IST default 330) same as milk-collections GET, to fix Home 20L vs Purchase 0 mismatch
+        // Previously used server's local hours (UTC on Render) causing wrong calendar day for IST users.
+        const tzOffsetParam = parseInt(req.query.tzOffsetMinutes, 10);
+        const clientTzOffsetMinutes = Number.isFinite(tzOffsetParam) ? tzOffsetParam : 330;
+        const nowLocal = new Date(Date.now() + clientTzOffsetMinutes * 60000);
+        const today = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate()) - clientTzOffsetMinutes * 60000);
+        const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
 
         const [
             todayCollections,
