@@ -223,8 +223,6 @@ export default function SubscriptionsScreen() {
                 setAvailableSubscriptions(subs);
                 setIsNewUser((availableResponse.response as any).isNewUser || false);
             }
-                // keep previous if any, don't blank
-            }
         } catch (error) {
             console.error('Error fetching subscriptions:', error);
         } finally {
