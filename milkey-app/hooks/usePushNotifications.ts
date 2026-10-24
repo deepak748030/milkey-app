@@ -98,14 +98,9 @@ export function usePushNotifications() {
         try {
             const authToken = await getToken();
             if (authToken) {
-                const result = await authApi.updatePushToken(token);
-                if (result.success) {
-                } else {
-                }
+                await authApi.updatePushToken(token);
             }
-        } catch (error) {
-        }
-        }
+        } catch {}
     }
 
     useEffect(() => {
