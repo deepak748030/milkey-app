@@ -183,6 +183,20 @@ export default function SellingScreen() {
     const [balanceReportLoading, setBalanceReportLoading] = useState(false);
     const [reportAmountSort, setReportAmountSort] = useState<'asc' | 'desc' | null>(null);
 
+    // Derived report data with amount sort (must be top-level hooks, not inside renderReportsTab)
+    const selectedReportMember = useMemo(() => reportMemberFilter ? balanceReportData.find(m => m._id === reportMemberFilter) : null, [reportMemberFilter, balanceReportData]);
+    const rawDisplayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
+    const displayData = useMemo(() => {
+        if (!reportAmountSort) return rawDisplayData;
+        const arr = [...(rawDisplayData || [])];
+        arr.sort((a: any, b: any) => {
+            const av = Number(a.totalBalance) || 0;
+            const bv = Number(b.totalBalance) || 0;
+            return reportAmountSort === 'asc' ? av - bv : bv - av;
+        });
+        return arr;
+    }, [rawDisplayData, reportAmountSort]);
+
     // Customer (member) state
     const [members, setMembers] = useState<Member[]>([]);
     const [memberName, setMemberName] = useState('');
@@ -2480,30 +2494,12 @@ export default function SellingScreen() {
     );
 
     const renderReportsTab = () => {
-        // Get selected member for report from balance report data (server data)
-        const selectedReportMember = reportMemberFilter
-            ? balanceReportData.find(m => m._id === reportMemberFilter)
-            : null;
-
-        // Use server-provided summary for totals
+        // Use server-provided summary for totals (selectedReportMember/displayData are top-level memos)
         const totalMembers = balanceReportSummary?.totalMembers || 0;
         const totalUnpaidQuantity = balanceReportSummary?.totalUnpaidQuantity || 0;
         const netBalance = balanceReportSummary?.netBalance || 0;
         const totalReceivable = balanceReportSummary?.totalReceivable || 0;
         const totalPayable = balanceReportSummary?.totalPayable || 0;
-
-        // Data to display in table (filtered by selected member or all) with amount sort
-        const rawDisplayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
-        const displayData = useMemo(() => {
-            if (!reportAmountSort) return rawDisplayData;
-            const arr = [...(rawDisplayData || [])];
-            arr.sort((a: any, b: any) => {
-                const av = Number(a.totalBalance) || 0;
-                const bv = Number(b.totalBalance) || 0;
-                return reportAmountSort === 'asc' ? av - bv : bv - av;
-            });
-            return arr;
-        }, [rawDisplayData, reportAmountSort]);
 
         return (
             <View>
