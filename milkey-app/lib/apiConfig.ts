@@ -1,7 +1,7 @@
 // Central API config - ponytail: single source, env switch, no hardcodes
-// Vercel (real) = https://milkey-app-server.vercel.app/api
+// Default = https://milkey-app.onrender.com/api (Render)
 // Local server-clone = http://<LAN-IP>:5000/api (EXPO_PUBLIC_API_URL must end with /api)
-const rawBase = process.env.EXPO_PUBLIC_API_URL || 'https://milkey-app-server.vercel.app/api';
+const rawBase = process.env.EXPO_PUBLIC_API_URL || 'https://milkey-app.onrender.com/api';
 const normalizedBase = rawBase.endsWith('/api') ? rawBase : rawBase.replace(/\/$/, '') + '/api';
 export const API_BASE_URL = normalizedBase;
 export const SERVER_BASE_URL = API_BASE_URL.replace('/api','');
