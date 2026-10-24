@@ -42,7 +42,7 @@ export default function AdminFeedbackScreen() {
         setLoading(true);
         try {
             const [feedbacksRes, statsRes] = await Promise.all([
-                feedbackApi.getAll({ status: filterStatus || undefined, limit: 50 }),
+                feedbackApi.getAll({ status: filterStatus || undefined, limit: 10 }),
                 feedbackApi.getStats(),
             ]);
 

@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import { X } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { DateRangePicker } from '@/components/DateRangePicker';
-import { milkCollectionsApi, sellingEntriesApi } from '@/lib/milkeyApi';
 
 type Kind = 'collection' | 'selling';
 
@@ -11,79 +10,41 @@ interface Props {
     visible: boolean;
     kind: Kind;
     onClose: () => void;
+    onRangeSelect?: (range: { startDate: string; endDate: string } | null) => void;
+    initialRange?: { startDate: string | null; endDate: string | null } | null;
 }
 
-interface Totals {
-    quantity: number;
-    amount: number;
-    avgRate: number;
-}
-
-export function OverviewRangeModal({ visible, kind, onClose }: Props) {
+export function OverviewRangeModal({ visible, kind, onClose, onRangeSelect, initialRange }: Props) {
     const { colors, isDark } = useTheme();
-    const [startDate, setStartDate] = useState<string | null>(null);
-    const [endDate, setEndDate] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [totals, setTotals] = useState<Totals | null>(null);
+    const [startDate, setStartDate] = useState<string | null>(initialRange?.startDate || null);
+    const [endDate, setEndDate] = useState<string | null>(initialRange?.endDate || null);
 
     useEffect(() => {
-        if (!visible) {
-            setStartDate(null);
-            setEndDate(null);
-            setTotals(null);
-        }
-    }, [visible]);
-
-    useEffect(() => {
-        if (!startDate || !endDate) return;
-        let cancelled = false;
-        (async () => {
-            setLoading(true);
-            try {
-                if (kind === 'collection') {
-                    // Totals come from the server aggregation, so limit: 1 is enough.
-                    // tzOffsetMinutes makes the range a *local* date range (bulk-filled
-                    // rows stored with a local time are counted too).
-                    const res = await milkCollectionsApi.getAll({
-                        startDate,
-                        endDate,
-                        limit: 1,
-                        tzOffsetMinutes: -new Date().getTimezoneOffset(),
-                    });
-                    if (!cancelled && res?.success && res.response) {
-                        const t = res.response.totals || { quantity: 0, amount: 0 };
-                        const qty = t.quantity || 0;
-                        const amt = t.amount || 0;
-                        setTotals({
-                            quantity: qty,
-                            amount: amt,
-                            avgRate: qty ? amt / qty : 0,
-                        });
-                    }
-                } else {
-                    const res = await sellingEntriesApi.getAll({ startDate, endDate, limit: 5000 });
-                    if (!cancelled && res?.success && res.response?.data) {
-                        let qty = 0;
-                        let amt = 0;
-                        for (const e of res.response.data) {
-                            const q = (e.morningQuantity || 0) + (e.eveningQuantity || 0);
-                            qty += q;
-                            amt += e.amount || q * (e.rate || 0);
-                        }
-                        setTotals({ quantity: qty, amount: amt, avgRate: qty ? amt / qty : 0 });
-                    }
-                }
-            } catch {
-                if (!cancelled) setTotals(null);
-            } finally {
-                if (!cancelled) setLoading(false);
+        if (visible) {
+            setStartDate(initialRange?.startDate || null);
+            setEndDate(initialRange?.endDate || null);
+        } else {
+            if (!initialRange) {
+                setStartDate(null);
+                setEndDate(null);
             }
-        })();
-        return () => { cancelled = true; };
-    }, [startDate, endDate, kind]);
+        }
+    }, [visible, initialRange]);
 
     const styles = createStyles(colors, isDark);
     const title = kind === 'collection' ? 'Milk Collection Range' : 'Selling Range';
+    const canApply = !!startDate && !!endDate;
+
+    const handleApply = () => {
+        if (startDate && endDate && onRangeSelect) {
+            onRangeSelect({ startDate, endDate });
+        }
+        onClose();
+    };
+    const handleClear = () => {
+        if (onRangeSelect) onRangeSelect(null);
+        onClose();
+    };
 
     return (
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -102,39 +63,19 @@ export function OverviewRangeModal({ visible, kind, onClose }: Props) {
                         onStartDateChange={setStartDate}
                         onEndDateChange={setEndDate}
                     />
+                    <Text style={styles.hint}>Select start & end date — Home will show totals for this range.</Text>
 
-                    <ScrollView style={{ maxHeight: 280 }}>
-                        {!startDate || !endDate ? (
-                            <Text style={styles.hint}>Select a date range to view {kind === 'collection' ? 'collection' : 'selling'} summary.</Text>
-                        ) : loading ? (
-                            <View style={styles.loadingWrap}>
-                                <ActivityIndicator color={colors.primary} />
-                            </View>
-                        ) : totals && totals.quantity > 0 ? (
-                            <View style={styles.rowsWrap}>
-                                <Row label="Quantity" value={`${totals.quantity.toFixed(2)} L`} colors={colors} />
-                                <Row label="Average Rate" value={`₹ ${totals.avgRate.toFixed(2)}`} colors={colors} />
-                                <Row label="Amount" value={`₹ ${totals.amount.toFixed(2)}`} colors={colors} highlight />
-                            </View>
-                        ) : (
-                            <Text style={styles.hint}>No data for selected range.</Text>
-                        )}
-                    </ScrollView>
+                    <View style={styles.actions}>
+                        <Pressable onPress={handleClear} style={[styles.btn, styles.btnClear]}>
+                            <Text style={styles.btnClearText}>Clear (Today)</Text>
+                        </Pressable>
+                        <Pressable onPress={handleApply} disabled={!canApply} style={[styles.btn, styles.btnApply, !canApply && styles.btnDisabled]}>
+                            <Text style={[styles.btnApplyText, !canApply && styles.btnDisabledText]}>Apply</Text>
+                        </Pressable>
+                    </View>
                 </Pressable>
             </Pressable>
         </Modal>
-    );
-}
-
-function Row({ label, value, colors, highlight }: { label: string; value: string; colors: any; highlight?: boolean }) {
-    return (
-        <View style={{
-            flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-            paddingVertical: 10, borderBottomWidth: 1, borderColor: colors.border,
-        }}>
-            <Text style={{ fontSize: 13, color: colors.mutedForeground }}>{label}</Text>
-            <Text style={{ fontSize: highlight ? 16 : 14, fontWeight: '700', color: highlight ? colors.primary : colors.foreground }}>{value}</Text>
-        </View>
     );
 }
 
@@ -151,7 +92,13 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10,
     },
     title: { fontSize: 15, fontWeight: '700', color: colors.foreground },
-    hint: { fontSize: 12, color: colors.mutedForeground, textAlign: 'center', paddingVertical: 20 },
-    loadingWrap: { paddingVertical: 24, alignItems: 'center' },
-    rowsWrap: { marginTop: 4 },
+    hint: { fontSize: 11, color: colors.mutedForeground, textAlign: 'center', paddingVertical: 8 },
+    actions: { flexDirection: 'row', gap: 10, marginTop: 10 },
+    btn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
+    btnClear: { backgroundColor: colors.card, borderColor: colors.border },
+    btnClearText: { fontSize: 13, fontWeight: '600', color: colors.foreground },
+    btnApply: { backgroundColor: colors.primary, borderColor: colors.primary },
+    btnApplyText: { fontSize: 13, fontWeight: '700', color: '#fff' },
+    btnDisabled: { backgroundColor: colors.muted, borderColor: colors.muted, opacity: 0.6 },
+    btnDisabledText: { color: colors.mutedForeground },
 });

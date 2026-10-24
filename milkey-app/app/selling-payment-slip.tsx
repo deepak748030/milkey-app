@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, ToastAndroid, Platform } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ChevronLeft, Download, Printer } from 'lucide-react-native';
+import { ChevronLeft, Download, Printer, MessageCircle } from 'lucide-react-native';
+import { shareViaWhatsapp, paymentSlipText } from '@/lib/whatsappShare';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { memberPaymentsApi, printSettingsApi, PrintSettings, MemberPayment } from '@/lib/milkeyApi';
 import * as Print from 'expo-print';
@@ -34,7 +35,7 @@ export default function SellingPaymentSlipScreen() {
             if (psRes.success && psRes.response) setPrintSettings(psRes.response);
 
             if (paymentId) {
-                const res = await memberPaymentsApi.getAll({ limit: 100 });
+                const res = await memberPaymentsApi.getAll({ limit: 10 });
                 if (res.success && res.response?.data) {
                     const found = res.response.data.find((p: MemberPayment) => p._id === paymentId);
                     if (found) setPayment(found);
@@ -211,6 +212,9 @@ export default function SellingPaymentSlipScreen() {
                     </Pressable>
                     <Pressable onPress={handlePrint} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
                         <Printer size={18} color={colors.primary} />
+                    </Pressable>
+                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).member?.name?.slice(0,4).toUpperCase()||'',name:(p as any).member?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, (p as any).totalMilkAmount||0, (p as any).totalAdvanceDeduction||0, (p as any).netPayable||0, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).member?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
+                        <MessageCircle size={18} color="#25D366" />
                     </Pressable>
                 </View>
             </View>

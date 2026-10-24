@@ -172,6 +172,20 @@ export default function ReferralScreen() {
                     </View>
                 )}
 
+                {/* Withdraw inside referral (combined) */}
+                <Pressable
+                    onPress={() => router.push('/withdraw' as any)}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, marginTop: 12 }}
+                >
+                    <View>
+                        <Text style={{ fontSize: 15, fontWeight: '700', color: colors.foreground }}>{t.profile.withdraw}</Text>
+                        <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>Withdraw your referral earnings</Text>
+                    </View>
+                    <View style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}>
+                        <Text style={{ color: '#fff', fontWeight: '700' }}>Open</Text>
+                    </View>
+                </Pressable>
+
                 {/* How It Works */}
                 <Text style={styles.sectionTitle}>How It Works</Text>
                 <View style={styles.howItWorksCard}>

@@ -95,7 +95,7 @@ export function WhatsappSettingsPage() {
     return (
         <div className="max-w-3xl mx-auto animate-fade-in">
             <div className="mb-6 flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-green-500/10 text-green-500 flex items-center justify-center">
+                <div className="w-11 h-11 rounded-lg bg-green-500/10 text-green-500 flex items-center justify-center">
                     <MessageCircle className="w-6 h-6" />
                 </div>
                 <div>
@@ -131,7 +131,7 @@ export function WhatsappSettingsPage() {
                 </div>
             )}
 
-            <div className="bg-card border border-border rounded-xl p-5 space-y-5">
+            <div className="bg-card border border-border rounded-lg p-5 space-y-5">
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="font-semibold text-foreground">Send on new registration</h3>
@@ -220,7 +220,7 @@ export function WhatsappSettingsPage() {
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm text-sm font-medium hover:opacity-90 disabled:opacity-50"
                     >
                         {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                         Save Settings
@@ -228,7 +228,7 @@ export function WhatsappSettingsPage() {
                 </div>
             </div>
 
-            <div className="mt-6 bg-card border border-border rounded-xl p-5">
+            <div className="mt-6 bg-card border border-border rounded-lg p-5">
                 <h3 className="font-semibold text-foreground mb-1">Send a test message</h3>
                 <p className="text-sm text-muted-foreground mb-4">Sends the current welcome message to any phone number.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

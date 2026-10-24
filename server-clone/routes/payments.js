@@ -1,0 +1,784 @@
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+const Payment = require('../models/Payment');
+const MilkCollection = require('../models/MilkCollection');
+const Advance = require('../models/Advance');
+const Farmer = require('../models/Farmer');
+const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
+
+// GET /api/payments - Get all payments
+router.get('/', auth, async (req, res) => {
+    try {
+        const { farmerId, startDate, endDate, limit = 10, page = 1, latestPerFarmer } = req.query;
+
+        // If latestPerFarmer is requested, use aggregation to get only the last payment per farmer
+        if (latestPerFarmer === 'true' && !farmerId) {
+            const matchStage = { owner: new mongoose.Types.ObjectId(req.userId) };
+            if (startDate || endDate) {
+                matchStage.date = {};
+                if (startDate) matchStage.date.$gte = new Date(startDate);
+                if (endDate) {
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    matchStage.date.$lte = end;
+                }
+            }
+
+            const pipeline = [
+                { $match: matchStage },
+                { $sort: { date: -1 } },
+                {
+                    $group: {
+                        _id: '$farmer',
+                        paymentId: { $first: '$$ROOT._id' },
+                        doc: { $first: '$$ROOT' }
+                    }
+                },
+                { $replaceRoot: { newRoot: '$doc' } },
+                { $sort: { date: -1 } },
+                { $skip: (parseInt(page) - 1) * parseInt(limit) },
+                { $limit: parseInt(limit) }
+            ];
+
+            const payments = await Payment.aggregate(pipeline);
+            await Payment.populate(payments, [
+                { path: 'farmer', select: 'code name' },
+                { path: 'settledAdvances', select: 'amount date note status farmer' }
+            ]);
+
+            // Populate farmer details in settledAdvances
+            for (const payment of payments) {
+                if (payment.settledAdvances && payment.settledAdvances.length > 0) {
+                    for (let i = 0; i < payment.settledAdvances.length; i++) {
+                        const advance = payment.settledAdvances[i];
+                        if (advance && advance.farmer) {
+                            const farmerDoc = await Farmer.findById(advance.farmer).select('code name').lean();
+                            payment.settledAdvances[i].farmer = farmerDoc;
+                        }
+                    }
+                }
+            }
+
+            // Count unique farmers for pagination
+            const totalAgg = await Payment.aggregate([
+                { $match: matchStage },
+                { $group: { _id: '$farmer' } },
+                { $count: 'total' }
+            ]);
+            const total = totalAgg.length > 0 ? totalAgg[0].total : 0;
+
+            return res.json({
+                success: true,
+                response: {
+                    data: payments,
+                    count: total,
+                    pagination: {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        total,
+                        pages: Math.ceil(total / parseInt(limit))
+                    }
+                }
+            });
+        }
+
+        const query = { owner: req.userId };
+        if (farmerId) query.farmer = farmerId;
+
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.date.$lte = end;
+            }
+        }
+
+        const payments = await Payment.find(query)
+            .populate('farmer', 'code name')
+            .populate('settledAdvances', 'amount date note status farmer')
+            .sort({ date: -1 })
+            .limit(parseInt(limit))
+            .skip((parseInt(page) - 1) * parseInt(limit))
+            .lean();
+
+        // Populate farmer details in settledAdvances
+        for (const payment of payments) {
+            if (payment.settledAdvances && payment.settledAdvances.length > 0) {
+                for (let i = 0; i < payment.settledAdvances.length; i++) {
+                    const advance = payment.settledAdvances[i];
+                    if (advance && advance.farmer) {
+                        const farmer = await Farmer.findById(advance.farmer).select('code name').lean();
+                        payment.settledAdvances[i].farmer = farmer;
+                    }
+                }
+            }
+        }
+
+        const total = await Payment.countDocuments(query);
+
+        res.json({
+            success: true,
+            response: {
+                data: payments,
+                count: total,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total,
+                    pages: Math.ceil(total / parseInt(limit))
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get payments error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get payments'
+        });
+    }
+});
+
+// GET /api/payments/farmer-summary/:farmerCode - Get pending summary for a farmer
+// FIX: ensure currentBalance always equals last closing balance (fixes 690 vs 877 mismatch)
+router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+
+        const farmer = await Farmer.findOne({
+            code: req.params.farmerCode,
+            owner: req.userId
+        });
+
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        // FIX: compute true currentBalance from latest payment's closingBalance
+        // This fixes drift where farmer.currentBalance (690) != last closing (877)
+        const latestPaymentForBalance = await Payment.findOne({
+            farmer: farmer._id,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('closingBalance')
+            .lean();
+
+        const trueCurrentBalance = latestPaymentForBalance ? (latestPaymentForBalance.closingBalance || 0) : (farmer.currentBalance || 0);
+
+        // If drift detected, auto-heal farmer document (fire-and-forget)
+        if (latestPaymentForBalance && Math.abs((farmer.currentBalance || 0) - trueCurrentBalance) > 0.01) {
+            Farmer.findByIdAndUpdate(farmer._id, { currentBalance: trueCurrentBalance }).catch(() => {});
+        }
+
+        // Build date filter for milk collections
+        const milkQuery = {
+            farmer: farmer._id,
+            owner: req.userId,
+            isPaid: false
+        };
+
+        if (startDate || endDate) {
+            milkQuery.date = {};
+            if (startDate) milkQuery.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                milkQuery.date.$lte = end;
+            }
+        }
+
+        // Get unpaid milk collections in date range
+        const unpaidCollections = await MilkCollection.aggregate([
+            { $match: milkQuery },
+            {
+                $group: {
+                    _id: null,
+                    totalQuantity: { $sum: '$quantity' },
+                    totalAmount: { $sum: '$amount' },
+                    count: { $sum: 1 },
+                    minDate: { $min: '$date' },
+                    maxDate: { $max: '$date' }
+                }
+            }
+        ]);
+
+        // Get pending advances (all pending, not filtered by date)
+        const pendingAdvances = await Advance.find({
+            farmer: farmer._id,
+            owner: req.userId,
+            status: { $in: ['pending', 'partial'] }
+        }).sort({ date: 1 });
+
+        const advanceTotal = pendingAdvances.reduce((sum, a) => sum + (a.amount - a.settledAmount), 0);
+
+        const milkData = unpaidCollections[0] || { totalQuantity: 0, totalAmount: 0, count: 0, minDate: null, maxDate: null };
+
+        const netPayable = milkData.totalAmount - advanceTotal;
+
+        res.json({
+            success: true,
+            response: {
+                farmer: {
+                    id: farmer._id,
+                    code: farmer.code,
+                    name: farmer.name,
+                    mobile: farmer.mobile,
+                    currentBalance: trueCurrentBalance
+                },
+                milk: {
+                    totalQuantity: milkData.totalQuantity,
+                    totalAmount: milkData.totalAmount,
+                    collections: milkData.count,
+                    periodStart: milkData.minDate,
+                    periodEnd: milkData.maxDate
+                },
+                advances: {
+                    totalPending: advanceTotal,
+                    count: pendingAdvances.length,
+                    items: pendingAdvances.map(a => ({
+                        _id: a._id,
+                        amount: a.amount,
+                        settledAmount: a.settledAmount,
+                        remaining: a.amount - a.settledAmount,
+                        date: a.date,
+                        note: a.note,
+                        status: a.status
+                    }))
+                },
+                netPayable,
+                closingBalance: netPayable
+            }
+        });
+    } catch (error) {
+        console.error('Get farmer summary error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get farmer summary'
+        });
+    }
+});
+
+// Helper function to check if two date ranges overlap
+const rangesOverlap = (start1, end1, start2, end2) => {
+    return start1 <= end2 && end1 >= start2;
+};
+
+// POST /api/payments - Create payment (settle farmer dues) (requires register subscription)
+router.post('/', auth, requireSubscription('register'), async (req, res) => {
+    try {
+        const { farmerCode, amount, paymentMethod, reference, notes, totalMilkAmount: providedMilkAmount, periodStart: clientPeriodStart, periodEnd: clientPeriodEnd } = req.body;
+
+        if (!farmerCode || amount === undefined || amount === null) {
+            return res.status(400).json({
+                success: false,
+                message: 'Farmer code and amount are required'
+            });
+        }
+
+        const farmer = await Farmer.findOne({
+            code: farmerCode,
+            owner: req.userId
+        });
+
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        // Use client-provided period dates if available, otherwise use collection dates
+        // Parse dates with time component to avoid timezone issues
+        let periodStart = null;
+        let periodEnd = null;
+
+        if (clientPeriodStart) {
+            periodStart = new Date(clientPeriodStart + 'T12:00:00');
+        }
+
+        if (clientPeriodEnd) {
+            periodEnd = new Date(clientPeriodEnd + 'T12:00:00');
+        }
+
+        // **VALIDATION: Check for overlapping payment periods for the same farmer**
+        if (periodStart && periodEnd) {
+            const existingPayments = await Payment.find({
+                farmer: farmer._id,
+                owner: req.userId,
+                periodStart: { $ne: null },
+                periodEnd: { $ne: null }
+            }).lean();
+
+            const overlappingPayments = existingPayments.filter(p => {
+                const existingStart = new Date(p.periodStart);
+                const existingEnd = new Date(p.periodEnd);
+                return rangesOverlap(periodStart, periodEnd, existingStart, existingEnd);
+            });
+
+            if (overlappingPayments.length > 0) {
+                const conflictPeriods = overlappingPayments.map(p => {
+                    const s = new Date(p.periodStart);
+                    const e = new Date(p.periodEnd);
+                    return `${s.getDate()}/${s.getMonth() + 1}/${s.getFullYear()} - ${e.getDate()}/${e.getMonth() + 1}/${e.getFullYear()}`;
+                }).join(', ');
+
+                console.log(`Payment period conflict for farmer ${farmerCode}: Requested ${clientPeriodStart} to ${clientPeriodEnd} overlaps with ${conflictPeriods}`);
+
+                return res.status(400).json({
+                    success: false,
+                    message: `Payment period overlaps with existing settlement(s): ${conflictPeriods}. Please select a different date range.`
+                });
+            }
+        }
+
+        // Get unpaid collections
+        const unpaidCollections = await MilkCollection.find({
+            farmer: farmer._id,
+            owner: req.userId,
+            isPaid: false
+        }).sort({ date: 1 });
+
+        // Get pending advances
+        const pendingAdvances = await Advance.find({
+            farmer: farmer._id,
+            owner: req.userId,
+            status: { $in: ['pending', 'partial'] }
+        }).sort({ date: 1 });
+
+        // Use provided milk amount from frontend if available, otherwise calculate from DB
+        const totalMilkAmount = providedMilkAmount !== undefined ? parseFloat(providedMilkAmount) : unpaidCollections.reduce((sum, c) => sum + c.amount, 0);
+        const totalAdvanceAmount = pendingAdvances.reduce((sum, a) => sum + (a.amount - a.settledAmount), 0);
+
+        // Get previous balance from farmer (can be + or -)
+        const previousBalance = farmer.currentBalance || 0;
+
+        // Net payable = milk amount - advances + previous balance
+        const netPayable = totalMilkAmount - totalAdvanceAmount + previousBalance;
+
+        const paymentAmount = parseFloat(amount) || 0;
+
+        // Closing balance = net payable - paid amount (can be + or -)
+        const closingBalance = netPayable - paymentAmount;
+
+        // If period dates not provided from client, use collection dates
+        if (!periodStart && unpaidCollections.length > 0) {
+            periodStart = unpaidCollections[0].date;
+        }
+        if (!periodEnd && unpaidCollections.length > 0) {
+            periodEnd = unpaidCollections[unpaidCollections.length - 1].date;
+        }
+
+        // Create payment record
+        const payment = await Payment.create({
+            farmer: farmer._id,
+            owner: req.userId,
+            amount: paymentAmount,
+            paymentMethod: paymentMethod || 'cash',
+            reference: reference?.trim() || '',
+            notes: notes?.trim() || '',
+            periodStart,
+            periodEnd,
+            settledCollections: unpaidCollections.map(c => c._id),
+            settledAdvances: pendingAdvances.map(a => a._id),
+            totalMilkAmount,
+            totalAdvanceDeduction: totalAdvanceAmount,
+            netPayable,
+            previousBalance,
+            closingBalance
+        });
+
+        // Mark collections as paid
+        await MilkCollection.updateMany(
+            { _id: { $in: unpaidCollections.map(c => c._id) } },
+            { isPaid: true }
+        );
+
+        // Settle advances
+        for (const advance of pendingAdvances) {
+            advance.status = 'settled';
+            advance.settledAmount = advance.amount;
+            await advance.save();
+        }
+
+        // Update farmer - set pending to 0 and save closing balance as current balance for next time
+        farmer.pendingAmount = 0;
+        farmer.currentBalance = closingBalance;
+        await farmer.save();
+
+        const populatedPayment = await Payment.findById(payment._id)
+            .populate('farmer', 'code name')
+            .lean();
+
+        res.status(201).json({
+            success: true,
+            message: 'Payment recorded successfully',
+            response: populatedPayment
+        });
+    } catch (error) {
+        console.error('Create payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to record payment'
+        });
+    }
+});
+
+// GET /api/payments/summary-stats - Get summary stats for Settlement History header
+router.get('/summary-stats', auth, async (req, res) => {
+    try {
+        const { date } = req.query;
+
+        // Calculate total paid for selected date
+        let paidOnDate = 0;
+        if (date) {
+            const selectedDate = new Date(date);
+            const startOfDay = new Date(selectedDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(selectedDate);
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const paymentsOnDate = await Payment.aggregate([
+                {
+                    $match: {
+                        owner: new mongoose.Types.ObjectId(req.userId),
+                        date: { $gte: startOfDay, $lte: endOfDay }
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        total: { $sum: '$amount' }
+                    }
+                }
+            ]);
+
+            paidOnDate = paymentsOnDate[0]?.total || 0;
+        }
+
+        // Calculate total current balance from all farmers
+        const farmersWithBalance = await Farmer.aggregate([
+            {
+                $match: { owner: new mongoose.Types.ObjectId(req.userId) }
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalBalance: { $sum: { $ifNull: ['$currentBalance', 0] } }
+                }
+            }
+        ]);
+
+        const totalCurrentBalance = farmersWithBalance[0]?.totalBalance || 0;
+
+        res.json({
+            success: true,
+            response: {
+                paidOnDate,
+                totalCurrentBalance
+            }
+        });
+    } catch (error) {
+        console.error('Get summary stats error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get summary stats'
+        });
+    }
+});
+
+// GET /api/payments/:id
+router.get('/:id', auth, async (req, res) => {
+    try {
+        const payment = await Payment.findOne({
+            _id: req.params.id,
+            owner: req.userId
+        })
+            .populate('farmer', 'code name mobile')
+            .populate('settledCollections')
+            .populate('settledAdvances')
+            .lean();
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: payment
+        });
+    } catch (error) {
+        console.error('Get payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get payment'
+        });
+    }
+});
+
+// PUT /api/payments/:id - Update payment (requires register subscription)
+// FIX: last closing balance should remain same after editing an old settlement
+// Previously, editing any payment subtracted difference from farmer.currentBalance,
+// causing current balance (690) to mismatch latest closing (877) as seen in screenshots.
+// Now we only update farmer.currentBalance if edited payment is the latest one.
+router.put('/:id', auth, requireSubscription('register'), async (req, res) => {
+    try {
+        const { amount, paymentMethod, reference, notes, totalMilkAmount, periodStart, periodEnd } = req.body;
+
+        const payment = await Payment.findOne({
+            _id: req.params.id,
+            owner: req.userId
+        });
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found'
+            });
+        }
+
+        // Get farmer for balance update
+        const farmer = await Farmer.findById(payment.farmer);
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Associated farmer not found'
+            });
+        }
+
+        // **VALIDATION: Check for overlapping payment periods when updating dates**
+        if (periodStart || periodEnd) {
+            const newPeriodStart = periodStart ? new Date(periodStart + 'T12:00:00') : payment.periodStart;
+            const newPeriodEnd = periodEnd ? new Date(periodEnd + 'T12:00:00') : payment.periodEnd;
+
+            if (newPeriodStart && newPeriodEnd) {
+                // Find other payments for this farmer (excluding the current one being updated)
+                const existingPayments = await Payment.find({
+                    farmer: payment.farmer,
+                    owner: req.userId,
+                    _id: { $ne: payment._id }, // Exclude current payment
+                    periodStart: { $ne: null },
+                    periodEnd: { $ne: null }
+                }).lean();
+
+                const overlappingPayments = existingPayments.filter(p => {
+                    const existingStart = new Date(p.periodStart);
+                    const existingEnd = new Date(p.periodEnd);
+                    return rangesOverlap(newPeriodStart, newPeriodEnd, existingStart, existingEnd);
+                });
+
+                if (overlappingPayments.length > 0) {
+                    const conflictPeriods = overlappingPayments.map(p => {
+                        const s = new Date(p.periodStart);
+                        const e = new Date(p.periodEnd);
+                        return `${s.getDate()}/${s.getMonth() + 1}/${s.getFullYear()} - ${e.getDate()}/${e.getMonth() + 1}/${e.getFullYear()}`;
+                    }).join(', ');
+
+                    console.log(`Payment update period conflict for farmer: Requested period overlaps with ${conflictPeriods}`);
+
+                    return res.status(400).json({
+                        success: false,
+                        message: `Payment period overlaps with existing settlement(s): ${conflictPeriods}. Please select a different date range.`
+                    });
+                }
+            }
+        }
+
+        // Calculate the difference in payment amount
+        const oldPaymentAmount = payment.amount;
+        const newPaymentAmount = amount !== undefined ? parseFloat(amount) : oldPaymentAmount;
+
+        // Recalculate closing balance if amount or milk amount changes
+        const newMilkAmount = totalMilkAmount !== undefined ? parseFloat(totalMilkAmount) : payment.totalMilkAmount;
+        const netPayable = newMilkAmount - payment.totalAdvanceDeduction + payment.previousBalance;
+        const newClosingBalance = netPayable - newPaymentAmount;
+
+        // Update payment fields
+        payment.amount = newPaymentAmount;
+        payment.totalMilkAmount = newMilkAmount;
+        payment.netPayable = netPayable;
+        payment.closingBalance = newClosingBalance;
+
+        if (paymentMethod) payment.paymentMethod = paymentMethod;
+        if (reference !== undefined) payment.reference = reference.trim();
+        if (notes !== undefined) payment.notes = notes.trim();
+
+        if (periodStart) {
+            payment.periodStart = new Date(periodStart + 'T12:00:00');
+        }
+        if (periodEnd) {
+            payment.periodEnd = new Date(periodEnd + 'T12:00:00');
+        }
+
+        await payment.save();
+
+        // FIX: Ensure last closing balance and current balance stay in sync
+        // - If edited payment IS latest, currentBalance = its new closing
+        // - If edited payment is older, currentBalance = latest's closing (keeps last closing same after edit)
+        // This fixes 690 vs 877 mismatch where current and last closing differed
+        const latestPayment = await Payment.findOne({
+            farmer: payment.farmer,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('_id closingBalance')
+            .lean();
+
+        if (latestPayment) {
+            if (latestPayment._id.toString() === payment._id.toString()) {
+                farmer.currentBalance = newClosingBalance;
+            } else {
+                // Edited an older settlement - keep currentBalance = latest's closing (last closing stays same)
+                farmer.currentBalance = latestPayment.closingBalance || 0;
+            }
+            await farmer.save();
+        } else {
+            farmer.currentBalance = newClosingBalance;
+            await farmer.save();
+        }
+
+        const populatedPayment = await Payment.findById(payment._id)
+            .populate('farmer', 'code name')
+            .lean();
+
+        res.json({
+            success: true,
+            message: 'Payment updated successfully',
+            response: populatedPayment
+        });
+    } catch (error) {
+        console.error('Update payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update payment'
+        });
+    }
+});
+
+// Helper: recalc payment netPayable & closingBalance from current totals
+function recalcPaymentTotals(payment) {
+    payment.netPayable = (payment.totalMilkAmount || 0) - (payment.totalAdvanceDeduction || 0) + (payment.previousBalance || 0);
+    payment.closingBalance = payment.netPayable - (payment.amount || 0);
+}
+
+// POST /api/payments/:id/advances - Add a new advance to an existing payment (already settled inside this payment)
+// FIX: ensure currentBalance = latest closing after add
+router.post('/:id/advances', auth, requireSubscription('register'), async (req, res) => {
+    try {
+        const { amount, note } = req.body;
+        const amt = parseFloat(amount);
+        if (!amt || amt <= 0) {
+            return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
+        }
+
+        const payment = await Payment.findOne({ _id: req.params.id, owner: req.userId });
+        if (!payment) return res.status(404).json({ success: false, message: 'Payment not found' });
+
+        const farmer = await Farmer.findById(payment.farmer);
+        if (!farmer) return res.status(404).json({ success: false, message: 'Farmer not found' });
+
+        // Create advance attached to this farmer, marked as already settled (deducted in this payment)
+        const advance = await Advance.create({
+            farmer: farmer._id,
+            owner: req.userId,
+            amount: amt,
+            settledAmount: amt,
+            status: 'settled',
+            note: (note || '').toString().trim(),
+            date: payment.date || new Date(),
+        });
+
+        // Update payment totals
+        payment.settledAdvances = [...(payment.settledAdvances || []), advance._id];
+        payment.totalAdvanceDeduction = (payment.totalAdvanceDeduction || 0) + amt;
+        recalcPaymentTotals(payment);
+        await payment.save();
+
+        // FIX: sync farmer.currentBalance to latest closing (fixes drift 690 vs 877)
+        const latestPayment = await Payment.findOne({
+            farmer: payment.farmer,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('_id closingBalance')
+            .lean();
+
+        if (latestPayment) {
+            farmer.currentBalance = latestPayment.closingBalance || 0;
+            await farmer.save();
+        }
+
+        const populated = await Payment.findById(payment._id)
+            .populate('farmer', 'code name')
+            .populate('settledAdvances', 'amount date note status farmer')
+            .lean();
+
+        res.json({ success: true, message: 'Advance added to payment', response: populated });
+    } catch (error) {
+        console.error('Add advance to payment error:', error);
+        res.status(500).json({ success: false, message: 'Failed to add advance' });
+    }
+});
+
+// DELETE /api/payments/:id/advances/:advanceId - Permanently remove an advance from a payment and DB
+// FIX: ensure currentBalance = latest closing after delete
+router.delete('/:id/advances/:advanceId', auth, requireSubscription('register'), async (req, res) => {
+    try {
+        const payment = await Payment.findOne({ _id: req.params.id, owner: req.userId });
+        if (!payment) return res.status(404).json({ success: false, message: 'Payment not found' });
+
+        const advance = await Advance.findOne({ _id: req.params.advanceId, owner: req.userId });
+        if (!advance) return res.status(404).json({ success: false, message: 'Advance not found' });
+
+        const advAmt = advance.amount || 0;
+
+        // Remove from settledAdvances on this payment
+        payment.settledAdvances = (payment.settledAdvances || []).filter(
+            (id) => id.toString() !== advance._id.toString()
+        );
+        payment.totalAdvanceDeduction = Math.max(0, (payment.totalAdvanceDeduction || 0) - advAmt);
+        recalcPaymentTotals(payment);
+        await payment.save();
+
+        // Permanently delete from DB
+        await Advance.findByIdAndDelete(advance._id);
+
+        // FIX: sync to latest closing
+        const latestPayment = await Payment.findOne({
+            farmer: payment.farmer,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('_id closingBalance')
+            .lean();
+
+        if (latestPayment) {
+            const farmer = await Farmer.findById(payment.farmer);
+            if (farmer) {
+                farmer.currentBalance = latestPayment.closingBalance || 0;
+                await farmer.save();
+            }
+        }
+
+        const populated = await Payment.findById(payment._id)
+            .populate('farmer', 'code name')
+            .populate('settledAdvances', 'amount date note status farmer')
+            .lean();
+
+        res.json({ success: true, message: 'Advance deleted permanently', response: populated });
+    } catch (error) {
+        console.error('Delete advance from payment error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete advance' });
+    }
+});
+
+module.exports = router;

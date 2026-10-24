@@ -233,16 +233,16 @@ export const useSubscriptionStore = create<SubscriptionStoreState>((set, get) =>
 
 // ============ Legacy functions for backward compatibility ============
 
-// Check if modal was shown in this app session
+// Fix: subscription modal should show at most once per day, not every 100s.
+// Previously sessionId changed every ~100s causing repeated popups even when active.
+const getTodayKey = () => new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
 export const wasModalShownThisSession = async (): Promise<boolean> => {
     try {
-        const sessionId = await AsyncStorage.getItem(SUBSCRIPTION_MODAL_SESSION_KEY);
-        const currentSessionId = Date.now().toString().slice(0, -5); // Changes every ~100 seconds
-
-        if (sessionId === currentSessionId) {
-            return true;
-        }
-        return false;
+        const lastShown = await AsyncStorage.getItem(SUBSCRIPTION_MODAL_SHOWN_KEY);
+        if (!lastShown) return false;
+        const lastDate = lastShown.split('T')[0];
+        return lastDate === getTodayKey();
     } catch {
         return false;
     }
@@ -250,22 +250,20 @@ export const wasModalShownThisSession = async (): Promise<boolean> => {
 
 export const markModalShownThisSession = async (): Promise<void> => {
     try {
-        const currentSessionId = Date.now().toString().slice(0, -5);
-        await AsyncStorage.setItem(SUBSCRIPTION_MODAL_SESSION_KEY, currentSessionId);
+        // Keep legacy key in sync - store today's date for backward compat
+        await AsyncStorage.setItem(SUBSCRIPTION_MODAL_SESSION_KEY, getTodayKey());
     } catch (error) {
         console.error('Failed to mark modal shown:', error);
     }
 };
 
-// Check if modal should be shown (once per day)
+// Check if modal should be shown (once per day max)
 export const shouldShowSubscriptionModal = async (): Promise<boolean> => {
     try {
         const lastShown = await AsyncStorage.getItem(SUBSCRIPTION_MODAL_SHOWN_KEY);
         if (!lastShown) return true;
-
-        // Show once per app open session (not per day)
-        const wasShown = await wasModalShownThisSession();
-        return !wasShown;
+        const lastDate = lastShown.split('T')[0];
+        return lastDate !== getTodayKey();
     } catch {
         return true;
     }

@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ShoppingCart, Bell, Sun, Moon, Bluetooth, BluetoothOff, AlertCircle } from 'lucide-react-native';
+import { ShoppingCart, Bell, Sun, Moon, Bluetooth, BluetoothOff, AlertCircle, User } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useCartStore } from '@/lib/cartStore';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import PrinterScanSheet from '@/components/PrinterScanSheet';
 import { router } from 'expo-router';
+import { useAuth } from '@/hooks/useAuth';
+import { printSettingsApi, PrintSettings } from '@/lib/milkeyApi';
 
 export default function TopBar() {
   const insets = useSafeAreaInsets();
@@ -34,102 +36,119 @@ export default function TopBar() {
     loadCart();
   }, []);
 
-  // When the user opens the printer sheet, auto-trigger a paired-device scan
-  // so they immediately see their already-paired printer without tapping Scan.
-  // The 500ms delay is CRITICAL: it lets the modal slide-up animation finish
-  // AND lets the Android Bluetooth stack settle if a permission dialog just
-  // popped — without it, the very first scan after granting "Nearby devices"
-  // can silently return an empty list on Android 13+.
-  // Also guard against double-scan if a scan is already in flight.
   useEffect(() => {
     if (showPrinterSheet && !isScanning) {
       const t = setTimeout(() => startScan(), 500);
       return () => clearTimeout(t);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPrinterSheet]);
 
+  const { user } = useAuth();
+  const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
+  useEffect(() => {
+    printSettingsApi.get().then(res => {
+      if (res.success && res.response) setPrintSettings(res.response);
+    }).catch(() => {});
+  }, []);
+
   const itemCount = getItemCount();
+  const dairyName = (printSettings?.dairyName || user?.name || 'Dairy').trim() || 'Dairy';
+  // header background same as profile card green (colors.primary)
+  const headerBg = colors.primary;
 
   return (
     <>
-      <View style={[
-        styles.container,
-        {
-          paddingTop: insets.top + 4,
-          backgroundColor: colors.background,
-          borderBottomWidth: 2,
-          borderBottomColor: colors.primary,
-        }
-      ]}>
-        <View style={styles.leftSection}>
-          <Image
-            source={require('@/assets/images/icon.png')}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-          <Pressable onPress={() => setShowPrinterSheet(true)}>
-            <Text style={[styles.appName, { color: colors.foreground }]}>Milkey</Text>
-            <View style={styles.printerStatus}>
-              {isPrinting ? (
-                <>
-                  <Bluetooth size={10} color={colors.primary} strokeWidth={2.5} />
-                  <Text style={[styles.statusText, { color: colors.primary }]} numberOfLines={1}>
-                    Printing...
-                  </Text>
-                </>
-              ) : isConnected ? (
-                <>
-                  <Bluetooth size={10} color={colors.success} strokeWidth={2.5} />
-                  <Text style={[styles.statusText, { color: colors.success }]} numberOfLines={1}>
-                    Connected
-                  </Text>
-                </>
-              ) : error ? (
-                <>
-                  <AlertCircle size={10} color={colors.destructive} strokeWidth={2.5} />
-                  <Text style={[styles.statusText, { color: colors.destructive }]} numberOfLines={1}>
-                    Printer error — tap to view
-                  </Text>
-                </>
+      <StatusBar backgroundColor={headerBg} barStyle="light-content" translucent={false} />
+      <View
+        style={[
+          styles.headerWrap,
+          {
+            paddingTop: insets.top + 6,
+            backgroundColor: headerBg,
+            borderBottomLeftRadius: 0,
+            borderBottomRightRadius: 0,
+            marginBottom: 0,
+            borderBottomWidth: 0,
+          },
+        ]}
+      >
+        <View style={styles.headerRow}>
+          <View style={styles.leftSection}>
+            <View style={styles.avatarRing}>
+              {user?.avatar ? (
+                <Image source={{ uri: user.avatar }} style={styles.avatarImage} resizeMode="cover" />
               ) : (
-                <>
-                  <BluetoothOff size={10} color={colors.destructive} strokeWidth={2.5} />
-                  <Text style={[styles.statusText, { color: colors.destructive }]}>Tap to connect printer</Text>
-                </>
+                <User size={20} color="#fff" />
               )}
             </View>
-          </Pressable>
-        </View>
-
-        <View style={styles.rightSection}>
-          <Pressable
-            style={[styles.iconButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-            onPress={toggleTheme}
-          >
-            {isDark ? (
-              <Sun size={18} color={colors.primary} strokeWidth={2.5} />
-            ) : (
-              <Moon size={18} color={colors.primary} strokeWidth={2.5} />
-            )}
-          </Pressable>
-          <Pressable
-            style={[styles.iconButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-            onPress={() => router.push('/notifications')}
-          >
-            <Bell size={18} color={colors.foreground} strokeWidth={2} />
-          </Pressable>
-          <Pressable
-            style={[styles.iconButton, { backgroundColor: colors.secondary, borderColor: colors.border }]}
-            onPress={() => router.push('/cart')}
-          >
-            <ShoppingCart size={18} color={colors.foreground} strokeWidth={2} />
-            {itemCount > 0 && (
-              <View style={[styles.badge, { backgroundColor: colors.primary }]}>
-                <Text style={[styles.badgeText, { color: colors.white }]}>{itemCount}</Text>
+            <Pressable onPress={() => setShowPrinterSheet(true)} style={styles.titleCol}>
+              <Text style={styles.appName} numberOfLines={1}>{dairyName}</Text>
+              <View style={styles.printerStatus}>
+                {isPrinting ? (
+                  <>
+                    <Bluetooth size={9} color="#86EFAC" strokeWidth={2.5} />
+                    <Text style={[styles.statusText, { color: '#86EFAC' }]} numberOfLines={1}>
+                      Printing...
+                    </Text>
+                  </>
+                ) : isConnected ? (
+                  <>
+                    <Bluetooth size={9} color="#86EFAC" strokeWidth={2.5} />
+                    <Text style={[styles.statusText, { color: '#BBF7D0' }]} numberOfLines={1}>
+                      Connected
+                    </Text>
+                  </>
+                ) : error ? (
+                  <>
+                    <AlertCircle size={9} color="#FCA5A5" strokeWidth={2.5} />
+                    <Text style={[styles.statusText, { color: '#FECACA' }]} numberOfLines={1}>
+                      Printer error
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <BluetoothOff size={9} color="#FECACA" strokeWidth={2.5} />
+                    <Text style={[styles.statusText, { color: 'rgba(255,255,255,0.7)' }]} numberOfLines={1}>
+                      Tap to connect printer
+                    </Text>
+                  </>
+                )}
               </View>
-            )}
-          </Pressable>
+            </Pressable>
+          </View>
+
+          <View style={styles.rightSection}>
+            <Pressable
+              onPress={toggleTheme}
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]}
+            >
+              {isDark ? (
+                <Sun size={18} color="#fff" strokeWidth={2.2} />
+              ) : (
+                <Moon size={18} color="#fff" strokeWidth={2.2} />
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push('/notifications')}
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]}
+            >
+              <Bell size={18} color="#fff" strokeWidth={2} />
+              {/* subtle dot if needed — keep clean for now */}
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.push('/cart')}
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconPressed]}
+            >
+              <ShoppingCart size={18} color="#fff" strokeWidth={2} />
+              {itemCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{itemCount}</Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -155,9 +174,33 @@ export default function TopBar() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 6,
-    paddingBottom: 10,
+  headerWrap: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  topGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  bottomAccent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    opacity: 0.6,
+  },
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -166,25 +209,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flex: 1,
   },
-  logoImage: {
+  avatarRing: {
     width: 40,
     height: 40,
-    borderRadius: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.85)',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  titleCol: {
+    flex: 1,
+    justifyContent: 'center',
+    maxWidth: 165,
+    paddingRight: 6,
   },
   appName: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.15,
+    lineHeight: 15,
+    maxWidth: 160,
+  },
+  appSub: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: 1,
+    letterSpacing: 0.3,
   },
   printerStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 1,
-    maxWidth: 180,
+    marginTop: 2,
+    maxWidth: 170,
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
     flexShrink: 1,
   },
@@ -193,28 +265,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  iconButton: {
+  iconBtn: {
     width: 38,
     height: 38,
-    borderRadius: 10,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.13)',
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
     position: 'relative',
+  },
+  iconBtnStatic: {
+    borderWidth: 0,
+  },
+  iconPressed: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
   },
   badge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -5,
+    right: -5,
     borderRadius: 10,
     minWidth: 18,
     height: 18,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
+    backgroundColor: '#22C55E',
+    borderWidth: 1.5,
+    borderColor: '#0F3D1A',
   },
   badgeText: {
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: '#fff',
   },
 });

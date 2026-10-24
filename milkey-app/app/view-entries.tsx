@@ -122,7 +122,7 @@ export default function ViewEntriesScreen() {
         }
         setError(null);
         try {
-            const p: any = { memberId, limit: 500 };
+            const p: any = { memberId, limit: 10 };
             if (startDate) p.startDate = startDate;
             if (endDate) p.endDate = endDate;
             const res = await sellingEntriesApi.getAll(p);

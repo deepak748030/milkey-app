@@ -56,33 +56,33 @@ export function CollectionReportPage() {
                     <h1 className="text-2xl font-bold text-foreground">Collection Report</h1>
                     <p className="text-muted-foreground">Aggregated milk collection reports</p>
                 </div>
-                <button onClick={fetchReport} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+                <button onClick={fetchReport} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors">
                     <RefreshCw className="w-4 h-4" /> Refresh
                 </button>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Records</p>
                     <p className="text-xl sm:text-2xl font-bold">{totals.count || 0}</p>
                 </div>
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Quantity</p>
                     <p className="text-xl sm:text-2xl font-bold text-primary">{(totals.totalQuantity || 0).toFixed(2)} L</p>
                 </div>
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Amount</p>
                     <p className="text-xl sm:text-2xl font-bold text-green-600">₹{(totals.totalAmount || 0).toFixed(2)}</p>
                 </div>
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Avg Rate</p>
                     <p className="text-xl sm:text-2xl font-bold">₹{(totals.avgRate || 0).toFixed(2)}</p>
                 </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-4 space-y-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Filter className="w-4 h-4" /><span className="font-medium">Filters</span>
@@ -105,7 +105,7 @@ export function CollectionReportPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <div className="bg-card rounded-lg border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">

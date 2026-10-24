@@ -134,8 +134,8 @@ export function SettingsPage() {
 
             {/* Profile Tab */}
             {activeTab === 'profile' && (
-                <div className="bg-card border border-border rounded-xl p-4 sm:p-6 max-w-2xl">
-                    <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4 sm:mb-6">Profile Information</h2>
+                <div className="rounded-xl border bg-card p-4 shadow-soft sm:p-6 max-w-2xl">
+                    <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground mb-4 sm:mb-6">Profile Information</h2>
 
                     <form onSubmit={handleProfileUpdate} className="space-y-4">
                         {/* Avatar Preview */}
@@ -204,7 +204,7 @@ export function SettingsPage() {
                         <button
                             type="submit"
                             disabled={profileLoading}
-                            className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 text-sm sm:text-base"
+                            className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50 text-sm sm:text-base"
                         >
                             <Save className="w-4 h-4" />
                             {profileLoading ? 'Saving...' : 'Save Changes'}
@@ -215,8 +215,8 @@ export function SettingsPage() {
 
             {/* Password Tab */}
             {activeTab === 'password' && (
-                <div className="bg-card border border-border rounded-xl p-4 sm:p-6 max-w-2xl">
-                    <h2 className="text-base sm:text-lg font-semibold text-foreground mb-4 sm:mb-6">Change Password</h2>
+                <div className="rounded-xl border bg-card p-4 shadow-soft sm:p-6 max-w-2xl">
+                    <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground mb-4 sm:mb-6">Change Password</h2>
 
                     <form onSubmit={handlePasswordUpdate} className="space-y-4">
                         <div>
@@ -291,7 +291,7 @@ export function SettingsPage() {
                         <button
                             type="submit"
                             disabled={passwordLoading}
-                            className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 text-sm sm:text-base"
+                            className="flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50 text-sm sm:text-base"
                         >
                             <Lock className="w-4 h-4" />
                             {passwordLoading ? 'Updating...' : 'Update Password'}

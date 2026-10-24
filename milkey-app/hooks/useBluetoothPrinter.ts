@@ -312,12 +312,10 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                     return false;
                 }
                 if (!scanGranted) {
-                    console.warn('[BluetoothPrinter] BLUETOOTH_SCAN denied — proceeding with bonded-only flow.');
                 }
 
                 // Permission settle delay — only when we just prompted the user.
                 if (!hadConnectAlready) {
-                    console.log('[BluetoothPrinter] permission just granted — settling 500ms before native call.');
                     await sleep(500);
                 }
             } else {
@@ -344,7 +342,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                     return false;
                 }
                 if (!hadLocationAlready) {
-                    console.log('[BluetoothPrinter] location permission just granted — settling 500ms.');
                     await sleep(500);
                 }
             }
@@ -403,7 +400,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
 
         if (typeof ThermalPrinter.getBluetoothDeviceList !== 'function') {
             rawNativeResponseRef.current = '(method getBluetoothDeviceList not available on native module)';
-            console.warn('[BluetoothPrinter] getBluetoothDeviceList is not available on the native module.');
             return [];
         }
 
@@ -413,7 +409,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             if (Array.isArray(list) && list.length > 0) return list;
         } catch (e: any) {
             rawNativeResponseRef.current = `error: ${e?.message || String(e)}`;
-            console.warn('[BluetoothPrinter] getBluetoothDeviceList failed:', e?.message || e);
         }
 
         await sleep(400);
@@ -424,7 +419,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             if (Array.isArray(list)) return list;
         } catch (e: any) {
             rawNativeResponseRef.current = `(retry) error: ${e?.message || String(e)}`;
-            console.warn('[BluetoothPrinter] retry getBluetoothDeviceList failed:', e?.message || e);
         }
 
         return [];
@@ -454,7 +448,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             return;
         }
         if (IS_EXPO_GO) {
-            console.warn('[BluetoothPrinter] Expo Go detected — native printer modules unavailable.');
             setState(prev => ({
                 ...prev,
                 error: 'Bluetooth printing requires a production APK or EAS dev build (not Expo Go).',
@@ -519,7 +512,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                 const list = await fetchDeviceList();
                 if (cancelled) return;
                 const devices = normalizeDeviceList(list);
-                console.log('[BluetoothPrinter] auto-loaded paired devices on init:', devices.length);
 
                 // Merge connected device into the list if it's not already there
                 // (paired list sometimes omits currently-connected printers).
@@ -533,7 +525,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                     availableDevices: merged,
                 }));
             } catch (e: any) {
-                console.warn('[BluetoothPrinter] auto-load paired devices failed:', e?.message || e);
             }
         })();
 
@@ -551,7 +542,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         // unresponsive in production after a previous scan. Instead, force-reset
         // the in-flight flag so a fresh tap always starts a new scan.
         if (scanInFlightRef.current) {
-            console.warn('[BluetoothPrinter] previous scan still flagged in-flight; forcing reset.');
             scanInFlightRef.current = false;
         }
         scanInFlightRef.current = true;
@@ -594,16 +584,13 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             // not require GPS to be ON in modern react-native-thermal-printer.
             const locationEnabled = await isLocationServiceEnabled();
             if (!locationEnabled) {
-                console.warn('[BluetoothPrinter] Location services are OFF — proceeding anyway for paired list.');
             }
 
             await sleep(300);
             const list = await fetchDeviceList();
-            console.log('[BluetoothPrinter] raw paired list from native:', JSON.stringify(list));
 
             const devices = normalizeDeviceList(list);
             lastBondedListRef.current = devices;
-            console.log('[BluetoothPrinter] normalized devices:', devices.length, devices);
 
             // Always include the currently-connected device in the list, even if
             // the native paired-device call momentarily omits it.
@@ -634,7 +621,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
         } catch (e: any) {
             const raw = e?.message || String(e);
             lastRawErrorRef.current = raw;
-            console.warn('[BluetoothPrinter] scan failed:', raw);
 
             let friendly = raw;
             if (/permission|denied/i.test(raw)) {
@@ -772,7 +758,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             try {
                 finalPayload = await preprocessPayloadForDevanagari(payload, widthMM);
             } catch (preErr: any) {
-                console.warn('[BluetoothPrinter] Devanagari preprocess failed, sending raw payload:', preErr?.message || preErr);
             }
 
             let refreshedBonded = lastBondedListRef.current;
@@ -791,7 +776,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             } catch (primaryError: any) {
                 const primaryRaw = primaryError?.message || String(primaryError);
                 lastRawErrorRef.current = primaryRaw;
-                console.warn('[BluetoothPrinter] primary print attempt failed:', primaryRaw);
 
                 const freshRawList = await fetchDeviceList();
                 refreshedBonded = normalizeDeviceList(freshRawList);
@@ -810,7 +794,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
                     } catch (retryError: any) {
                         const retryRaw = retryError?.message || String(retryError);
                         lastRawErrorRef.current = retryRaw;
-                        console.warn('[BluetoothPrinter] print retry after refresh failed:', retryRaw);
                         throw new Error(`${primaryRaw} | retry failed: ${retryRaw}`);
                     }
                 } else {
@@ -849,7 +832,6 @@ function useBluetoothPrinterController(): BluetoothPrinterContextValue {
             const raw = e?.message || String(e);
             lastRawErrorRef.current = raw;
             lastPrintRef.current = { ...lastPrintRef.current, outcome: 'error', error: raw };
-            console.warn('[BluetoothPrinter] print failed:', raw);
 
             let friendly = raw;
             if (/socket|broken pipe|write|closed|unable to connect/i.test(raw)) {

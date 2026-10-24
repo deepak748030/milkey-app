@@ -21,6 +21,24 @@ const ensurePermission = (manifest, permissionName, attributes = {}) => {
     manifest['uses-permission'] = permissions;
 };
 
+const patchThermalPrinterBuildGradle = async (projectRoot) => {
+    const targetFile = path.join(
+        projectRoot,
+        'node_modules',
+        'react-native-thermal-printer',
+        'android',
+        'build.gradle'
+    );
+    if (!fs.existsSync(targetFile)) return;
+    let content = fs.readFileSync(targetFile, 'utf8');
+    if (!content.includes('jcenter()')) return;
+    const patched = content.replace(/jcenter\(\)/g, 'mavenCentral()');
+    if (patched !== content) {
+        fs.writeFileSync(targetFile, patched);
+        console.log('[withBluetoothScanPermission] Patched react-native-thermal-printer build.gradle: jcenter() -> mavenCentral()');
+    }
+};
+
 const patchThermalPrinterModule = async (projectRoot) => {
     const targetFile = path.join(
         projectRoot,
@@ -111,6 +129,7 @@ module.exports = function withBluetoothScanPermission(config) {
     });
 
     return withDangerousMod(config, ['android', async (modConfig) => {
+        await patchThermalPrinterBuildGradle(modConfig.modRequest.projectRoot);
         await patchThermalPrinterModule(modConfig.modRequest.projectRoot);
         return modConfig;
     }]);

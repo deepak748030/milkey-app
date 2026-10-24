@@ -1,11 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL, SERVER_BASE_URL } from '@/lib/apiConfig';
 import { getAuthToken } from './authStore';
-
-// API Base URL - Vercel deployed server
-const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
-// const API_BASE_URL = 'http://localhost:5000/api'
-
-export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
 
 // Types
 export interface ApiResponse<T> {
@@ -87,6 +82,7 @@ export interface PurchaseFarmer {
     alertMethod?: 'sms' | 'whatsapp' | 'none';
     printEntrySlip?: 'default' | 'yes' | 'no';
     showRateChart?: boolean;
+    showRateSetting?: boolean;
 }
 
 export interface Advance {
@@ -202,7 +198,8 @@ export interface Payment {
     settledAdvances?: SettledAdvanceInPayment[];
 }
 
-export interface RateChart {
+export interface RateSetting {
+
     _id: string;
     name: string;
     milkType: 'cow' | 'buffalo' | 'mixed';
@@ -215,6 +212,7 @@ export interface RateChart {
     baseRate: number;
     isActive: boolean;
 }
+export type RateChart = RateSetting;
 
 export interface ReportSummary {
     totalQuantity: number;
@@ -317,6 +315,17 @@ export interface ReferralData {
     }>;
 }
 
+// Cached device id to avoid hitting AsyncStorage on every API call
+let cachedDeviceId: string | null = null;
+async function getCachedDeviceId(): Promise<string | null> {
+    if (cachedDeviceId) return cachedDeviceId;
+    try {
+        const v = await AsyncStorage.getItem('milkey_device_id');
+        if (v) { cachedDeviceId = v; return v; }
+    } catch {}
+    return null;
+}
+
 // API Request helper with auth
 const apiRequest = async <T>(
     endpoint: string,
@@ -324,6 +333,7 @@ const apiRequest = async <T>(
 ): Promise<ApiResponse<T>> => {
     try {
         const token = await getAuthToken();
+        const deviceId = await getCachedDeviceId();
 
         const headers: HeadersInit = {
             'Content-Type': 'application/json',
@@ -332,6 +342,9 @@ const apiRequest = async <T>(
 
         if (token) {
             (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+        }
+        if (deviceId) {
+            (headers as Record<string, string>)['X-Device-Id'] = deviceId;
         }
 
         const isAuthCall = endpoint.startsWith('/auth/');
@@ -356,12 +369,16 @@ const apiRequest = async <T>(
             // Extract clean error message without HTTP codes
             const serverMessage = data?.message || data?.error || 'Something went wrong';
 
-            // Helpful auth hint
+            // Helpful auth hint + device-logged-out check
             if (response.status === 401) {
+                const msg = data?.code === 'DEVICE_LOGGED_OUT'
+                    ? (data?.message || 'This device has been logged out. Please login again.')
+                    : 'Session expired. Please login again.';
                 return {
                     success: false,
-                    message: 'Session expired. Please login again.',
-                };
+                    message: msg,
+                    code: data?.code,
+                } as ApiResponse<T>;
             }
 
             // Handle subscription required error
@@ -423,6 +440,11 @@ export const farmersApi = {
             method: 'DELETE',
         });
     },
+    restore: async (id: string) => {
+        return apiRequest<Farmer>(`/farmers/${id}/restore`, {
+            method: 'PUT',
+        });
+    },
 };
 
 // Purchase Farmers API (for Purchase tab only)
@@ -471,6 +493,11 @@ export const purchaseFarmersApi = {
             method: 'DELETE',
         });
     },
+    restore: async (id: string) => {
+        return apiRequest<PurchaseFarmer>(`/purchase-farmers/${id}/restore`, {
+            method: 'PUT',
+        });
+    },
 };
 
 // Advances API
@@ -482,6 +509,8 @@ export const advancesApi = {
         limit?: number;
         search?: string;
         sortOrder?: 'pendingFirst' | 'date';
+        sortBy?: 'amount' | 'date';
+        order?: 'asc' | 'desc';
     }) => {
         const queryParams = new URLSearchParams();
         if (params?.farmerId) queryParams.append('farmerId', params.farmerId);
@@ -490,6 +519,8 @@ export const advancesApi = {
         if (params?.limit) queryParams.append('limit', params.limit.toString());
         if (params?.search) queryParams.append('search', params.search);
         if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+        if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+        if (params?.order) queryParams.append('order', params.order);
         const query = queryParams.toString();
 
         return apiRequest<{
@@ -785,7 +816,7 @@ export const paymentsApi = {
     },
 };
 
-// Rate Charts API
+// Rate Setting API (alias rateChartsApi kept for compat)
 export const rateChartsApi = {
     getAll: async () => {
         return apiRequest<{ data: RateChart[] }>('/rate-charts');
@@ -867,6 +898,7 @@ export const rateChartsApi = {
         });
     },
 };
+export const rateSettingsApi = rateChartsApi;
 
 // Reports API
 export const reportsApi = {
@@ -1162,6 +1194,47 @@ export const authApiNew = {
     },
 };
 
+// Devices / Sessions API — real session management via server-clone
+export interface DeviceInfo {
+    _id: string;
+    user: string;
+    deviceId: string;
+    deviceName: string;
+    platform: string;
+    modelName?: string;
+    osName?: string;
+    osVersion?: string;
+    appVersion?: string;
+    ip?: string;
+    lastActive: string;
+    firstSeenAt?: string;
+    isActive: boolean;
+    isCurrent?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+}
+export const devicesApi = {
+    register: async (meta: { deviceId: string; deviceName?: string; platform?: string; modelName?: string; osName?: string; osVersion?: string; appVersion?: string; pushToken?: string; userAgent?: string }) => {
+        return apiRequest<DeviceInfo>('/devices/register', { method: 'POST', body: JSON.stringify(meta) });
+    },
+    list: async (currentDeviceId?: string) => {
+        const q = currentDeviceId ? `?currentDeviceId=${encodeURIComponent(currentDeviceId)}` : '';
+        return apiRequest<DeviceInfo[]>(`/devices${q}`);
+    },
+    logoutDevice: async (id: string) => {
+        return apiRequest<{ message: string }>(`/devices/${id}`, { method: 'DELETE' });
+    },
+    logoutOthers: async (currentDeviceId: string) => {
+        return apiRequest<{ message: string }>('/devices/logout-others', { method: 'POST', body: JSON.stringify({ currentDeviceId }) });
+    },
+    logoutCurrent: async (deviceId: string) => {
+        return apiRequest<{ message: string }>('/devices/logout-current', { method: 'POST', body: JSON.stringify({ deviceId }) });
+    },
+    ping: async (deviceId: string) => {
+        return apiRequest<void>('/devices/ping', { method: 'POST', body: JSON.stringify({ deviceId }) });
+    },
+};
+
 // Custom Forms API
 export interface CustomForm {
     _id: string;
@@ -1250,12 +1323,14 @@ export interface BalanceReportSummary {
 
 // Members API (for Selling tab)
 export const membersApi = {
-    getAll: async (params?: { search?: string; includeInactive?: boolean }) => {
+    getAll: async (params?: { search?: string; includeInactive?: boolean; limit?: number; page?: number }) => {
         const queryParams = new URLSearchParams();
         if (params?.search) queryParams.append('search', params.search);
         if (params?.includeInactive) queryParams.append('includeInactive', 'true');
+        if (params?.limit) queryParams.append('limit', String(params.limit));
+        if (params?.page) queryParams.append('page', String(params.page));
         const query = queryParams.toString();
-        return apiRequest<{ data: Member[]; count: number }>(`/members${query ? `?${query}` : ''}`);
+        return apiRequest<{ data: Member[]; count: number; total: number; page: number; pages: number }>(`/members${query ? `?${query}` : ''}`);
     },
 
     getById: async (id: string) => {
@@ -1301,6 +1376,11 @@ export const membersApi = {
     delete: async (id: string) => {
         return apiRequest<void>(`/members/${id}`, {
             method: 'DELETE',
+        });
+    },
+    restore: async (id: string) => {
+        return apiRequest<Member>(`/members/${id}/restore`, {
+            method: 'PUT',
         });
     },
 };
@@ -1578,6 +1658,9 @@ export interface SubscriptionStatus {
     hasSelling: boolean;
     hasRegister: boolean;
     subscriptions: UserSubscription[];
+    expiryDate?: string | null;
+    daysLeft?: number | null;
+    expiresAt?: string | null;
 }
 
 export interface TabSubscriptionCheck {
@@ -1690,6 +1773,28 @@ export const bannersApi = {
                 : [];
 
         return { ...res, response: banners } as ApiResponse<Banner[]>;
+    },
+};
+
+// Ads Popup (post-login) API
+export interface AdPopup {
+    _id: string;
+    title: string;
+    subtitle?: string;
+    image: string;
+    linkType?: string;
+    linkValue?: string;
+    order?: number;
+    isActive?: boolean;
+}
+export const adsApi = {
+    getActive: async () => {
+        const res = await apiRequest<AdPopup | null>('/ads/active');
+        return res;
+    },
+    getAll: async () => {
+        const res = await apiRequest<AdPopup[]>('/ads');
+        return res;
     },
 };
 
@@ -1975,6 +2080,23 @@ export interface PrintSettings {
     /** Optional dairy name used only on shared digital (WhatsApp/SMS) slips. */
     digitalSlipName?: string;
 }
+
+// Milk Rate Settings API (Collection > Rate settings)
+export interface MilkRateSettingsDoc {
+  _id?: string;
+  owner?: string;
+  fatSnfRate: { buffalo: number; cow: number; baseLabel: string };
+  fixedRate: { buffalo: number; cow: number };
+  fatRate: { buffalo: number; cow: number };
+  clrProRata: { clrToSnf: number; proRataEnabled: boolean; proRata: { col1: number; col2: number; col3: number } };
+  bonus: { type: 'perLitre' | 'percent'; perLitre: number; percent: number };
+  createdAt?: string;
+  updatedAt?: string;
+}
+export const milkRateSettingsApi = {
+  get: async () => apiRequest<MilkRateSettingsDoc>('/milk-rate-settings'),
+  update: async (data: Partial<MilkRateSettingsDoc>) => apiRequest<MilkRateSettingsDoc>('/milk-rate-settings', { method: 'PUT', body: JSON.stringify(data) }),
+};
 
 // Print Settings API
 export const printSettingsApi = {

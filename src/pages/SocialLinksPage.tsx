@@ -185,16 +185,16 @@ export function SocialLinksPage() {
     )
 
     return (
-        <div className="space-y-4 animate-fade-in">
+        <div className="space-y-5 animate-fade-in pb-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                    <h1 className="text-xl lg:text-2xl font-bold text-foreground">Social Links</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-foreground">Social Links</h1>
                     <p className="text-sm text-muted-foreground">Manage "Follow Us On" social links shown in the app</p>
                 </div>
                 <button
                     onClick={() => handleOpenModal()}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors text-sm font-medium"
                 >
                     <Plus className="w-4 h-4" />
                     Add Social Link
@@ -202,7 +202,7 @@ export function SocialLinksPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-card border border-border rounded-xl p-3">
+            <div className="rounded-xl border bg-card p-4 shadow-soft">
                 <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -211,7 +211,7 @@ export function SocialLinksPage() {
                             placeholder="Search social links..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-9 pr-4 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full pl-9 pr-4 py-2.5 bg-input border border-input rounded-lg border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
                     <div className="relative">
@@ -219,7 +219,7 @@ export function SocialLinksPage() {
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-                            className="pl-9 pr-8 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring appearance-none cursor-pointer min-w-[140px]"
+                            className="pl-9 pr-8 py-2 bg-input border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring appearance-none cursor-pointer min-w-[140px]"
                         >
                             <option value="all">All Status</option>
                             <option value="active">Active</option>
@@ -233,7 +233,7 @@ export function SocialLinksPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft">
                             <div className="flex gap-3">
                                 <div className="skeleton w-12 h-12 rounded-lg" />
                                 <div className="flex-1 space-y-2">
@@ -244,13 +244,13 @@ export function SocialLinksPage() {
                         </div>
                     ))
                 ) : links.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <LinkIcon className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
                         <p className="text-sm text-muted-foreground">No social links found</p>
                     </div>
                 ) : (
                     links.map((link) => (
-                        <div key={link._id} className="bg-card border border-border rounded-xl p-4">
+                        <div key={link._id} className="rounded-xl border bg-card p-4 shadow-soft">
                             <div className="flex gap-3">
                                 <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
                                     <img src={link.image} alt={link.title} className="w-full h-full object-cover" />
@@ -269,10 +269,10 @@ export function SocialLinksPage() {
                                 </div>
                             </div>
                             <div className="flex items-center justify-end mt-3 pt-3 border-t border-border gap-1">
-                                <button onClick={() => handleToggleStatus(link._id)} disabled={toggleLoading === link._id} className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50">
+                                <button onClick={() => handleToggleStatus(link._id)} disabled={toggleLoading === link._id} className="p-2 rounded-lg hover:bg-muted border border-transparent hover:border-border hover:shadow-sm transition-colors disabled:opacity-50">
                                     {toggleLoading === link._id ? <Loader2 className="w-4 h-4 animate-spin" /> : link.isActive ? <ToggleRight className="w-4 h-4 text-success" /> : <ToggleLeft className="w-4 h-4 text-muted-foreground" />}
                                 </button>
-                                <button onClick={() => handleOpenModal(link)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                                <button onClick={() => handleOpenModal(link)} className="p-2 rounded-lg hover:bg-muted border border-transparent hover:border-border hover:shadow-sm transition-colors">
                                     <Edit2 className="w-4 h-4 text-primary" />
                                 </button>
                                 <button onClick={() => handleDelete(link._id)} disabled={deleteLoading === link._id} className="p-1.5 rounded-lg hover:bg-destructive/20 transition-colors disabled:opacity-50">
@@ -285,7 +285,7 @@ export function SocialLinksPage() {
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
+            <div className="hidden md:block rounded-xl border bg-card overflow-hidden shadow-soft">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">
@@ -336,10 +336,10 @@ export function SocialLinksPage() {
                                         <td className="px-4 py-3 text-sm text-muted-foreground">{link.order}</td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center justify-end gap-1">
-                                                <button onClick={() => handleToggleStatus(link._id)} disabled={toggleLoading === link._id} className="p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50">
+                                                <button onClick={() => handleToggleStatus(link._id)} disabled={toggleLoading === link._id} className="p-2 rounded-lg hover:bg-muted border border-transparent hover:border-border hover:shadow-sm transition-colors disabled:opacity-50">
                                                     {toggleLoading === link._id ? <Loader2 className="w-4 h-4 animate-spin" /> : link.isActive ? <ToggleRight className="w-4 h-4 text-success" /> : <ToggleLeft className="w-4 h-4 text-muted-foreground" />}
                                                 </button>
-                                                <button onClick={() => handleOpenModal(link)} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
+                                                <button onClick={() => handleOpenModal(link)} className="p-2 rounded-lg hover:bg-muted border border-transparent hover:border-border hover:shadow-sm transition-colors">
                                                     <Edit2 className="w-4 h-4 text-primary" />
                                                 </button>
                                                 <button onClick={() => handleDelete(link._id)} disabled={deleteLoading === link._id} className="p-1.5 rounded-lg hover:bg-destructive/20 transition-colors disabled:opacity-50">
@@ -357,16 +357,16 @@ export function SocialLinksPage() {
 
             {/* Pagination */}
             {pagination && pagination.pages > 1 && (
-                <div className="flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-3">
                     <p className="text-sm text-muted-foreground">
                         Showing {((page - 1) * 10) + 1}-{Math.min(page * 10, pagination.total)} of {pagination.total}
                     </p>
                     <div className="flex items-center gap-1">
-                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-50">
+                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-lg hover:bg-muted border border-transparent hover:border-border hover:shadow-sm disabled:opacity-50">
                             <ChevronLeft className="w-4 h-4" />
                         </button>
                         <span className="px-3 py-1 text-sm font-medium">{page} / {pagination.pages}</span>
-                        <button onClick={() => setPage(p => Math.min(pagination!.pages, p + 1))} disabled={page === pagination.pages} className="p-1.5 rounded-lg hover:bg-muted disabled:opacity-50">
+                        <button onClick={() => setPage(p => Math.min(pagination!.pages, p + 1))} disabled={page === pagination.pages} className="p-2 rounded-lg hover:bg-muted border border-transparent hover:border-border hover:shadow-sm disabled:opacity-50">
                             <ChevronRight className="w-4 h-4" />
                         </button>
                     </div>
@@ -375,13 +375,13 @@ export function SocialLinksPage() {
 
             {/* Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={handleCloseModal}>
-                    <div className="bg-card border border-border rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleCloseModal}>
+                    <div className="bg-card border border-border rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between p-4 border-b border-border">
-                            <h2 className="text-lg font-semibold text-foreground">
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">
                                 {editingLink ? 'Edit Social Link' : 'Add Social Link'}
                             </h2>
-                            <button onClick={handleCloseModal} className="p-1.5 rounded-lg hover:bg-muted">
+                            <button onClick={handleCloseModal} className="p-2 rounded-lg hover:bg-muted border border-transparent hover:border-border hover:shadow-sm">
                                 <X className="w-4 h-4" />
                             </button>
                         </div>
@@ -391,7 +391,7 @@ export function SocialLinksPage() {
                                 <label className="block text-sm font-medium text-foreground mb-1.5">Image / Icon</label>
                                 <div
                                     onClick={() => fileInputRef.current?.click()}
-                                    className="border-2 border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                                    className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
                                 >
                                     {uploadLoading ? (
                                         <div className="flex flex-col items-center gap-2 py-4">
@@ -421,7 +421,7 @@ export function SocialLinksPage() {
                                     value={formData.title}
                                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                                     placeholder="e.g. Instagram, YouTube, Facebook"
-                                    className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-3 py-2 bg-input border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                 />
                             </div>
 
@@ -433,7 +433,7 @@ export function SocialLinksPage() {
                                     value={formData.link}
                                     onChange={(e) => setFormData(prev => ({ ...prev, link: e.target.value }))}
                                     placeholder="https://instagram.com/yourpage"
-                                    className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-3 py-2 bg-input border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                 />
                             </div>
 
@@ -444,7 +444,7 @@ export function SocialLinksPage() {
                                     type="number"
                                     value={formData.order}
                                     onChange={(e) => setFormData(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
-                                    className="w-full px-3 py-2 bg-input border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-3 py-2 bg-input border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                                 />
                             </div>
 
@@ -456,7 +456,7 @@ export function SocialLinksPage() {
                                 <button
                                     type="submit"
                                     disabled={formLoading || uploadLoading}
-                                    className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {formLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                                     {editingLink ? 'Update' : 'Create'}

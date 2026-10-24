@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndic
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X, Zap } from 'lucide-react-native';
+import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X, Zap, Power, Users, UserPlus } from 'lucide-react-native';
+import AmountFilterIcon from '@/components/AmountFilterIcon';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
 import { SellingPaymentCalendar } from '@/components/SellingPaymentCalendar';
@@ -24,7 +25,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
 import { buildSellingPaymentSlipPayload, buildMembersListPayload } from '@/lib/slipPrint';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, threeCol, line as fmtLine, left as fmtLeft, center as fmtCenter, feed } from '@/lib/printFormat';
 import { getThermalSlipLabels } from '@/lib/printTranslations';
 
@@ -59,7 +60,7 @@ export default function SellingScreen() {
         handleSubscriptionSuccess
     } = useSubscriptionCheck('selling');
 
-    const TAB_ORDER: TabType[] = ['Entry', 'Payment', 'Reports', 'Member'];
+    const TAB_ORDER: TabType[] = ['Entry', 'Payment', 'Reports', 'Customer'];
     const { sellingTab: activeTab, setSellingTab: setActiveTab } = useSubTabStore();
     const [isLoading, setIsLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -85,10 +86,13 @@ export default function SellingScreen() {
         }
     };
 
-    // Set active tab from URL params
+    // Set active tab from URL params (support legacy Member -> Customer)
     useEffect(() => {
-        if (tab && ['Entry', 'Payment', 'Reports', 'Member'].includes(tab)) {
-            setActiveTab(tab as TabType);
+        if (tab) {
+            const mapped = (tab === 'Member' ? 'Customer' : tab) as TabType;
+            if (['Entry', 'Payment', 'Reports', 'Customer'].includes(mapped)) {
+                setActiveTab(mapped);
+            }
         }
     }, [tab]);
 
@@ -117,6 +121,7 @@ export default function SellingScreen() {
     const [recentEntriesMemberFilter, setRecentEntriesMemberFilter] = useState('');
     const [showRecentMemberDropdown, setShowRecentMemberDropdown] = useState(false);
     const [recentMemberSearch, setRecentMemberSearch] = useState('');
+    const [entryAmountSort, setEntryAmountSort] = useState<'asc' | 'desc' | null>(null);
     const [recentDateSelectingType, setRecentDateSelectingType] = useState<'start' | 'end'>('start');
     const [showRecentCalendarModal, setShowRecentCalendarModal] = useState(false);
 
@@ -176,8 +181,23 @@ export default function SellingScreen() {
     const [balanceReportData, setBalanceReportData] = useState<MemberBalanceReport[]>([]);
     const [balanceReportSummary, setBalanceReportSummary] = useState<BalanceReportSummary | null>(null);
     const [balanceReportLoading, setBalanceReportLoading] = useState(false);
+    const [reportAmountSort, setReportAmountSort] = useState<'asc' | 'desc' | null>(null);
 
-    // Member state
+    // Derived report data with amount sort (must be top-level hooks, not inside renderReportsTab)
+    const selectedReportMember = useMemo(() => reportMemberFilter ? balanceReportData.find(m => m._id === reportMemberFilter) : null, [reportMemberFilter, balanceReportData]);
+    const rawDisplayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
+    const displayData = useMemo(() => {
+        if (!reportAmountSort) return rawDisplayData;
+        const arr = [...(rawDisplayData || [])];
+        arr.sort((a: any, b: any) => {
+            const av = Number(a.totalBalance) || 0;
+            const bv = Number(b.totalBalance) || 0;
+            return reportAmountSort === 'asc' ? av - bv : bv - av;
+        });
+        return arr;
+    }, [rawDisplayData, reportAmountSort]);
+
+    // Customer (member) state
     const [members, setMembers] = useState<Member[]>([]);
     const [memberName, setMemberName] = useState('');
     const [memberMobile, setMemberMobile] = useState('');
@@ -193,6 +213,10 @@ export default function SellingScreen() {
     const [showBulkEntryModal, setShowBulkEntryModal] = useState(false);
     const [memberTabSearch, setMemberTabSearch] = useState('');
     const [memberSearchLoading, setMemberSearchLoading] = useState(false);
+    // Customer pagination (10-10)
+    const [customerPage, setCustomerPage] = useState(1);
+    const [customerHasMore, setCustomerHasMore] = useState(true);
+    const [customerLoadingMore, setCustomerLoadingMore] = useState(false);
 
     // Modal state
     const [alertVisible, setAlertVisible] = useState(false);
@@ -263,9 +287,9 @@ export default function SellingScreen() {
 
     // Get selected recent member name for display (memoized for performance)
     const selectedRecentMemberName = useMemo(() => {
-        if (!recentEntriesMemberFilter) return 'All Members';
+        if (!recentEntriesMemberFilter) return 'All Customers';
         const member = members.find(m => m._id === recentEntriesMemberFilter);
-        return member?.name || 'All Members';
+        return member?.name || 'All Customers';
     }, [recentEntriesMemberFilter, members]);
 
     // Pre-compute date strings for entries once to avoid repeated Date parsing
@@ -313,9 +337,18 @@ export default function SellingScreen() {
             groups[key].entryCount = Math.max(groups[key].entryCount, (entry as any).entryCount || 1);
         }
 
+        const result = Object.values(groups);
+        if (entryAmountSort) {
+            result.sort((a, b) => {
+                const av = Number(a.totalAmount) || 0;
+                const bv = Number(b.totalAmount) || 0;
+                return entryAmountSort === 'asc' ? av - bv : bv - av;
+            });
+            return result;
+        }
         // Sort by date descending
-        return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
-    }, [entriesWithDateStr, recentEntriesStartDate, recentEntriesEndDate, recentEntriesMemberFilter]);
+        return result.sort((a, b) => b.date.localeCompare(a.date));
+    }, [entriesWithDateStr, recentEntriesStartDate, recentEntriesEndDate, recentEntriesMemberFilter, entryAmountSort]);
 
     // Fetch data - members and selling entries
     const fetchData = useCallback(async () => {
@@ -325,25 +358,28 @@ export default function SellingScreen() {
         try {
             setIsLoading(true);
             const [membersRes, entriesRes, paymentsRes, balanceReportRes] = await Promise.all([
-                membersApi.getAll({ includeInactive: true }),
-                sellingEntriesApi.getAll({ limit: 50 }),
-                memberPaymentsApi.getAll({ limit: 2, latestPerMember: true }),
+                membersApi.getAll({ includeInactive: true, limit: 10, page: 1 }),
+                sellingEntriesApi.getAll({ limit: 10 }),
+                memberPaymentsApi.getAll({ limit: 10, latestPerMember: true }),
                 membersApi.getBalanceReport()
             ]);
 
             if (membersRes.success) {
-                setMembers(membersRes.response?.data || []);
+                const data = membersRes.response?.data || [];
+                setMembers(data);
+                setCustomerPage(1);
+                setCustomerHasMore(data.length >= 10);
             }
             if (entriesRes.success) {
                 setRecentEntries(entriesRes.response?.data || []);
-                setHasMoreEntries((entriesRes.response?.data || []).length >= 50);
+                setHasMoreEntries((entriesRes.response?.data || []).length >= 10);
                 setEntriesPage(1);
             }
             if (paymentsRes.success) {
                 const data = paymentsRes.response?.data || [];
                 setRecentPayments(data);
                 setPaymentsPage(1);
-                setPaymentsHasMore(data.length >= 2);
+                setPaymentsHasMore(data.length >= 10);
             }
             if (balanceReportRes.success) {
                 setBalanceReportData(balanceReportRes.response?.data || []);
@@ -371,7 +407,7 @@ export default function SellingScreen() {
 
         try {
             setIsLoading(true);
-            const params: Record<string, any> = { limit: 50 };
+            const params: Record<string, any> = { limit: 10 };
             if (recentEntriesMemberFilter) params.memberId = recentEntriesMemberFilter;
             if (recentEntriesStartDate) params.startDate = recentEntriesStartDate;
             if (recentEntriesEndDate) params.endDate = recentEntriesEndDate;
@@ -380,7 +416,7 @@ export default function SellingScreen() {
             if (res.success) {
                 const data = res.response?.data || [];
                 setRecentEntries(data);
-                setHasMoreEntries(data.length >= 50);
+                setHasMoreEntries(data.length >= 10);
                 setEntriesPage(1);
             }
         } catch (error) {
@@ -416,7 +452,7 @@ export default function SellingScreen() {
         setLoadingMore(true);
         try {
             const nextPage = entriesPage + 1;
-            const params: Record<string, any> = { limit: 50, page: nextPage };
+            const params: Record<string, any> = { limit: 10, page: nextPage };
             if (recentEntriesMemberFilter) params.memberId = recentEntriesMemberFilter;
             if (recentEntriesStartDate) params.startDate = recentEntriesStartDate;
             if (recentEntriesEndDate) params.endDate = recentEntriesEndDate;
@@ -424,7 +460,7 @@ export default function SellingScreen() {
             if (res.success) {
                 const newEntries = res.response?.data || [];
                 setRecentEntries(prev => [...prev, ...newEntries]);
-                setHasMoreEntries(newEntries.length >= 50);
+                setHasMoreEntries(newEntries.length >= 10);
                 setEntriesPage(nextPage);
             }
         } catch (error) {
@@ -440,7 +476,7 @@ export default function SellingScreen() {
         setPaymentsLoadingMore(true);
         try {
             const nextPage = paymentsPage + 1;
-            const res = await memberPaymentsApi.getAll({ limit: 2, page: nextPage, latestPerMember: true });
+            const res = await memberPaymentsApi.getAll({ limit: 10, page: nextPage, latestPerMember: true });
             if (res.success && res.response?.data) {
                 const newData = res.response.data;
                 setRecentPayments(prev => {
@@ -448,7 +484,7 @@ export default function SellingScreen() {
                     return [...prev, ...newData.filter(p => !seen.has(p._id))];
                 });
                 setPaymentsPage(nextPage);
-                if (newData.length < 2) setPaymentsHasMore(false);
+                if (newData.length < 10) setPaymentsHasMore(false);
             } else {
                 setPaymentsHasMore(false);
             }
@@ -465,7 +501,7 @@ export default function SellingScreen() {
         setMemberPaymentsLoadingMore(true);
         try {
             const nextPage = memberPaymentsPage + 1;
-            const res = await memberPaymentsApi.getAll({ memberId: selectedPaymentMember._id, limit: 2, page: nextPage });
+            const res = await memberPaymentsApi.getAll({ memberId: selectedPaymentMember._id, limit: 10, page: nextPage });
             if (res.success && res.response?.data) {
                 const newData = res.response.data;
                 setRecentPayments(prev => {
@@ -473,7 +509,7 @@ export default function SellingScreen() {
                     return [...prev, ...newData.filter(p => !seen.has(p._id))];
                 });
                 setMemberPaymentsPage(nextPage);
-                if (newData.length < 2) setMemberPaymentsHasMore(false);
+                if (newData.length < 10) setMemberPaymentsHasMore(false);
             } else {
                 setMemberPaymentsHasMore(false);
             }
@@ -487,7 +523,7 @@ export default function SellingScreen() {
         if (savingEntry) return;
 
         if (!selectedMember) {
-            showAlert('Error', 'Please select a member first');
+            showAlert('Error', 'Please select a customer first');
             return;
         }
 
@@ -572,7 +608,7 @@ export default function SellingScreen() {
                         ? { startDate: startDateFromLastPayment, endDate: undefined }
                         : undefined
                 ),
-                memberPaymentsApi.getAll({ memberId: member._id, limit: 2 }),
+                memberPaymentsApi.getAll({ memberId: member._id, limit: 10 }),
             ]);
 
             if (summaryRes.success && summaryRes.response) {
@@ -593,7 +629,7 @@ export default function SellingScreen() {
                     return [...data, ...otherPayments];
                 });
                 setMemberPaymentsPage(1);
-                setMemberPaymentsHasMore(data.length >= 2);
+                setMemberPaymentsHasMore(data.length >= 10);
             }
         } catch (error) {
             setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
@@ -630,7 +666,7 @@ export default function SellingScreen() {
     // Process payment
     const handleProcessPayment = async () => {
         if (!selectedPaymentMember) {
-            showAlert('Error', 'Please select a member first');
+            showAlert('Error', 'Please select a customer first');
             return;
         }
 
@@ -720,7 +756,7 @@ export default function SellingScreen() {
                     defaultNotes: memberDefaultNotes
                 });
                 if (res.success) {
-                    showAlert('Success', 'Member updated successfully');
+                    showAlert('Success', 'Customer updated successfully');
                     clearMemberForm();
                     setShowMemberModal(false);
                     fetchData();
@@ -739,7 +775,7 @@ export default function SellingScreen() {
                     defaultNotes: memberDefaultNotes
                 });
                 if (res.success) {
-                    showAlert('Success', 'Member added successfully');
+                    showAlert('Success', 'Customer added successfully');
                     clearMemberForm();
                     setShowMemberModal(false);
                     fetchData();
@@ -780,17 +816,33 @@ export default function SellingScreen() {
     };
 
     const handleDeleteMember = async (id: string) => {
-        showConfirm('Deactivate Member', 'Are you sure you want to deactivate this member? The member will be hidden from active lists but data will be preserved.', async () => {
+        showConfirm('Deactivate Customer', 'Are you sure you want to deactivate this customer? The customer will be hidden from active lists but data will be preserved. Dairy owner can re-activate later.', async () => {
             setConfirmVisible(false);
             try {
                 const res = await membersApi.delete(id);
                 if (res.success) {
                     fetchData();
                 } else {
-                    showAlert('Error', 'Failed to deactivate member');
+                    showAlert('Error', 'Failed to deactivate customer');
                 }
             } catch (error) {
-                showAlert('Error', 'Failed to deactivate member');
+                showAlert('Error', 'Failed to deactivate customer');
+            }
+        });
+    };
+
+    const handleRestoreMember = async (id: string) => {
+        showConfirm('Activate Customer', 'Re-activate this customer? They will appear in active lists again.', async () => {
+            setConfirmVisible(false);
+            try {
+                const res = await membersApi.restore(id);
+                if (res.success) {
+                    fetchData();
+                } else {
+                    showAlert('Error', res.message || 'Failed to activate');
+                }
+            } catch (error) {
+                showAlert('Error', 'Failed to activate customer');
             }
         });
     };
@@ -841,9 +893,9 @@ export default function SellingScreen() {
 
     // Get selected member name for display (memoized for performance)
     const selectedReportMemberName = useMemo(() => {
-        if (!reportMemberFilter) return 'All Members';
+        if (!reportMemberFilter) return 'All Customers';
         const member = members.find(m => m._id === reportMemberFilter);
-        return member?.name || 'All Members';
+        return member?.name || 'All Customers';
     }, [reportMemberFilter, members]);
 
     const getFilteredPayments = () => {
@@ -1067,8 +1119,8 @@ export default function SellingScreen() {
             ? `Period: ${recentEntriesStartDate ? formatDate(recentEntriesStartDate) : 'Start'} to ${recentEntriesEndDate ? formatDate(recentEntriesEndDate) : 'End'}`
             : 'All Entries';
         const memberText = recentEntriesMemberFilter
-            ? `Member: ${selectedRecentMemberName}`
-            : 'All Members';
+            ? `Customer: ${selectedRecentMemberName}`
+            : 'All Customers';
 
         const html = `
             <html>
@@ -1214,8 +1266,8 @@ export default function SellingScreen() {
                 </head>
                 <body>
                     ${brandedHeaderHtml(topPrintSettings)}
-                    <h1>Member Balance Report</h1>
-                    <p class="subtitle">${selectedReportMember ? `Member: ${selectedReportMember.name}` : 'All Members'} | Generated: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
+                    <h1>Customer Balance Report</h1>
+                    <p class="subtitle">${selectedReportMember ? `Customer: ${selectedReportMember.name}` : 'All Customers'} | Generated: ${formatDateDDMMYYYY(new Date().toISOString().split('T')[0])}</p>
                     <table>
                         <tr>
                             <th style="width: 50px;">Sr.</th>
@@ -1227,7 +1279,7 @@ export default function SellingScreen() {
                         ${rows}
                     </table>
                     <div class="summary">
-                        <p class="summary-text"><strong>Total Members:</strong> ${membersToShow.length}</p>
+                        <p class="summary-text"><strong>Total Customers:</strong> ${membersToShow.length}</p>
                         <p class="summary-text"><strong>Net Balance:</strong> <span style="color: ${netBalance >= 0 ? '#22c55e' : '#ef4444'};">${netBalance < 0 ? '-' : ''}₹${Math.abs(netBalance).toFixed(0)}</span></p>
                     </div>
                     ${brandedFooterHtml(topPrintSettings)}
@@ -1240,7 +1292,7 @@ export default function SellingScreen() {
     const [reportDownloading, setReportDownloading] = useState(false);
     const handleReportPDF = async () => {
         if (balanceReportData.length === 0) {
-            showAlert('Error', 'No members to export');
+            showAlert('Error', 'No customers to export');
             return;
         }
         setReportDownloading(true);
@@ -1262,7 +1314,7 @@ export default function SellingScreen() {
     // Handle Report Print
     const handleReportPrint = async () => {
         if (balanceReportData.length === 0) {
-            showAlert('Error', 'No members to print');
+            showAlert('Error', 'No customers to print');
             return;
         }
 
@@ -1309,13 +1361,13 @@ export default function SellingScreen() {
     const [paymentEntriesPdfLoading, setPaymentEntriesPdfLoading] = useState(false);
     const handleDownloadPaymentMemberEntriesPDF = async () => {
         if (!selectedPaymentMember) {
-            showAlert('Error', 'Please select a member first');
+            showAlert('Error', 'Please select a customer first');
             return;
         }
         setPaymentEntriesPdfLoading(true);
         try {
             // Fetch entries for this member within the calc period
-            const params: Record<string, any> = { memberId: selectedPaymentMember._id, limit: 500 };
+            const params: Record<string, any> = { memberId: selectedPaymentMember._id, limit: 10 };
             if (calcStartDate) params.startDate = calcStartDate;
             if (calcEndDate) params.endDate = calcEndDate;
             const res = await sellingEntriesApi.getAll(params);
@@ -1399,7 +1451,7 @@ export default function SellingScreen() {
 
     const handlePrintPaymentMemberEntriesThermal = async () => {
         if (!selectedPaymentMember) {
-            showAlert('Error', 'Please select a member first');
+            showAlert('Error', 'Please select a customer first');
             return;
         }
         if (!isPrinterConnected) {
@@ -1408,7 +1460,7 @@ export default function SellingScreen() {
         }
 
         try {
-            const params: Record<string, any> = { memberId: selectedPaymentMember._id, limit: 500 };
+            const params: Record<string, any> = { memberId: selectedPaymentMember._id, limit: 10 };
             if (calcStartDate) params.startDate = calcStartDate;
             if (calcEndDate) params.endDate = calcEndDate;
             const res = await sellingEntriesApi.getAll(params);
@@ -1486,7 +1538,7 @@ export default function SellingScreen() {
     const [milkSlipPrinting, setMilkSlipPrinting] = useState(false);
     const handlePrintMilkSlip = async () => {
         if (!selectedPaymentMember) {
-            showAlert('Error', 'Please select a member first');
+            showAlert('Error', 'Please select a customer first');
             return;
         }
         if (!isPrinterConnected) {
@@ -1583,7 +1635,7 @@ export default function SellingScreen() {
     // Print members list to thermal printer (toast if no printer connected)
     const handlePrintMembers = async () => {
         if (members.length === 0) {
-            if (Platform.OS === 'android') ToastAndroid.show('No members to print', ToastAndroid.SHORT);
+            if (Platform.OS === 'android') ToastAndroid.show('No customers to print', ToastAndroid.SHORT);
             return;
         }
         if (!isPrinterConnected) {
@@ -1599,7 +1651,7 @@ export default function SellingScreen() {
 
     const downloadMembersPDF = async () => {
         if (members.length === 0) {
-            showAlert('Error', 'No members to export');
+            showAlert('Error', 'No customers to export');
             return;
         }
         const rows = members.map((m, index) => `
@@ -1617,15 +1669,15 @@ export default function SellingScreen() {
                 th{background:#22C55E;color:#fff} tr:nth-child(even){background:#f9f9f9}
             </style></head><body>
                 ${brandedHeaderHtml(topPrintSettings)}
-                <h1>Members List</h1>
-                <p>Total Members: ${members.length}</p>
+                <h1>Customers List</h1>
+                <p>Total Customers: ${members.length}</p>
                 <table><tr><th>Sr.</th><th>Name</th><th>Mobile</th><th>Rate</th></tr>${rows}</table>
                 ${brandedFooterHtml(topPrintSettings)}
             </body></html>
         `;
         try {
             const { uri } = await Print.printToFileAsync({ html });
-            if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Members List' });
+            if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Customers List' });
             else showAlert('PDF Generated', `Saved to: ${uri}`);
         } catch (error) {
             showAlert('Error', 'Failed to generate PDF');
@@ -1672,7 +1724,7 @@ export default function SellingScreen() {
                     ))}
                     {filteredMembers.length === 0 && (
                         <View style={styles.dropdownEmptyContainer}>
-                            <Text style={styles.dropdownEmpty}>No members found</Text>
+                            <Text style={styles.dropdownEmpty}>No customers found</Text>
                             <Pressable
                                 style={styles.addNewBtn}
                                 onPress={() => {
@@ -1682,7 +1734,7 @@ export default function SellingScreen() {
                                 }}
                             >
                                 <Plus size={14} color={colors.primary} />
-                                <Text style={styles.addNewBtnText}>Add New Member</Text>
+                                <Text style={styles.addNewBtnText}>Add New Customer</Text>
                             </Pressable>
                         </View>
                     )}
@@ -1702,7 +1754,7 @@ export default function SellingScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-                <Text style={styles.label}>Member (Customer)</Text>
+                <Text style={styles.label}>Customer</Text>
                 <Pressable
                     style={styles.searchInput}
                     onPress={() => setShowSuggestions(true)}
@@ -1710,7 +1762,7 @@ export default function SellingScreen() {
                     <Search size={16} color={colors.mutedForeground} />
                     <TextInput
                         style={styles.searchTextInput}
-                        placeholder="Search member by name..."
+                        placeholder="Search customer by name..."
                         value={searchMember}
                         onChangeText={(text) => {
                             setSearchMember(text);
@@ -1853,7 +1905,7 @@ export default function SellingScreen() {
                                 <Search size={14} color={colors.mutedForeground} />
                                 <TextInput
                                     style={[styles.memberSearchInput, { flex: 1 }]}
-                                    placeholder="Search member..."
+                                    placeholder="Search customer..."
                                     value={recentMemberSearch}
                                     onChangeText={setRecentMemberSearch}
                                     placeholderTextColor={colors.mutedForeground}
@@ -1886,7 +1938,7 @@ export default function SellingScreen() {
                                             setRecentMemberSearch('');
                                         }}
                                     >
-                                        <Text style={[styles.memberDropdownText, !recentEntriesMemberFilter && { color: colors.primary }]}>All Members</Text>
+                                        <Text style={[styles.memberDropdownText, !recentEntriesMemberFilter && { color: colors.primary }]}>All Customers</Text>
                                     </Pressable>
                                     {filteredRecentMembers.map(member => (
                                         <Pressable
@@ -1921,6 +1973,10 @@ export default function SellingScreen() {
                         <Printer size={14} color={colors.white} />
                         <Text style={styles.printEntriesBtnText}>Print</Text>
                     </Pressable>
+                    <AmountFilterIcon
+                        sort={entryAmountSort}
+                        onToggle={() => setEntryAmountSort((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                    />
 
                     {/* Clear Filters Button */}
                     {(recentEntriesStartDate || recentEntriesEndDate || recentEntriesMemberFilter) && (
@@ -2000,7 +2056,7 @@ export default function SellingScreen() {
         <View>
             {/* Member Search */}
             <View style={styles.inputGroup}>
-                <Text style={styles.label}>Select Member</Text>
+                <Text style={styles.label}>Select Customer</Text>
                 <Pressable
                     style={styles.searchInput}
                     onPress={() => setShowPaymentMemberSuggestions(true)}
@@ -2008,7 +2064,7 @@ export default function SellingScreen() {
                     <Search size={16} color={colors.mutedForeground} />
                     <TextInput
                         style={styles.searchTextInput}
-                        placeholder="Search member by name..."
+                        placeholder="Search customer by name..."
                         value={paymentMemberSearch}
                         onChangeText={(text) => {
                             setPaymentMemberSearch(text);
@@ -2042,7 +2098,7 @@ export default function SellingScreen() {
                     <View style={styles.suggestionDropdown}>
                         <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                             {filteredPaymentMembers.length === 0 ? (
-                                <Text style={styles.emptyText}>No members found</Text>
+                                <Text style={styles.emptyText}>No customers found</Text>
                             ) : (
                                 filteredPaymentMembers.map((member) => (
                                     <Pressable
@@ -2124,7 +2180,7 @@ export default function SellingScreen() {
                             }}
                             onPress={() => {
                                 if (!selectedPaymentMember) {
-                                    showAlert('Error', 'Please select a member first');
+                                    showAlert('Error', 'Please select a customer first');
                                     return;
                                 }
                                 router.push({
@@ -2438,20 +2494,12 @@ export default function SellingScreen() {
     );
 
     const renderReportsTab = () => {
-        // Get selected member for report from balance report data (server data)
-        const selectedReportMember = reportMemberFilter
-            ? balanceReportData.find(m => m._id === reportMemberFilter)
-            : null;
-
-        // Use server-provided summary for totals
+        // Use server-provided summary for totals (selectedReportMember/displayData are top-level memos)
         const totalMembers = balanceReportSummary?.totalMembers || 0;
         const totalUnpaidQuantity = balanceReportSummary?.totalUnpaidQuantity || 0;
         const netBalance = balanceReportSummary?.netBalance || 0;
         const totalReceivable = balanceReportSummary?.totalReceivable || 0;
         const totalPayable = balanceReportSummary?.totalPayable || 0;
-
-        // Data to display in table (filtered by selected member or all)
-        const displayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
 
         return (
             <View>
@@ -2461,7 +2509,7 @@ export default function SellingScreen() {
                 {!selectedReportMember && (
                     <View style={styles.reportSummary}>
                         <View style={styles.reportCard}>
-                            <Text style={styles.reportCardLabel}>Total Members</Text>
+                            <Text style={styles.reportCardLabel}>Total Customers</Text>
                             <Text style={styles.reportCardValue}>{totalMembers}</Text>
                         </View>
                         <View style={styles.reportCard}>
@@ -2483,7 +2531,7 @@ export default function SellingScreen() {
                 {/* Member Filter Only */}
                 <View style={styles.filterCard}>
                     <View style={styles.memberFilterRow}>
-                        <Text style={styles.memberFilterLabel}>Member:</Text>
+                        <Text style={styles.memberFilterLabel}>Customer:</Text>
                         {showReportMemberDropdown ? (
                             <View style={[styles.memberFilterBtn, { paddingVertical: 0 }]}>
                                 <Search size={14} color={colors.primary} />
@@ -2535,7 +2583,7 @@ export default function SellingScreen() {
                                         setShowReportMemberDropdown(false);
                                     }}
                                 >
-                                    <Text style={styles.memberFilterItemText}>All Members</Text>
+                                    <Text style={styles.memberFilterItemText}>All Customers</Text>
                                     {!reportMemberFilter && <Check size={14} color={colors.primary} />}
                                 </Pressable>
                                 {filteredReportMembers.map(member => (
@@ -2557,11 +2605,11 @@ export default function SellingScreen() {
                     )}
                 </View>
 
-                {/* All Members Balance Table */}
+                {/* All Customers Balance Table */}
                 <View style={styles.memberSummarySection}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8 }}>
                         <Text style={[styles.memberSummaryTitle, { marginBottom: 0 }]} numberOfLines={1}>
-                            {selectedReportMember ? 'Member Details' : 'All Members Balance'}
+                            {selectedReportMember ? 'Customer Details' : 'All Customers Balance'}
                         </Text>
                         <View style={{ flexDirection: 'row', gap: 6 }}>
                             <Pressable
@@ -2579,13 +2627,17 @@ export default function SellingScreen() {
                                 <Printer size={14} color={colors.primary} />
                                 <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Print</Text>
                             </Pressable>
+                            <AmountFilterIcon
+                                sort={reportAmountSort}
+                                onToggle={() => setReportAmountSort((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                            />
                         </View>
                     </View>
 
                     {balanceReportLoading ? (
                         <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 20 }} />
                     ) : displayData.length === 0 ? (
-                        <Text style={styles.emptyText}>No members found</Text>
+                        <Text style={styles.emptyText}>No customers found</Text>
                     ) : (
                         <View style={styles.table}>
                             <View style={styles.tableHeader}>
@@ -2664,21 +2716,44 @@ export default function SellingScreen() {
         );
     };
 
-    // Search members with server-side search
+    // Search customers with server-side search (10-10 pagination)
     const handleMemberTabSearch = useCallback(async (searchText: string) => {
         setMemberTabSearch(searchText);
         setMemberSearchLoading(true);
         try {
-            const res = await membersApi.getAll({ search: searchText.trim() || undefined, includeInactive: true });
+            const res = await membersApi.getAll({ search: searchText.trim() || undefined, includeInactive: true, limit: 10, page: 1 });
             if (res.success) {
-                setMembers(res.response?.data || []);
+                const data = res.response?.data || [];
+                setMembers(data);
+                setCustomerPage(1);
+                setCustomerHasMore(data.length >= 10);
             }
         } catch (error) {
-            console.error('Member search error:', error);
+            console.error('Customer search error:', error);
         } finally {
             setMemberSearchLoading(false);
         }
     }, []);
+
+    // Load more customers (10-10 pagination)
+    const handleLoadMoreCustomers = async () => {
+        if (customerLoadingMore || !customerHasMore) return;
+        setCustomerLoadingMore(true);
+        try {
+            const nextPage = customerPage + 1;
+            const res = await membersApi.getAll({ search: memberTabSearch.trim() || undefined, includeInactive: true, limit: 10, page: nextPage });
+            if (res.success) {
+                const newData = res.response?.data || [];
+                setMembers(prev => [...prev, ...newData]);
+                setCustomerPage(nextPage);
+                setCustomerHasMore(newData.length >= 10);
+            }
+        } catch (error) {
+            console.error('Load more customers error:', error);
+        } finally {
+            setCustomerLoadingMore(false);
+        }
+    };
 
     const renderMemberTab = () => (
         <View>
@@ -2687,7 +2762,7 @@ export default function SellingScreen() {
                     <Search size={16} color={colors.mutedForeground} />
                     <TextInput
                         style={styles.memberTabSearchInput}
-                        placeholder="Search members..."
+                        placeholder="Search customers..."
                         placeholderTextColor={colors.mutedForeground}
                         value={memberTabSearch}
                         onChangeText={handleMemberTabSearch}
@@ -2718,10 +2793,33 @@ export default function SellingScreen() {
                 </View>
             </View>
 
-            <Text style={[styles.sectionTitle, { marginTop: 4, fontSize: 13 }]}>Members List ({members.filter(m => m.isActive !== false).length} active, {members.filter(m => m.isActive === false).length} inactive)</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 4, fontSize: 13 }]}>Customers List ({members.filter(m => m.isActive !== false).length} active, {members.filter(m => m.isActive === false).length} inactive)</Text>
 
             {members.length === 0 ? (
-                <Text style={styles.emptyText}>No members yet. Add your first member.</Text>
+                memberTabSearch?.trim() ? (
+                    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 10 }}>
+                        <Search size={36} color={colors.mutedForeground} opacity={0.4} />
+                        <Text style={{ fontSize: 15, fontWeight: '600', color: colors.mutedForeground }}>No customers found</Text>
+                        <Text style={{ fontSize: 12, color: colors.mutedForeground }}>No results for “{memberTabSearch.trim()}”</Text>
+                    </View>
+                ) : (
+                    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 72, paddingHorizontal: 24, gap: 18, minHeight: 420 }}>
+                        <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+                            <Users size={44} color="#9CA3AF" />
+                        </View>
+                        <View style={{ alignItems: 'center', gap: 8 }}>
+                            <Text style={{ fontSize: 22, fontWeight: '800', color: colors.foreground, textAlign: 'center' }}>Add First Customer</Text>
+                            <Text style={{ fontSize: 15, fontWeight: '500', color: colors.mutedForeground, textAlign: 'center' }}>No customers added yet</Text>
+                        </View>
+                        <Pressable
+                            onPress={() => { clearMemberForm(); setShowMemberModal(true); }}
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#2563EB', paddingHorizontal: 28, paddingVertical: 14, borderRadius: 28, marginTop: 4, shadowColor: '#2563EB', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 3 }}
+                        >
+                            <UserPlus size={18} color="#fff" />
+                            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Add Customer</Text>
+                        </Pressable>
+                    </View>
+                )
             ) : (
                 <View style={styles.table}>
                     <View style={styles.tableHeader}>
@@ -2754,15 +2852,32 @@ export default function SellingScreen() {
                                     <Pressable style={styles.editBtn} onPress={() => handleEditMember(item)}>
                                         <Edit2 size={12} color={colors.primary} />
                                     </Pressable>
-                                    {!isInactive && (
+                                    {!isInactive ? (
                                         <Pressable style={styles.deleteBtn} onPress={() => handleDeleteMember(item._id)}>
                                             <Trash2 size={12} color={colors.destructive} />
+                                        </Pressable>
+                                    ) : (
+                                        <Pressable style={[styles.editBtn, { backgroundColor: colors.primary + '15', borderWidth: 1, borderColor: colors.primary + '30' }]} onPress={() => handleRestoreMember(item._id)}>
+                                            <Power size={12} color={colors.primary} />
                                         </Pressable>
                                     )}
                                 </View>
                             </View>
                         );
                     })}
+                    {customerHasMore && (
+                        <Pressable
+                            style={[styles.loadMoreBtn, customerLoadingMore && { opacity: 0.6 }]}
+                            onPress={handleLoadMoreCustomers}
+                            disabled={customerLoadingMore}
+                        >
+                            {customerLoadingMore ? (
+                                <ActivityIndicator size="small" color={colors.primary} />
+                            ) : (
+                                <Text style={styles.loadMoreText}>Load More</Text>
+                            )}
+                        </Pressable>
+                    )}
                 </View>
             )}
         </View>
@@ -2791,7 +2906,7 @@ export default function SellingScreen() {
                                 <View style={styles.memberModalIcon}>
                                     <User size={20} color={colors.white} />
                                 </View>
-                                <Text style={styles.memberModalTitle}>{editingMember ? 'Edit Member' : 'Add New Member'}</Text>
+                                <Text style={styles.memberModalTitle}>{editingMember ? 'Edit Customer' : 'Add New Customer'}</Text>
                             </View>
                             <Pressable style={styles.memberModalCloseBtn} onPress={() => setShowMemberModal(false)}>
                                 <X size={20} color={colors.foreground} />
@@ -2916,7 +3031,7 @@ export default function SellingScreen() {
                                 {isLoading ? (
                                     <ActivityIndicator size="small" color={colors.white} />
                                 ) : (
-                                    <Text style={styles.memberModalSaveBtnText}>{editingMember ? 'Update Member' : 'Save Member'}</Text>
+                                    <Text style={styles.memberModalSaveBtnText}>{editingMember ? 'Update Customer' : 'Save Customer'}</Text>
                                 )}
                             </Pressable>
                         </View>
@@ -2957,7 +3072,7 @@ export default function SellingScreen() {
                         {activeTab === 'Entry' && renderEntryTab()}
                         {activeTab === 'Payment' && renderPaymentTab()}
                         {activeTab === 'Reports' && renderReportsTab()}
-                        {activeTab === 'Member' && renderMemberTab()}
+                        {activeTab === 'Customer' && renderMemberTab()}
                     </>
                 )}
             </ScrollView>

@@ -153,7 +153,7 @@ export function SellingEntriesPage() {
     const hasFilters = memberId || userId || startDate || endDate || isPaid
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in pb-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -168,14 +168,14 @@ export function SellingEntriesPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-card border border-border rounded-xl p-4">
+            <div className="rounded-xl border bg-card p-4 shadow-soft">
                 <div className="flex flex-wrap items-end gap-4">
                     <div className="min-w-[180px]">
                         <label className="block text-sm font-medium text-muted-foreground mb-1.5">Owner</label>
                         <select
                             value={userId}
                             onChange={e => { setUserId(e.target.value); setMemberId(''); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
@@ -188,7 +188,7 @@ export function SellingEntriesPage() {
                         <select
                             value={memberId}
                             onChange={e => { setMemberId(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="">All Members</option>
                             {members.map(m => (
@@ -202,7 +202,7 @@ export function SellingEntriesPage() {
                             type="date"
                             value={startDate}
                             onChange={e => { setStartDate(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
                     <div className="min-w-[140px]">
@@ -211,7 +211,7 @@ export function SellingEntriesPage() {
                             type="date"
                             value={endDate}
                             onChange={e => { setEndDate(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
                     <div className="min-w-[120px]">
@@ -219,7 +219,7 @@ export function SellingEntriesPage() {
                         <select
                             value={isPaid}
                             onChange={e => { setIsPaid(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="">All</option>
                             <option value="true">Paid</option>
@@ -241,7 +241,7 @@ export function SellingEntriesPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="flex justify-between mb-2">
                                 <div className="h-4 bg-muted rounded w-24" />
                                 <div className="h-5 bg-muted rounded-full w-16" />
@@ -255,14 +255,14 @@ export function SellingEntriesPage() {
                         </div>
                     ))
                 ) : entries.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <p className="text-sm text-muted-foreground">No entries found</p>
                     </div>
                 ) : (
                     entries.map(entry => {
                         const totalQty = entry.morningQuantity + entry.eveningQuantity
                         return (
-                            <div key={entry._id} className="bg-card border border-border rounded-xl p-4">
+                            <div key={entry._id} className="rounded-xl border bg-card p-4 shadow-soft">
                                 <div className="flex items-start justify-between mb-2">
                                     <span className="text-sm text-muted-foreground">{formatDate(entry.date)}</span>
                                     <span className={cn(
@@ -316,11 +316,11 @@ export function SellingEntriesPage() {
             {loading ? (
                 <div className="hidden md:block"><TableSkeleton rows={10} columns={10} /></div>
             ) : entries.length === 0 ? (
-                <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
+                <div className="hidden md:block bg-card border border-border rounded-lg p-12 text-center">
                     <p className="text-muted-foreground">No entries found</p>
                 </div>
             ) : (
-                <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
+                <div className="hidden md:block rounded-xl border bg-card overflow-hidden shadow-soft">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">
@@ -430,9 +430,9 @@ export function SellingEntriesPage() {
             {/* Edit Modal */}
             {editModalOpen && editingEntry && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-                    <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 animate-fade-in">
+                    <div className="bg-card border border-border rounded-lg w-full max-w-md p-6 animate-fade-in">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-lg font-semibold text-foreground">Edit Entry</h2>
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Edit Entry</h2>
                             <button
                                 onClick={() => setEditModalOpen(false)}
                                 className="p-2 hover:bg-muted rounded-lg transition-colors"
@@ -452,7 +452,7 @@ export function SellingEntriesPage() {
                                         step="0.01"
                                         value={editFormData.morningQuantity}
                                         onChange={e => setEditFormData(f => ({ ...f, morningQuantity: parseFloat(e.target.value) || 0 }))}
-                                        className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                        className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                     />
                                 </div>
                                 <div>
@@ -465,7 +465,7 @@ export function SellingEntriesPage() {
                                         step="0.01"
                                         value={editFormData.eveningQuantity}
                                         onChange={e => setEditFormData(f => ({ ...f, eveningQuantity: parseFloat(e.target.value) || 0 }))}
-                                        className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                        className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                     />
                                 </div>
                             </div>
@@ -476,7 +476,7 @@ export function SellingEntriesPage() {
                                     step="0.01"
                                     value={editFormData.rate}
                                     onChange={e => setEditFormData(f => ({ ...f, rate: parseFloat(e.target.value) || 0 }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 />
                             </div>
                             <div>
@@ -485,7 +485,7 @@ export function SellingEntriesPage() {
                                     type="text"
                                     value={editFormData.notes}
                                     onChange={e => setEditFormData(f => ({ ...f, notes: e.target.value }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 />
                             </div>
                             <div className="flex items-center gap-2">
@@ -511,7 +511,7 @@ export function SellingEntriesPage() {
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                    className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium disabled:opacity-50"
+                                    className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors font-medium disabled:opacity-50"
                                 >
                                     {submitting ? 'Saving...' : 'Save'}
                                 </button>

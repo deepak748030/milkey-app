@@ -53,7 +53,7 @@ export function AppVersionPage() {
         return (
             <div className="p-6 space-y-6">
                 <div className="h-8 w-48 bg-muted rounded animate-pulse" />
-                <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+                <div className="bg-card rounded-lg border border-border p-6 space-y-4">
                     {Array.from({ length: 6 }).map((_, i) => (
                         <div key={i} className="h-12 bg-muted rounded animate-pulse" />
                     ))}
@@ -75,21 +75,21 @@ export function AppVersionPage() {
                     <button onClick={fetchVersion} className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors">
                         <RefreshCw className="w-4 h-4" /> Refresh
                     </button>
-                    <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50">
+                    <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50">
                         <Save className="w-4 h-4" /> {saving ? 'Saving...' : saved ? 'Saved ✓' : 'Save'}
                     </button>
                 </div>
             </div>
 
             {saved && (
-                <div className="bg-primary/10 border border-primary/30 rounded-xl p-4 flex items-center gap-3 text-primary">
+                <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 flex items-center gap-3 text-primary">
                     <Shield className="w-5 h-5" /> Settings saved successfully! Changes will reflect immediately for app users.
                 </div>
             )}
 
             {/* Version Section */}
-            <div className="bg-card rounded-xl border border-border p-5 space-y-5">
-                <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <div className="bg-card rounded-lg border border-border p-5 space-y-5">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-primary" /> Version Settings
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -119,8 +119,8 @@ export function AppVersionPage() {
             </div>
 
             {/* Store Links Section */}
-            <div className="bg-card rounded-xl border border-border p-5 space-y-5">
-                <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <div className="bg-card rounded-lg border border-border p-5 space-y-5">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground flex items-center gap-2">
                     <ExternalLink className="w-5 h-5 text-primary" /> Store Links
                 </h2>
                 <div className="space-y-4">
@@ -148,8 +148,8 @@ export function AppVersionPage() {
             </div>
 
             {/* Force Update Section */}
-            <div className="bg-card rounded-xl border border-border p-5 space-y-5">
-                <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <div className="bg-card rounded-lg border border-border p-5 space-y-5">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 text-warning" /> Update Behavior
                 </h2>
                 <div className="flex items-center justify-between p-4 bg-background rounded-lg border border-border">
@@ -187,8 +187,8 @@ export function AppVersionPage() {
             </div>
 
             {/* Preview */}
-            <div className="bg-card rounded-xl border border-border p-5 space-y-4">
-                <h2 className="text-lg font-semibold text-foreground">Current Configuration Preview</h2>
+            <div className="bg-card rounded-lg border border-border p-5 space-y-4">
+                <h2 className="text-lg font-semibold tracking-tight text-foreground">Current Configuration Preview</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="bg-background rounded-lg p-3 border border-border text-center">
                         <p className="text-xs text-muted-foreground">Latest</p>

@@ -1,10 +1,9 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { View, Image, Text, StyleSheet, Pressable, ScrollView, Dimensions, Animated, Linking } from 'react-native';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { View, Image, StyleSheet, Pressable, ScrollView, Dimensions, Animated, Linking } from 'react-native';
 import { colors } from '@/lib/colors';
+import { API_BASE_URL } from '@/lib/apiConfig';
 
 const { width: screenWidth } = Dimensions.get('window');
-
-const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
 
 interface Banner {
   _id: string;
@@ -38,27 +37,15 @@ export default function BannerCarousel() {
     loadBanners();
   }, []);
 
-  const loadBanners = async () => {
+  const loadBanners = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`${API_BASE_URL}/products/banners`);
-      const data = await response.json();
-
-      const list: Banner[] = data?.success
-        ? Array.isArray(data?.response)
-          ? data.response
-          : Array.isArray(data?.response?.data)
-            ? data.response.data
-            : []
-        : [];
-
+      const r = await fetch(`${API_BASE_URL}/products/banners`);
+      const d = await r.json();
+      const list: Banner[] = d?.success ? (Array.isArray(d.response) ? d.response : Array.isArray(d.response?.data) ? d.response.data : []) : [];
       setBanners(list);
-    } catch (error) {
-      setBanners([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    } catch { setBanners([]); } finally { setIsLoading(false); }
+  }, []);
 
   useEffect(() => {
     if (banners.length === 0) return;
@@ -120,11 +107,6 @@ export default function BannerCarousel() {
         {banners.map((banner) => (
           <Pressable key={banner._id} style={styles.bannerContainer} onPress={() => handleBannerPress(banner)}>
             <Image source={{ uri: banner.image }} style={styles.bannerImage} />
-            {banner.badge && (
-              <View style={styles.badgeContainer}>
-                <Text style={styles.badgeText}>{banner.badge}</Text>
-              </View>
-            )}
           </Pressable>
         ))}
       </ScrollView>
@@ -167,20 +149,6 @@ const styles = StyleSheet.create({
     width: screenWidth,
     height: 160,
     resizeMode: 'cover',
-  },
-  badgeContainer: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  badgeText: {
-    color: colors.primaryForeground,
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   dotsContainer: {
     position: 'absolute',

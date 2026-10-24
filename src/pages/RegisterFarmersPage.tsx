@@ -177,7 +177,7 @@ export function RegisterFarmersPage() {
     const hasFilters = search || userId || includeDeleted
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in pb-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -190,7 +190,7 @@ export function RegisterFarmersPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-card border border-border rounded-xl p-4">
+            <div className="rounded-xl border bg-card p-4 shadow-soft">
                 <div className="flex flex-wrap items-end gap-4">
                     <div className="flex-1 min-w-[200px]">
                         <label className="block text-sm font-medium text-muted-foreground mb-1.5">Search</label>
@@ -201,7 +201,7 @@ export function RegisterFarmersPage() {
                                 placeholder="Search by code, name or mobile..."
                                 value={search}
                                 onChange={e => { setSearch(e.target.value); setPage(1) }}
-                                className="w-full pl-10 pr-4 py-2.5 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                className="w-full pl-10 pr-4 py-2.5 bg-input border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                             />
                         </div>
                     </div>
@@ -210,7 +210,7 @@ export function RegisterFarmersPage() {
                         <select
                             value={userId}
                             onChange={e => { setUserId(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
@@ -242,7 +242,7 @@ export function RegisterFarmersPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="flex justify-between mb-2">
                                 <div className="h-5 bg-muted rounded w-20" />
                                 <div className="h-5 bg-muted rounded w-24" />
@@ -252,13 +252,13 @@ export function RegisterFarmersPage() {
                         </div>
                     ))
                 ) : farmers.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <p className="text-sm text-muted-foreground">No farmers found</p>
                     </div>
                 ) : (
                     farmers.map(farmer => (
                         <div key={farmer._id} className={cn(
-                            "bg-card border rounded-xl p-4",
+                            "bg-card border rounded-lg p-4",
                             !farmer.isActive ? "border-destructive/50 bg-destructive/5" : "border-border"
                         )}>
                             <div className="flex items-start justify-between mb-2">
@@ -311,11 +311,11 @@ export function RegisterFarmersPage() {
             {loading ? (
                 <div className="hidden md:block"><TableSkeleton rows={10} columns={8} /></div>
             ) : farmers.length === 0 ? (
-                <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
+                <div className="hidden md:block bg-card border border-border rounded-lg p-12 text-center">
                     <p className="text-muted-foreground">No farmers found</p>
                 </div>
             ) : (
-                <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
+                <div className="hidden md:block rounded-xl border bg-card overflow-hidden shadow-soft">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">
@@ -438,9 +438,9 @@ export function RegisterFarmersPage() {
             {/* Edit Modal */}
             {modalOpen && editingFarmer && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-                    <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 animate-fade-in">
+                    <div className="bg-card border border-border rounded-lg w-full max-w-md p-6 animate-fade-in">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-lg font-semibold text-foreground">Edit Farmer</h2>
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Edit Farmer</h2>
                             <button
                                 onClick={() => setModalOpen(false)}
                                 className="p-2 hover:bg-muted rounded-lg transition-colors"
@@ -464,7 +464,7 @@ export function RegisterFarmersPage() {
                                     type="text"
                                     value={formData.name}
                                     onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                     required
                                 />
                             </div>
@@ -474,7 +474,7 @@ export function RegisterFarmersPage() {
                                     type="text"
                                     value={formData.mobile}
                                     onChange={e => setFormData(f => ({ ...f, mobile: e.target.value }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                     required
                                 />
                             </div>
@@ -484,7 +484,7 @@ export function RegisterFarmersPage() {
                                     type="text"
                                     value={formData.address}
                                     onChange={e => setFormData(f => ({ ...f, address: e.target.value }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 />
                             </div>
                             <div className="flex gap-3 pt-4">

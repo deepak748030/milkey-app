@@ -187,7 +187,7 @@ export function Purchase() {
                 </div>
                 <button
                     onClick={fetchCollections}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors"
                 >
                     <RefreshCw className="w-4 h-4" />
                     Refresh
@@ -196,22 +196,22 @@ export function Purchase() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Records</p>
                     <p className="text-xl sm:text-2xl font-bold">{pagination.total}</p>
                 </div>
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Quantity</p>
                     <p className="text-xl sm:text-2xl font-bold text-primary">{totals.quantity.toFixed(2)} L</p>
                 </div>
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Amount</p>
                     <p className="text-xl sm:text-2xl font-bold text-green-600">₹{totals.amount.toFixed(2)}</p>
                 </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-4 space-y-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Filter className="w-4 h-4" />
@@ -282,7 +282,7 @@ export function Purchase() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="flex justify-between mb-2">
                                 <div className="h-4 bg-muted rounded w-24" />
                                 <div className="h-6 bg-muted rounded-full w-16" />
@@ -296,13 +296,13 @@ export function Purchase() {
                         </div>
                     ))
                 ) : collections.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <Milk className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
                         <p className="text-sm text-muted-foreground">No collections found</p>
                     </div>
                 ) : (
                     collections.map((collection) => (
-                        <div key={collection._id} className="bg-card border border-border rounded-xl p-4">
+                        <div key={collection._id} className="rounded-xl border bg-card p-4 shadow-soft">
                             <div className="flex items-start justify-between mb-2">
                                 <span className="text-sm text-muted-foreground">{formatDate(collection.date)}</span>
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${collection.shift === 'morning' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' : 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
@@ -349,7 +349,7 @@ export function Purchase() {
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
+            <div className="hidden md:block bg-card rounded-lg border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">
@@ -452,9 +452,9 @@ export function Purchase() {
             {/* Edit Modal */}
             {showEditModal && selectedCollection && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card rounded-xl w-full max-w-md">
+                    <div className="bg-card rounded-lg w-full max-w-md">
                         <div className="p-6 border-b border-border flex items-center justify-between">
-                            <h2 className="text-xl font-bold">Edit Collection</h2>
+                            <h2 className="text-2xl font-bold tracking-tight">Edit Collection</h2>
                             <button onClick={() => setShowEditModal(false)} className="p-2 hover:bg-muted rounded-lg">
                                 <X className="w-5 h-5" />
                             </button>
@@ -523,7 +523,7 @@ export function Purchase() {
                             </div>
                             <div className="bg-muted/30 rounded-lg p-3">
                                 <p className="text-sm text-muted-foreground">Calculated Amount</p>
-                                <p className="text-xl font-bold text-green-600">
+                                <p className="text-2xl font-bold tracking-tight text-green-600">
                                     ₹{((parseFloat(editForm.quantity) || 0) * (parseFloat(editForm.rate) || 0)).toFixed(2)}
                                 </p>
                             </div>
@@ -538,7 +538,7 @@ export function Purchase() {
                             <button
                                 onClick={handleSave}
                                 disabled={actionLoading}
-                                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
                             >
                                 <Save className="w-4 h-4" />
                                 Save Changes

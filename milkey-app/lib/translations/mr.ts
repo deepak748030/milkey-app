@@ -6,7 +6,8 @@ const mr: TranslationKeys = {
         home: 'होम',
         purchase: 'संकलन',
         selling: 'विक्री',
-        register: 'रजिस्टर',
+        register: 'इन्व्हेंटरी',
+        inventory: 'इन्व्हेंटरी',
         profile: 'प्रोफाइल',
     },
 
@@ -90,7 +91,7 @@ const mr: TranslationKeys = {
         today: 'आज',
         milkCollection: 'दूध संकलन',
         sellQty: 'विक्री प्रमाण',
-        members: 'सदस्य',
+        members: 'ग्राहक',
         farmers: 'शेतकरी',
         cFarmer: 'C-शेतकरी',
         rFarmer: 'R-शेतकरी',
@@ -149,10 +150,10 @@ const mr: TranslationKeys = {
         entry: 'एंट्री',
         payment: 'पेमेंट',
         reports: 'रिपोर्ट',
-        member: 'सदस्य',
-        addMember: 'सदस्य जोडा',
+        member: 'ग्राहक',
+        addMember: 'ग्राहक जोडा',
         memberName: 'सदस्याचे नाव',
-        memberCode: 'सदस्य कोड',
+        memberCode: 'ग्राहक कोड',
         morningQty: 'स.प्रमाण',
         eveningQty: 'सं.प्रमाण',
         ratePerLiter: 'दर/ली',
@@ -179,6 +180,12 @@ const mr: TranslationKeys = {
         deleteMember: 'सदस्य हटवा',
         noMembers: 'अजून सदस्य नाहीत',
         noEntries: 'अजून नोंदी नाहीत',
+    },
+
+    inventory: {
+        title: 'इन्व्हेंटरी',
+        upcoming: 'लवकरच येत आहे',
+        upcomingDesc: 'इन्व्हेंटरी मॅनेजमेंट लवकरच येत आहे।',
     },
 
     register: {

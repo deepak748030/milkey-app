@@ -45,7 +45,7 @@ function StatCard({ title, value, icon: Icon, color, subValue }: {
     subValue?: string
 }) {
     return (
-        <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+        <div className="rounded-xl border bg-card p-4 shadow-soft sm:p-4">
             <div className="flex items-center justify-between mb-1 sm:mb-2">
                 <span className="text-xs sm:text-sm text-muted-foreground truncate">{title}</span>
                 <div className={cn('p-1.5 sm:p-2 rounded-lg flex-shrink-0', color)}>
@@ -84,7 +84,7 @@ function StatsSkeleton() {
     return (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4">
             {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="bg-card border border-border rounded-xl p-3 sm:p-4">
+                <div key={i} className="rounded-xl border bg-card p-4 shadow-soft sm:p-4">
                     <div className="flex items-center justify-between mb-1 sm:mb-2">
                         <div className="h-3 sm:h-4 w-16 sm:w-20 skeleton rounded" />
                         <div className="w-6 h-6 sm:w-8 sm:h-8 skeleton rounded-lg" />
@@ -111,7 +111,7 @@ function ProductDetailModal({ product, onClose }: ProductDetailModalProps) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
             <div
-                className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in"
+                className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
@@ -125,7 +125,7 @@ function ProductDetailModal({ product, onClose }: ProductDetailModalProps) {
                 <div className="p-4 space-y-6">
                     {/* Product Image */}
                     <div className="flex flex-col md:flex-row gap-4">
-                        <div className="w-full md:w-48 h-48 rounded-xl bg-muted overflow-hidden flex-shrink-0">
+                        <div className="w-full md:w-48 h-48 rounded-lg bg-muted overflow-hidden flex-shrink-0">
                             {product.image ? (
                                 <img src={product.image} alt={product.title} className="w-full h-full object-cover" />
                             ) : (
@@ -154,7 +154,7 @@ function ProductDetailModal({ product, onClose }: ProductDetailModalProps) {
                                     </span>
                                 )}
                             </div>
-                            <h3 className="text-xl font-bold text-foreground mb-2">{product.title}</h3>
+                            <h3 className="text-2xl font-bold tracking-tight text-foreground mb-2">{product.title}</h3>
                             <div className="flex items-center gap-2 mb-2">
                                 <span className="text-2xl font-bold text-primary">{formatCurrency(product.price)}</span>
                                 {discount > 0 && (
@@ -185,7 +185,7 @@ function ProductDetailModal({ product, onClose }: ProductDetailModalProps) {
                     )}
 
                     {/* Category */}
-                    <div className="bg-muted/50 rounded-xl p-4">
+                    <div className="bg-muted/50 rounded-lg p-4">
                         <h4 className="text-sm font-semibold text-foreground mb-2">Category</h4>
                         <div className="flex items-center gap-2">
                             <div
@@ -441,7 +441,7 @@ export function ProductsPage() {
             )}
 
             {/* Filters */}
-            <div className="bg-card border border-border rounded-xl p-4">
+            <div className="rounded-xl border bg-card p-4 shadow-soft">
                 <div className="flex flex-col gap-4">
                     {/* Search and Filter Toggle */}
                     <div className="flex flex-col sm:flex-row gap-3">
@@ -514,7 +514,7 @@ export function ProductsPage() {
             </div>
 
             {/* Products Table */}
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="rounded-xl border bg-card overflow-hidden shadow-soft">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead>

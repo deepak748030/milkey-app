@@ -1,11 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// API Base URL - Change this to your server URL
-// const API_BASE_URL = 'http://localhost:5000/api';
-const API_BASE_URL = 'https://milkey-app-server.vercel.app/api';
-
-// Server Base URL (without /api) for constructing image URLs
-export const SERVER_BASE_URL = API_BASE_URL.replace('/api', '');
+import { API_BASE_URL, SERVER_BASE_URL } from '@/lib/apiConfig';
 
 // Helper function to get full image URL from path
 export const getImageUrl = (imagePath: string | undefined | null): string => {

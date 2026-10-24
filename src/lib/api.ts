@@ -522,6 +522,67 @@ export const reorderBanners = async (bannerOrders: { id: string; order: number }
     return response.data
 }
 
+// Ad Popups (Login Ads Modal) APIs
+export interface AdPopupAdmin { _id: string; title: string; subtitle?: string; image: string; linkType?: string; linkValue?: string; order?: number; isActive?: boolean; createdAt?: string }
+export const getAdPopupsAdmin = async (params: { page?: number; limit?: number; search?: string; status?: string }) => {
+    const response = await api.get('/admin/ad-popups', { params })
+    return response.data
+}
+export const createAdPopup = async (data: { title: string; subtitle?: string; image: string; linkType?: string; linkValue?: string; order?: number }) => {
+    const response = await api.post('/admin/ad-popups', data)
+    return response.data
+}
+export const updateAdPopup = async (id: string, data: Partial<AdPopupAdmin>) => {
+    const response = await api.put(`/admin/ad-popups/${id}`, data)
+    return response.data
+}
+export const deleteAdPopup = async (id: string) => {
+    const response = await api.delete(`/admin/ad-popups/${id}`)
+    return response.data
+}
+export const toggleAdPopupStatus = async (id: string) => {
+    const response = await api.put(`/admin/ad-popups/${id}/toggle`)
+    return response.data
+}
+
+// FAQs APIs (server-clone /faqs)
+export interface AdminFaq { _id: string; question: string; answer: string; category?: string; order?: number; isActive?: boolean; createdAt?: string }
+export const getFaqsAdmin = async () => {
+    const res = await api.get('/faqs/admin/all')
+    return res.data
+}
+export const createFaq = async (data: { question: string; answer: string; category?: string; order?: number }) => {
+    const res = await api.post('/faqs', data)
+    return res.data
+}
+export const updateFaq = async (id: string, data: Partial<AdminFaq>) => {
+    const res = await api.put(`/faqs/${id}`, data)
+    return res.data
+}
+export const deleteFaq = async (id: string) => {
+    const res = await api.delete(`/faqs/${id}`)
+    return res.data
+}
+
+// Video Tutorials APIs (server-clone /videos)
+export interface AdminVideo { _id: string; title: string; description?: string; youtubeUrl: string; thumbnail?: string; category?: string; order?: number; isActive?: boolean; createdAt?: string }
+export const getVideosAdmin = async () => {
+    const res = await api.get('/videos/admin/all')
+    return res.data
+}
+export const createVideo = async (data: { title: string; youtubeUrl: string; description?: string; thumbnail?: string; category?: string; order?: number }) => {
+    const res = await api.post('/videos', data)
+    return res.data
+}
+export const updateVideo = async (id: string, data: Partial<AdminVideo>) => {
+    const res = await api.put(`/videos/${id}`, data)
+    return res.data
+}
+export const deleteVideo = async (id: string) => {
+    const res = await api.delete(`/videos/${id}`)
+    return res.data
+}
+
 // Events APIs (for banner selection)
 export const getEventsAdmin = async (params: {
     page?: number
@@ -1162,6 +1223,7 @@ export interface AdminPurchaseFarmer {
     createdAt: string
     isActive?: boolean
     showRateChart?: boolean
+    showRateSetting?: boolean
 }
 
 export const getAdminPurchaseFarmers = async (params: {
@@ -1190,7 +1252,7 @@ export const permanentDeleteAdminPurchaseFarmer = async (id: string) => {
     return response.data
 }
 
-// ─── Admin: Rate Chart Settings ───────────────────────────────────────
+// ─── Admin: Rate Setting Settings (alias RateChart kept) ────────────────────
 export interface AdminRateChartSetting {
     _id: string
     owner: { _id: string; name: string; email: string; phone: string } | null
@@ -1202,11 +1264,12 @@ export interface AdminRateChartSetting {
     step: number
     presetKey: string
     rateChartFarmersCount: number
+    rateSettingFarmersCount?: number
     createdAt: string
     updatedAt: string
 }
-
-export const getAdminRateChartSettings = async (params: {
+export interface AdminRateSettingSetting extends AdminRateChartSetting {}
+export const getAdminRateSettingSettings = async (params: {
     page?: number
     limit?: number
     search?: string
@@ -1221,6 +1284,7 @@ export const getAdminRateChartSettings = async (params: {
         }
     }
 }
+export const getAdminRateChartSettings = getAdminRateSettingSettings
 
 
 export const getAdminCollectionReport = async (params: {

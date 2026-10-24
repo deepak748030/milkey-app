@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Image, Linking, Activity
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { AVAILABLE_LANGUAGES, LanguageCode } from '@/lib/translations';
-import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail, ExternalLink, Globe, Check, Printer } from 'lucide-react-native';
+import { User, Bell, LogOut, ChevronRight, Sun, Moon, Users, Package, FileEdit, Edit2, MapPin, CreditCard, HelpCircle, Wallet, FileText, Shield, Phone, Mail, ExternalLink, Globe, Check, Printer, Smartphone, ShieldCheck } from 'lucide-react-native';
 import { router } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useAuth } from '@/hooks/useAuth';
-import { authApiNew, socialLinksApi, SocialLink } from '@/lib/milkeyApi';
+import { authApiNew, socialLinksApi, SocialLink, devicesApi } from '@/lib/milkeyApi';
 import { clearAuth } from '@/lib/authStore';
+import { getStableDeviceId } from '@/lib/device';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { EditProfileModal } from '@/components/EditProfileModal';
 
@@ -22,6 +23,24 @@ export default function ProfileScreen() {
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
   const [socialLinksLoading, setSocialLinksLoading] = useState(true);
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
+  // Real device stats for Session & Device management preview
+  const [deviceStats, setDeviceStats] = useState<{ active: number; total: number } | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    const loadDevices = async () => {
+      try {
+        const cid = await getStableDeviceId();
+        const r = await devicesApi.list(cid);
+        if (r.success && Array.isArray(r.response)) {
+          const total = (r.response as any).length;
+          const active = (r.response as any).filter((d: any) => d.isActive).length;
+          if (mounted) setDeviceStats({ active, total });
+        }
+      } catch { }
+    };
+    loadDevices();
+    return () => { mounted = false; };
+  }, []);
 
   useEffect(() => {
     const fetchSocialLinks = async () => {
@@ -48,6 +67,11 @@ export default function ProfileScreen() {
   const confirmLogout = async () => {
     setIsLoggingOut(true);
     try {
+      // Deactivate current device session (real) before clearing token
+      try {
+        const did = await getStableDeviceId();
+        await devicesApi.logoutCurrent(did);
+      } catch {}
       await authApiNew.logout();
     } catch (error) {
       // Ignore API errors on logout
@@ -70,8 +94,7 @@ export default function ProfileScreen() {
     { id: '1', icon: CreditCard, label: t.profile.mySubscriptions, action: () => router.push('/subscriptions' as any) },
     { id: '2', icon: Printer, label: 'Print Settings', action: () => router.push('/print-settings' as any) },
     { id: '3', icon: FileEdit, label: t.profile.submitForm, action: () => router.push('/submit-form' as any) },
-    { id: '4', icon: Users, label: t.profile.referralProgram, action: () => router.push('/referral') },
-    { id: '5', icon: Wallet, label: t.profile.withdraw, action: () => router.push('/withdraw' as any) },
+    { id: '4', icon: Users, label: `${t.profile.referralProgram} & ${t.profile.withdraw}`, action: () => router.push('/referral') },
     { id: '6', icon: Bell, label: t.profile.notifications, action: () => router.push('/notifications') },
     { id: '7', icon: HelpCircle, label: t.profile.helpSupport, action: () => router.push('/help-support' as any) },
     { id: '8', icon: FileText, label: t.profile.termsConditions, action: () => router.push('/terms-conditions' as any) },
@@ -183,6 +206,34 @@ export default function ProfileScreen() {
             })}
           </View>
         )}
+
+        {/* Session & Device management — real data */}
+        <Pressable
+          onPress={() => router.push('/devices' as any)}
+          style={[styles.sessionCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        >
+          <View style={styles.sessionHeader}>
+            <View style={[styles.sessionIconBox, { backgroundColor: colors.primary + '14' }]}>
+              <ShieldCheck size={18} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sessionTitle, { color: colors.foreground }]}>Sessions & Devices</Text>
+              <Text style={[styles.sessionSub, { color: colors.mutedForeground }]}>
+                {deviceStats ? `${deviceStats.active} active · ${deviceStats.total} total · Max 3 active` : 'Manage logged-in devices (real)'}
+              </Text>
+            </View>
+            <View style={[styles.sessionBadge, { backgroundColor: colors.primary }]}>
+              <Text style={styles.sessionBadgeText}>Manage</Text>
+            </View>
+            <ChevronRight size={16} color={colors.mutedForeground} />
+          </View>
+          <View style={styles.sessionMetaRow}>
+            <View style={[styles.sessionDot, { backgroundColor: (deviceStats?.active || 0) > 0 ? '#22C55E' : colors.mutedForeground }]} />
+            <Text style={[styles.sessionMetaText, { color: colors.mutedForeground }]}>
+              {deviceStats ? `${deviceStats.active} device(s) currently active — tap to view, logout others, or revoke sessions` : 'Loading sessions…'}
+            </Text>
+          </View>
+        </Pressable>
 
         {/* Menu Items */}
         <View style={styles.menuSection}>
@@ -572,4 +623,22 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     fontWeight: '600',
     color: colors.destructive,
   },
+  // Sessions & Devices card (real)
+  sessionCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 6,
+    gap: 10,
+  },
+  sessionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sessionIconBox: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  sessionTitle: { fontSize: 15, fontWeight: '700' },
+  sessionSub: { fontSize: 12, marginTop: 2, lineHeight: 14 },
+  sessionBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  sessionBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  sessionMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 2 },
+  sessionDot: { width: 8, height: 8, borderRadius: 4 },
+  sessionMetaText: { fontSize: 12, flex: 1, lineHeight: 15 },
 });

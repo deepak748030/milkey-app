@@ -5,10 +5,6 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { ChevronLeft, TrendingUp, Users, Droplets, Wallet, Calendar } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { reportsApi } from '@/lib/milkeyApi';
-import { LineChart, BarChart } from 'react-native-chart-kit';
-
-const { width } = Dimensions.get('window');
-const CHART_WIDTH = width - 32;
 
 type PeriodType = '7' | '14' | '30';
 
@@ -73,46 +69,10 @@ export default function AnalyticsScreen() {
         setRefreshing(false);
     }, [period]);
 
-    const getLineChartData = () => {
-        const labels = chartData.slice(-7).map(d => d.label.split(' ')[0]);
-        const data = chartData.slice(-7).map(d => chartType === 'quantity' ? d.quantity : d.amount / 100);
-
-        return {
-            labels,
-            datasets: [{
-                data: data.length > 0 ? data : [0],
-                color: () => colors.primary,
-                strokeWidth: 2
-            }],
-            legend: [chartType === 'quantity' ? 'Quantity (L)' : 'Amount (₹100s)']
-        };
-    };
-
-    const getBarChartData = () => {
-        const labels = chartData.slice(-7).map(d => d.label.split(' ')[0]);
-        const morningData = chartData.slice(-7).map(d => d.morningQty);
-        const eveningData = chartData.slice(-7).map(d => d.eveningQty);
-
-        return {
-            labels,
-            datasets: [
-                { data: morningData.length > 0 ? morningData : [0] },
-            ],
-            legend: ['Morning Collection (L)']
-        };
-    };
-
-    const chartConfig = {
-        backgroundColor: colors.card,
-        backgroundGradientFrom: colors.card,
-        backgroundGradientTo: colors.card,
-        decimalPlaces: 1,
-        color: (opacity = 1) => `rgba(74, 144, 217, ${opacity})`,
-        labelColor: () => colors.mutedForeground,
-        style: { borderRadius: 12 },
-        propsForDots: { r: '4', strokeWidth: '2', stroke: colors.primary },
-        propsForBackgroundLines: { stroke: colors.border, strokeDasharray: '5,5' },
-    };
+    const maxQty = Math.max(...chartData.map(d => chartType==='quantity'?d.quantity:d.amount/100), 1);
+    const SimpleBar = ({ value, max, color }: { value:number; max:number; color:string }) => (
+      <View style={{ height: 8, width: `${Math.max(6, (value/max)*100)}%`, backgroundColor: color, borderRadius: 4 }} />
+    );
 
     return (
         <View style={styles.container}>
@@ -196,45 +156,17 @@ export default function AnalyticsScreen() {
                             </Pressable>
                         </View>
 
-                        {/* Line Chart */}
+                        {/* Trend - ponytail minimal bars (no heavy chart lib) */}
                         <View style={styles.chartCard}>
-                            <Text style={styles.chartTitle}>Collection Trend</Text>
-                            {chartData.length > 0 && (
-                                <LineChart
-                                    data={getLineChartData()}
-                                    width={CHART_WIDTH}
-                                    height={200}
-                                    chartConfig={chartConfig}
-                                    bezier
-                                    style={styles.chart}
-                                    withInnerLines={true}
-                                    withOuterLines={false}
-                                    withVerticalLabels={true}
-                                    withHorizontalLabels={true}
-                                    fromZero={true}
-                                />
-                            )}
-                        </View>
-
-                        {/* Bar Chart - Morning vs Evening */}
-                        <View style={styles.chartCard}>
-                            <Text style={styles.chartTitle}>Morning Collection</Text>
-                            {chartData.length > 0 && (
-                                <BarChart
-                                    data={getBarChartData()}
-                                    width={CHART_WIDTH}
-                                    height={180}
-                                    chartConfig={{
-                                        ...chartConfig,
-                                        color: (opacity = 1) => `rgba(245, 158, 11, ${opacity})`,
-                                    }}
-                                    style={styles.chart}
-                                    showValuesOnTopOfBars={true}
-                                    fromZero={true}
-                                    yAxisLabel=""
-                                    yAxisSuffix="L"
-                                />
-                            )}
+                            <Text style={styles.chartTitle}>Collection Trend (last 7)</Text>
+                            {chartData.slice(-7).map((d,i)=>(
+                              <View key={i} style={{ flexDirection:'row', alignItems:'center', gap:8, marginBottom:6 }}>
+                                <Text style={{ width:36, fontSize:11, color: colors.mutedForeground }}>{d.label.split(' ')[0]}</Text>
+                                <SimpleBar value={chartType==='quantity'? d.quantity : d.amount/100} max={maxQty} color={colors.primary} />
+                                <Text style={{ fontSize:11, color: colors.foreground, fontWeight:'600' }}>{chartType==='quantity'? `${d.quantity.toFixed(1)}L` : `₹${d.amount.toFixed(0)}`}</Text>
+                              </View>
+                            ))}
+                            {chartData.length===0 && <Text style={styles.emptyText}>No data</Text>}
                         </View>
 
                         {/* Top Farmers */}

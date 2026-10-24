@@ -260,7 +260,7 @@ export function ProductManagementPage() {
                     </button>
                     <button
                         onClick={handleOpenCreateModal}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors"
                     >
                         <Plus className="w-4 h-4" />
                         Add Product
@@ -269,7 +269,7 @@ export function ProductManagementPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-4 space-y-4">
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <Filter className="w-4 h-4" />
                     <span className="font-medium">Filters</span>
@@ -311,7 +311,7 @@ export function ProductManagementPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="flex gap-3 mb-3">
                                 <div className="w-12 h-12 bg-muted rounded" />
                                 <div className="flex-1">
@@ -327,13 +327,13 @@ export function ProductManagementPage() {
                         </div>
                     ))
                 ) : products.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <Package className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
                         <p className="text-sm text-muted-foreground">No products found</p>
                     </div>
                 ) : (
                     products.map((product) => (
-                        <div key={product._id} className="bg-card border border-border rounded-xl p-4">
+                        <div key={product._id} className="rounded-xl border bg-card p-4 shadow-soft">
                             <div className="flex gap-3 mb-3">
                                 {product.image ? (
                                     <img src={product.image} alt={product.name} className="w-12 h-12 rounded object-cover" />
@@ -344,7 +344,7 @@ export function ProductManagementPage() {
                                 )}
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium text-foreground truncate">{product.name}</p>
-                                    <p className="text-lg font-semibold text-foreground">₹{product.price}</p>
+                                    <p className="text-lg font-semibold tracking-tight text-foreground">₹{product.price}</p>
                                 </div>
                                 <span className={`h-fit px-2 py-0.5 rounded-full text-xs font-medium ${product.isActive
                                     ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
@@ -389,7 +389,7 @@ export function ProductManagementPage() {
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
+            <div className="hidden md:block bg-card rounded-lg border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">
@@ -524,9 +524,9 @@ export function ProductManagementPage() {
             {/* Create/Edit Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                    <div className="bg-card rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
                         <div className="p-6 border-b border-border flex items-center justify-between">
-                            <h2 className="text-xl font-bold">
+                            <h2 className="text-2xl font-bold tracking-tight">
                                 {editingProduct ? 'Edit Product' : 'Create Product'}
                             </h2>
                             <button onClick={() => setShowModal(false)} className="p-2 hover:bg-muted rounded-lg">
@@ -631,7 +631,7 @@ export function ProductManagementPage() {
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
                                 >
                                     {submitting ? 'Saving...' : (editingProduct ? 'Update' : 'Create')}
                                 </button>
@@ -644,9 +644,9 @@ export function ProductManagementPage() {
             {/* Detail Modal */}
             {showDetailModal && selectedProduct && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card rounded-xl w-full max-w-lg">
+                    <div className="bg-card rounded-lg w-full max-w-lg">
                         <div className="p-6 border-b border-border flex items-center justify-between">
-                            <h2 className="text-xl font-bold">Product Details</h2>
+                            <h2 className="text-2xl font-bold tracking-tight">Product Details</h2>
                             <button onClick={() => setShowDetailModal(false)} className="p-2 hover:bg-muted rounded-lg">
                                 <X className="w-5 h-5" />
                             </button>

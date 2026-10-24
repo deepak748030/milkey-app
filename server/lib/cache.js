@@ -170,6 +170,8 @@ const SKIP_BASES = new Set([
     '/api/members',
     '/api/selling-entries',
     '/api/member-payments',
+    '/api/user-subscriptions',
+    '/api/subscriptions',
 ]);
 
 /**

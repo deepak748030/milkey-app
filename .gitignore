@@ -34,3 +34,9 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# backups - never commit DB dumps
+backups/
+server/backups/
+*.dump
+*.bson

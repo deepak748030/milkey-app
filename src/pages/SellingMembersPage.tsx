@@ -78,7 +78,7 @@ export function SellingMembersPage() {
                 setTotal(res.response?.pagination?.total || 0)
             }
         } catch (err) {
-            console.error('Failed to fetch members:', err)
+            console.error('Failed to fetch customers:', err)
             setMembers([])
         } finally {
             setLoading(false)
@@ -110,29 +110,29 @@ export function SellingMembersPage() {
             setModalOpen(false)
             fetchMembers()
         } catch (err) {
-            console.error('Failed to save member:', err)
+            console.error('Failed to save customer:', err)
         } finally {
             setSubmitting(false)
         }
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this member?')) return
+        if (!confirm('Are you sure you want to delete this customer?')) return
         try {
             await deleteSellingMember(id)
             fetchMembers()
         } catch (err) {
-            console.error('Failed to delete member:', err)
+            console.error('Failed to delete customer:', err)
         }
     }
 
     const handlePermanentDelete = async (id: string) => {
-        if (!confirm('⚠️ PERMANENT DELETE\n\nThis will permanently delete this member and ALL related data (entries, payments).\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?')) return
+        if (!confirm('⚠️ PERMANENT DELETE\n\nThis will permanently delete this customer and ALL related data (entries, payments).\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?')) return
         try {
             await permanentDeleteSellingMember(id)
             fetchMembers()
         } catch (err) {
-            console.error('Failed to permanently delete member:', err)
+            console.error('Failed to permanently delete customer:', err)
         }
     }
 
@@ -142,7 +142,7 @@ export function SellingMembersPage() {
             await restoreSellingMember(id)
             fetchMembers()
         } catch (err) {
-            console.error('Failed to restore member:', err)
+            console.error('Failed to restore customer:', err)
         }
     }
 
@@ -164,20 +164,20 @@ export function SellingMembersPage() {
     const hasFilters = search || userId || includeDeleted
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in pb-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground">Selling Members</h1>
-                    <p className="text-muted-foreground">Manage members for milk selling</p>
+                    <h1 className="text-2xl font-bold text-foreground">Selling Customers</h1>
+                    <p className="text-muted-foreground">Manage customers for milk selling</p>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                    Total: <span className="font-medium text-foreground">{total}</span> members
+                    Total: <span className="font-medium text-foreground">{total}</span> customers
                 </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-card border border-border rounded-xl p-4">
+            <div className="rounded-xl border bg-card p-4 shadow-soft">
                 <div className="flex flex-wrap items-end gap-4">
                     <div className="flex-1 min-w-[200px]">
                         <label className="block text-sm font-medium text-muted-foreground mb-1.5">Search</label>
@@ -188,7 +188,7 @@ export function SellingMembersPage() {
                                 placeholder="Search by name or mobile..."
                                 value={search}
                                 onChange={e => { setSearch(e.target.value); setPage(1) }}
-                                className="w-full pl-10 pr-4 py-2.5 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                className="w-full pl-10 pr-4 py-2.5 bg-input border border-input rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                             />
                         </div>
                     </div>
@@ -197,7 +197,7 @@ export function SellingMembersPage() {
                         <select
                             value={userId}
                             onChange={e => { setUserId(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
@@ -229,7 +229,7 @@ export function SellingMembersPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="h-5 bg-muted rounded w-32 mb-2" />
                             <div className="h-4 bg-muted rounded w-28 mb-3" />
                             <div className="grid grid-cols-2 gap-2">
@@ -239,13 +239,13 @@ export function SellingMembersPage() {
                         </div>
                     ))
                 ) : members.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
-                        <p className="text-sm text-muted-foreground">No members found</p>
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
+                        <p className="text-sm text-muted-foreground">No customers found</p>
                     </div>
                 ) : (
                     members.map(member => (
                         <div key={member._id} className={cn(
-                            "bg-card border rounded-xl p-4",
+                            "bg-card border rounded-lg p-4",
                             !member.isActive ? "border-destructive/50 bg-destructive/5" : "border-border"
                         )}>
                             <div className="flex items-start justify-between mb-2">
@@ -310,11 +310,11 @@ export function SellingMembersPage() {
             {loading ? (
                 <div className="hidden md:block"><TableSkeleton rows={10} columns={9} /></div>
             ) : members.length === 0 ? (
-                <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
-                    <p className="text-muted-foreground">No members found</p>
+                <div className="hidden md:block bg-card border border-border rounded-lg p-12 text-center">
+                    <p className="text-muted-foreground">No customers found</p>
                 </div>
             ) : (
-                <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
+                <div className="hidden md:block rounded-xl border bg-card overflow-hidden shadow-soft">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">
@@ -442,9 +442,9 @@ export function SellingMembersPage() {
             {/* Edit Modal */}
             {modalOpen && editingMember && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-                    <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 animate-fade-in">
+                    <div className="bg-card border border-border rounded-lg w-full max-w-md p-6 animate-fade-in">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-lg font-semibold text-foreground">Edit Member</h2>
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Edit Customer</h2>
                             <button
                                 onClick={() => setModalOpen(false)}
                                 className="p-2 hover:bg-muted rounded-lg transition-colors"
@@ -459,7 +459,7 @@ export function SellingMembersPage() {
                                     type="text"
                                     value={formData.name}
                                     onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                     required
                                 />
                             </div>
@@ -469,7 +469,7 @@ export function SellingMembersPage() {
                                     type="text"
                                     value={formData.mobile}
                                     onChange={e => setFormData(f => ({ ...f, mobile: e.target.value }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                     required
                                 />
                             </div>
@@ -479,7 +479,7 @@ export function SellingMembersPage() {
                                     type="text"
                                     value={formData.address}
                                     onChange={e => setFormData(f => ({ ...f, address: e.target.value }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 />
                             </div>
                             <div>
@@ -489,7 +489,7 @@ export function SellingMembersPage() {
                                     step="0.01"
                                     value={formData.ratePerLiter}
                                     onChange={e => setFormData(f => ({ ...f, ratePerLiter: parseFloat(e.target.value) || 0 }))}
-                                    className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                    className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                                 />
                             </div>
                             <div className="flex gap-3 pt-4">
@@ -503,7 +503,7 @@ export function SellingMembersPage() {
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                    className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium disabled:opacity-50"
+                                    className="flex-1 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors font-medium disabled:opacity-50"
                                 >
                                     {submitting ? 'Saving...' : 'Save Changes'}
                                 </button>
