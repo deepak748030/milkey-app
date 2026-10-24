@@ -1,16 +1,31 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { Search, X, Printer, FileText, Droplets, MoreVertical } from 'lucide-react-native';
+import AmountFilterIcon from '@/components/AmountFilterIcon';
 
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseSaleEntriesTable(props:any){
   const { s, colors, t, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, selectedCustomer, isDark, isPrinting, handlePrintPress, setActionMenuEntry } = (props as any).ctx || props;
-  const sorted = [...collections].sort((a: any, b: any) => {
-    const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    if (at !== bt) return bt - at;
-    return String(b._id).localeCompare(String(a._id));
-  });
+  const [amountSort, setAmountSort] = useState<'asc' | 'desc' | null>(null);
+  const toggleSort = () => setAmountSort((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  const sorted = useMemo(() => {
+    const arr = [...collections];
+    if (amountSort) {
+      arr.sort((a: any, b: any) => {
+        const av = Number(a.amount) || 0;
+        const bv = Number(b.amount) || 0;
+        return amountSort === 'asc' ? av - bv : bv - av;
+      });
+      return arr;
+    }
+    arr.sort((a: any, b: any) => {
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (at !== bt) return bt - at;
+      return String(b._id).localeCompare(String(a._id));
+    });
+    return arr;
+  }, [collections, amountSort]);
   const selectedCode = selectedCustomer?.code.toUpperCase();
   const q = selectedCode || saleEntrySearch.trim().toUpperCase();
   const visible = selectedCode
@@ -50,6 +65,7 @@ export function PurchaseSaleEntriesTable(props:any){
                         <Pressable style={[s.pdfBtn, isPrinting && { opacity: 0.5 }]} onPress={() => handlePrintPress('purchase')} disabled={isPrinting}>
                             {isPrinting ? <ActivityIndicator size={12} color="#fff" /> : <Printer size={12} color="#fff" />}
                         </Pressable>
+                        <AmountFilterIcon sort={amountSort} onToggle={toggleSort} />
                     </View>
 
                     <View style={s.tHead}>

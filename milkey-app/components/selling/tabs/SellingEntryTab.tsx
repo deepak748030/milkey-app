@@ -1,11 +1,24 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, TextInput, ActivityIndicator, ScrollView, Modal } from 'react-native';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, X, Zap, Check } from 'lucide-react-native';
 import { DateRangePicker } from '@/components/DateRangePicker';
+import AmountFilterIcon from '@/components/AmountFilterIcon';
 
 // Ponytail reusable — single source, no duplication, no UI change
 export function SellingEntryTab(props:any){
   const { s, styles, colors, t, isDark, entryDate, setShowBulkEntryModal, renderSuggestionDropdown, formatDate, openDatePicker, searchMember, setSearchMember, selectedMember, setSelectedMember, setShowSuggestions, showSuggestions, mornQty, setMornQty, eveQty, setEveQty, rate, setRate, amount, handleSaveEntry, savingEntry, groupedEntries, setEditingEntry, setShowEditModal, handleDeleteEntry, deletingId, recentEntriesStartDate, setRecentEntriesStartDate, recentEntriesEndDate, setRecentEntriesEndDate, formatDate, filteredRecentMembers, recentEntriesMemberFilter, setRecentEntriesMemberFilter, showRecentMemberDropdown, setShowRecentMemberDropdown, recentMemberSearch, setRecentMemberSearch, selectedRecentMemberName, handleEntriesPDF, handlePrintEntries, hasMoreEntries, handleLoadMore, loadingMore, previousBalance, currentMilkAmount, paidAmount, netPayable, closingBalance, paymentMemberSearch, setPaymentMemberSearch, selectedPaymentMember, setSelectedPaymentMember, memberSummary, setMemberSummary, showPaymentMemberSuggestions, setShowPaymentMemberSuggestions, filteredPaymentMembers, milkAmount, setMilkAmount, paymentAmount, setPaymentAmount, paymentMethod, setPaymentMethod, handleAddPayment, savingPayment, payments, handleDeletePayment, handleExportPaymentPdf, handlePrintPayment, filteredReportData, reportSummary, handlePrintReport, handleExportCsv, members, memberSearch, setMemberSearch, handleAddMember, handleEditMember, handleDeleteMember, setShowAddMemberModal, setEditingMember, setSelectedMemberForPayments, setShowMemberPaymentsModal } = (props as any).ctx || props;
+  const [amountSort, setAmountSort] = useState<'asc' | 'desc' | null>(null);
+  const toggleSort = () => setAmountSort((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  const displayEntries = useMemo(() => {
+    if (!amountSort) return groupedEntries;
+    const arr = [...(groupedEntries || [])];
+    arr.sort((a: any, b: any) => {
+      const av = Number(a.totalAmount) || 0;
+      const bv = Number(b.totalAmount) || 0;
+      return amountSort === 'asc' ? av - bv : bv - av;
+    });
+    return arr;
+  }, [groupedEntries, amountSort]);
   return (
         <View>
             <View style={styles.entryHeaderRow}>
@@ -236,6 +249,7 @@ export function SellingEntryTab(props:any){
                         <Printer size={14} color={colors.white} />
                         <Text style={styles.printEntriesBtnText}>Print</Text>
                     </Pressable>
+                    <AmountFilterIcon sort={amountSort} onToggle={toggleSort} />
 
                     {/* Clear Filters Button */}
                     {(recentEntriesStartDate || recentEntriesEndDate || recentEntriesMemberFilter) && (
@@ -254,7 +268,7 @@ export function SellingEntryTab(props:any){
                 </View>
             </View>
 
-            {groupedEntries.length === 0 ? (
+            {displayEntries.length === 0 ? (
                 <Text style={styles.emptyText}>No entries found</Text>
             ) : (
                 <View style={styles.table}>
@@ -266,7 +280,7 @@ export function SellingEntryTab(props:any){
                         <Text style={[styles.tableHeaderCell, { flex: 0.8 }]}>Amt</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Act</Text>
                     </View>
-                    {groupedEntries.map((item, index) => (
+                    {displayEntries.map((item, index) => (
                         <View key={`${item.date}-${item.memberId}-${index}`} style={styles.tableRow}>
                             <Text style={[styles.tableCell, { flex: 1 }]}>{formatDate(item.date)}</Text>
                             <Text style={[styles.tableCell, { flex: 1.2 }]} numberOfLines={1}>{item.memberName}</Text>

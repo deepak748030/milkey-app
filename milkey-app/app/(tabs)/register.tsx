@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndic
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Printer, User, ClipboardList, Power, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Eye } from 'lucide-react-native';
+import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Printer, User, ClipboardList, Power, ArrowRight, Eye } from 'lucide-react-native';
+import AmountFilterIcon from '@/components/AmountFilterIcon';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -1850,11 +1851,11 @@ export default function RegisterScreen() {
                     <Printer size={14} color={colors.white} />
                     <Text style={styles.advancePdfBtnText}>Print</Text>
                 </Pressable>
-                <Pressable
-                    onPress={async () => {
+                <AmountFilterIcon
+                    sort={advSortOrder}
+                    onToggle={async () => {
                         const next = advSortOrder === 'asc' ? 'desc' : 'asc';
                         setAdvSortOrder(next);
-                        // immediate fetch with next order so UI feels instant
                         try {
                             const res = await advancesApi.getAll({
                                 page: 1,
@@ -1873,19 +1874,7 @@ export default function RegisterScreen() {
                             }
                         } catch {}
                     }}
-                    style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 8,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: advSortOrder ? colors.primary : colors.card,
-                        borderWidth: 1.2,
-                        borderColor: advSortOrder ? colors.primary : '#9CA3AF',
-                    }}
-                >
-                    {advSortOrder === 'asc' ? <ArrowUp size={18} color={advSortOrder ? '#fff' : colors.primary} /> : advSortOrder === 'desc' ? <ArrowDown size={18} color="#fff" /> : <ArrowUpDown size={18} color={colors.primary} />}
-                </Pressable>
+                />
             </View>
 
             {/* Total header - count + amount */}

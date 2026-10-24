@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, Pressable, ActivityIndicator, ScrollView } from 'react-native';
-import { FileText, Download, Printer, Search, X } from 'lucide-react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, Pressable, ActivityIndicator, ScrollView, TextInput } from 'react-native';
+import { FileText, Download, Printer, Search, X, User, Check } from 'lucide-react-native';
 import { DateRangePicker } from '@/components/DateRangePicker';
+import AmountFilterIcon from '@/components/AmountFilterIcon';
 
 // Ponytail reusable — single source, no duplication, no UI change
 export function SellingReportsTab(props:any){
@@ -20,7 +21,19 @@ export function SellingReportsTab(props:any){
         const totalPayable = balanceReportSummary?.totalPayable || 0;
 
         // Data to display in table (filtered by selected member or all)
-        const displayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
+        const rawDisplayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
+        const [amountSort, setAmountSort] = useState<'asc' | 'desc' | null>(null);
+        const toggleSort = () => setAmountSort((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+        const displayData = useMemo(() => {
+            if (!amountSort) return rawDisplayData;
+            const arr = [...(rawDisplayData || [])];
+            arr.sort((a: any, b: any) => {
+                const av = Number(a.totalBalance) || 0;
+                const bv = Number(b.totalBalance) || 0;
+                return amountSort === 'asc' ? av - bv : bv - av;
+            });
+            return arr;
+        }, [rawDisplayData, amountSort]);
 
         return (
             <View>
@@ -148,6 +161,7 @@ export function SellingReportsTab(props:any){
                                 <Printer size={14} color={colors.primary} />
                                 <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Print</Text>
                             </Pressable>
+                            <AmountFilterIcon sort={amountSort} onToggle={toggleSort} />
                         </View>
                     </View>
 

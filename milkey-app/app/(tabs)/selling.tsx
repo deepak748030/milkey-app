@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X, Zap, Power, Users, UserPlus } from 'lucide-react-native';
+import AmountFilterIcon from '@/components/AmountFilterIcon';
 import TopBar from '@/components/TopBar';
 import { Calendar } from '@/components/Calendar';
 import { SellingPaymentCalendar } from '@/components/SellingPaymentCalendar';
@@ -120,6 +121,7 @@ export default function SellingScreen() {
     const [recentEntriesMemberFilter, setRecentEntriesMemberFilter] = useState('');
     const [showRecentMemberDropdown, setShowRecentMemberDropdown] = useState(false);
     const [recentMemberSearch, setRecentMemberSearch] = useState('');
+    const [entryAmountSort, setEntryAmountSort] = useState<'asc' | 'desc' | null>(null);
     const [recentDateSelectingType, setRecentDateSelectingType] = useState<'start' | 'end'>('start');
     const [showRecentCalendarModal, setShowRecentCalendarModal] = useState(false);
 
@@ -179,6 +181,7 @@ export default function SellingScreen() {
     const [balanceReportData, setBalanceReportData] = useState<MemberBalanceReport[]>([]);
     const [balanceReportSummary, setBalanceReportSummary] = useState<BalanceReportSummary | null>(null);
     const [balanceReportLoading, setBalanceReportLoading] = useState(false);
+    const [reportAmountSort, setReportAmountSort] = useState<'asc' | 'desc' | null>(null);
 
     // Customer (member) state
     const [members, setMembers] = useState<Member[]>([]);
@@ -320,9 +323,18 @@ export default function SellingScreen() {
             groups[key].entryCount = Math.max(groups[key].entryCount, (entry as any).entryCount || 1);
         }
 
+        const result = Object.values(groups);
+        if (entryAmountSort) {
+            result.sort((a, b) => {
+                const av = Number(a.totalAmount) || 0;
+                const bv = Number(b.totalAmount) || 0;
+                return entryAmountSort === 'asc' ? av - bv : bv - av;
+            });
+            return result;
+        }
         // Sort by date descending
-        return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
-    }, [entriesWithDateStr, recentEntriesStartDate, recentEntriesEndDate, recentEntriesMemberFilter]);
+        return result.sort((a, b) => b.date.localeCompare(a.date));
+    }, [entriesWithDateStr, recentEntriesStartDate, recentEntriesEndDate, recentEntriesMemberFilter, entryAmountSort]);
 
     // Fetch data - members and selling entries
     const fetchData = useCallback(async () => {
@@ -1947,6 +1959,10 @@ export default function SellingScreen() {
                         <Printer size={14} color={colors.white} />
                         <Text style={styles.printEntriesBtnText}>Print</Text>
                     </Pressable>
+                    <AmountFilterIcon
+                        sort={entryAmountSort}
+                        onToggle={() => setEntryAmountSort((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                    />
 
                     {/* Clear Filters Button */}
                     {(recentEntriesStartDate || recentEntriesEndDate || recentEntriesMemberFilter) && (
@@ -2476,8 +2492,18 @@ export default function SellingScreen() {
         const totalReceivable = balanceReportSummary?.totalReceivable || 0;
         const totalPayable = balanceReportSummary?.totalPayable || 0;
 
-        // Data to display in table (filtered by selected member or all)
-        const displayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
+        // Data to display in table (filtered by selected member or all) with amount sort
+        const rawDisplayData = selectedReportMember ? [selectedReportMember] : balanceReportData;
+        const displayData = useMemo(() => {
+            if (!reportAmountSort) return rawDisplayData;
+            const arr = [...(rawDisplayData || [])];
+            arr.sort((a: any, b: any) => {
+                const av = Number(a.totalBalance) || 0;
+                const bv = Number(b.totalBalance) || 0;
+                return reportAmountSort === 'asc' ? av - bv : bv - av;
+            });
+            return arr;
+        }, [rawDisplayData, reportAmountSort]);
 
         return (
             <View>
@@ -2605,6 +2631,10 @@ export default function SellingScreen() {
                                 <Printer size={14} color={colors.primary} />
                                 <Text style={{ fontSize: 12, fontWeight: '600', color: colors.primary }}>Print</Text>
                             </Pressable>
+                            <AmountFilterIcon
+                                sort={reportAmountSort}
+                                onToggle={() => setReportAmountSort((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                            />
                         </View>
                     </View>
 
