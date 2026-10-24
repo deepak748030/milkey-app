@@ -803,6 +803,49 @@ function checkOtpRateLimit(phone) {
     return { ok: true };
 }
 
+// POST /api/auth/send-phone-otp
+router.post('/send-phone-otp', async (req, res) => {
+    try {
+        const { phone } = req.body || {};
+        const norm = normalizeIndianMobile(phone);
+        if (!norm.ok) {
+            return res.status(400).json({ success: false, message: norm.error });
+        }
+
+        const rl = checkOtpRateLimit(norm.tenDigit);
+        if (!rl.ok) {
+            return res.status(429).json({ success: false, message: rl.message });
+        }
+
+        const otp = generate6DigitOtp();
+
+        const result = await sendNinzaOtp(norm.tenDigit, otp);
+        if (!result.ok) {
+            console.error('[send-phone-otp] provider failed:', result);
+            return res.status(502).json({
+                success: false,
+                message: result.msg || result.error || 'Failed to send OTP. Please try again.',
+            });
+        }
+
+        phoneOtpStore.set(norm.tenDigit, {
+            otp,
+            expiresAt: Date.now() + 10 * 60 * 1000,
+            attempts: 0,
+        });
+
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[send-phone-otp] phone=${norm.tenDigit} otp=${otp}`);
+        }
+
+        return res.json({ success: true, message: 'OTP sent successfully' });
+    } catch (error) {
+        console.error('Send phone OTP error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to send OTP' });
+    }
+});
+
+// POST /api/auth/verify-phone-otp
 router.post('/verify-phone-otp', async (req, res) => {
     try {
         const { phone, otp } = req.body || {};
