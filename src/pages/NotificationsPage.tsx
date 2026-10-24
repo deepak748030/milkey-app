@@ -192,7 +192,7 @@ export function NotificationsPage() {
         <div className="max-w-5xl mx-auto animate-fade-in pb-8">
             {/* ─── Header ─── */}
             <div className="mb-4 sm:mb-6 flex items-center gap-3">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
                     <Bell className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div className="min-w-0">
@@ -232,7 +232,7 @@ export function NotificationsPage() {
             {tab === 'compose' ? (
                 <div className="space-y-4">
                     {/* Audience selector */}
-                    <div className="bg-card border border-border rounded-xl p-4 sm:p-5">
+                    <div className="rounded-xl border bg-card p-4 shadow-soft sm:p-5">
                         <label className="block text-sm font-semibold text-foreground mb-3">Audience</label>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             {[
@@ -262,7 +262,7 @@ export function NotificationsPage() {
 
                     {/* Audience-specific inputs */}
                     {audience === 'phone' && (
-                        <div className="bg-card border border-border rounded-xl p-4 sm:p-5">
+                        <div className="rounded-xl border bg-card p-4 shadow-soft sm:p-5">
                             <label className="block text-sm font-semibold text-foreground mb-1.5">Phone Numbers</label>
                             <textarea
                                 value={phoneQuery}
@@ -276,7 +276,7 @@ export function NotificationsPage() {
                     )}
 
                     {audience === 'users' && (
-                        <div className="bg-card border border-border rounded-xl p-4 sm:p-5">
+                        <div className="rounded-xl border bg-card p-4 shadow-soft sm:p-5">
                             <label className="block text-sm font-semibold text-foreground mb-1.5">Search Users by Phone</label>
                             <div className="relative">
                                 <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -337,7 +337,7 @@ export function NotificationsPage() {
                     )}
 
                     {/* Message editor */}
-                    <div className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-3">
+                    <div className="rounded-xl border bg-card p-4 shadow-soft sm:p-5 space-y-3">
                         <div>
                             <label className="block text-sm font-semibold text-foreground mb-1.5">Title</label>
                             <input
@@ -366,7 +366,7 @@ export function NotificationsPage() {
                             <button
                                 onClick={handleSend}
                                 disabled={sending}
-                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50 w-full sm:w-auto justify-center"
+                                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg shadow-sm text-sm font-semibold hover:opacity-90 disabled:opacity-50 w-full sm:w-auto justify-center"
                             >
                                 {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                                 {sending ? 'Sending...' : 'Send Notification'}
@@ -377,7 +377,7 @@ export function NotificationsPage() {
             ) : (
                 <div className="space-y-4">
                     {/* Filters */}
-                    <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
+                    <div className="rounded-xl border bg-card p-4 shadow-soft sm:p-4">
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                             <div className="relative sm:col-span-2">
                                 <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
@@ -428,14 +428,14 @@ export function NotificationsPage() {
                             <Loader2 className="w-6 h-6 animate-spin text-primary" />
                         </div>
                     ) : campaigns.length === 0 ? (
-                        <div className="bg-card border border-border rounded-xl p-8 text-center">
+                        <div className="bg-card border border-border rounded-lg p-8 text-center">
                             <Bell className="w-10 h-10 text-muted-foreground mx-auto mb-2 opacity-50" />
                             <p className="text-sm text-muted-foreground">No notifications sent yet.</p>
                         </div>
                     ) : (
                         <div className="space-y-2">
                             {campaigns.map(c => (
-                                <div key={c._id} className="bg-card border border-border rounded-xl p-3 sm:p-4 hover:border-primary/50 transition">
+                                <div key={c._id} className="rounded-xl border bg-card p-4 shadow-soft sm:p-4 hover:border-primary/50 transition">
                                     <div className="flex items-start justify-between gap-3">
                                         <button
                                             onClick={() => openDetail(c._id)}
@@ -518,12 +518,12 @@ export function NotificationsPage() {
                     onClick={() => setDetailCampaign(null)}
                 >
                     <div
-                        className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[90vh] flex flex-col"
+                        className="bg-card border border-border rounded-t-2xl sm:rounded-xl w-full sm:max-w-2xl max-h-[90vh] flex flex-col"
                         onClick={e => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between p-4 border-b border-border">
                             <h3 className="font-bold text-foreground">Campaign Details</h3>
-                            <button onClick={() => setDetailCampaign(null)} className="p-1.5 rounded-lg hover:bg-muted">
+                            <button onClick={() => setDetailCampaign(null)} className="p-2 rounded-lg hover:bg-muted border border-transparent hover:border-border hover:shadow-sm">
                                 <X className="w-4 h-4" />
                             </button>
                         </div>
@@ -595,7 +595,7 @@ export function NotificationsPage() {
                                 <div className="pt-2 border-t border-border flex flex-col sm:flex-row gap-2">
                                     <button
                                         onClick={() => { handleResend(detailCampaign._id); setDetailCampaign(null) }}
-                                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:opacity-90"
+                                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm text-sm font-semibold hover:opacity-90"
                                     >
                                         <RefreshCw className="w-4 h-4" /> Resend
                                     </button>

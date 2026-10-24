@@ -57,7 +57,7 @@ export default function OrdersScreen() {
 
     const fetchOrders = useCallback(async () => {
         try {
-            const res = await ordersApi.getAll({ limit: 50 });
+            const res = await ordersApi.getAll({ limit: 10 });
             if (res.success && res.response?.data) {
                 setOrders(res.response.data);
             }

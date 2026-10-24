@@ -26,7 +26,7 @@ interface StatCardProps {
 
 function StatCard({ title, value, icon, className }: StatCardProps) {
     return (
-        <div className={cn('bg-card border border-border rounded-xl p-4', className)}>
+        <div className={cn('rounded-xl border bg-card p-4 shadow-soft', className)}>
             <div className="flex items-start justify-between">
                 <div>
                     <p className="text-sm text-muted-foreground">{title}</p>
@@ -97,7 +97,7 @@ export function SellingReportPage() {
     }
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in pb-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -107,14 +107,14 @@ export function SellingReportPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-card border border-border rounded-xl p-4">
+            <div className="rounded-xl border bg-card p-4 shadow-soft">
                 <div className="flex flex-wrap items-end gap-4">
                     <div className="min-w-[200px]">
                         <label className="block text-sm font-medium text-muted-foreground mb-1.5">Owner</label>
                         <select
                             value={userId}
                             onChange={e => setUserId(e.target.value)}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
@@ -153,11 +153,11 @@ export function SellingReportPage() {
             {loading ? (
                 <TableSkeleton rows={10} columns={5} />
             ) : data.length === 0 ? (
-                <div className="bg-card border border-border rounded-xl p-12 text-center">
+                <div className="bg-card border border-border rounded-lg p-12 text-center">
                     <p className="text-muted-foreground">No data found</p>
                 </div>
             ) : (
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="rounded-xl border bg-card overflow-hidden shadow-soft">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">

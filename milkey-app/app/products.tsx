@@ -10,6 +10,13 @@ import { useCartStore } from '@/lib/cartStore';
 import { useSubscriptionStore } from '@/lib/subscriptionStore';
 import { SuccessModal } from '@/components/SuccessModal';
 
+const FALLBACK_PRODUCTS: Product[] = [
+    { _id: 'fallback-1', name: 'Fresh Milk', price: 60, unit: 'liter', icon: '🥛', description: 'Pure farm fresh milk', stock: 100, isActive: true },
+    { _id: 'fallback-2', name: 'Curd (Dahi)', price: 80, unit: 'kg', icon: '🍶', description: 'Fresh curd', stock: 100, isActive: true },
+    { _id: 'fallback-3', name: 'Butter', price: 500, unit: 'kg', icon: '🧈', description: 'Premium butter', stock: 100, isActive: true },
+    { _id: 'fallback-4', name: 'Paneer', price: 380, unit: 'kg', icon: '🧀', description: 'Fresh paneer', stock: 100, isActive: true },
+];
+
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 22) / 2;
 
@@ -38,17 +45,34 @@ export default function ProductsScreen() {
     const fetchProducts = useCallback(async () => {
         try {
             const hasSubscription = status?.hasAnySubscription || false;
-            const res = await productsApi.getAll({ subscribed: hasSubscription });
-            if (res.success && res.response?.data) {
-                setProducts(res.response.data);
-                const initialQuantities: { [key: string]: number } = {};
-                res.response.data.forEach(p => { initialQuantities[p._id] = 1; });
-                setQuantities(initialQuantities);
+            let loaded: Product[] | null = null;
+            const res = await productsApi.getAll({ subscribed: hasSubscription }).catch(()=>null);
+            if (res?.success && res.response?.data && res.response.data.length > 0) {
+                loaded = res.response.data;
             } else {
+                // try with subscribed=true to get all admin products (including subscriptionOnly)
+                const res2 = await productsApi.getAll({ subscribed: true }).catch(()=>null);
+                if (res2?.success && res2.response?.data && res2.response.data.length > 0) loaded = res2.response.data;
+            }
+            if (!loaded || loaded.length === 0) {
+                const def = await productsApi.getDefault().catch(()=>null);
+                if (def?.success && (def.response as any)?.data?.length) {
+                    const d = (def.response as any).data;
+                    loaded = d.map((p:any)=>({ _id: p.id || p._id, name: p.name, price: p.price, unit: p.unit || 'unit', icon: p.icon || '🥛', description: p.description || '', stock: p.stock ?? 100, isActive: true, image: p.image } as Product));
+                }
+            }
+            if (!loaded || loaded.length === 0) {
                 setProducts([]);
+                setQuantities({});
+            } else {
+                setProducts(loaded);
+                const initialQuantities: { [key: string]: number } = {};
+                loaded.forEach(p => { initialQuantities[p._id] = 1; });
+                setQuantities(initialQuantities);
             }
         } catch (error) {
             setProducts([]);
+            setQuantities({});
         } finally {
             setLoading(false);
         }

@@ -140,10 +140,10 @@ export function WithdrawalsPage() {
         <div className="space-y-6">
             {/* Detail Modal */}
             {selectedWithdrawal && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-card rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between p-4 border-b border-border">
-                            <h3 className="text-lg font-semibold text-foreground">Withdrawal Details</h3>
+                            <h3 className="text-lg font-semibold tracking-tight text-foreground">Withdrawal Details</h3>
                             <button
                                 onClick={() => {
                                     setSelectedWithdrawal(null)
@@ -284,7 +284,7 @@ export function WithdrawalsPage() {
                 </div>
                 <button
                     onClick={fetchData}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90"
                 >
                     <RefreshCw className="w-4 h-4" />
                     Refresh
@@ -293,38 +293,38 @@ export function WithdrawalsPage() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-xl border bg-card p-4 shadow-soft">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
                             <Clock className="w-5 h-5 text-warning" />
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Pending</p>
-                            <p className="text-xl font-bold text-foreground">{stats?.pending?.count || 0}</p>
+                            <p className="text-2xl font-bold tracking-tight text-foreground">{stats?.pending?.count || 0}</p>
                             <p className="text-xs text-warning">₹{(stats?.pending?.total || 0).toLocaleString()}</p>
                         </div>
                     </div>
                 </div>
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-xl border bg-card p-4 shadow-soft">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
                             <CheckCircle className="w-5 h-5 text-success" />
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Approved</p>
-                            <p className="text-xl font-bold text-foreground">{stats?.approved?.count || 0}</p>
+                            <p className="text-2xl font-bold tracking-tight text-foreground">{stats?.approved?.count || 0}</p>
                             <p className="text-xs text-success">₹{(stats?.approved?.total || 0).toLocaleString()}</p>
                         </div>
                     </div>
                 </div>
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-xl border bg-card p-4 shadow-soft">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
                             <XCircle className="w-5 h-5 text-destructive" />
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Rejected</p>
-                            <p className="text-xl font-bold text-foreground">{stats?.rejected?.count || 0}</p>
+                            <p className="text-2xl font-bold tracking-tight text-foreground">{stats?.rejected?.count || 0}</p>
                             <p className="text-xs text-destructive">₹{(stats?.rejected?.total || 0).toLocaleString()}</p>
                         </div>
                     </div>
@@ -362,12 +362,12 @@ export function WithdrawalsPage() {
             {loading ? (
                 <TableSkeleton rows={8} columns={6} />
             ) : filteredWithdrawals.length === 0 ? (
-                <div className="bg-card border border-border rounded-xl p-12 text-center">
+                <div className="bg-card border border-border rounded-lg p-12 text-center">
                     <Wallet className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                     <p className="text-muted-foreground">No withdrawal requests found</p>
                 </div>
             ) : (
-                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                <div className="rounded-xl border bg-card overflow-hidden shadow-soft">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50">

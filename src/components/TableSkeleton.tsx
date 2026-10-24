@@ -9,7 +9,7 @@ interface TableSkeletonProps {
 
 export function TableSkeleton({ rows = 5, columns = 5, className }: TableSkeletonProps) {
     return (
-        <div className={cn('overflow-hidden rounded-xl border border-border', className)}>
+        <div className={cn('overflow-hidden rounded-lg border border-border', className)}>
             <table className="w-full">
                 <thead className="bg-muted/50">
                     <tr>

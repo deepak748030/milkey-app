@@ -170,7 +170,7 @@ const DeleteAccountPage = () => {
                             <Trash2 className="w-5 h-5 text-red-600" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold text-gray-900">Account & Data Deletion</h1>
+                            <h1 className="text-2xl font-bold tracking-tight text-gray-900">Account & Data Deletion</h1>
                             <p className="text-sm text-gray-500">Bhaojan App</p>
                         </div>
                     </div>
@@ -179,7 +179,7 @@ const DeleteAccountPage = () => {
 
             <main className="max-w-xl mx-auto px-4 py-8">
                 {/* Info Card */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 mb-6">
+                <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6 mb-6">
                     <div className="flex items-start gap-3 mb-4">
                         <Shield className="w-6 h-6 text-blue-500 mt-0.5" />
                         <div>
@@ -190,7 +190,7 @@ const DeleteAccountPage = () => {
                         </div>
                     </div>
 
-                    <div className="bg-gray-50 rounded-xl p-4 mb-4">
+                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
                         <h3 className="font-medium text-gray-900 mb-2">Deletion process:</h3>
                         <ol className="list-decimal list-inside text-sm text-gray-600 space-y-1">
                             <li>Enter your registered mobile number</li>
@@ -199,7 +199,7 @@ const DeleteAccountPage = () => {
                         </ol>
                     </div>
 
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                         <div className="flex items-start gap-2">
                             <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5" />
                             <div className="text-sm text-amber-800">
@@ -210,14 +210,14 @@ const DeleteAccountPage = () => {
                 </div>
 
                 {/* Step Content */}
-                <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+                <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-6">
                     {step === "phone" && (
                         <div className="space-y-6">
                             <div className="text-center">
                                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <Phone className="w-8 h-8 text-red-600" />
                                 </div>
-                                <h3 className="text-lg font-semibold text-gray-900">Enter Mobile Number</h3>
+                                <h3 className="text-lg font-semibold tracking-tight text-gray-900">Enter Mobile Number</h3>
                                 <p className="text-sm text-gray-500 mt-1">Enter the mobile number registered with your account</p>
                             </div>
 
@@ -225,7 +225,7 @@ const DeleteAccountPage = () => {
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Mobile Number
                                 </label>
-                                <div className="flex items-center border border-gray-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-red-500 focus-within:border-red-500">
+                                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-red-500 focus-within:border-red-500">
                                     <span className="px-4 py-3 bg-gray-50 text-gray-600 border-r border-gray-300">+91</span>
                                     <input
                                         type="tel"
@@ -239,7 +239,7 @@ const DeleteAccountPage = () => {
                             </div>
 
                             {error && (
-                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                                     {error}
                                 </div>
                             )}
@@ -247,7 +247,7 @@ const DeleteAccountPage = () => {
                             <button
                                 onClick={handleSendOtp}
                                 disabled={loading || phone.length !== 10}
-                                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+                                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                             >
                                 {loading ? "Sending OTP..." : "Send OTP"}
                             </button>
@@ -260,7 +260,7 @@ const DeleteAccountPage = () => {
                                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <Shield className="w-8 h-8 text-blue-600" />
                                 </div>
-                                <h3 className="text-lg font-semibold text-gray-900">Verify OTP</h3>
+                                <h3 className="text-lg font-semibold tracking-tight text-gray-900">Verify OTP</h3>
                                 <p className="text-sm text-gray-500 mt-1">
                                     Enter the 6-digit OTP sent to +91 {phone}
                                 </p>
@@ -276,14 +276,14 @@ const DeleteAccountPage = () => {
                                         value={digit}
                                         onChange={(e) => handleOtpChange(index, e.target.value)}
                                         onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                                        className="w-12 h-14 text-center text-xl font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white text-gray-900"
+                                        className="w-12 h-14 text-center text-2xl font-bold tracking-tight border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none bg-white text-gray-900"
                                         maxLength={1}
                                     />
                                 ))}
                             </div>
 
                             {error && (
-                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm text-center">
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm text-center">
                                     {error}
                                 </div>
                             )}
@@ -291,7 +291,7 @@ const DeleteAccountPage = () => {
                             <button
                                 onClick={handleVerifyOtp}
                                 disabled={loading || otp.join("").length !== 6}
-                                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+                                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                             >
                                 {loading ? "Verifying..." : "Verify OTP"}
                             </button>
@@ -321,11 +321,11 @@ const DeleteAccountPage = () => {
                                 <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <Trash2 className="w-8 h-8 text-red-600" />
                                 </div>
-                                <h3 className="text-lg font-semibold text-gray-900">Confirm Deletion</h3>
+                                <h3 className="text-lg font-semibold tracking-tight text-gray-900">Confirm Deletion</h3>
                                 <p className="text-sm text-gray-500 mt-1">This action cannot be undone</p>
                             </div>
 
-                            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                                 <h4 className="font-medium text-red-900 mb-2">The following data will be deleted:</h4>
                                 <ul className="text-sm text-red-800 space-y-1">
                                     <li>• User profile and personal information</li>
@@ -338,7 +338,7 @@ const DeleteAccountPage = () => {
                             </div>
 
                             {error && (
-                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+                                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                                     {error}
                                 </div>
                             )}
@@ -346,14 +346,14 @@ const DeleteAccountPage = () => {
                             <button
                                 onClick={handleDeleteAccount}
                                 disabled={loading}
-                                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+                                className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                             >
                                 {loading ? "Deleting Account..." : "Delete My Account"}
                             </button>
 
                             <button
                                 onClick={resetFlow}
-                                className="w-full border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-3 px-4 rounded-xl transition-colors"
+                                className="w-full border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold py-3 px-4 rounded-lg transition-colors"
                             >
                                 Cancel
                             </button>
@@ -366,17 +366,17 @@ const DeleteAccountPage = () => {
                                 <CheckCircle className="w-8 h-8 text-green-600" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900">Account Deletion Requested</h3>
+                                <h3 className="text-lg font-semibold tracking-tight text-gray-900">Account Deletion Requested</h3>
                                 <p className="text-sm text-gray-500 mt-2">
                                     Your account and associated data will be permanently deleted within 7 days.
                                 </p>
                             </div>
-                            <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-800">
+                            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
                                 You will receive a confirmation once your data has been completely removed from our systems.
                             </div>
                             <Link
                                 to="/"
-                                className="inline-block w-full bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+                                className="inline-block w-full bg-gray-900 hover:bg-gray-800 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                             >
                                 Return to Home
                             </Link>
@@ -389,12 +389,12 @@ const DeleteAccountPage = () => {
                                 <AlertTriangle className="w-8 h-8 text-red-600" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900">Something Went Wrong</h3>
+                                <h3 className="text-lg font-semibold tracking-tight text-gray-900">Something Went Wrong</h3>
                                 <p className="text-sm text-gray-500 mt-2">{error || "Failed to delete account. Please try again."}</p>
                             </div>
                             <button
                                 onClick={resetFlow}
-                                className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+                                className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                             >
                                 Try Again
                             </button>

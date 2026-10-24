@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Animated, Easing, Dimensions, Image } from 'rea
 import { router } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { initializeAuth, isAuthenticated } from '@/lib/authStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -116,7 +117,12 @@ export default function SplashScreen() {
           duration: 250,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
-        }).start(() => {
+        }).start(async () => {
+          const seen = await AsyncStorage.getItem('hasSeenOnboarding');
+          if (!seen) {
+            router.replace('/onboarding' as any);
+            return;
+          }
           if (isAuthenticated()) {
             router.replace('/(tabs)');
           } else {

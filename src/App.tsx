@@ -28,10 +28,16 @@ import { WithdrawalsPage } from './pages/WithdrawalsPage'
 import { SocialLinksPage } from './pages/SocialLinksPage'
 import { CollectionReportPage } from './pages/CollectionReportPage'
 import { CollectionFarmersPage } from './pages/CollectionFarmersPage'
+import { FarmersPage } from './pages/FarmersPage'
+import { FaqsPage } from './pages/FaqsPage'
+import { VideosPage } from './pages/VideosPage'
 import { AppVersionPage } from './pages/AppVersionPage'
 import { PaymentSettingsPage } from './pages/PaymentSettingsPage'
 import { WhatsappSettingsPage } from './pages/WhatsappSettingsPage'
 import { NotificationsPage } from './pages/NotificationsPage'
+import { MrrPage } from './pages/MrrPage'
+import { DauPage } from './pages/DauPage'
+import { AdPopupsPage } from './pages/AdPopupsPage'
 
 function App() {
     return (
@@ -56,18 +62,22 @@ function App() {
                         <Route path="product-management" element={<ProductManagementPage />} />
                         <Route path="users" element={<UsersPage />} />
                         <Route path="banners" element={<BannersPage />} />
+                        <Route path="ads" element={<AdPopupsPage />} />
                         <Route path="admin-orders" element={<AdminOrdersPage />} />
                         <Route path="purchase" element={<Purchase />} />
                         <Route path="collection-data" element={<Purchase />} />
+                        <Route path="farmers" element={<FarmersPage />} />
+                        <Route path="collection-farmers" element={<Navigate to="/farmers" replace />} />
+                        <Route path="register-farmers" element={<Navigate to="/farmers" replace />} />
                         <Route path="collection-report" element={<CollectionReportPage />} />
-                        <Route path="collection-farmers" element={<CollectionFarmersPage />} />
                         <Route path="selling-members" element={<SellingMembersPage />} />
                         <Route path="selling-entries" element={<SellingEntriesPage />} />
                         <Route path="selling-payments" element={<SellingPaymentsPage />} />
                         <Route path="selling-report" element={<SellingReportPage />} />
-                        <Route path="register-farmers" element={<RegisterFarmersPage />} />
                         <Route path="register-advances" element={<RegisterAdvancesPage />} />
                         <Route path="register-payments" element={<RegisterPaymentsPage />} />
+                        <Route path="faqs" element={<FaqsPage />} />
+                        <Route path="videos" element={<VideosPage />} />
                         <Route path="subscriptions" element={<SubscriptionsPage />} />
                         <Route path="active-subscriptions" element={<ActiveSubscriptionsPage />} />
                         <Route path="withdrawals" element={<WithdrawalsPage />} />
@@ -78,6 +88,8 @@ function App() {
                         <Route path="payment-settings" element={<PaymentSettingsPage />} />
                         <Route path="whatsapp-settings" element={<WhatsappSettingsPage />} />
                         <Route path="notifications" element={<NotificationsPage />} />
+                        <Route path="mrr" element={<MrrPage />} />
+                        <Route path="dau" element={<DauPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

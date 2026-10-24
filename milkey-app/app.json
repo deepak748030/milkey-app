@@ -7,11 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "milkey",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
-    },
     "android": {
       "package": "com.milkey.app",
       "versionCode": 7,
@@ -57,6 +52,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/images/icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain"
+        }
+      ],
       "expo-font",
       "expo-web-browser",
       [
@@ -108,12 +112,16 @@
     "experiments": {
       "typedRoutes": true
     },
-    "newArchEnabled": true,
     "extra": {
       "router": {},
       "eas": {
         "projectId": "5105d798-655a-478f-9ff0-062ac18b4e0e"
       }
+    },
+    "androidStatusBar": {
+      "backgroundColor": "#123F1A",
+      "translucent": false,
+      "barStyle": "light-content"
     }
   }
 }

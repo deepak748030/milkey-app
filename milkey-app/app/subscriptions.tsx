@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl, Modal, Dimensions } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { ArrowLeft, CreditCard, Clock, CheckCircle, XCircle, Crown, Sparkles, Gift, Calendar, Zap, Check, Star, AlertCircle, X } from 'lucide-react-native';
+import { ArrowLeft, CreditCard, Clock, CheckCircle, XCircle, Crown, Sparkles, Gift, Calendar, Zap, Check, Star, AlertCircle, X, ShieldCheck, Lock, Wallet, ChevronRight, TrendingUp } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { userSubscriptionsApi, UserSubscription, Subscription as AvailableSubscription, formatSubscriptionDuration } from '@/lib/milkeyApi';
@@ -214,15 +214,27 @@ export default function SubscriptionsScreen() {
         try {
             // Fetch user's subscriptions
             const mySubsResponse = await userSubscriptionsApi.getMy();
+            console.log('[subs] getMy:', mySubsResponse);
             if (mySubsResponse.success && mySubsResponse.response) {
                 setActiveSubscriptions(mySubsResponse.response.active || []);
+            } else {
+                console.warn('[subs] getMy failed:', mySubsResponse?.message);
             }
 
             // Fetch available subscriptions
             const availableResponse = await userSubscriptionsApi.getAvailable();
+            console.log('[subs] getAvailable:', JSON.stringify(availableResponse).slice(0, 2000));
             if (availableResponse.success && availableResponse.response) {
-                setAvailableSubscriptions(availableResponse.response.subscriptions || []);
-                setIsNewUser(availableResponse.response.isNewUser || false);
+                const subs = (availableResponse.response as any).subscriptions || (availableResponse.response as any).data || [];
+                console.log(`[subs] available count=${subs.length} isNewUser=${(availableResponse.response as any).isNewUser} totalInDb=${(availableResponse.response as any).totalInDb}`);
+                setAvailableSubscriptions(subs);
+                setIsNewUser((availableResponse.response as any).isNewUser || false);
+                if (!subs.length) {
+                    console.warn('[subs] EMPTY available — check server DB subscriptions collection and isActive flag');
+                }
+            } else {
+                console.warn('[subs] getAvailable failed:', availableResponse?.message);
+                // keep previous if any, don't blank
             }
         } catch (error) {
             console.error('Error fetching subscriptions:', error);
@@ -444,58 +456,40 @@ export default function SubscriptionsScreen() {
     };
 
     const renderActiveSubscription = (item: UserSubscription) => {
-        // Use locked-in subscription name as fallback when subscription is not populated
         const subscriptionName = item.lockedSubscriptionName || item.subscription?.name || 'Subscription';
-        const subscriptionType = item.subscription?.subscriptionType ||
-            (item.isFree ? 'free' : (item.applicableTabs?.length > 1 ? 'combined' : 'single'));
-
+        const subscriptionType = item.subscription?.subscriptionType || (item.isFree ? 'free' : (item.applicableTabs?.length > 1 ? 'combined' : 'single'));
         const daysRemaining = getDaysRemaining(item.endDate);
-        const TypeIcon = getTypeIcon(subscriptionType);
         const isQueued = new Date(item.startDate) > new Date();
-
+        const TypeIcon = getTypeIcon(subscriptionType);
+        const isFree = subscriptionType === 'free';
+        const isCombo = subscriptionType === 'combined';
         return (
-            <View key={item._id} style={[styles.subscriptionCard, isQueued && styles.queuedCard]}>
-                <View style={styles.cardHeader}>
-                    <View style={[styles.iconContainer, isQueued && styles.queuedIconContainer]}>
-                        <TypeIcon size={24} color={isQueued ? colors.warning : colors.primary} />
+            <View key={item._id} style={[styles.subscriptionCard, isQueued ? styles.queuedCard : styles.activeCard]}>
+                <View style={[styles.cardAccent, isQueued ? styles.accentQueued : isFree ? styles.accentFree : isCombo ? styles.accentCombo : styles.accentActive]} />
+                <View style={styles.badgesRow}>
+                    <View style={[styles.typeBadge, isQueued ? styles.badgeQueued : isFree ? styles.badgeFree : isCombo ? styles.badgeCombo : styles.badgeSingle]}>
+                        <TypeIcon size={14} color={isQueued ? colors.warning : isFree ? '#92400e' : '#fff'} fill={isFree ? colors.warning : undefined} />
+                        <Text style={[styles.typeBadgeText, isQueued ? styles.typeBadgeTextWarn : isFree ? styles.typeBadgeTextFree : styles.typeBadgeTextOnDark]}>{isQueued ? 'QUEUED' : isFree ? 'FREE ACTIVE' : isCombo ? 'COMBO ACTIVE' : 'ACTIVE'}</Text>
                     </View>
-                    <View style={styles.cardHeaderInfo}>
-                        <Text style={styles.subscriptionName}>
-                            {subscriptionName}
-                        </Text>
-                        <View style={[styles.statusBadge, isQueued && styles.queuedBadge]}>
-                            {isQueued ? (
-                                <>
-                                    <Clock size={12} color={colors.warning} />
-                                    <Text style={[styles.statusText, { color: colors.warning }]}>Queued</Text>
-                                </>
-                            ) : (
-                                <>
-                                    <CheckCircle size={12} color={colors.success} />
-                                    <Text style={styles.statusText}>Active</Text>
-                                </>
-                            )}
+                    {!isQueued && (
+                        <View style={styles.saveBadge}>
+                            <Clock size={10} color={daysRemaining <= 7 ? '#92400e' : '#065f46'} />
+                            <Text style={[styles.saveBadgeText, { color: daysRemaining <= 7 ? '#92400e' : '#065f46' }]}>{daysRemaining}d left</Text>
                         </View>
-                    </View>
+                    )}
                 </View>
-
-                {/* Locked-in price and duration info */}
+                <Text style={styles.subscriptionName}>{subscriptionName}</Text>
                 {(item.multiplier && item.multiplier > 1) || item.baseAmount ? (
                     <View style={styles.lockedInfoContainer}>
-                        <Text style={styles.lockedInfoText}>
-                            Paid: ₹{item.amount}
-                            {item.multiplier && item.multiplier > 1 && ` (${item.multiplier}× plan)`}
-                        </Text>
+                        <Wallet size={12} color={colors.primary} />
+                        <Text style={styles.lockedInfoText}>Paid: ₹{item.amount}{item.multiplier && item.multiplier > 1 ? ` (${item.multiplier}× plan)` : ''}</Text>
                     </View>
                 ) : null}
-
                 <View style={styles.cardDetails}>
                     {isQueued && (
                         <View style={styles.detailRow}>
                             <Calendar size={14} color={colors.warning} />
-                            <Text style={[styles.detailText, { color: colors.warning }]}>
-                                Starts: {formatDate(item.startDate)}
-                            </Text>
+                            <Text style={[styles.detailText, { color: colors.warning }]}>Starts: {formatDate(item.startDate)}</Text>
                         </View>
                     )}
                     <View style={styles.detailRow}>
@@ -504,148 +498,125 @@ export default function SubscriptionsScreen() {
                     </View>
                     {!isQueued && (
                         <View style={styles.detailRow}>
-                            <Clock size={14} color={daysRemaining <= 7 ? colors.warning : colors.mutedForeground} />
-                            <Text style={[styles.detailText, daysRemaining <= 7 && { color: colors.warning }]}>
-                                {daysRemaining} days remaining
-                            </Text>
+                            <TrendingUp size={14} color={daysRemaining <= 7 ? colors.warning : colors.success} />
+                            <Text style={[styles.detailText, daysRemaining <= 7 && { color: colors.warning, fontWeight: '700' }]}>{daysRemaining} days remaining</Text>
                         </View>
                     )}
                 </View>
-
                 <View style={styles.tabsContainer}>
+                    <ShieldCheck size={12} color={colors.mutedForeground} />
                     <Text style={styles.tabsLabel}>Covers: </Text>
                     <Text style={styles.tabsValue}>{getTabNames(item.applicableTabs || item.subscription.applicableTabs || [])}</Text>
+                </View>
+                <View style={styles.activeFooter}>
+                    <CheckCircle size={14} color={colors.success} />
+                    <Text style={styles.activeFooterText}>{isQueued ? 'Will auto-activate after current plan' : 'Premium access unlocked'}</Text>
                 </View>
             </View>
         );
     };
 
-    // Expired subscriptions are intentionally not displayed.
-
     const renderAvailableSubscription = (item: AvailableSubscription) => {
         const TypeIcon = getTypeIcon(item.subscriptionType);
         const isPurchasing = purchasing === item._id;
         const isPurchased = item.isPurchased || false;
+        const isFree = !!item.isFree;
+        const isCombo = item.subscriptionType === 'combined';
         const typeLabel = getTypeLabel(item);
         const multiplier = getMultiplier(item._id);
         const totalPrice = item.amount * multiplier;
-        const multiplierOptions = [1, 2, 3, 6, 12];
+        const perMonthApprox = (() => {
+            const baseValue = item.durationValue || 1;
+            const baseType = item.durationType || 'months';
+            let months = baseValue;
+            if (baseType === 'days') months = baseValue / 30;
+            if (baseType === 'years') months = baseValue * 12;
+            months = months * multiplier;
+            if (months <= 0) return null;
+            return Math.round(totalPrice / months);
+        })();
 
         return (
-            <View key={item._id} style={[styles.availableCard, item.isFree && styles.freeCard]}>
-                {/* New User Banner */}
-                {item.isFree && isNewUser && item.forNewUsers && (
-                    <View style={styles.newUserBanner}>
-                        <Gift size={12} color="#FFFFFF" />
-                        <Text style={styles.newUserText}>Free for New Users!</Text>
+            <View key={item._id} style={[styles.availableCard, isFree && styles.freeCard, isCombo && styles.comboCard]}>
+                <View style={[styles.cardAccent, isFree ? styles.accentFree : isCombo ? styles.accentCombo : styles.accentSingle]} />
+                <View style={styles.badgesRow}>
+                    <View style={[styles.typeBadge, isFree ? styles.badgeFree : isCombo ? styles.badgeCombo : styles.badgeSingle]}>
+                        <TypeIcon size={14} color={isFree ? '#92400e' : '#fff'} fill={isFree ? colors.warning : undefined} />
+                        <Text style={[styles.typeBadgeText, isFree ? styles.typeBadgeTextFree : styles.typeBadgeTextOnDark]}>{isFree ? 'FREE TRIAL' : isCombo ? 'BEST VALUE' : 'POPULAR'}</Text>
                     </View>
-                )}
-                {/* Type Badge */}
-                <View style={[
-                    styles.typeBadge,
-                    item.isFree ? styles.freeBadge :
-                        item.subscriptionType === 'combined' ? styles.comboBadge :
-                            styles.singleBadge
-                ]}>
-                    <TypeIcon size={14} color={item.isFree ? colors.warning : colors.primary} fill={item.isFree ? colors.warning : undefined} />
-                    <Text style={[styles.typeBadgeText, item.isFree && styles.freeBadgeText]}>
-                        {typeLabel}
-                    </Text>
+                    {!isFree && isCombo && (
+                        <View style={styles.saveBadge}><Text style={styles.saveBadgeText}>Save 30%</Text></View>
+                    )}
+                    {isFree && isNewUser && item.forNewUsers && (
+                        <View style={styles.newUserMiniBadge}><Gift size={10} color="#fff" /><Text style={styles.newUserMiniText}>New user</Text></View>
+                    )}
                 </View>
-
-                {/* Name */}
                 <Text style={styles.availableName}>{item.name}</Text>
-
-                {/* Price Row - Shows calculated price with multiplier */}
-                <View style={styles.priceRow}>
-                    <Text style={[styles.priceText, item.isFree && styles.freePriceText]}>
-                        {item.isFree ? 'FREE' : `₹${totalPrice}`}
-                    </Text>
-                    <Text style={styles.durationText}>/ {formatDurationWithMultiplier(item, multiplier)}</Text>
+                {item.description ? <Text style={styles.descriptionText}>{item.description}</Text> : null}
+                <View style={styles.priceBlock}>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                        <Text style={[styles.priceText, isFree && styles.freePriceText]}>{isFree ? 'FREE' : `₹${totalPrice.toLocaleString('en-IN')}`}</Text>
+                        <Text style={styles.durationText}>/ {formatDurationWithMultiplier(item, multiplier)}</Text>
+                    </View>
+                    {!isFree && perMonthApprox !== null && <Text style={styles.perMonth}>≈ ₹{perMonthApprox}/month • Billed once</Text>}
+                    {!isFree && multiplier > 1 && <Text style={styles.basePriceText}>Base ₹{item.amount} × {multiplier} = ₹{totalPrice}</Text>}
                 </View>
-
-                {/* Base price info when multiplier > 1 */}
-                {!item.isFree && multiplier > 1 && (
-                    <Text style={styles.basePriceText}>
-                        Base: ₹{item.amount} × {multiplier} = ₹{totalPrice}
-                    </Text>
-                )}
-
-                {/* Quantity Selector - Only for paid subscriptions */}
-                {!item.isFree && !isPurchased && (
-                    <View style={styles.multiplierContainer}>
-                        <Text style={styles.multiplierLabel}>Select Quantity:</Text>
-                        <View style={styles.quantitySelector}>
-                            <Pressable
-                                style={[styles.quantityButton, multiplier <= 1 && styles.quantityButtonDisabled]}
-                                onPress={() => multiplier > 1 && setMultiplier(item._id, multiplier - 1)}
-                                disabled={multiplier <= 1}
-                            >
-                                <Text style={[styles.quantityButtonText, multiplier <= 1 && styles.quantityButtonTextDisabled]}>−</Text>
+                {!isFree && !isPurchased && (
+                    <View style={styles.stepperCard}>
+                        <View style={styles.stepperHeader}>
+                            <Clock size={14} color={colors.mutedForeground} />
+                            <Text style={styles.stepperLabel}>Duration</Text>
+                            <Text style={styles.stepperValue}>{formatDurationWithMultiplier(item, multiplier)}</Text>
+                        </View>
+                        <View style={styles.stepperRow}>
+                            <Pressable onPress={() => multiplier > 1 && setMultiplier(item._id, multiplier - 1)} disabled={multiplier <= 1} style={[styles.stepBtn, multiplier <= 1 && styles.stepBtnDisabled]}>
+                                <Text style={[styles.stepBtnText, multiplier <= 1 && styles.stepBtnTextDisabled]}>–</Text>
                             </Pressable>
-                            <View style={styles.quantityInputContainer}>
-                                <Text style={styles.quantityInputText}>{multiplier}</Text>
+                            <View style={styles.stepValueBox}>
+                                <Text style={styles.stepValueText}>{multiplier}×</Text>
+                                <Text style={styles.stepValueSub}>{formatDurationWithMultiplier(item, multiplier)}</Text>
                             </View>
-                            <Pressable
-                                style={styles.quantityButton}
-                                onPress={() => setMultiplier(item._id, multiplier + 1)}
-                            >
-                                <Text style={styles.quantityButtonText}>+</Text>
+                            <Pressable onPress={() => setMultiplier(item._id, multiplier + 1)} style={styles.stepBtn}>
+                                <Text style={styles.stepBtnText}>+</Text>
                             </Pressable>
                         </View>
-                        <Text style={styles.multiplierHint}>
-                            {formatDurationWithMultiplier(item, multiplier)} for ₹{totalPrice}
-                        </Text>
                     </View>
                 )}
-
-                {/* Description */}
-                {item.description ? (
-                    <Text style={styles.descriptionText}>{item.description}</Text>
-                ) : null}
-
-                {/* Tabs Row */}
-                <View style={styles.tabsRow}>
-                    <Text style={styles.tabsRowLabel}>Access to: </Text>
-                    <Text style={styles.tabsRowValue}>{getTabNames(item.applicableTabs || [])}</Text>
+                <View style={styles.metaRow}>
+                    <View style={styles.metaPill}>
+                        <Wallet size={12} color={colors.mutedForeground} />
+                        <Text style={styles.metaText}>{getTabNames(item.applicableTabs)}</Text>
+                    </View>
                 </View>
-
-                {/* Features */}
                 <View style={styles.featuresContainer}>
                     {item.applicableTabs?.map((tab) => (
                         <View key={tab} style={styles.featureRow}>
-                            <Check size={14} color={colors.primary} />
-                            <Text style={styles.featureText}>
-                                {tab.charAt(0).toUpperCase() + tab.slice(1)} Tab Access
-                            </Text>
+                            <View style={styles.checkCircle}><Check size={10} color="#fff" strokeWidth={3} /></View>
+                            <Text style={styles.featureText}>{tab.charAt(0).toUpperCase() + tab.slice(1)} access unlocked</Text>
                         </View>
                     ))}
                     <View style={styles.featureRow}>
-                        <Check size={14} color={colors.primary} />
-                        <Text style={styles.featureText}>
-                            {formatDurationWithMultiplier(item, multiplier)} Validity
-                        </Text>
+                        <View style={styles.checkCircle}><Check size={10} color="#fff" strokeWidth={3} /></View>
+                        <Text style={styles.featureText}>{formatDurationWithMultiplier(item, multiplier)} validity • Instant activation</Text>
+                    </View>
+                    <View style={styles.featureRow}>
+                        <View style={[styles.checkCircle, { backgroundColor: isDark ? '#334155' : '#e5e7eb' }]}><ShieldCheck size={10} color={isDark ? '#9ca3af' : '#6b7280'} /></View>
+                        <Text style={[styles.featureText, { color: colors.mutedForeground }]}>Secure payment • No hidden charges</Text>
                     </View>
                 </View>
-
-                {/* Purchase Button */}
                 <Pressable
-                    style={[
-                        styles.purchaseButton,
-                        isPurchased && styles.purchasedButton,
-                        item.isFree && !isPurchased && styles.freePurchaseButton
-                    ]}
+                    style={({ pressed }: any) => [styles.purchaseButton, isPurchased ? styles.purchasedButton : isFree ? styles.freePurchaseButton : isCombo ? styles.comboPurchaseButton : styles.singlePurchaseButton, pressed && { opacity: 0.92 }]}
                     onPress={() => !isPurchased && handlePurchase(item._id)}
-                    disabled={isPurchased || isPurchasing}
+                    disabled={isPurchased || !!isPurchasing}
                 >
-                    {isPurchasing ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                        <Text style={styles.purchaseButtonText}>
-                            {isPurchased ? 'Already Subscribed' : item.isFree ? 'Activate Free' : `Subscribe for ₹${totalPrice}`}
-                        </Text>
+                    {isPurchasing ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Text style={styles.purchaseButtonText}>{isPurchased ? 'Already Subscribed' : isFree ? 'Start Free Plan' : `Pay ₹${totalPrice.toLocaleString('en-IN')}`}</Text>
+                            {!isPurchased && <View style={styles.ctaArrow}><ChevronRight size={14} color="#fff" /></View>}
+                        </View>
                     )}
                 </Pressable>
+                {!isFree && !isPurchased && <Text style={styles.ctaNote}><Lock size={10} color={colors.mutedForeground} />  100% safe & encrypted checkout</Text>}
             </View>
         );
     };
@@ -842,401 +813,196 @@ export default function SubscriptionsScreen() {
 }
 
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: colors.background,
-    },
+    container: { flex: 1, backgroundColor: colors.background },
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border,
+        backgroundColor: colors.card,
     },
     backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: colors.secondary,
-        alignItems: 'center',
-        justifyContent: 'center',
+        width: 38, height: 38, borderRadius: 12, backgroundColor: colors.background,
+        alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border,
     },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: colors.foreground,
-    },
-    headerSpacer: {
-        width: 40,
-    },
+    headerTitle: { fontSize: 17, fontWeight: '800', color: colors.foreground, letterSpacing: -0.3 },
+    headerSpacer: { width: 38 },
     tabsBar: {
-        flexDirection: 'row',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        gap: 8,
+        flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10, gap: 8,
+        backgroundColor: colors.background,
     },
     tab: {
-        flex: 1,
-        paddingVertical: 10,
-        borderRadius: 8,
-        backgroundColor: colors.secondary,
-        alignItems: 'center',
+        flex: 1, paddingVertical: 11, borderRadius: 12, backgroundColor: colors.card,
+        alignItems: 'center', borderWidth: 1, borderColor: colors.border,
     },
     activeTab: {
-        backgroundColor: colors.primary,
+        backgroundColor: colors.primary, borderColor: colors.primary,
+        shadowColor: colors.primary, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 3,
     },
-    tabText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.mutedForeground,
-    },
-    activeTabText: {
-        color: '#FFFFFF',
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 16,
-        paddingBottom: 32,
-    },
-    loadingContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 60,
-    },
-    loadingText: {
-        marginTop: 12,
-        fontSize: 14,
-        color: colors.mutedForeground,
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 60,
-    },
-    emptyText: {
-        marginTop: 12,
-        fontSize: 16,
-        color: colors.mutedForeground,
-    },
+    tabText: { fontSize: 13, fontWeight: '700', color: colors.mutedForeground },
+    activeTabText: { color: '#fff' },
+    scrollView: { flex: 1 },
+    scrollContent: { padding: 14, paddingBottom: 32, gap: 14 },
+    loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12 },
+    loadingText: { fontSize: 13, color: colors.mutedForeground, fontWeight: '600' },
+    emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12 },
+    emptyText: { fontSize: 15, color: colors.mutedForeground, fontWeight: '600' },
     browseButton: {
-        marginTop: 16,
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        backgroundColor: colors.primary,
-        borderRadius: 8,
+        marginTop: 4, paddingHorizontal: 20, paddingVertical: 11, backgroundColor: colors.primary,
+        borderRadius: 12, shadowColor: colors.primary, shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2,
     },
-    browseButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#FFFFFF',
-    },
-    listContainer: {
-        gap: 16,
-    },
+    browseButtonText: { fontSize: 13, fontWeight: '800', color: '#fff' },
+    listContainer: { gap: 14 },
 
-    // Active subscription card styles
+    // --- Premium active card (My Subscriptions) ---
     subscriptionCard: {
-        backgroundColor: colors.card,
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.card, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: colors.border,
+        overflow: 'hidden', shadowColor: '#000', shadowOpacity: isDark ? 0.2 : 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2,
     },
-    queuedCard: {
-        borderColor: colors.warning,
-        borderWidth: 2,
+    activeCard: { borderColor: `${colors.primary}30`, borderWidth: 1.2 },
+    queuedCard: { borderColor: '#f59e0b', borderWidth: 1.5, backgroundColor: isDark ? '#1c1500' : '#fffbeb' },
+    expiredCard: { opacity: 0.7 },
+    cardAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, borderTopLeftRadius: 18, borderTopRightRadius: 18 },
+    accentActive: { backgroundColor: colors.primary },
+    accentQueued: { backgroundColor: '#f59e0b' },
+    accentFree: { backgroundColor: '#f59e0b' },
+    accentCombo: { backgroundColor: colors.primary },
+    accentSingle: { backgroundColor: isDark ? '#334155' : '#e2e8f0' },
+    badgesRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginBottom: 8 },
+    typeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+    badgeFree: { backgroundColor: isDark ? '#422006' : '#fef3c7', borderWidth: 1, borderColor: isDark ? '#92400e' : '#fde68a' },
+    badgeCombo: { backgroundColor: colors.primary },
+    badgeSingle: { backgroundColor: isDark ? '#1e293b' : '#f1f5f9', borderWidth: 1, borderColor: colors.border },
+    badgeQueued: { backgroundColor: isDark ? '#422006' : '#fef3c7', borderWidth: 1, borderColor: '#fde68a' },
+    typeBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+    typeBadgeTextFree: { color: '#92400e' },
+    typeBadgeTextOnDark: { color: '#fff' },
+    typeBadgeTextWarn: { color: '#92400e' },
+    saveBadge: { backgroundColor: isDark ? '#064e3b' : '#ecfdf5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1, borderColor: isDark ? '#047857' : '#a7f3d0', flexDirection: 'row', alignItems: 'center', gap: 4 },
+    saveBadgeText: { fontSize: 10, fontWeight: '800', color: '#047857' },
+    subscriptionName: { fontSize: 16, fontWeight: '800', color: colors.foreground, letterSpacing: -0.2 },
+    lockedInfoContainer: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: `${colors.primary}10`,
+        paddingVertical: 7, paddingHorizontal: 10, borderRadius: 8, marginTop: 8, borderWidth: 1, borderColor: `${colors.primary}18`,
     },
-    expiredCard: {
-        opacity: 0.7,
+    lockedInfoText: { fontSize: 11, color: colors.primary, fontWeight: '700' },
+    cardDetails: { gap: 7, marginTop: 10 },
+    detailRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    detailText: { fontSize: 12, color: colors.mutedForeground, fontWeight: '500' },
+    tabsContainer: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 10,
+        backgroundColor: colors.background, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginTop: 10,
     },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
+    tabsLabel: { fontSize: 11, color: colors.mutedForeground, fontWeight: '600' },
+    tabsValue: { fontSize: 11, fontWeight: '700', color: colors.foreground },
+    activeFooter: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10,
+        backgroundColor: isDark ? '#0f2e1a' : '#f0fdf5', paddingVertical: 7, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#166534' : '#bbf7d0',
     },
+    activeFooterText: { fontSize: 11, color: isDark ? '#86efac' : '#166534', fontWeight: '700' },
+
+    // --- Premium available card (like modal) ---
+    availableCard: {
+        backgroundColor: colors.card, borderRadius: 18, padding: 14, borderWidth: 1, borderColor: colors.border,
+        overflow: 'hidden', shadowColor: '#000', shadowOpacity: isDark ? 0.2 : 0.06, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 2,
+    },
+    freeCard: { borderColor: '#f59e0b', borderWidth: 1.5 },
+    comboCard: { borderColor: `${colors.primary}55`, borderWidth: 1.2 },
+    cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
     iconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
-        backgroundColor: `${colors.primary}15`,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
+        width: 44, height: 44, borderRadius: 12, backgroundColor: `${colors.primary}15`,
+        alignItems: 'center', justifyContent: 'center', marginRight: 10, borderWidth: 1, borderColor: `${colors.primary}18`,
     },
-    queuedIconContainer: {
-        backgroundColor: `${colors.warning}15`,
-    },
-    expiredIcon: {
-        backgroundColor: colors.muted,
-    },
-    cardHeaderInfo: {
-        flex: 1,
-    },
-    subscriptionName: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: colors.foreground,
-        marginBottom: 4,
-    },
-    expiredText: {
-        color: colors.mutedForeground,
-    },
-    statusBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
+    queuedIconContainer: { backgroundColor: '#fef3c7', borderColor: '#fde68a' },
+    expiredIcon: { backgroundColor: colors.muted },
+    cardHeaderInfo: { flex: 1 },
+    expiredText: { color: colors.mutedForeground },
+    statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     queuedBadge: {},
     expiredBadge: {},
-    statusText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: colors.success,
-    },
-    cardDetails: {
-        gap: 6,
-        marginBottom: 12,
-    },
-    detailRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    detailText: {
-        fontSize: 13,
-        color: colors.mutedForeground,
-    },
-    tabsContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        backgroundColor: colors.secondary,
-        borderRadius: 8,
-    },
-    tabsLabel: {
-        fontSize: 12,
-        color: colors.mutedForeground,
-    },
-    tabsValue: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: colors.foreground,
-    },
-
-    // Available subscription card styles (matching modal UI)
-    availableCard: {
-        backgroundColor: colors.card,
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    freeCard: {
-        borderColor: colors.warning,
-        borderWidth: 2,
-    },
-    typeBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        alignSelf: 'flex-start',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 20,
-        marginBottom: 10,
-    },
-    freeBadge: {
-        backgroundColor: `${colors.warning}20`,
-    },
-    comboBadge: {
-        backgroundColor: `${colors.primary}15`,
-    },
-    singleBadge: {
-        backgroundColor: colors.muted,
-    },
-    typeBadgeText: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: colors.primary,
-    },
-    freeBadgeText: {
-        color: colors.warning,
-    },
+    statusText: { fontSize: 11, fontWeight: '700', color: colors.success },
+    typeBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+    freeBadgeText: { color: '#92400e' },
     newUserBanner: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.success,
-        paddingVertical: 6,
-        marginTop: -16,
-        marginHorizontal: -16,
-        marginBottom: 12,
-        borderTopLeftRadius: 14,
-        borderTopRightRadius: 14,
-        gap: 6,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.success,
+        paddingVertical: 6, marginTop: -14, marginHorizontal: -14, marginBottom: 12, borderTopLeftRadius: 14, borderTopRightRadius: 14, gap: 6,
     },
-    newUserText: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#FFFFFF',
+    newUserText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+    newUserMiniBadge: {
+        flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.success,
+        paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginLeft: 6,
     },
-    availableName: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: colors.foreground,
-        marginBottom: 6,
+    newUserMiniText: { fontSize: 10, fontWeight: '700', color: '#fff' },
+    availableName: { fontSize: 16, fontWeight: '800', color: colors.foreground, letterSpacing: -0.2 },
+    priceBlock: {
+        marginTop: 8, marginBottom: 10, backgroundColor: isDark ? '#0f172a' : '#f8fafc',
+        borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border,
     },
-    priceRow: {
-        flexDirection: 'row',
-        alignItems: 'baseline',
-        gap: 4,
-        marginBottom: 10,
+    priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+    priceText: { fontSize: 24, fontWeight: '900', color: colors.foreground, letterSpacing: -0.5 },
+    freePriceText: { color: '#f59e0b' },
+    durationText: { fontSize: 11, color: colors.mutedForeground, fontWeight: '700' },
+    perMonth: { fontSize: 11, color: colors.mutedForeground, fontWeight: '600', marginTop: 2 },
+    descriptionText: { fontSize: 12, color: colors.mutedForeground, lineHeight: 16, marginTop: 6, fontWeight: '500' },
+    basePriceText: { fontSize: 11, color: colors.mutedForeground, marginTop: 4, fontWeight: '500' },
+    stepperCard: {
+        backgroundColor: isDark ? '#0f172a' : '#fff', borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+        padding: 10, marginBottom: 10,
     },
-    priceText: {
-        fontSize: 28,
-        fontWeight: '800',
-        color: colors.primary,
+    stepperHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+    stepperLabel: { fontSize: 12, fontWeight: '700', color: colors.foreground, flex: 1 },
+    stepperValue: {
+        fontSize: 11, fontWeight: '700', color: colors.primary, backgroundColor: `${colors.primary}15`,
+        paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, overflow: 'hidden',
     },
-    freePriceText: {
-        color: colors.warning,
+    stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+    stepBtn: {
+        width: 40, height: 40, borderRadius: 12, backgroundColor: colors.primary,
+        alignItems: 'center', justifyContent: 'center', shadowColor: colors.primary, shadowOpacity: 0.18, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2,
     },
-    durationText: {
-        fontSize: 14,
-        color: colors.mutedForeground,
+    stepBtnDisabled: { backgroundColor: isDark ? '#1e293b' : '#f1f5f9', borderWidth: 1, borderColor: colors.border, shadowOpacity: 0, elevation: 0 },
+    stepBtnText: { fontSize: 20, fontWeight: '800', color: '#fff' },
+    stepBtnTextDisabled: { color: colors.mutedForeground },
+    stepValueBox: {
+        flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background,
+        borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingVertical: 6,
     },
-    descriptionText: {
-        fontSize: 13,
-        color: colors.mutedForeground,
-        marginBottom: 12,
-        lineHeight: 18,
+    stepValueText: { fontSize: 15, fontWeight: '900', color: colors.foreground },
+    stepValueSub: { fontSize: 10, fontWeight: '600', color: colors.mutedForeground, marginTop: 1 },
+    metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+    metaPill: {
+        flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: isDark ? '#1e293b' : '#f1f5f9',
+        paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: colors.border,
     },
-    basePriceText: {
-        fontSize: 12,
-        color: colors.mutedForeground,
-        marginBottom: 8,
-    },
-    // Quantity selector styles
-    multiplierContainer: {
-        marginBottom: 12,
-        padding: 12,
-        backgroundColor: colors.secondary,
-        borderRadius: 10,
-    },
-    multiplierLabel: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.foreground,
-        marginBottom: 8,
-    },
-    quantitySelector: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 12,
-        marginBottom: 8,
-    },
-    quantityButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: colors.primary,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    quantityButtonDisabled: {
-        backgroundColor: colors.muted,
-    },
-    quantityButtonText: {
-        fontSize: 24,
-        fontWeight: '600',
-        color: '#FFFFFF',
-    },
-    quantityButtonTextDisabled: {
-        color: colors.mutedForeground,
-    },
-    quantityInputContainer: {
-        minWidth: 60,
-        height: 44,
-        paddingHorizontal: 16,
-        backgroundColor: colors.background,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: colors.border,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    quantityInputText: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: colors.foreground,
-    },
-    multiplierHint: {
-        fontSize: 12,
-        color: colors.primary,
-        fontWeight: '500',
-        textAlign: 'center',
-    },
-    lockedInfoContainer: {
-        backgroundColor: `${colors.primary}10`,
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        borderRadius: 6,
-        marginBottom: 10,
-    },
-    lockedInfoText: {
-        fontSize: 12,
-        color: colors.primary,
-        fontWeight: '500',
-    },
-    tabsRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    tabsRowLabel: {
-        fontSize: 12,
-        color: colors.mutedForeground,
-    },
-    tabsRowValue: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: colors.foreground,
-    },
+    metaText: { fontSize: 11, fontWeight: '700', color: colors.foreground },
     featuresContainer: {
-        gap: 6,
-        marginBottom: 14,
+        gap: 7, marginBottom: 10, backgroundColor: isDark ? 'transparent' : '#fff',
+        borderRadius: 10, padding: isDark ? 0 : 6, borderWidth: isDark ? 0 : 1, borderColor: isDark ? 'transparent' : '#f1f5f9',
     },
-    featureRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    featureText: {
-        fontSize: 13,
-        color: colors.foreground,
-    },
+    featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    checkCircle: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+    featureText: { fontSize: 12, color: colors.foreground, fontWeight: '600', flex: 1 },
     purchaseButton: {
-        backgroundColor: colors.primary,
-        paddingVertical: 12,
-        borderRadius: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+        paddingVertical: 13, borderRadius: 12, shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3,
     },
-    purchasedButton: {
-        backgroundColor: colors.muted,
-    },
-    freePurchaseButton: {
-        backgroundColor: colors.success,
-    },
-    purchaseButtonText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#FFFFFF',
-    },
+    purchasedButton: { backgroundColor: colors.muted, shadowOpacity: 0, elevation: 0 },
+    freePurchaseButton: { backgroundColor: '#f59e0b' },
+    comboPurchaseButton: { backgroundColor: colors.primary },
+    singlePurchaseButton: { backgroundColor: isDark ? '#334155' : '#0f172a' },
+    purchaseButtonText: { fontSize: 13, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+    ctaArrow: { width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+    ctaNote: { fontSize: 10, color: colors.mutedForeground, textAlign: 'center', marginTop: 6, fontWeight: '500' },
+    // legacy kept for compat
+    tabsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+    tabsRowLabel: { fontSize: 11, color: colors.mutedForeground },
+    tabsRowValue: { fontSize: 11, fontWeight: '700', color: colors.foreground },
+    multiplierContainer: { marginBottom: 10, padding: 12, backgroundColor: colors.secondary, borderRadius: 10 },
+    multiplierLabel: { fontSize: 12, fontWeight: '700', color: colors.foreground, marginBottom: 8 },
+    quantitySelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 8 },
+    quantityButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+    quantityButtonDisabled: { backgroundColor: colors.muted },
+    quantityButtonText: { fontSize: 20, fontWeight: '800', color: '#fff' },
+    quantityButtonTextDisabled: { color: colors.mutedForeground },
+    quantityInputContainer: { minWidth: 60, height: 44, paddingHorizontal: 16, backgroundColor: colors.background, borderRadius: 10, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+    quantityInputText: { fontSize: 16, fontWeight: '800', color: colors.foreground },
+    multiplierHint: { fontSize: 11, color: colors.primary, fontWeight: '600', textAlign: 'center' },
 });

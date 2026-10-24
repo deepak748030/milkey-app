@@ -120,7 +120,7 @@ export function SellingPaymentsPage() {
     const hasFilters = memberId || userId || startDate || endDate
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in pb-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -134,14 +134,14 @@ export function SellingPaymentsPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-card border border-border rounded-xl p-4">
+            <div className="rounded-xl border bg-card p-4 shadow-soft">
                 <div className="flex flex-wrap items-end gap-4">
                     <div className="min-w-[180px]">
                         <label className="block text-sm font-medium text-muted-foreground mb-1.5">Owner</label>
                         <select
                             value={userId}
                             onChange={e => { setUserId(e.target.value); setMemberId(''); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="">All Owners</option>
                             {users.map(u => (
@@ -154,7 +154,7 @@ export function SellingPaymentsPage() {
                         <select
                             value={memberId}
                             onChange={e => { setMemberId(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="">All Members</option>
                             {members.map(m => (
@@ -168,7 +168,7 @@ export function SellingPaymentsPage() {
                             type="date"
                             value={startDate}
                             onChange={e => { setStartDate(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
                     <div className="min-w-[140px]">
@@ -177,7 +177,7 @@ export function SellingPaymentsPage() {
                             type="date"
                             value={endDate}
                             onChange={e => { setEndDate(e.target.value); setPage(1) }}
-                            className="w-full px-4 py-2.5 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         />
                     </div>
                     {hasFilters && (
@@ -195,7 +195,7 @@ export function SellingPaymentsPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="flex justify-between mb-2">
                                 <div className="h-4 bg-muted rounded w-24" />
                                 <div className="h-5 bg-muted rounded w-20" />
@@ -208,12 +208,12 @@ export function SellingPaymentsPage() {
                         </div>
                     ))
                 ) : payments.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <p className="text-sm text-muted-foreground">No payments found</p>
                     </div>
                 ) : (
                     payments.map(payment => (
-                        <div key={payment._id} className="bg-card border border-border rounded-xl p-4">
+                        <div key={payment._id} className="rounded-xl border bg-card p-4 shadow-soft">
                             <div className="flex items-start justify-between mb-2">
                                 <span className="text-sm text-muted-foreground">{formatDate(payment.date)}</span>
                                 <div className="flex items-center gap-1.5 text-muted-foreground capitalize text-sm">
@@ -267,11 +267,11 @@ export function SellingPaymentsPage() {
             {loading ? (
                 <div className="hidden md:block"><TableSkeleton rows={10} columns={11} /></div>
             ) : payments.length === 0 ? (
-                <div className="hidden md:block bg-card border border-border rounded-xl p-12 text-center">
+                <div className="hidden md:block bg-card border border-border rounded-lg p-12 text-center">
                     <p className="text-muted-foreground">No payments found</p>
                 </div>
             ) : (
-                <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden">
+                <div className="hidden md:block rounded-xl border bg-card overflow-hidden shadow-soft">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50 border-b border-border">
@@ -376,8 +376,8 @@ export function SellingPaymentsPage() {
             {/* Detail Modal */}
             {selectedPayment && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setSelectedPayment(null)}>
-                    <div className="bg-card border border-border rounded-xl w-full max-w-lg p-6 animate-fade-in" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-lg font-semibold text-foreground mb-4">Payment Details</h2>
+                    <div className="bg-card border border-border rounded-lg w-full max-w-lg p-6 animate-fade-in" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-lg font-semibold tracking-tight text-foreground mb-4">Payment Details</h2>
                         <div className="space-y-3">
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Member</span>

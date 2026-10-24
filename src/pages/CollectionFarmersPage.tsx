@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Search, RefreshCw, UserPlus, Trash2, RotateCcw, AlertTriangle, TableProperties, ChevronDown } from 'lucide-react'
 import { Pagination } from '@/components/Pagination'
-import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, restoreAdminPurchaseFarmer, permanentDeleteAdminPurchaseFarmer, getAdminRateChartSettings, type AdminPurchaseFarmer, type AdminRateChartSetting } from '@/lib/api'
+import { getAdminPurchaseFarmers, getAdminUsersList, deleteAdminPurchaseFarmer, restoreAdminPurchaseFarmer, permanentDeleteAdminPurchaseFarmer, getAdminRateSettingSettings, type AdminPurchaseFarmer, type AdminRateChartSetting } from '@/lib/api'
 
 const FAT_RATIO = 0.08
 const SNF_RATIO = 0.053333333
@@ -53,7 +53,7 @@ export function CollectionFarmersPage() {
     const fetchRateSettings = useCallback(async () => {
         setRateLoading(true)
         try {
-            const res = await getAdminRateChartSettings({
+            const res = await getAdminRateSettingSettings({
                 page: 1, limit: 50,
                 search: search || undefined,
                 userId: userId || undefined,
@@ -105,28 +105,28 @@ export function CollectionFarmersPage() {
         <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground">Collection Farmers (C-Farmer)</h1>
+                    <h1 className="text-2xl font-bold text-foreground">Farmers</h1>
                     <p className="text-muted-foreground">All purchase farmers across users</p>
                 </div>
-                <button onClick={fetchFarmers} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+                <button onClick={fetchFarmers} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors">
                     <RefreshCw className="w-4 h-4" /> Refresh
                 </button>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Farmers</p>
                     <p className="text-xl sm:text-2xl font-bold">{pagination.total}</p>
                 </div>
-                <div className="bg-card rounded-xl border border-border p-3 sm:p-4">
+                <div className="bg-card rounded-lg border border-border p-3 sm:p-4">
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Amount</p>
                     <p className="text-xl sm:text-2xl font-bold text-green-600">₹{farmers.reduce((s, f) => s + (f.totalAmount || 0), 0).toFixed(2)}</p>
                 </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-card rounded-xl border border-border p-4">
+            <div className="bg-card rounded-lg border border-border p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -145,8 +145,8 @@ export function CollectionFarmersPage() {
                 </div>
             </div>
 
-            {/* Rate Chart Settings (embedded) */}
-            <div className="bg-card rounded-xl border border-border overflow-hidden">
+            {/* Rate Setting Settings (embedded) */}
+            <div className="bg-card rounded-lg border border-border overflow-hidden">
                 <button
                     onClick={() => setRateOpen(o => !o)}
                     className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors"
@@ -154,7 +154,7 @@ export function CollectionFarmersPage() {
                     <div className="flex items-center gap-2">
                         <TableProperties className="w-5 h-5 text-primary" />
                         <div className="text-left">
-                            <p className="font-semibold text-foreground">Rate Chart Settings</p>
+                            <p className="font-semibold text-foreground">Rate Setting Settings</p>
                             <p className="text-xs text-muted-foreground">Per-user quick settings from mobile Collection tab</p>
                         </div>
                     </div>
@@ -189,7 +189,7 @@ export function CollectionFarmersPage() {
                                     ))
                                 ) : rateSettings.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">No rate chart settings</td>
+                                        <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">No rate setting settings</td>
                                     </tr>
                                 ) : (
                                     rateSettings.map(r => {
@@ -207,7 +207,7 @@ export function CollectionFarmersPage() {
                                                 <td className="px-4 py-2 text-xs text-center">{r.fatMin}–{r.fatMax}</td>
                                                 <td className="px-4 py-2 text-xs text-center">{r.snfMin}–{r.snfMax}</td>
                                                 <td className="px-4 py-2 text-center">
-                                                    <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{r.rateChartFarmersCount}</span>
+                                                    <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{r.rateSettingFarmersCount ?? r.rateChartFarmersCount}</span>
                                                 </td>
                                                 <td className="px-4 py-2 text-xs text-muted-foreground">
                                                     {r.updatedAt ? new Date(r.updatedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
@@ -226,7 +226,7 @@ export function CollectionFarmersPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 4 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="h-5 bg-muted rounded w-32 mb-2" />
                             <div className="h-4 bg-muted rounded w-24 mb-3" />
                             <div className="grid grid-cols-2 gap-2">
@@ -236,13 +236,13 @@ export function CollectionFarmersPage() {
                         </div>
                     ))
                 ) : farmers.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <UserPlus className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
                         <p className="text-sm text-muted-foreground">No farmers found</p>
                     </div>
                 ) : (
                     farmers.map((f) => (
-                        <div key={f._id} className={`bg-card border rounded-xl p-4 ${f.isActive === false ? 'border-destructive/30 opacity-75' : 'border-border'}`}>
+                        <div key={f._id} className={`bg-card border rounded-lg p-4 ${f.isActive === false ? 'border-destructive/30 opacity-75' : 'border-border'}`}>
                             <div className="flex justify-between items-start mb-1">
                                 <div>
                                     <p className="font-semibold text-foreground">{f.name}</p>
@@ -250,8 +250,8 @@ export function CollectionFarmersPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">{f.defaultMilk}</span>
-                                    {f.showRateChart && (
-                                        <span className="px-2 py-0.5 bg-primary/15 text-primary rounded-full text-xs font-medium">Rate Chart</span>
+                                    {(f.showRateSetting ?? f.showRateChart) && (
+                                        <span className="px-2 py-0.5 bg-primary/15 text-primary rounded-full text-xs font-medium">Rate Setting</span>
                                     )}
                                     {f.isActive === false && (
                                         <span className="px-2 py-0.5 bg-destructive/10 text-destructive rounded-full text-xs font-medium">Deleted</span>
@@ -289,7 +289,7 @@ export function CollectionFarmersPage() {
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
+            <div className="hidden md:block bg-card rounded-lg border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">
@@ -300,7 +300,7 @@ export function CollectionFarmersPage() {
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Owner</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Milk Type</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Rate Basis</th>
-                                <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Rate Chart</th>
+                                <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Rate Setting</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Total Qty</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Total Amount</th>
                                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Last Purchase</th>
@@ -341,7 +341,7 @@ export function CollectionFarmersPage() {
                                         </td>
                                         <td className="px-4 py-3 text-sm capitalize">{f.priceBasis || 'rate'}</td>
                                         <td className="px-4 py-3 text-center">
-                                            {f.showRateChart ? (
+                                            {(f.showRateSetting ?? f.showRateChart) ? (
                                                 <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/15 text-primary">Yes</span>
                                             ) : (
                                                 <span className="px-2 py-1 rounded-full text-xs font-medium bg-muted text-muted-foreground">No</span>

@@ -3,14 +3,14 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndic
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Printer, User, TrendingUp, TrendingDown, ClipboardList } from 'lucide-react-native';
+import { Calendar as CalendarIcon, FileText, Trash2, Plus, Search, X, Edit2, Printer, User, ClipboardList, Power, ArrowRight, ArrowUp, ArrowDown, ArrowUpDown, Eye } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { ToastAndroid, Platform as RNPlatform } from 'react-native';
-import { farmersApi, advancesApi, paymentsApi, printSettingsApi, Farmer, Advance, Payment, FarmerPaymentSummary, PrintSettings } from '@/lib/milkeyApi';
+import { farmersApi, advancesApi, paymentsApi, printSettingsApi, milkCollectionsApi, Farmer, Advance, Payment, FarmerPaymentSummary, PrintSettings } from '@/lib/milkeyApi';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
-import { buildRegisterPaymentSlipPayload, buildFarmersListPayload } from '@/lib/slipPrint';
+import { buildRegisterPaymentSlipPayload, buildJointCollectionPaymentSlipPayload, buildFarmersListPayload } from '@/lib/slipPrint';
 import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, line as fmtLine, left as fmtLeft } from '@/lib/printFormat';
 import { getThermalSlipLabels } from '@/lib/printTranslations';
 import { SuccessModal } from '@/components/SuccessModal';
@@ -23,7 +23,7 @@ import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useSubTabStore, RegisterTab } from '@/lib/subTabStore';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 
 // Helper function to format date as dd/mm/yyyy clear
 const formatDateDDMMYYYY = (dateStr: string) => {
@@ -36,7 +36,7 @@ const formatDateDDMMYYYY = (dateStr: string) => {
 };
 
 type TabType = RegisterTab;
-const TAB_ORDER: TabType[] = ['Payments', 'Advances', 'R-Farmer'];
+const TAB_ORDER: TabType[] = ['Payments', 'Advances', 'Farmer'];
 
 
 export default function RegisterScreen() {
@@ -108,6 +108,7 @@ export default function RegisterScreen() {
     const [advancesLoadingMore, setAdvancesLoadingMore] = useState(false);
     const [totalPendingAmount, setTotalPendingAmount] = useState(0);
     const [advancesTotalCount, setAdvancesTotalCount] = useState(0);
+    const [advSortOrder, setAdvSortOrder] = useState<'asc' | 'desc' | null>(null);
 
     // Settlement History summary stats
     const [settlementSummaryDate, setSettlementSummaryDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -339,7 +340,23 @@ export default function RegisterScreen() {
 
         // Clamp end to the last day of newStart's month so month-end cycles auto-fit.
         const monthEnd = new Date(newStart.getFullYear(), newStart.getMonth() + 1, 0);
-        const finalEnd = tentativeEnd > monthEnd ? monthEnd : tentativeEnd;
+        let finalEnd = tentativeEnd > monthEnd ? monthEnd : tentativeEnd;
+        // If today is 1st (month start) and newStart is in previous month, extend to monthEnd
+        // e.g. last 01/10-10/10 (gap 10), new 11/10-20/10, but if today 01/11 and last was 21/10-30/10 (28-31), final should be 21/10-31/10
+        const today = new Date();
+        if (today.getDate() === 1) {
+            const isPrevMonth = newStart.getMonth() !== today.getMonth() || newStart.getFullYear() !== today.getFullYear();
+            const lastDayNum = lastEnd.getDate();
+            if (isPrevMonth && [28, 29, 30, 31].includes(lastDayNum)) {
+                finalEnd = monthEnd;
+            } else if (isPrevMonth) {
+                // also if tentative period would leave <3 days to month end, fill to monthEnd
+                const daysToMonthEnd = Math.round((monthEnd.getTime() - tentativeEnd.getTime()) / msPerDay);
+                if (daysToMonthEnd >= 0 && daysToMonthEnd <= 3) {
+                    finalEnd = monthEnd;
+                }
+            }
+        }
 
         // Skip if the computed range overlaps an existing settled period.
         const overlaps = blockedPeriods.some(period => {
@@ -363,9 +380,11 @@ export default function RegisterScreen() {
 
             const res = await advancesApi.getAll({
                 page,
-                limit: 20,
+                limit: 10,
                 search: search || undefined,
-                sortOrder: 'pendingFirst'
+                sortOrder: 'pendingFirst',
+                status: 'pending',
+                ...(advSortOrder ? { sortBy: 'amount' as const, order: advSortOrder } : {})
             });
 
             if (!res.success) {
@@ -432,7 +451,7 @@ export default function RegisterScreen() {
         try {
             const [farmersRes, paymentsRes] = await Promise.all([
                 farmersApi.getAll({ includeInactive: true }),
-                paymentsApi.getAll({ limit: 2, latestPerFarmer: true }),
+                paymentsApi.getAll({ limit: 10, latestPerFarmer: true }),
             ]);
 
             if (!farmersRes.success) {
@@ -455,7 +474,7 @@ export default function RegisterScreen() {
             } else if (paymentsRes.response?.data) {
                 setPayments(paymentsRes.response.data);
                 setPaymentsPage(1);
-                setPaymentsHasMore(paymentsRes.response.data.length >= 2);
+                setPaymentsHasMore(paymentsRes.response.data.length >= 10);
             }
 
             // Fetch settlement summary stats
@@ -482,7 +501,7 @@ export default function RegisterScreen() {
                 setFarmerPaymentsPage(1);
                 setFarmerPaymentsHasMore(true);
             }
-            const res = await paymentsApi.getAll({ farmerId, limit: 2, page });
+            const res = await paymentsApi.getAll({ farmerId, limit: 10, page });
             if (!res.success) {
                 showAlert('Error', res.message || 'Failed to load settlement history');
                 if (!append) setFarmerPayments([]);
@@ -495,7 +514,7 @@ export default function RegisterScreen() {
                     setFarmerPayments(res.response.data);
                 }
                 // Check if more pages available
-                if (res.response.data.length < 2) {
+                if (res.response.data.length < 10) {
                     setFarmerPaymentsHasMore(false);
                 }
             } else {
@@ -519,10 +538,27 @@ export default function RegisterScreen() {
     };
     // Print a register payment slip directly when a printer is connected,
     // otherwise notify the user and open the slip preview screen as a fallback.
+    // Joint Collection + Payment slip exactly like image - fetches milk collections for period
     const handlePrintPaymentSlip = async (p: Payment, _skipPrinterCheck = false) => {
         if (isPrinterConnected) {
             try {
-                await printText(buildRegisterPaymentSlipPayload(p, printSettings));
+                let collections: any[] = [];
+                try {
+                    const farmerCode = (p.farmer as any)?.code;
+                    if (farmerCode && (p.periodStart || p.date) && (p.periodEnd || p.date)) {
+                        const res = await milkCollectionsApi.getAll({
+                            farmerCode,
+                            startDate: p.periodStart || p.date,
+                            endDate: p.periodEnd || p.date,
+                            limit: 100,
+                        });
+                        if (res.success && res.response?.data) collections = res.response.data;
+                    }
+                } catch { }
+                const payload = collections.length
+                    ? buildJointCollectionPaymentSlipPayload(p, collections, printSettings)
+                    : buildRegisterPaymentSlipPayload(p, printSettings);
+                await printText(payload);
             } catch (e) {
                 console.error('Direct print error:', e);
             }
@@ -538,11 +574,11 @@ export default function RegisterScreen() {
         setPaymentsLoadingMore(true);
         const nextPage = paymentsPage + 1;
         try {
-            const res = await paymentsApi.getAll({ limit: 2, page: nextPage, latestPerFarmer: true });
+            const res = await paymentsApi.getAll({ limit: 10, page: nextPage, latestPerFarmer: true });
             if (res.success && res.response?.data) {
                 setPayments(prev => [...prev, ...res.response!.data]);
                 setPaymentsPage(nextPage);
-                if (res.response.data.length < 2) {
+                if (res.response.data.length < 10) {
                     setPaymentsHasMore(false);
                 }
             } else {
@@ -567,7 +603,8 @@ export default function RegisterScreen() {
             const res = await paymentsApi.getFarmerSummary(paymentCode, dateStart, dateEnd);
             if (res.success && res.response) {
                 setPaymentFarmer(res.response);
-                setMilkAmount(res.response.milk.totalAmount.toFixed(2));
+                // Milk Amount equation: purchase amount is totalAmount, input is extra (start 0)
+                setMilkAmount('');
                 setPaidAmount('');
                 // Fetch farmer-specific payment history
                 await fetchFarmerPayments(res.response.farmer.id);
@@ -642,7 +679,7 @@ export default function RegisterScreen() {
 
         setSavingPayment(true);
         try {
-            const milkAmountValue = parseFloat(milkAmount) || 0;
+            const milkAmountValue = purchaseAmount + (parseFloat(milkAmount) || 0);
             console.log('Creating payment with period:', { periodStart: dateStart, periodEnd: dateEnd });
             const res = await paymentsApi.create({
                 farmerCode: paymentFarmer.farmer.code,
@@ -936,13 +973,25 @@ export default function RegisterScreen() {
 
     // Delete farmer
     const handleDeleteFarmer = async (id: string, name: string) => {
-        showConfirm('Deactivate Farmer', `Are you sure you want to deactivate ${name}? The farmer will be hidden from active lists but data will be preserved.`, async () => {
+        showConfirm('Deactivate Farmer', `Are you sure you want to deactivate ${name}? The farmer will be hidden from active lists but data will be preserved. Dairy owner can re-activate later.`, async () => {
             setConfirmVisible(false);
             const res = await farmersApi.delete(id);
             if (res.success) {
                 fetchData();
             } else {
                 showAlert('Error', res.message || 'Failed to deactivate');
+            }
+        });
+    };
+
+    const handleRestoreFarmer = async (id: string, name: string) => {
+        showConfirm('Activate Farmer', `Re-activate ${name}? They will appear in active lists again.`, async () => {
+            setConfirmVisible(false);
+            const res = await (farmersApi as any).restore(id);
+            if (res.success) {
+                fetchData();
+            } else {
+                showAlert('Error', res.message || 'Failed to activate');
             }
         });
     };
@@ -1155,8 +1204,10 @@ export default function RegisterScreen() {
         }
     };
 
-    // Calculate closing balance with editable milk amount + previous balance
-    const currentMilkAmount = parseFloat(milkAmount) || 0;
+    // Calculate milk amount equation: purchase amount (hardcoded) + input = total
+    const purchaseAmount = paymentFarmer ? paymentFarmer.milk.totalAmount : 0;
+    const milkExtra = parseFloat(milkAmount) || 0;
+    const currentMilkAmount = purchaseAmount + milkExtra;
     const advanceAmount = paymentFarmer ? paymentFarmer.advances.totalPending : 0;
     const previousBalance = paymentFarmer?.farmer?.currentBalance || 0;
     const netPayable = currentMilkAmount - advanceAmount + previousBalance;
@@ -1179,7 +1230,7 @@ export default function RegisterScreen() {
 
     const renderPaymentsTab = () => (
         <View>
-            {/* Code input + Go button + Balance Report button */}
+            {/* Code input + Go button */}
             <View style={styles.searchRow}>
                 <TextInput
                     style={styles.searchInput}
@@ -1195,7 +1246,7 @@ export default function RegisterScreen() {
                     returnKeyType="go"
                 />
                 <Pressable
-                    style={({ pressed }) => [styles.goBtn, pressed && { opacity: 0.7, transform: [{ scale: 0.97 }] }]}
+                    style={({ pressed }) => [styles.goBtnImproved, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
                     onPress={() => {
                         Keyboard.dismiss();
                         handleFetchFarmerSummary();
@@ -1204,24 +1255,13 @@ export default function RegisterScreen() {
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                     {paymentLoading ? (
-                        <ActivityIndicator size="small" color={colors.white} />
+                        <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                        <Text style={styles.goBtnText}>Go</Text>
+                        <>
+                            <Text style={styles.goBtnTextImproved}>Go</Text>
+                            <ArrowRight size={16} color="#fff" />
+                        </>
                     )}
-                </Pressable>
-                <Pressable
-                    style={{
-                        backgroundColor: colors.card,
-                        borderWidth: 1,
-                        borderColor: colors.primary,
-                        borderRadius: 6,
-                        paddingHorizontal: 10,
-                        paddingVertical: 8,
-                        justifyContent: 'center',
-                    }}
-                    onPress={() => setShowBalancePrintModal(true)}
-                >
-                    <ClipboardList size={18} color={colors.primary} />
                 </Pressable>
             </View>
 
@@ -1253,24 +1293,29 @@ export default function RegisterScreen() {
                         blockedPeriods={blockedPeriods}
                     />
 
-                    {/* Summary card */}
+                    {/* Summary card - Milk Amount: purchase + input = total */}
                     <View style={styles.summaryCard}>
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Milk Amount:</Text>
-                            <TextInput
-                                style={styles.milkAmountInput}
-                                value={milkAmount}
-                                onChangeText={setMilkAmount}
-                                onFocus={() => {
-                                    // Clear if value is 0.00 or 0
-                                    if (milkAmount === '0.00' || milkAmount === '0') {
-                                        setMilkAmount('');
-                                    }
-                                }}
-                                keyboardType="numeric"
-                                placeholder="0.00"
-                                placeholderTextColor={colors.mutedForeground}
-                            />
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                <Text style={[styles.summaryValue, { fontWeight: '700', color: colors.foreground }]}>{purchaseAmount.toFixed(0)}</Text>
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.mutedForeground }}>+</Text>
+                                <TextInput
+                                    style={[styles.milkAmountInput, { minWidth: 55, width: 72, textAlign: 'center', paddingVertical: 6 }]}
+                                    value={milkAmount}
+                                    onChangeText={setMilkAmount}
+                                    onFocus={() => {
+                                        if (milkAmount === '0.00' || milkAmount === '0') {
+                                            setMilkAmount('');
+                                        }
+                                    }}
+                                    keyboardType="numeric"
+                                    placeholder="0"
+                                    placeholderTextColor={colors.mutedForeground}
+                                />
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: colors.mutedForeground }}>=</Text>
+                                <Text style={[styles.summaryValue, { fontWeight: '800', color: colors.primary }]}>₹{currentMilkAmount.toFixed(2)}</Text>
+                            </View>
                         </View>
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Advance/Prod:</Text>
@@ -1285,6 +1330,25 @@ export default function RegisterScreen() {
                             </Text>
                         </View>
                     </View>
+
+                    {/* View Entries - collection purchase data for searched farmer */}
+                    <Pressable
+                        style={({ pressed }) => [styles.viewEntriesBtn, pressed && { opacity: 0.8 }]}
+                        onPress={() => {
+                            (router as any).push({
+                                pathname: '/view-collection-entries',
+                                params: {
+                                    farmerCode: paymentFarmer.farmer.code,
+                                    farmerName: paymentFarmer.farmer.name,
+                                    startDate: dateStart,
+                                    endDate: dateEnd,
+                                },
+                            });
+                        }}
+                    >
+                        <Eye size={16} color={colors.primary} />
+                        <Text style={[styles.viewEntriesText, { color: colors.primary }]}>View Entries ({paymentFarmer.milk.totalQuantity.toFixed(1)}L)</Text>
+                    </Pressable>
 
                     {/* Pending Advances List */}
                     {paymentFarmer.advances.items && paymentFarmer.advances.items.length > 0 && (
@@ -1371,43 +1435,17 @@ export default function RegisterScreen() {
                                 <Text style={styles.settlementStatValue}>₹{settlementPaidOnDate.toLocaleString('en-IN')}</Text>
                             </View>
                         </View>
-                        <View style={[styles.settlementStatChip, settlementTotalBalance < 0 && { borderColor: colors.destructive }]}>
+                        <View style={[styles.settlementStatChip, styles.settlementCurrentChip, settlementTotalBalance < 0 && { borderColor: colors.destructive }]}>
                             <Text style={styles.settlementStatLabel}>CURRENT</Text>
-                            <Text style={[styles.settlementStatValue, { color: settlementTotalBalance >= 0 ? colors.primary : colors.destructive }]}>
+                            <Text style={[styles.settlementStatValue, styles.settlementCurrentValue, { color: settlementTotalBalance >= 0 ? colors.primary : colors.destructive }]} numberOfLines={1} adjustsFontSizeToFit>
                                 ₹{settlementTotalBalance.toLocaleString('en-IN')}
                             </Text>
                         </View>
                         <Pressable
-                            style={{
-                                paddingHorizontal: 6,
-                                paddingVertical: 6,
-                                borderRadius: 6,
-                                borderWidth: 1,
-                                borderColor: colors.primary,
-                                backgroundColor: 'transparent',
-                            }}
-                            onPress={() => {
-                                setBalanceType('positive');
-                                (router as any).push({ pathname: '/balance-report', params: { type: 'positive' } });
-                            }}
+                            style={styles.balanceReportBtn}
+                            onPress={() => setShowBalancePrintModal(true)}
                         >
-                            <TrendingUp size={14} color={colors.primary} />
-                        </Pressable>
-                        <Pressable
-                            style={{
-                                paddingHorizontal: 6,
-                                paddingVertical: 6,
-                                borderRadius: 6,
-                                borderWidth: 1,
-                                borderColor: colors.destructive,
-                                backgroundColor: 'transparent',
-                            }}
-                            onPress={() => {
-                                setBalanceType('negative');
-                                (router as any).push({ pathname: '/balance-report', params: { type: 'negative' } });
-                            }}
-                        >
-                            <TrendingDown size={14} color={colors.destructive} />
+                            <ClipboardList size={16} color={colors.primary} />
                         </Pressable>
                     </View>
                 )}
@@ -1793,9 +1831,9 @@ export default function RegisterScreen() {
                 </Pressable>
             </View>
 
-            {/* Search bar and PDF button */}
+            {/* Search bar and PDF button + sort */}
             <View style={styles.advanceSearchRow}>
-                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 10 }}>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 6, paddingHorizontal: 10 }}>
                     <Search size={16} color={colors.mutedForeground} />
                     <TextInput
                         style={[styles.advanceSearchInput, { borderWidth: 0, backgroundColor: 'transparent', marginLeft: 8 }]}
@@ -1814,15 +1852,55 @@ export default function RegisterScreen() {
                     <Printer size={14} color={colors.white} />
                     <Text style={styles.advancePdfBtnText}>Print</Text>
                 </Pressable>
+                <Pressable
+                    onPress={async () => {
+                        const next = advSortOrder === 'asc' ? 'desc' : 'asc';
+                        setAdvSortOrder(next);
+                        // immediate fetch with next order so UI feels instant
+                        try {
+                            const res = await advancesApi.getAll({
+                                page: 1,
+                                limit: 10,
+                                search: advanceSearch || undefined,
+                                status: 'pending',
+                                sortBy: 'amount',
+                                order: next,
+                            });
+                            if (res.success && res.response?.data) {
+                                setAdvances(res.response.data);
+                                setAdvancesTotalCount(res.response.pagination.total);
+                                setAdvancesHasMore(1 < res.response.pagination.pages);
+                                setAdvancesPage(1);
+                                if (res.response.totalPendingAmount !== undefined) setTotalPendingAmount(res.response.totalPendingAmount);
+                            }
+                        } catch {}
+                    }}
+                    style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 8,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: advSortOrder ? colors.primary : colors.card,
+                        borderWidth: 1.2,
+                        borderColor: advSortOrder ? colors.primary : '#9CA3AF',
+                    }}
+                >
+                    {advSortOrder === 'asc' ? <ArrowUp size={18} color={advSortOrder ? '#fff' : colors.primary} /> : advSortOrder === 'desc' ? <ArrowDown size={18} color="#fff" /> : <ArrowUpDown size={18} color={colors.primary} />}
+                </Pressable>
             </View>
 
-            {/* Total Amount Header */}
-            {advances.length > 0 && (
-                <View style={styles.totalAmountHeader}>
+            {/* Total header - count + amount */}
+            <View style={styles.totalAmountHeader}>
+                <View>
+                    <Text style={styles.totalAmountLabel}>Total Records</Text>
+                    <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>{advancesTotalCount} records • {advances.length} shown</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.totalAmountLabel}>Total Amount</Text>
                     <Text style={styles.totalAmountValue}>₹{totalPendingAmount.toLocaleString('en-IN')}</Text>
                 </View>
-            )}
+            </View>
 
             {/* Advances Table */}
             {advances.length > 0 ? (
@@ -1835,22 +1913,22 @@ export default function RegisterScreen() {
                         <Text style={[styles.tableHeaderCell, { flex: 0.9 }]}>Date</Text>
                         <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}>Del</Text>
                     </View>
-                    {advances.map((item) => {
-                        // Only show cross-line for advances that are settled or partial (used in payments)
-                        const isUsedInPayment = item.status === 'settled' || item.status === 'partial';
+                    {(advances || []).filter(Boolean).map((item, idx) => {
+                        // settled is now filtered server-side; partial should appear normally (no cross)
+                        const rowKey = String((item as any)?._id || (item as any)?.id || idx);
                         return (
-                            <View key={item._id} style={[styles.tableRow, isUsedInPayment && styles.settledRow]}>
-                                <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.farmer?.code}</Text>
-                                <Text style={[styles.tableCell, { flex: 1.3, textAlign: 'center' }]}>{item.farmer?.name || '-'}</Text>
-                                <Text style={[styles.tableCell, { flex: 0.9, textAlign: 'center' }]}>{item.note || '-'}</Text>
-                                <Text style={[styles.tableCell, { flex: 0.7, textAlign: 'center' }, isUsedInPayment ? styles.settledAmountText : { color: colors.warning }]}>₹{item.amount}</Text>
+                            <View key={rowKey} style={styles.tableRow}>
+                                <Text style={[styles.tableCell, { flex: 0.5, color: colors.primary, textAlign: 'center' }]}>{item.farmer?.code || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 1.3, textAlign: 'center' }]}>{item?.farmer?.name || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 0.9, textAlign: 'center' }]}>{item?.note || '-'}</Text>
+                                <Text style={[styles.tableCell, { flex: 0.7, textAlign: 'center', color: colors.warning }]}>₹{item?.amount ?? 0}</Text>
                                 <Text style={[styles.tableCell, { flex: 0.9, textAlign: 'center' }]}>
-                                    {new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                    {item?.date ? new Date(item.date).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '-'}
                                 </Text>
                                 <View style={{ flex: 0.5, alignItems: 'center', justifyContent: 'center' }}>
                                     <Pressable
                                         style={styles.deleteBtn}
-                                        onPress={() => handleDeleteAdvance(item._id, item.farmer?.name || 'Unknown')}
+                                        onPress={() => handleDeleteAdvance((item as any)?._id, item?.farmer?.name || 'Unknown')}
                                     >
                                         <Trash2 size={14} color={colors.destructive} />
                                     </Pressable>
@@ -1951,9 +2029,13 @@ export default function RegisterScreen() {
                                     <Pressable style={styles.editBtn} onPress={() => handleEditFarmer(item)}>
                                         <Edit2 size={14} color={colors.primary} />
                                     </Pressable>
-                                    {!isInactive && (
+                                    {!isInactive ? (
                                         <Pressable style={styles.deleteBtn} onPress={() => handleDeleteFarmer(item._id, item.name)}>
                                             <Trash2 size={14} color={colors.destructive} />
+                                        </Pressable>
+                                    ) : (
+                                        <Pressable style={[styles.editBtn, { backgroundColor: colors.primary + '15', borderWidth: 1, borderColor: colors.primary + '30' }]} onPress={() => handleRestoreFarmer(item._id, item.name)}>
+                                            <Power size={14} color={colors.primary} />
                                         </Pressable>
                                     )}
                                 </View>
@@ -2096,7 +2178,7 @@ export default function RegisterScreen() {
             >
                 {activeTab === 'Payments' && renderPaymentsTab()}
                 {activeTab === 'Advances' && renderAdvancesTab()}
-                {activeTab === 'R-Farmer' && renderFarmersTab()}
+                {activeTab === 'Farmer' && renderFarmersTab()}
             </ScrollView>
 
 
@@ -2513,11 +2595,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     input: {
         backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
+        borderWidth: 1.2,
+        borderColor: '#9CA3AF',
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
         fontSize: 14,
         color: colors.foreground,
     },
@@ -2529,11 +2611,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     searchInput: {
         flex: 1,
         backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
+        borderWidth: 1.2,
+        borderColor: '#9CA3AF',
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
         fontSize: 14,
         color: colors.foreground,
     },
@@ -2551,6 +2633,43 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         color: colors.white,
         fontSize: 15,
         fontWeight: '700',
+    },
+    goBtnImproved: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: 18,
+        paddingVertical: 10,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'row',
+        gap: 6,
+        minWidth: 72,
+        minHeight: 42,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: colors.primary,
+    },
+    goBtnTextImproved: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '800',
+        letterSpacing: 0.5,
+    },
+    balanceReportBtn: {
+        backgroundColor: colors.card,
+        borderWidth: 1.5,
+        borderColor: colors.primary,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        minWidth: 38,
+        minHeight: 34,
     },
     pdfBtn: {
         backgroundColor: colors.warning,
@@ -2701,11 +2820,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     dateInputWrapper: {
         flex: 1,
         backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
+        borderWidth: 1.2,
+        borderColor: '#9CA3AF',
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -2771,11 +2890,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     milkAmountInput: {
         backgroundColor: colors.background,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
+        borderWidth: 1.2,
+        borderColor: '#9CA3AF',
+        borderRadius: 8,
         paddingHorizontal: 12,
-        paddingVertical: 6,
+        paddingVertical: 8,
         fontSize: 14,
         fontWeight: '600',
         color: colors.primary,
@@ -2817,9 +2936,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     paidInput: {
         backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
+        borderWidth: 1.2,
+        borderColor: '#9CA3AF',
+        borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 12,
         fontSize: 16,
@@ -2850,6 +2969,22 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     saveSettlementText: {
         color: colors.white,
         fontSize: 15,
+        fontWeight: '700',
+    },
+    viewEntriesBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        backgroundColor: colors.card,
+        borderWidth: 1.2,
+        borderColor: colors.primary,
+        borderRadius: 8,
+        paddingVertical: 10,
+        marginBottom: 12,
+    },
+    viewEntriesText: {
+        fontSize: 13,
         fontWeight: '700',
     },
     clearPaymentBtn: {
@@ -2961,11 +3096,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     advanceSearchInput: {
         flex: 1,
         backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 8,
+        borderWidth: 1.2,
+        borderColor: '#9CA3AF',
+        borderRadius: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
         fontSize: 14,
         color: colors.foreground,
     },
@@ -3492,7 +3627,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     settlementStatChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 3,
+        gap: 4,
         paddingHorizontal: 8,
         paddingVertical: 6,
         borderRadius: 6,
@@ -3502,15 +3637,27 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
         backgroundColor: 'transparent',
         flexShrink: 1,
     },
+    settlementCurrentChip: {
+        flex: 1,
+        minWidth: 0,
+        maxWidth: '38%',
+        justifyContent: 'space-between',
+    },
+    settlementCurrentValue: {
+        flexShrink: 1,
+        fontSize: 12,
+    },
     settlementStatLabel: {
         fontSize: 10,
         fontWeight: '600',
         color: colors.mutedForeground,
         textTransform: 'uppercase',
+        flexShrink: 0,
     },
     settlementStatValue: {
         fontSize: 11,
         fontWeight: '700',
         color: colors.primary,
+        flexShrink: 1,
     },
 });

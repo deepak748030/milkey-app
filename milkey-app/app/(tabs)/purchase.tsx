@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, router } from 'expo-router';
 import {
     Plus, Edit2, Trash2, Calendar as CalendarIcon, Search, X,
     ChevronDown, FileText, User, Sun, Moon,
@@ -32,24 +32,24 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
-import RateChartModal from '@/components/RateChartModal';
-import { FAT_RATIO, SNF_RATIO } from '@/lib/rateChart';
+import RateSettingModal from '@/components/RateSettingModal';
+import { PurchaseCollectionTab } from '@/components/purchase/tabs/PurchaseCollectionTab';
+import { PurchaseSaleEntriesTable } from '@/components/purchase/tabs/PurchaseSaleEntriesTable';
+import { PurchaseReportTab } from '@/components/purchase/tabs/PurchaseReportTab';
+import { PurchaseFarmerTab } from '@/components/purchase/tabs/PurchaseFarmerTab';
+import { FAT_RATIO, SNF_RATIO } from '@/lib/rateSetting';
+import { TAB_ORDERS } from '@/components/common/AppTabs';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 
 type TabType = PurchaseTab;
-const TAB_ORDER: TabType[] = ['Purchase', 'Report', 'C-Farmer'];
+const TAB_ORDER = TAB_ORDERS.purchase as unknown as TabType[];
 
 // Device timezone as minutes AHEAD of UTC (IST = +330). Sent with every collection
 // request so the server treats the picked calendar day as the *user's local day*.
 // Without it, rows that were bulk-filled/imported with a local time (e.g. stored as
 // 18:30Z of the previous day for IST) or as date strings never matched the query and
 // silently went missing from the Collection tab.
-const TZ_OFFSET_MINUTES = -new Date().getTimezoneOffset();
-// Server caps a single page at 1000 rows, so page through them instead of truncating.
-const COLLECTIONS_PAGE_SIZE = 1000;
-const REPORT_PAGE_SIZE = 1000;
-// Safety cap for the report table (rows are rendered + printed together).
-const REPORT_MAX_ROWS = 3000;
+import { TZ_OFFSET_MINUTES, COLLECTIONS_PAGE_SIZE, REPORT_PAGE_SIZE, REPORT_MAX_ROWS } from '@/lib/purchaseConstants';
 
 export default function PurchaseScreen() {
     const { colors, isDark } = useTheme();
@@ -85,10 +85,10 @@ export default function PurchaseScreen() {
     const [isZero, setIsZero] = useState(false);
     const [noPrint, setNoPrint] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [showRateChart, setShowRateChart] = useState(false);
+    const [showRateSetting, setShowRateSetting] = useState(false);
     const [todayRate, setTodayRate] = useState<number>(0);
 
-    // Fetch the current Rate Chart "today rate" (from persisted quick settings)
+    // Fetch the current Rate Setting "today rate" (from persisted quick settings)
     // so it can be displayed in the summary bar for rate-chart customers.
     React.useEffect(() => {
         let cancelled = false;
@@ -101,7 +101,17 @@ export default function PurchaseScreen() {
             } catch { /* offline-safe */ }
         })();
         return () => { cancelled = true; };
-    }, [showRateChart]);
+    }, [showRateSetting]);
+
+    // RateSetting now directly opens Milk Rate Settings page via bottom sheet handler.
+    // If somehow activeTab becomes RateSetting (deep link), redirect to the page.
+    React.useEffect(() => {
+        if (activeTab === 'RateSetting') {
+            router.push('/milk-rate-settings' as any);
+            // reset tab so back navigation lands on Purchase, not blank RateSetting view
+            setActiveTab('Purchase' as any);
+        }
+    }, [activeTab]);
 
     // History state
     const [collections, setCollections] = useState<MilkCollection[]>([]);
@@ -123,10 +133,14 @@ export default function PurchaseScreen() {
     const [reportTotalCount, setReportTotalCount] = useState(0);
     const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
 
-    // Farmer tab state
+    // Farmer tab state — Load More pagination 10
     const [farmerTabSearch, setFarmerTabSearch] = useState('');
     const debouncedFarmerSearch = useDebounce(farmerTabSearch, 400);
     const [farmerSearchLoading, setFarmerSearchLoading] = useState(false);
+    const [farmerPage, setFarmerPage] = useState(1);
+    const [farmerPagination, setFarmerPagination] = useState<{ page: number; pages: number; total: number; limit: number } | null>(null);
+    const [farmerHasMore, setFarmerHasMore] = useState(true);
+    const [farmerLoadingMore, setFarmerLoadingMore] = useState(false);
     const [reportFarmerCodeSearch, setReportFarmerCodeSearch] = useState('');
     const [saleEntrySearch, setSaleEntrySearch] = useState('');
 
@@ -154,18 +168,30 @@ export default function PurchaseScreen() {
     // Data fetching
     const fetchCustomers = useCallback(async (search?: string) => {
         try {
-            const res = await purchaseFarmersApi.getAll({ search, limit: 100 });
+            const res = await purchaseFarmersApi.getAll({ search, limit: 10 });
             if (res.success) setCustomers(res.response?.data || []);
         } catch { }
     }, []);
 
-    // Fetch customers including inactive for farmer tab
-    const fetchCustomersWithInactive = useCallback(async (search?: string) => {
+    // Fetch customers including inactive for farmer tab — Load More 10
+    const fetchCustomersWithInactive = useCallback(async (search?: string, page: number = farmerPage) => {
         try {
-            const res = await purchaseFarmersApi.getAll({ search, limit: 100, includeInactive: true });
-            if (res.success) setCustomers(res.response?.data || []);
-        } catch { }
-    }, []);
+            if (page === 1) setFarmerSearchLoading(true);
+            const res = await purchaseFarmersApi.getAll({ search, limit: 10, page, includeInactive: true });
+            if (res.success) {
+                const list = res.response?.data || [];
+                if (page === 1) setCustomers(list);
+                else setCustomers(prev => [...prev, ...list]);
+                if (res.response?.pagination) {
+                    setFarmerPagination(res.response.pagination);
+                    setFarmerHasMore(page < res.response.pagination.pages);
+                } else {
+                    setFarmerPagination(null);
+                    setFarmerHasMore(list.length >= 10);
+                }
+            }
+        } catch { } finally { setFarmerSearchLoading(false); }
+    }, [farmerPage]);
 
     const fetchCollections = useCallback(async () => {
         const requestId = ++collectionsRequestIdRef.current;
@@ -238,7 +264,7 @@ export default function PurchaseScreen() {
     }, [reportStartDate, reportEndDate]);
 
     useEffect(() => {
-        if (activeTab === 'C-Farmer') {
+        if (activeTab === 'Farmer') {
             fetchCustomersWithInactive();
         } else {
             fetchCustomers();
@@ -263,18 +289,32 @@ export default function PurchaseScreen() {
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
     useEffect(() => { if (reportStartDate && reportEndDate) fetchReportData(); }, [reportStartDate, reportEndDate]);
 
-    // Farmer tab search - include inactive farmers
+    // Farmer tab search - include inactive farmers — Load More 10
+    useEffect(() => { setFarmerPage(1); }, [debouncedFarmerSearch]);
     useEffect(() => {
         const searchFarmers = async () => {
-            setFarmerSearchLoading(true);
             try {
-                const res = await purchaseFarmersApi.getAll({ search: debouncedFarmerSearch.trim() || undefined, limit: 100, includeInactive: true });
-                if (res.success) setCustomers(res.response?.data || []);
-            } catch { }
-            setFarmerSearchLoading(false);
+                if (farmerPage === 1) setFarmerSearchLoading(true);
+                const res = await purchaseFarmersApi.getAll({ search: debouncedFarmerSearch.trim() || undefined, limit: 10, page: farmerPage, includeInactive: true });
+                if (res.success) {
+                    const list = res.response?.data || [];
+                    if (farmerPage === 1) setCustomers(list);
+                    else setCustomers(prev => [...prev, ...list]);
+                    if (res.response?.pagination) {
+                        setFarmerPagination(res.response.pagination);
+                        setFarmerHasMore(farmerPage < res.response.pagination.pages);
+                    } else setFarmerHasMore(list.length >= 10);
+                }
+            } catch { } finally { setFarmerSearchLoading(false); }
         };
         searchFarmers();
-    }, [debouncedFarmerSearch]);
+    }, [debouncedFarmerSearch, farmerPage]);
+    const handleLoadMoreFarmers = useCallback(async () => {
+        if (farmerLoadingMore || !farmerHasMore) return;
+        setFarmerLoadingMore(true);
+        setFarmerPage(prev => prev + 1);
+        setFarmerLoadingMore(false);
+    }, [farmerLoadingMore, farmerHasMore]);
 
     // Inline search by code
     useEffect(() => {
@@ -328,14 +368,14 @@ export default function PurchaseScreen() {
     }, [fatValue, selectedCustomer, milkType]);
 
     // For rate-chart customers: auto-compute rate from FAT + SNF using the
-    // saved rate chart's "today rate" (FatRate = rate*0.08, SnfRate = rate*0.053333).
+    // saved rate setting's "today rate" (FatRate = rate*0.08, SnfRate = rate*0.053333).
     // rate = fat * fatRate + snf * snfRate
     useEffect(() => {
         if (!selectedCustomer) return;
-        const isRateChart =
-            (selectedCustomer as any).showRateChart === true ||
+        const isRateSetting =
+            ((selectedCustomer as any).showRateSetting === true || (selectedCustomer as any).showRateChart === true) ||
             selectedCustomer.priceBasis === 'fat_snf';
-        if (!isRateChart) return;
+        if (!isRateSetting) return;
         const fat = parseFloat(fatValue) || 0;
         const snf = parseFloat(snfValue) || 0;
         if (fat <= 0 || snf <= 0 || todayRate <= 0) { setRateValue(''); return; }
@@ -543,13 +583,13 @@ export default function PurchaseScreen() {
 
     // Soft delete customer (from app)
     const handleDeleteCustomer = useCallback((id: string) => {
-        showConfirm('Deactivate Customer', 'This will deactivate the customer. Only admin can permanently delete.', async () => {
+        showConfirm('Deactivate Customer', 'This will deactivate the customer. Dairy owner can re-activate later.', async () => {
             setConfirmVisible(false);
             try {
                 const res = await purchaseFarmersApi.delete(id);
                 if (res.success) {
                     showAlert('Success', 'Customer deactivated');
-                    if (activeTab === 'C-Farmer') {
+                    if (activeTab === 'Farmer') {
                         fetchCustomersWithInactive();
                     } else {
                         fetchCustomers();
@@ -560,9 +600,26 @@ export default function PurchaseScreen() {
         });
     }, [selectedCustomer, activeTab]);
 
+    const handleRestoreCustomer = useCallback((id: string) => {
+        showConfirm('Activate Customer', 'Re-activate this customer? They will appear in active lists again.', async () => {
+            setConfirmVisible(false);
+            try {
+                const res = await purchaseFarmersApi.restore(id);
+                if (res.success) {
+                    showAlert('Success', 'Customer activated');
+                    if (activeTab === 'Farmer') {
+                        fetchCustomersWithInactive();
+                    } else {
+                        fetchCustomers();
+                    }
+                } else showAlert('Error', res.message || 'Failed');
+            } catch { showAlert('Error', 'Failed'); }
+        });
+    }, [activeTab]);
+
     const onRefresh = useCallback(async () => {
         setRefreshing(true);
-        if (activeTab === 'C-Farmer') {
+        if (activeTab === 'Farmer') {
             await fetchCustomersWithInactive();
         } else {
             await Promise.all([fetchCustomers(), fetchCollections()]);
@@ -918,665 +975,9 @@ export default function PurchaseScreen() {
         } catch { showAlert('Error', 'Failed to export'); }
     }, [customers]);
 
-    // ── Collection Tab ──
-    const renderCollectionTab = () => (
-        <View style={{ flex: 1 }}>
-            {/* Top Controls: Date + Shift + Add */}
-            <View style={s.topControls}>
-                <Pressable style={s.dateBtn} onPress={() => setShowDateModal(true)}>
-                    <CalendarIcon size={14} color={colors.primary} />
-                    <Text style={s.dateText}>{formatDate(entryDate)}</Text>
-                    <ChevronDown size={12} color={colors.mutedForeground} />
-                </Pressable>
-                <View style={s.shiftRow}>
-                    <Pressable
-                        onPress={() => setEntryShift('morning')}
-                        style={[s.shiftBtn, isMorning && s.shiftBtnActive]}
-                    >
-                        <Sun size={13} color={isMorning ? '#fff' : colors.mutedForeground} />
-                        <Text style={[s.shiftBtnText, isMorning && s.shiftBtnTextActive]}>{t.common.morning}</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => setEntryShift('evening')}
-                        style={[s.shiftBtn, !isMorning && s.shiftBtnActive]}
-                    >
-                        <Moon size={13} color={!isMorning ? '#fff' : colors.mutedForeground} />
-                        <Text style={[s.shiftBtnText, !isMorning && s.shiftBtnTextActive]}>{t.common.evening}</Text>
-                    </Pressable>
-                </View>
-                {selectedCustomer && (
-                    <Pressable
-                        style={s.addCustTopBtn}
-                        onPress={() => { setEditingCustomer(selectedCustomer); setShowAddCustomer(true); }}
-                    >
-                        <Edit2 size={16} color="#fff" />
-                    </Pressable>
-                )}
-                {selectedCustomer && (selectedCustomer as any).showRateChart === true && (
-                    <Pressable
-                        style={[s.addCustTopBtn, { backgroundColor: colors.secondary, marginLeft: 6 }]}
-                        onPress={() => setShowRateChart(true)}
-                        accessibilityLabel="Rate Chart"
-                    >
-                        <TableIcon size={16} color={colors.primary} />
-                    </Pressable>
-                )}
-            </View>
 
-            {/* Summary Bar */}
-            <View style={s.summaryBar}>
-                <View style={s.summaryCell}>
-                    <Droplets size={14} color={colors.primary} />
-                    <View>
-                        <Text style={s.summaryVal}>{historyTotals.quantity.toFixed(1)} L</Text>
-                        <Text style={s.summaryLbl}>{t.common.quantity}</Text>
-                    </View>
-                </View>
-                <View style={s.summaryDivider} />
-                <View style={s.summaryCell}>
-                    <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
-                    <View>
-                        <Text style={s.summaryVal}>{historyTotals.quantity > 0 ? (historyTotals.amount / historyTotals.quantity).toFixed(1) : '0'}</Text>
-                        <Text style={s.summaryLbl}>{t.purchase.avgRate}</Text>
-                    </View>
-                </View>
-                <View style={s.summaryDivider} />
-                <View style={s.summaryCell}>
-                    <Text style={{ fontSize: 14, color: colors.primary, fontWeight: '800' }}>₹</Text>
-                    <View>
-                        <Text style={[s.summaryVal, { color: colors.primary }]}>{historyTotals.amount.toFixed(1)}</Text>
-                        <Text style={s.summaryLbl}>{t.common.amount}</Text>
-                    </View>
-                </View>
-                {selectedCustomer && (selectedCustomer as any).showRateChart === true && (
-                    <>
-                        <View style={s.summaryDivider} />
-                        <View style={s.summaryCell}>
-                            <TableIcon size={14} color={colors.primary} />
-                            <View>
-                                <Text style={[s.summaryVal, { color: colors.primary }]}>
-                                    ₹{Number(todayRate || 0).toFixed(2)}
-                                </Text>
-                                <Text style={s.summaryLbl}>Today Rate</Text>
-                            </View>
-                        </View>
-                    </>
-                )}
-            </View>
-
-            {/* Inline Farmer Search - replaces the old pressable box */}
-            <View style={s.codeRow}>
-                {showInlineSearch ? (
-                    <View style={s.inlineSearchContainer}>
-                        <Search size={16} color={colors.mutedForeground} />
-                        <TextInput
-                            style={s.inlineSearchInput}
-                            value={inlineSearchCode}
-                            onChangeText={setInlineSearchCode}
-                            placeholder="Search by code..."
-                            placeholderTextColor={colors.mutedForeground}
-                            autoFocus
-                            keyboardType="number-pad"
-                        />
-                        <Pressable onPress={() => {
-                            setShowInlineSearch(false);
-                            setInlineSearchCode('');
-                        }}>
-                            <X size={18} color={colors.destructive} />
-                        </Pressable>
-                    </View>
-                ) : selectedCustomer ? (
-                    <Pressable style={s.selectedFarmerBox} onPress={() => setShowInlineSearch(true)}>
-                        <View style={s.selectedFarmerBadge}>
-                            <Text style={s.selectedFarmerBadgeText}>{selectedCustomer.code}</Text>
-                        </View>
-                        <Text style={s.selectedFarmerName} numberOfLines={1}>{selectedCustomer.name}</Text>
-                        <Pressable onPress={() => {
-                            setSelectedCustomer(null);
-                            setShowInlineSearch(true);
-                            setInlineSearchCode('');
-                        }} hitSlop={8}>
-                            <X size={16} color={colors.destructive} />
-                        </Pressable>
-                    </Pressable>
-                ) : (
-                    <Pressable style={s.codeInputBox} onPress={() => setShowInlineSearch(true)}>
-                        <Search size={14} color={colors.mutedForeground} />
-                        <Text style={[s.codeInputText, { color: colors.mutedForeground }]}>{t.purchase.enterCode}</Text>
-                    </Pressable>
-                )}
-
-                {selectedCustomer && showCow && (selectedCustomer as any).showRateChart !== true && (
-                    <Pressable onPress={() => setMilkType('cow')} style={[s.milkToggleBtn, milkType === 'cow' && s.milkToggleBtnActive]}>
-                        <Milk size={14} color={milkType === 'cow' ? '#fff' : colors.foreground} />
-                        <Text style={[s.milkToggleBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
-                    </Pressable>
-                )}
-                {selectedCustomer && showBuffalo && (selectedCustomer as any).showRateChart !== true && (
-                    <Pressable onPress={() => setMilkType('buffalo')} style={[s.milkToggleBtn, milkType === 'buffalo' && s.milkToggleBtnActive]}>
-                        <Milk size={14} color={milkType === 'buffalo' ? '#fff' : colors.foreground} />
-                        <Text style={[s.milkToggleBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
-                    </Pressable>
-                )}
-            </View>
-
-            {/* Inline search results dropdown */}
-            {showInlineSearch && inlineSearchCode.trim().length > 0 && (
-                <View style={s.inlineDropdown}>
-                    {inlineSearchResults.length > 0 ? (
-                        inlineSearchResults.map(item => (
-                            <Pressable
-                                key={item._id}
-                                style={s.inlineDropdownItem}
-                                onPress={() => handleSelectCustomer(item)}
-                            >
-                                <View style={s.inlineDropdownBadge}>
-                                    <Text style={s.inlineDropdownBadgeText}>{item.code}</Text>
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={s.inlineDropdownName}>{item.name}</Text>
-                                    {item.mobile ? <Text style={s.inlineDropdownSub}>{item.mobile}</Text> : null}
-                                </View>
-                            </Pressable>
-                        ))
-                    ) : (
-                        <View style={s.emptyBox}>
-                            <Text style={s.emptyText}>No farmer with code "{inlineSearchCode}"</Text>
-                        </View>
-                    )}
-                </View>
-            )}
-
-            {/* Entry Fields */}
-            {selectedCustomer && (
-                <View style={s.entryCard}>
-                    {/* Price Basis Label */}
-                    <Text style={s.priceBasisLabel}>
-                        {selectedCustomer.priceBasis === 'rate' ? t.purchase.rateBased : selectedCustomer.priceBasis === 'fat_snf' ? 'Fat + SNF based' : t.purchase.fatBased}
-                    </Text>
-
-                    {/* Input Row */}
-                    <View style={s.fieldsRow}>
-                        <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>{t.purchase.qty}</Text>
-                            <TextInput style={s.fieldInput} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '00.00' : '0.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                        </View>
-                        {selectedCustomer.priceBasis !== 'rate' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
-                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '6.5' : '0.0'} placeholderTextColor={colors.mutedForeground} />
-                            </View>
-                        )}
-                        {selectedCustomer.priceBasis === 'fat_snf' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>SNF</Text>
-                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="9.0" placeholderTextColor={colors.mutedForeground} />
-                            </View>
-                        )}
-                        {selectedCustomer.priceBasis === 'rate' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>{t.common.rate}</Text>
-                                <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                            </View>
-                        )}
-                    </View>
-
-                    {/* Computed Values Display */}
-                    <View style={s.computedRow}>
-                        {(selectedCustomer.priceBasis === 'fat' || selectedCustomer.priceBasis === 'fat_snf') && (
-                            <Text style={s.computedText}>{t.common.rate}: <Text style={s.computedValue}>{rateValue || '0'}</Text></Text>
-                        )}
-                        <Text style={s.computedText}>{t.common.amount}: <Text style={[s.computedValue, { color: colors.primary }]}>₹{computeAmount().toFixed(1)}</Text></Text>
-                    </View>
-
-                    {/* Actions */}
-                    <View style={s.actionsRow}>
-                        <Pressable style={[s.zeroToggle, isZero && { backgroundColor: colors.destructive, borderColor: colors.destructive }]} onPress={() => setIsZero(!isZero)}>
-                            <Ban size={14} color={isZero ? '#fff' : colors.destructive} />
-                            <Text style={[s.zeroText, isZero && { color: '#fff' }]}>{t.purchase.zeroEntry}</Text>
-                        </Pressable>
-                        {isPrinterConnected && (
-                            <Pressable
-                                style={[s.noPrintToggle, noPrint && { backgroundColor: colors.mutedForeground, borderColor: colors.mutedForeground }]}
-                                onPress={() => setNoPrint(!noPrint)}
-                            >
-                                <Printer size={14} color={noPrint ? '#fff' : colors.mutedForeground} />
-                                <Text style={[s.noPrintText, noPrint && { color: '#fff' }]}>No Print</Text>
-                            </Pressable>
-                        )}
-                        <Pressable style={[s.saveEntryBtn, saving && { opacity: 0.5 }]} onPress={handleSaveEntry} disabled={saving}>
-                            {saving ? <ActivityIndicator size="small" color="#fff" /> : (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                    <Check size={18} color="#fff" strokeWidth={3} />
-                                    <Text style={s.saveEntryText}>{t.common.save}</Text>
-                                </View>
-                            )}
-                        </Pressable>
-                    </View>
-                </View>
-            )}
-
-        </View>
-    );
-
-    // ── Sale Entries Table (scrolls with page) ──
-    const renderSaleEntriesTable = () => {
-        // Latest entry first: sort by createdAt/_id descending (Mongo _id is time-ordered)
-        const sorted = [...collections].sort((a: any, b: any) => {
-            const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            if (at !== bt) return bt - at;
-            return String(b._id).localeCompare(String(a._id));
-        });
-        const selectedCode = selectedCustomer?.code.toUpperCase();
-        const q = selectedCode || saleEntrySearch.trim().toUpperCase();
-        const visible = selectedCode
-            ? sorted.filter(it => String(it.farmerCode || it.purchaseFarmer?.code || '').toUpperCase() === selectedCode)
-            : q
-                ? sorted.filter(it => String(it.farmerCode || it.purchaseFarmer?.code || '').toUpperCase().includes(q))
-                : sorted;
-
-        return (
-            <View style={s.tableBottomWrap}>
-                <View style={s.tableWrap}>
-                    <View style={s.tableBar}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                            <FileText size={13} color={colors.primary} />
-                            <Text style={s.tableBarTitle}>{t.purchase.saleEntries}</Text>
-                            <View style={s.badge}><Text style={s.badgeText}>{visible.length}</Text></View>
-                        </View>
-
-                        {/* Code search bar */}
-                        <View style={s.entrySearchBox}>
-                            <Search size={12} color={colors.mutedForeground} />
-                            <TextInput
-                                style={s.entrySearchInput}
-                                value={saleEntrySearch}
-                                onChangeText={(v) => setSaleEntrySearch(v.replace(/\s/g, '').toUpperCase())}
-                                placeholder="Search code"
-                                placeholderTextColor={colors.mutedForeground}
-                                autoCapitalize="characters"
-                                returnKeyType="search"
-                            />
-                            {saleEntrySearch.length > 0 && (
-                                <Pressable onPress={() => setSaleEntrySearch('')} hitSlop={8}>
-                                    <X size={12} color={colors.mutedForeground} />
-                                </Pressable>
-                            )}
-                        </View>
-
-                        <Pressable style={[s.pdfBtn, isPrinting && { opacity: 0.5 }]} onPress={() => handlePrintPress('purchase')} disabled={isPrinting}>
-                            {isPrinting ? <ActivityIndicator size={12} color="#fff" /> : <Printer size={12} color="#fff" />}
-                        </Pressable>
-                    </View>
-
-                    <View style={s.tHead}>
-                        <View style={s.entryCell1}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.common.code}</Text></View>
-                        <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.milk}</Text></View>
-                        <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.fat}</Text></View>
-                        <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>SNF</Text></View>
-                        <View style={s.entryCellFlex}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.common.rate}</Text></View>
-                        <View style={s.entryCellAmt}><Text style={[s.tHeadText, { textAlign: 'center' }]}>{t.purchase.amt}</Text></View>
-                        <View style={{ width: 26 }} />
-                    </View>
-
-                    {historyLoading && collections.length === 0 ? (
-                        <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
-                    ) : visible.length === 0 ? (
-                        <View style={s.emptyBox}>
-                            <Droplets size={24} color={colors.border} />
-                            <Text style={s.emptyText}>
-                                {q ? `No entries for code "${q}"` : t.purchase.noEntries}
-                            </Text>
-                        </View>
-                    ) : (
-                        <View>
-                            {visible.map((item, index) => (
-                                <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
-                                    <View style={s.entryCell1}>
-                                        <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
-                                        <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
-                                    </View>
-                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
-                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.fat || '-'}</Text></View>
-                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text></View>
-                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.rate}</Text></View>
-                                    <View style={s.entryCellAmt}><Text style={[s.entryCellText, { textAlign: 'center', color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text></View>
-                                    <Pressable
-                                        style={s.deleteBtn}
-                                        onPress={() => setActionMenuEntry(item)}
-                                    >
-                                        <MoreVertical size={14} color={colors.mutedForeground} />
-                                    </Pressable>
-                                </View>
-                            ))}
-                        </View>
-                    )}
-                </View>
-            </View>
-        );
-    };
-
-    // ── Report Tab ──
-    const renderReportTab = () => (
-        <View>
-            {/* Farmer Picker */}
-            <Pressable style={s.reportFarmerPicker} onPress={() => setShowReportFarmerModal(true)}>
-                <User size={16} color={colors.primary} />
-                <Text style={s.reportFarmerText} numberOfLines={1}>
-                    {selectedReportFarmer ? `${selectedReportFarmer.code} - ${selectedReportFarmer.name}` : 'Enter farmer code'}
-                </Text>
-                {reportFarmerFilter ? (
-                    <Pressable onPress={() => setReportFarmerFilter('')} hitSlop={6}>
-                        <X size={14} color={colors.destructive} />
-                    </Pressable>
-                ) : (
-                    <ChevronDown size={16} color={colors.mutedForeground} />
-                )}
-            </Pressable>
-
-            {/* Date Range Selector */}
-            <DateRangePicker
-                startDate={reportStartDate || null}
-                endDate={reportEndDate || null}
-                onStartDateChange={setReportStartDate}
-                onEndDateChange={setReportEndDate}
-            />
-
-            {/* Report Summary */}
-            {reportStartDate && reportEndDate && (
-                <View style={s.reportSummaryCard}>
-                    <View style={s.reportSummaryRow}>
-                        <View style={s.reportSummaryItem}>
-                            <Text style={s.reportSummaryLabel}>Total Qty</Text>
-                            <Text style={s.reportSummaryValue}>{filteredReportTotals.quantity.toFixed(1)} L</Text>
-                        </View>
-                        <View style={s.reportSummaryDivider} />
-                        <View style={s.reportSummaryItem}>
-                            <Text style={s.reportSummaryLabel}>Avg Rate</Text>
-                            <Text style={s.reportSummaryValue}>₹{filteredReportTotals.quantity > 0 ? (filteredReportTotals.amount / filteredReportTotals.quantity).toFixed(1) : '0'}</Text>
-                        </View>
-                        <View style={s.reportSummaryDivider} />
-                        <View style={s.reportSummaryItem}>
-                            <Text style={s.reportSummaryLabel}>Total Amt</Text>
-                            <Text style={[s.reportSummaryValue, { color: colors.primary }]}>₹{filteredReportTotals.amount.toFixed(0)}</Text>
-                        </View>
-                    </View>
-                </View>
-            )}
-
-            {/* Print & Export Buttons */}
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Pressable
-                    style={[s.exportReportBtn, { flex: 1, backgroundColor: colors.primary }, isPrinting && { opacity: 0.6 }]}
-                    onPress={() => {
-                        setPrintSource('report');
-                        if (!reportFarmerFilter) {
-                            handleReportBatchPrint('full');
-                        } else {
-                            handleFullSummaryPrint('report');
-                        }
-                    }}
-                    disabled={isPrinting}
-                >
-                    {isPrinting ? <ActivityIndicator size={16} color="#fff" /> : <FileText size={16} color="#fff" />}
-                    <Text style={s.exportReportBtnText}>Full Summary</Text>
-                </Pressable>
-                <Pressable
-                    style={[s.exportReportBtn, { flex: 1, backgroundColor: '#f59e0b' }, isPrinting && { opacity: 0.6 }]}
-                    onPress={() => {
-                        setPrintSource('report');
-                        if (!reportFarmerFilter) {
-                            handleReportBatchPrint('short');
-                        } else {
-                            handleShortSummaryPrint('report');
-                        }
-                    }}
-                    disabled={isPrinting}
-                >
-                    {isPrinting ? <ActivityIndicator size={16} color="#fff" /> : <Printer size={16} color="#fff" />}
-                    <Text style={s.exportReportBtnText}>Short Summary</Text>
-                </Pressable>
-            </View>
-            <Pressable style={[s.exportReportBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]} onPress={handleExportReportPdf}>
-                <Download size={16} color={colors.primary} />
-                <Text style={[s.exportReportBtnText, { color: colors.foreground }]}>Download PDF</Text>
-            </Pressable>
-
-            {/* Row-cap note: the totals above always cover the full range, the table
-                below renders the newest rows (capped) — say so instead of staying silent */}
-            {!reportLoading && reportStartDate && reportEndDate && reportTotalCount > reportCollections.length && (
-                <Text style={s.reportCapNote}>
-                    Showing latest {reportCollections.length} of {reportTotalCount} entries — select a smaller date range to see older entries.
-                </Text>
-            )}
-
-            {/* Report Table */}
-            {reportLoading ? (
-                <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
-            ) : filteredReportCollections.length === 0 && reportStartDate && reportEndDate ? (
-                <View style={s.emptyBox}>
-                    <Droplets size={24} color={colors.border} />
-                    <Text style={s.emptyText}>No data for selected period</Text>
-                </View>
-            ) : !reportStartDate || !reportEndDate ? (
-                <View style={s.emptyBox}>
-                    <CalendarIcon size={24} color={colors.border} />
-                    <Text style={s.emptyText}>Select date range to view report</Text>
-                </View>
-            ) : (
-                <View style={s.tableWrap}>
-                    <View style={s.tHead}>
-                        <Text style={[s.tHeadText, s.entryCell1]}>{t.common.code}</Text>
-                        <Text style={[s.tHeadText, { flex: 0.7, textAlign: 'center' }]}>Date/S</Text>
-                        <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.milk}</Text>
-                        <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
-                        <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.snf}</Text>
-                        <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
-                        <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
-                    </View>
-                    {filteredReportCollections.map((item, index) => {
-                        const d = new Date(item.date);
-                        const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-                        const shiftLetter = item.shift === 'morning' ? 'M' : item.shift === 'evening' ? 'E' : '';
-                        const dateLabel = shiftLetter ? `${dateStr}-${shiftLetter}` : dateStr;
-                        return (
-                            <View key={item._id} style={[s.entryRow, index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' }]}>
-                                <View style={[s.entryCell1, { alignItems: 'center' }]}>
-                                    <Text style={[s.entryCellText, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.farmerCode || '-'}</Text>
-                                    <Text style={[s.entrySubText, { textAlign: 'center' }]} numberOfLines={1}>{item.purchaseFarmer?.name || ''}</Text>
-                                </View>
-                                <Text style={[s.entryCellText, { flex: 0.7, textAlign: 'center', fontSize: 9 }]}>{dateLabel}</Text>
-                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.quantity}</Text>
-                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.fat || '-'}</Text>
-                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text>
-                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.rate}</Text>
-                                <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>₹{item.amount.toFixed(0)}</Text>
-                            </View>
-                        );
-                    })}
-                    <View style={s.tFootRow}>
-                        <Text style={[s.tFootText, s.entryCell1]}>{t.common.total} ({filteredReportCollections.length})</Text>
-                        <Text style={[s.tFootText, { flex: 0.7 }]}></Text>
-                        <Text style={[s.tFootText, s.entryCell2]}>{filteredReportTotals.quantity.toFixed(1)}</Text>
-                        <Text style={[s.tFootText, s.entryCell2]}></Text>
-                        <Text style={[s.tFootText, s.entryCell2]}></Text>
-                        <Text style={[s.tFootText, s.entryCell2]}></Text>
-                        <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{filteredReportTotals.amount.toFixed(0)}</Text>
-                    </View>
-                </View>
-            )}
-
-            {/* Report Farmer Select Modal */}
-            <Modal visible={showReportFarmerModal} animationType="slide" transparent onRequestClose={() => setShowReportFarmerModal(false)}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                    <View style={s.modalOverlay}>
-                        <Pressable style={{ flex: 1 }} onPress={() => setShowReportFarmerModal(false)} />
-                        <View style={[s.modalSheet, { maxHeight: '85%' }]}>
-                            <View style={s.modalHandle} />
-                            <View style={s.modalHeader}>
-                                <Text style={s.modalTitle}>Select Farmer for Report</Text>
-                                <Pressable onPress={() => setShowReportFarmerModal(false)}><X size={18} color={colors.foreground} /></Pressable>
-                            </View>
-
-                            {/* Code-only search input */}
-                            <View style={s.searchRow}>
-                                <Search size={14} color={colors.mutedForeground} />
-                                <TextInput
-                                    style={s.searchInput}
-                                    value={reportFarmerCodeSearch}
-                                    onChangeText={(v) => setReportFarmerCodeSearch(v.replace(/\s/g, '').toUpperCase())}
-                                    placeholder="Enter farmer code"
-                                    placeholderTextColor={colors.mutedForeground}
-                                    autoCapitalize="characters"
-                                    keyboardType="default"
-                                    returnKeyType="search"
-                                    autoFocus
-                                    onSubmitEditing={() => {
-                                        const q = reportFarmerCodeSearch.trim();
-                                        if (!q) return;
-                                        const match = customers.find(c => String(c.code).toUpperCase() === q);
-                                        if (match) {
-                                            setReportFarmerFilter(match._id);
-                                            setReportFarmerCodeSearch('');
-                                            setShowReportFarmerModal(false);
-                                        }
-                                    }}
-                                />
-                                {reportFarmerCodeSearch.length > 0 && (
-                                    <Pressable onPress={() => setReportFarmerCodeSearch('')} hitSlop={8}>
-                                        <X size={14} color={colors.mutedForeground} />
-                                    </Pressable>
-                                )}
-                            </View>
-
-                            <FlatList
-                                data={
-                                    reportFarmerCodeSearch.trim()
-                                        ? customers.filter(c => String(c.code).toUpperCase().includes(reportFarmerCodeSearch.trim()))
-                                        : customers
-                                }
-                                keyExtractor={item => item._id}
-                                keyboardShouldPersistTaps="handled"
-                                renderItem={({ item }) => (
-                                    <Pressable
-                                        style={[s.custListItem, { paddingHorizontal: 12 }]}
-                                        onPress={() => {
-                                            setReportFarmerFilter(item._id);
-                                            setReportFarmerCodeSearch('');
-                                            setShowReportFarmerModal(false);
-                                        }}
-                                    >
-                                        <View style={s.custListAvatar}>
-                                            <Text style={s.custListAvatarText}>{item.code}</Text>
-                                        </View>
-                                        <View style={{ flex: 1 }}>
-                                            <Text style={s.custListName}>{item.name}</Text>
-                                            {item.mobile ? <Text style={s.custListSub}>{item.mobile}</Text> : null}
-                                        </View>
-                                        {(reportFarmerFilter === item._id || reportFarmerFilter === item.code) && <Check size={16} color={colors.primary} />}
-                                    </Pressable>
-                                )}
-                                ListEmptyComponent={
-                                    <View style={{ paddingVertical: 24, alignItems: 'center' }}>
-                                        <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
-                                            {reportFarmerCodeSearch ? 'No farmer with this code' : 'No farmers'}
-                                        </Text>
-                                    </View>
-                                }
-                                contentContainerStyle={{ paddingHorizontal: 6, paddingBottom: 24 }}
-                                showsVerticalScrollIndicator={false}
-                            />
-                        </View>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
-        </View>
-    );
-
-    // ── Farmer Tab ──
-    const renderFarmerTab = () => (
-        <View>
-            {/* Search + Print + Add */}
-            <View style={s.farmerTopRow}>
-                <View style={s.farmerSearchBox}>
-                    <Search size={16} color={colors.mutedForeground} />
-                    <TextInput
-                        style={s.farmerSearchInput}
-                        value={farmerTabSearch}
-                        onChangeText={setFarmerTabSearch}
-                        placeholder="Search farmers..."
-                        placeholderTextColor={colors.mutedForeground}
-                    />
-                    {farmerTabSearch.length > 0 && (
-                        <Pressable onPress={() => setFarmerTabSearch('')}><X size={13} color={colors.mutedForeground} /></Pressable>
-                    )}
-                </View>
-                <Pressable style={s.farmerActionBtn} onPress={handleExportFarmersPdf}>
-                    <Printer size={14} color="#fff" />
-                </Pressable>
-                <Pressable style={s.farmerActionBtn} onPress={() => { setEditingCustomer(null); setShowAddCustomer(true); }}>
-                    <Plus size={14} color="#fff" />
-                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>Add</Text>
-                </Pressable>
-            </View>
-
-            {/* Farmer Management Title */}
-            <Text style={s.farmerSectionTitle}>Farmer Management</Text>
-            <Text style={[s.farmerSubtitle, { color: colors.mutedForeground }]}>farmer list ({customers.length})</Text>
-
-            {/* Farmer Table */}
-            {farmerSearchLoading ? (
-                <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
-            ) : customers.length === 0 ? (
-                <View style={s.emptyBox}>
-                    <User size={24} color={colors.border} />
-                    <Text style={s.emptyText}>No farmers found</Text>
-                </View>
-            ) : (
-                <View style={s.tableWrap}>
-                    <View style={[s.tHead, { backgroundColor: colors.primary }]}>
-                        <Text style={[s.tHeadText, { flex: 0.5, color: '#fff', textAlign: 'center' }]}>{t.common.code}</Text>
-                        <Text style={[s.tHeadText, { flex: 1.2, color: '#fff', textAlign: 'center' }]}>{t.common.name}</Text>
-                        <Text style={[s.tHeadText, { flex: 0.8, color: '#fff', textAlign: 'center' }]}>Based On</Text>
-                        <Text style={[s.tHeadText, { flex: 0.6, color: '#fff', textAlign: 'center' }]}>Status</Text>
-                        <View style={{ flex: 0.6 }} />
-                    </View>
-                    {customers.map((item, index) => {
-                        const isInactive = item.isActive === false;
-                        return (
-                            <View key={item._id} style={[
-                                s.entryRow,
-                                index % 2 !== 0 && { backgroundColor: isDark ? colors.muted + '30' : '#f8fafc' },
-                                isInactive && { opacity: 0.45 }
-                            ]}>
-                                <Text style={[s.entryCellText, { flex: 0.5, color: isInactive ? colors.mutedForeground : colors.primary, fontWeight: '700', textAlign: 'center' }]}>{item.code}</Text>
-                                <Text style={[s.entryCellText, { flex: 1.2, textAlign: 'center', color: isInactive ? colors.mutedForeground : colors.foreground }]} numberOfLines={1}>{item.name}</Text>
-                                <Text style={[s.entryCellText, { flex: 0.8, textAlign: 'center', fontSize: 10, color: isInactive ? colors.mutedForeground : colors.foreground }]}>{item.priceBasis || '-'}</Text>
-                                <View style={{ flex: 0.6, alignItems: 'center' }}>
-                                    <View style={[s.statusBadge, { backgroundColor: isInactive ? colors.destructive + '20' : colors.primary + '20' }]}>
-                                        <Text style={[s.statusBadgeText, { color: isInactive ? colors.destructive : colors.primary }]}>
-                                            {isInactive ? 'Off' : 'On'}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <View style={{ flex: 0.6, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                                    <Pressable style={s.miniIconBtn} onPress={() => handleEditCustomer(item)}>
-                                        <Edit2 size={12} color={colors.primary} />
-                                    </Pressable>
-                                    {!isInactive && (
-                                        <Pressable style={s.miniIconBtn} onPress={() => handleDeleteCustomer(item._id)}>
-                                            <Trash2 size={12} color={colors.destructive} />
-                                        </Pressable>
-                                    )}
-                                </View>
-                            </View>
-                        );
-                    })}
-                </View>
-            )}
-        </View>
-    );
+    // Ponytail ctx — single source for all tabs (no prop drilling duplication)
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>
@@ -1589,10 +990,33 @@ export default function PurchaseScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
                 keyboardShouldPersistTaps="handled"
             >
-                {activeTab === 'Purchase' && renderCollectionTab()}
-                {activeTab === 'Purchase' && renderSaleEntriesTable()}
-                {activeTab === 'Report' && renderReportTab()}
-                {activeTab === 'C-Farmer' && renderFarmerTab()}
+                {activeTab === 'Purchase' && <PurchaseCollectionTab ctx={purchaseCtx} />}
+                {activeTab === 'Purchase' && <PurchaseSaleEntriesTable ctx={purchaseCtx} />}
+                {activeTab === 'Report' && <PurchaseReportTab ctx={purchaseCtx} />}
+                {activeTab === 'Farmer' && <PurchaseFarmerTab ctx={purchaseCtx} />}
+                {activeTab === 'RateSetting' && (
+                    <View style={{ flex: 1, padding: 16, alignItems: 'center', gap: 12, marginTop: 16 }}>
+                        <View style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: colors.primary + '15', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.primary + '30' }}>
+                            <TableIcon size={28} color={colors.primary} />
+                        </View>
+                        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.foreground }}>Milk Rate Settings</Text>
+                        <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: 20 }}>
+                            Manage Fixed Rate, FAT Rate & FAT+SNF Rate like your screenshots. Tap to open the new page.
+                        </Text>
+                        <Pressable onPress={() => router.push('/milk-rate-settings' as any)} style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <TableIcon size={16} color="#fff" />
+                            <Text style={{ color: '#fff', fontWeight: '700' }}>Open Milk Rate Settings</Text>
+                        </Pressable>
+                        <Pressable onPress={() => setShowRateSetting(true)} style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <TableIcon size={14} color={colors.foreground} />
+                            <Text style={{ color: colors.foreground, fontWeight: '600', fontSize: 12 }}>Open old Rate Table (advanced)</Text>
+                        </Pressable>
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 }}>
+                            <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Today Rate:</Text>
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary }}>₹{Number(todayRate || 0).toFixed(2)}</Text>
+                        </View>
+                    </View>
+                )}
             </ScrollView>
 
 
@@ -1677,7 +1101,7 @@ export default function PurchaseScreen() {
                 visible={showAddCustomer}
                 onClose={() => { setShowAddCustomer(false); setEditingCustomer(null); }}
                 onSuccess={() => {
-                    if (activeTab === 'C-Farmer') {
+                    if (activeTab === 'Farmer') {
                         fetchCustomersWithInactive();
                     } else {
                         fetchCustomers();
@@ -1807,9 +1231,9 @@ export default function PurchaseScreen() {
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />
             <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
 
-            <RateChartModal
-                visible={showRateChart}
-                onClose={() => setShowRateChart(false)}
+            <RateSettingModal
+                visible={showRateSetting}
+                onClose={() => setShowRateSetting(false)}
                 initialRate={rateValue}
                 highlightFat={parseFloat(fatValue) || undefined}
                 highlightSnf={parseFloat(snfValue) || undefined}

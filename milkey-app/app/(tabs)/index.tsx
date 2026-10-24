@@ -2,12 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, ActivityIndicator, RefreshControl, Animated, Linking } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
-import { productsApi, reportsApi, bannersApi, Product, HomeStats, Banner } from '@/lib/milkeyApi';
+import { productsApi, reportsApi, milkCollectionsApi, sellingEntriesApi, Product, HomeStats } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
-import { Plus, Wallet, ChevronRight, Package } from 'lucide-react-native';
+import { Plus, Wallet, ChevronRight, Package, ChevronDown, Milk, ShoppingCart, Users } from 'lucide-react-native';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useTranslation } from '@/hooks/useTranslation';
 import { QuickEntryModal } from '@/components/QuickEntryModal';
@@ -17,25 +17,30 @@ import { useSubscriptionStore, shouldShowSubscriptionModal, markSubscriptionModa
 import { SuccessModal } from '@/components/SuccessModal';
 import { OverviewRangeModal } from '@/components/OverviewRangeModal';
 import { useSubTabStore } from '@/lib/subTabStore';
+import { setSuppressCollection, setSuppressSelling } from '@/lib/sheetSuppress';
+import { vibrate } from '@/hooks/useTabSound';
+import BannerCarousel from '@/components/BannerCarousel';
+import SubscriptionReminder from '@/components/SubscriptionReminder';
+import HomeFaqSection from '@/components/HomeFaqSection';
+import HomeVideoSection from '@/components/HomeVideoSection';
+import TutorialOverlay from '@/components/TutorialOverlay';
+import HomeCalculator from '@/components/HomeCalculator';
+import { useAppRating } from '@/hooks/useAppRating';
 
 const { width } = Dimensions.get('window');
-const BANNER_WIDTH = width - 12;
 const CARD_WIDTH = (width - 18) / 2;
+const BANNER_WIDTH = width - 12;
 
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { isAuthenticated } = useAuth();
   const { t } = useTranslation();
-  const [currentBanner, setCurrentBanner] = useState(0);
+  useAppRating();
   const [loading, setLoading] = useState(true);
-  const [bannersLoading, setBannersLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [quantities, setQuantities] = useState<{ [key: string]: number }>({});
-  const bannerScrollRef = useRef<ScrollView>(null);
-  const bannerSkeletonOpacity = useRef(new Animated.Value(0.4)).current;
   const { addToCart, loadCart, getItemCount } = useCartStore();
 
   // Cart success notification
@@ -57,10 +62,12 @@ export default function HomeScreen() {
 
   // Overview range modal state (collection / selling breakdown by date range)
   const [overviewRangeKind, setOverviewRangeKind] = useState<'collection' | 'selling' | null>(null);
+  const [homeDateRange, setHomeDateRange] = useState<{ startDate: string; endDate: string } | null>(null);
+  const [rangeStats, setRangeStats] = useState<{ collQty: number; collAmt: number; sellQty: number; sellAmt: number } | null>(null);
 
   // Get subscription store - must be before useEffects that use status
   const { fetchStatus, preloadAllTabs, status, initializeFromStorage } = useSubscriptionStore();
-  const { setSellingTab, setPurchaseTab, setRegisterTab } = useSubTabStore();
+  const { setSellingTab, setPurchaseTab, setRegisterTab, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
 
   useEffect(() => {
     loadCart();
@@ -71,17 +78,7 @@ export default function HomeScreen() {
     fetchData();
   }, [status?.hasAnySubscription]);
 
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bannerSkeletonOpacity, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(bannerSkeletonOpacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
-      ])
-    );
-
-    loop.start();
-    return () => loop.stop();
-  }, [bannerSkeletonOpacity]);
+  // banner now pure BannerCarousel (image-only, no text) — ponytail fast
 
   // Check if subscription modal should be shown and preload subscription data
   useEffect(() => {
@@ -94,25 +91,18 @@ export default function HomeScreen() {
 
         const shouldShow = await shouldShowSubscriptionModal();
         if (shouldShow) {
-          // Fetch status and preload all tabs data
           const statusData = await fetchStatus();
-
           if (statusData) {
-            const { hasPurchase, hasSelling, hasRegister, hasAnySubscription } = statusData;
-
             // Preload all tab subscription data in background
             preloadAllTabs();
-
-            // Show modal if user doesn't have all subscriptions
-            if (!hasAnySubscription || !hasPurchase || !hasSelling || !hasRegister) {
+            // Fix: show modal ONLY when user has zero active subscriptions.
+            // Previously required all 3 tabs, causing popup even after 1 subscription was active.
+            if (!statusData.hasAnySubscription) {
               setShowSubscriptionModal(true);
               await markSubscriptionModalShown();
             }
-          } else {
-            // No subscription data, show modal
-            setShowSubscriptionModal(true);
-            await markSubscriptionModalShown();
           }
+          // If statusData is null (network error), do NOT show modal — avoid false popup for active users when offline
         } else {
           // Even if not showing modal, preload subscription data for faster navigation
           preloadAllTabs();
@@ -144,45 +134,41 @@ export default function HomeScreen() {
     }
   };
 
+  const fetchRangeStats = async (range: { startDate: string; endDate: string }) => {
+    try {
+      const [collRes, sellRes] = await Promise.all([
+        milkCollectionsApi.getAll({ startDate: range.startDate, endDate: range.endDate, limit: 1, tzOffsetMinutes: -new Date().getTimezoneOffset() }).catch(() => null),
+        sellingEntriesApi.getAll({ startDate: range.startDate, endDate: range.endDate, limit: 100 }).catch(() => null),
+      ]);
+      let collQty = 0, collAmt = 0;
+      if (collRes?.success && (collRes.response as any)?.totals) { const t = (collRes.response as any).totals; collQty = t.quantity || 0; collAmt = t.amount || 0; }
+      let sellQty = 0, sellAmt = 0;
+      if (sellRes?.success && (sellRes.response as any)?.data) { for (const e of (sellRes.response as any).data) { const q = (e.morningQuantity || 0) + (e.eveningQuantity || 0); sellQty += q; sellAmt += e.amount || q * (e.rate || 0); } }
+      setRangeStats({ collQty, collAmt, sellQty, sellAmt });
+    } catch { setRangeStats({ collQty: 0, collAmt: 0, sellQty: 0, sellAmt: 0 }); }
+  };
+
+  const handleHomeRangeSelect = (range: { startDate: string; endDate: string } | null) => {
+    if (!range) { setHomeDateRange(null); setRangeStats(null); fetchHomeStats(); return; }
+    setHomeDateRange(range); fetchRangeStats(range);
+  };
+
   const fetchData = async () => {
     setLoading(true);
-    setBannersLoading(true);
     try {
-      // Check if user has any active subscription
       const hasSubscription = status?.hasAnySubscription || false;
-
-      // Fetch banners, products and home stats in parallel
-      const [bannersRes, productsRes, homeStatsRes] = await Promise.all([
-        bannersApi.getAll().catch(() => null),
+      const [productsRes, homeStatsRes] = await Promise.all([
         productsApi.getAll({ subscribed: hasSubscription }).catch(() => null),
         reportsApi.getHomeStats().catch(() => null),
       ]);
-
-      // Set banners from API only
-      if (bannersRes?.success) {
-        setBanners(bannersRes.response || []);
-      } else {
-        setBanners([]);
-      }
-
       if (productsRes?.success && productsRes.response?.data) {
         setProducts(productsRes.response.data);
-
-        // Initialize quantities
-        const initialQuantities: { [key: string]: number } = {};
-        productsRes.response.data.forEach(p => { initialQuantities[p._id] = 1; });
-        setQuantities(initialQuantities);
+        const iq: Record<string,number> = {};
+        productsRes.response.data.forEach((p:any) => { iq[p._id]=1; });
+        setQuantities(iq);
       }
-
-      if (homeStatsRes?.success && homeStatsRes.response) {
-        setHomeStats(homeStatsRes.response);
-      }
-    } catch (error) {
-      // Silent error handling
-    } finally {
-      setLoading(false);
-      setBannersLoading(false);
-    }
+      if (homeStatsRes?.success && homeStatsRes.response) setHomeStats(homeStatsRes.response);
+    } catch {} finally { setLoading(false); }
   };
 
   const onRefresh = useCallback(async () => {
@@ -191,22 +177,7 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, []);
 
-  // Auto-scroll banner
-  useEffect(() => {
-    if (banners.length === 0) return;
-    const interval = setInterval(() => {
-      const nextIndex = (currentBanner + 1) % banners.length;
-      bannerScrollRef.current?.scrollTo({ x: nextIndex * BANNER_WIDTH, animated: true });
-      setCurrentBanner(nextIndex);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [currentBanner, banners.length]);
-
-  const handleBannerScroll = (event: any) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const index = Math.round(offsetX / BANNER_WIDTH);
-    setCurrentBanner(index);
-  };
+  // banner auto-scroll now inside BannerCarousel (ponytail)
 
   const updateQuantity = (id: string, delta: number) => {
     setQuantities(prev => ({
@@ -226,19 +197,7 @@ export default function HomeScreen() {
     setCartSuccessVisible(true);
   };
 
-  // Open banner hyperlink (e.g. YouTube tutorial video / any URL)
-  const handleBannerPress = async (banner: Banner) => {
-    const url = (banner.linkValue || '').trim();
-    if (!url) return;
-    try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
-      }
-    } catch (error) {
-      // Silent — invalid or unsupported URL
-    }
-  };
+  // banner press handled inside BannerCarousel
 
   const styles = createStyles(colors, isDark);
 
@@ -251,6 +210,8 @@ export default function HomeScreen() {
         title={t.home.choosePlan}
       />
       <TopBar />
+      {/* Subscription Reminder below header */}
+      <SubscriptionReminder />
 
       <ScrollView
         style={styles.scrollView}
@@ -265,108 +226,97 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Banner Carousel */}
-        {bannersLoading ? (
-          <View style={styles.bannerSkeletonWrap}>
-            <Animated.View style={[styles.bannerSkeleton, { opacity: bannerSkeletonOpacity }]} />
-          </View>
-        ) : banners.length > 0 ? (
-          <>
-            <ScrollView
-              ref={bannerScrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScroll={handleBannerScroll}
-              scrollEventThrottle={16}
-              contentContainerStyle={styles.bannerScrollContainer}
-            >
-              {banners.map((banner) => (
-                <Pressable
-                  key={banner._id}
-                  style={styles.banner}
-                  onPress={() => handleBannerPress(banner)}
-                >
-                  <Image
-                    source={{ uri: banner.image }}
-                    style={styles.bannerImage}
-                    resizeMode="cover"
-                  />
-                  {banner.title && (
-                    <View style={styles.bannerOverlay}>
-                      <Text style={styles.bannerTitle}>{banner.title}</Text>
-                    </View>
-                  )}
-                  {!!banner.linkValue && (
-                    <View style={styles.bannerLinkBadge}>
-                      <Text style={styles.bannerLinkBadgeText}>🔗 Link</Text>
-                    </View>
-                  )}
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            {/* Banner Dots */}
-            <View style={styles.bannerDots}>
-              {banners.map((_, index) => (
-                <Pressable key={index} onPress={() => {
-                  bannerScrollRef.current?.scrollTo({ x: index * BANNER_WIDTH, animated: true });
-                  setCurrentBanner(index);
-                }}>
-                  <View style={[styles.dot, currentBanner === index && styles.activeDot]} />
-                </Pressable>
-              ))}
-            </View>
-          </>
-        ) : null
-        }
-        {/* Quick Overview */}
-        <Text style={styles.sectionTitle}>{t.home.quickOverview}</Text>
-        <View style={styles.overviewCard}>
-          <View style={styles.overviewMain}>
-            <Pressable style={styles.overviewCollectionCol} onPress={() => setOverviewRangeKind('collection')}>
-              <Text style={styles.overviewLabel}>{t.home.today}</Text>
-              <Text style={styles.overviewSubLabel}>{t.home.milkCollection}</Text>
-              {(() => {
-                const qty = homeStats?.today.quantity || 0;
-                const amt = homeStats?.today.amount || 0;
-                const rate = qty > 0 ? amt / qty : 0;
-                return (
-                  <Text style={styles.overviewFormula}>
-                    {qty.toFixed(1)} × {rate.toFixed(2)}
-                  </Text>
-                );
-              })()}
-              <Text style={styles.overviewValue}>₹{(homeStats?.today.amount || 0).toFixed(0)}</Text>
-            </Pressable>
-            <View style={styles.overviewDivider} />
-            <Pressable style={styles.overviewStat} onPress={() => setOverviewRangeKind('selling')}>
-              <Text style={styles.overviewStatValue}>{(homeStats?.todaySell.quantity || 0).toFixed(1)}L</Text>
-              <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.sellQty}</Text>
-              <Text style={[styles.overviewStatSubValue, { color: colors.primary }]}>₹{(homeStats?.todaySell.amount || 0).toFixed(0)}</Text>
-            </Pressable>
-            <View style={styles.overviewDivider} />
-            <Pressable style={styles.overviewStat} onPress={() => { setSellingTab('Member'); router.push('/(tabs)/selling?tab=Member'); }}>
-              <Text style={[styles.overviewStatValue, { color: colors.warning }]}>{homeStats?.totalMembers || 0}</Text>
-              <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.members}</Text>
-            </Pressable>
-            <View style={styles.overviewDivider} />
-            <Pressable style={styles.overviewStat} onPress={() => { setPurchaseTab('C-Farmer'); router.push('/(tabs)/purchase'); }}>
-              <Text style={[styles.overviewStatValue, { color: colors.primary }]}>{homeStats?.totalCollectionFarmers || 0}</Text>
-              <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.cFarmer}</Text>
-            </Pressable>
-            <View style={styles.overviewDivider} />
-            <Pressable style={styles.overviewStat} onPress={() => { setRegisterTab('R-Farmer'); router.push('/(tabs)/register'); }}>
-              <Text style={[styles.overviewStatValue, { color: colors.destructive }]}>{homeStats?.totalFarmers || 0}</Text>
-              <Text style={styles.overviewStatLabel} numberOfLines={1}>{t.home.rFarmer}</Text>
-            </Pressable>
-          </View>
+        <BannerCarousel />
+        {/* Quick Overview — new design matching screenshot, same space */}
+        <View style={styles.overviewHeaderRow}>
+          <Text style={styles.sectionTitleNoMargin}>{t.home.quickOverview}</Text>
+          <Pressable onPress={() => setOverviewRangeKind('collection')} style={styles.todayPill}>
+            <Text style={styles.todayPillText}>{homeDateRange ? `${homeDateRange.startDate.split('-').reverse().join('/')} - ${homeDateRange.endDate.split('-').reverse().join('/')}` : t.home.today}</Text>
+            <ChevronDown size={12} color={colors.mutedForeground} />
+          </Pressable>
         </View>
+        {(() => {
+          const useRange = !!homeDateRange && !!rangeStats;
+          const collQty = useRange ? rangeStats!.collQty : (homeStats?.today.quantity || 0);
+          const collAmt = useRange ? rangeStats!.collAmt : (homeStats?.today.amount || 0);
+          const collRate = collQty > 0 ? collAmt / collQty : 0;
+          const sellQty = useRange ? rangeStats!.sellQty : (homeStats?.todaySell.quantity || 0);
+          const sellAmt = useRange ? rangeStats!.sellAmt : (homeStats?.todaySell.amount || 0);
+          const sellRate = sellQty > 0 ? sellAmt / sellQty : 0;
+          const customers = homeStats?.totalMembers || 0;
+          // Fix double-count: Farmer & PurchaseFarmer share same collection (Farmer model).
+          // Use collection count directly (now filtered isActive:true in server-clone) — matches Farmer Management (140).
+          const farmers = homeStats?.totalCollectionFarmers ?? homeStats?.totalFarmers ?? 0;
+          return (
+            <View style={styles.overviewCardNew}>
+              {/* Top: Collection | Selling */}
+              <View style={styles.overviewTopRow}>
+                <Pressable style={styles.overviewCol} onPress={() => setOverviewRangeKind('collection')}>
+                  <View style={styles.overviewColHeader}>
+                    <View style={[styles.overviewIcon, { backgroundColor: isDark ? '#0f2e1a' : '#DCFCE7' }]}>
+                      <Milk size={14} color={colors.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.overviewColTitle} numberOfLines={1}>{homeDateRange ? 'Collection' : 'Today Collection'}</Text>
+                      <Text style={styles.overviewColSub}>(Purchase)</Text>
+                    </View>
+                  </View>
+                  <View style={styles.overviewMetricsRow}>
+                    <View style={styles.metricCol}><Text style={styles.metricLabel}>Qty</Text><Text style={styles.metricValue}>{collQty.toFixed(1)} L</Text></View>
+                    <View style={styles.metricCol}><Text style={styles.metricLabel}>Avg Rate</Text><Text style={styles.metricValue}>₹{collRate.toFixed(2)}</Text></View>
+                    <View style={styles.metricCol}><Text style={styles.metricLabel}>Amount</Text><Text style={[styles.metricValue, styles.metricValueAmount]}>₹{collAmt.toFixed(0)}</Text></View>
+                  </View>
+                </Pressable>
+                <View style={styles.overviewVDivider} />
+                <Pressable style={styles.overviewCol} onPress={() => setOverviewRangeKind('selling')}>
+                  <View style={styles.overviewColHeader}>
+                    <View style={[styles.overviewIcon, { backgroundColor: isDark ? '#1e293b' : '#DBEAFE' }]}>
+                      <ShoppingCart size={14} color="#2563EB" />
+                    </View>
+                    <Text style={styles.overviewColTitle} numberOfLines={1}>{homeDateRange ? 'Selling' : 'Today Selling'}</Text>
+                  </View>
+                  <View style={styles.overviewMetricsRow}>
+                    <View style={styles.metricCol}><Text style={styles.metricLabel}>Qty</Text><Text style={styles.metricValue}>{sellQty.toFixed(1)} L</Text></View>
+                    <View style={styles.metricCol}><Text style={styles.metricLabel}>Avg Rate</Text><Text style={styles.metricValue}>₹{sellRate.toFixed(2)}</Text></View>
+                    <View style={styles.metricCol}><Text style={styles.metricLabel}>Amount</Text><Text style={[styles.metricValue, { color: '#2563EB' }]}>₹{sellAmt.toFixed(0)}</Text></View>
+                  </View>
+                </Pressable>
+              </View>
+              <View style={styles.overviewHDivider} />
+              {/* Bottom: Farmers | Customers — Farmers first with plant icon */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewBottomContent} style={styles.overviewBottomScroll}>
+                <Pressable style={styles.overviewBottomItem} onPress={() => { vibrate(); setSuppressCollection(true); setSuppressCollectionSheet(true); setPurchaseTab('Farmer'); router.push('/(tabs)/purchase' as any); }}>
+                  <View style={[styles.overviewIconSmall, { backgroundColor: isDark ? '#0f2e1a' : '#E8F5E9', width: 36, height: 36, borderRadius: 10 }]}>
+                    <Image source={require('@/assets/images/farmer-hat-icon.png')} style={{ width: 26, height: 26 }} resizeMode="contain" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bottomLabel}>Farmers</Text>
+                    <Text style={[styles.bottomValue, { color: colors.primary }]}>{farmers}</Text>
+                  </View>
+                  <ChevronRight size={16} color={colors.mutedForeground} />
+                </Pressable>
+                <View style={styles.overviewVDividerSmall} />
+                <Pressable style={styles.overviewBottomItem} onPress={() => { vibrate(); setSuppressSelling(true); setSuppressSellingSheet(true); setSellingTab('Customer'); router.push('/(tabs)/selling?tab=Customer' as any); }}>
+                  <View style={[styles.overviewIconSmall, { backgroundColor: isDark ? '#3a2a12' : '#FEF9C3' }]}>
+                    <Users size={14} color="#CA8A04" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bottomLabel}>Customers</Text>
+                    <Text style={styles.bottomValue}>{customers}</Text>
+                  </View>
+                  <ChevronRight size={16} color={colors.mutedForeground} />
+                </Pressable>
+              </ScrollView>
+            </View>
+          );
+        })()}
 
         <OverviewRangeModal
           visible={overviewRangeKind !== null}
           kind={overviewRangeKind || 'collection'}
           onClose={() => setOverviewRangeKind(null)}
+          onRangeSelect={handleHomeRangeSelect}
+          initialRange={homeDateRange}
         />
 
 
@@ -393,6 +343,10 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
+        <HomeCalculator />
+        <HomeVideoSection />
+        <HomeFaqSection />
+
         {/* Quick Entry Modal */}
         <QuickEntryModal
           isVisible={showQuickEntryModal}
@@ -415,12 +369,7 @@ export default function HomeScreen() {
           onSuccess={() => fetchHomeStats()}
         />
 
-        {/* Products */}
-        <Pressable style={styles.productPageBox} onPress={() => router.push('/products')}>
-          <Package size={16} color={colors.primary} />
-          <Text style={styles.productPageBoxText}>{t.home.product}</Text>
-          <ChevronRight size={16} color={colors.primary} />
-        </Pressable>
+
       </ScrollView>
 
       {/* Cart Added Success Modal */}
@@ -430,6 +379,8 @@ export default function HomeScreen() {
         title="Added to Cart"
         message={cartSuccessMessage}
       />
+      {/* Tutorials as new user */}
+      <TutorialOverlay />
     </View>
   );
 }
@@ -461,8 +412,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     height: 140,
     borderRadius: 10,
     backgroundColor: colors.muted,
-    borderWidth: 1,
-    borderColor: colors.border,
+    // bottom border removed - clean flat look
   },
   banner: {
     width: BANNER_WIDTH,
@@ -513,6 +463,145 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     color: colors.foreground,
     marginBottom: 8,
     marginTop: 6,
+  },
+  sectionTitleNoMargin: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.foreground,
+  },
+  overviewHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  todayPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  todayPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.mutedForeground,
+  },
+  overviewCardNew: {
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 6,
+    overflow: 'hidden',
+  },
+  overviewTopRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  overviewCol: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  overviewColHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  overviewIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overviewColTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.foreground,
+  },
+  overviewColSub: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.mutedForeground,
+  },
+  overviewMetricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  metricCol: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  metricLabel: {
+    fontSize: 9,
+    color: colors.mutedForeground,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  metricValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.foreground,
+  },
+  metricValueAmount: {
+    color: colors.primary,
+  },
+  overviewVDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+  },
+  overviewHDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  overviewBottomScroll: {
+    flexGrow: 0,
+  },
+  overviewBottomContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexGrow: 1,
+  },
+  overviewBottomItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minWidth: (width - 12) / 2,
+  },
+  overviewIconSmall: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomLabel: {
+    fontSize: 10,
+    color: colors.mutedForeground,
+    fontWeight: '500',
+  },
+  bottomValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.foreground,
+    marginTop: 1,
+  },
+  overviewVDividerSmall: {
+    width: 1,
+    height: 32,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
   },
   sectionHeaderRow: {
     flexDirection: 'row',

@@ -166,7 +166,7 @@ export function AdminOrdersPage() {
                 </div>
                 <button
                     onClick={fetchOrders}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors"
                 >
                     <RefreshCw className="w-4 h-4" />
                     Refresh
@@ -174,7 +174,7 @@ export function AdminOrdersPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-card rounded-xl border border-border p-4 space-y-4">
+            <div className="bg-card rounded-lg border border-border p-4 space-y-4">
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <Filter className="w-4 h-4" />
                     <span className="font-medium">Filters</span>
@@ -234,7 +234,7 @@ export function AdminOrdersPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 3 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="flex justify-between mb-3">
                                 <div className="h-4 bg-muted rounded w-24"></div>
                                 <div className="h-6 bg-muted rounded-full w-20"></div>
@@ -246,13 +246,13 @@ export function AdminOrdersPage() {
                         </div>
                     ))
                 ) : orders.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <Package className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
                         <p className="text-sm text-muted-foreground">No orders found</p>
                     </div>
                 ) : (
                     orders.map((order) => (
-                        <div key={order._id} className="bg-card border border-border rounded-xl p-4">
+                        <div key={order._id} className="rounded-xl border bg-card p-4 shadow-soft">
                             <div className="flex items-start justify-between mb-3">
                                 <div>
                                     <p className="font-mono text-sm font-medium text-foreground">{order.orderNumber}</p>
@@ -308,7 +308,7 @@ export function AdminOrdersPage() {
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
+            <div className="hidden md:block bg-card rounded-lg border border-border overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-muted/50">
@@ -389,9 +389,9 @@ export function AdminOrdersPage() {
             {/* Detail Modal */}
             {showDetailModal && selectedOrder && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <div className="bg-card rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         <div className="p-6 border-b border-border flex items-center justify-between">
-                            <h2 className="text-xl font-bold">Order Details</h2>
+                            <h2 className="text-2xl font-bold tracking-tight">Order Details</h2>
                             <button onClick={() => setShowDetailModal(false)} className="p-2 hover:bg-muted rounded-lg">
                                 <X className="w-5 h-5" />
                             </button>
@@ -428,7 +428,7 @@ export function AdminOrdersPage() {
 
                             <div>
                                 <label className="text-sm text-muted-foreground">Total Amount</label>
-                                <p className="text-xl font-bold text-primary">₹{selectedOrder.totalAmount?.toFixed(2)}</p>
+                                <p className="text-2xl font-bold tracking-tight text-primary">₹{selectedOrder.totalAmount?.toFixed(2)}</p>
                             </div>
 
                             <div>

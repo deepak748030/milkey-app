@@ -69,7 +69,7 @@ export function LoginPage() {
                 <div className="relative z-10 flex flex-col justify-between p-12 text-white w-full">
                     {/* Logo */}
                     <div className="flex items-center gap-3">
-                        <div className="p-3 bg-white/20 backdrop-blur-sm rounded-2xl">
+                        <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
                             <Milk className="w-8 h-8 text-white" />
                         </div>
                         <div>
@@ -114,7 +114,7 @@ export function LoginPage() {
                 <div className="w-full max-w-md animate-fade-in">
                     {/* Mobile Logo */}
                     <div className="lg:hidden text-center mb-8">
-                        <div className="inline-flex items-center justify-center p-4 bg-primary rounded-2xl mb-4">
+                        <div className="inline-flex items-center justify-center p-4 bg-primary rounded-xl mb-4">
                             <Milk className="w-10 h-10 text-primary-foreground" />
                         </div>
                         <h1 className="text-2xl font-bold text-foreground">Milkey</h1>
@@ -131,7 +131,7 @@ export function LoginPage() {
                     <form onSubmit={handleSubmit} className="space-y-5">
                         {/* Error Message */}
                         {error && (
-                            <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive">
+                            <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
                                 <AlertCircle className="w-5 h-5 flex-shrink-0" />
                                 <span className="text-sm">{error}</span>
                             </div>
@@ -139,7 +139,7 @@ export function LoginPage() {
 
                         {/* Setup Message */}
                         {setupMessage && (
-                            <div className="p-4 bg-success/10 border border-success/20 rounded-xl text-success text-sm">
+                            <div className="p-4 bg-success/10 border border-success/20 rounded-lg text-success text-sm">
                                 {setupMessage}
                             </div>
                         )}
@@ -155,7 +155,7 @@ export function LoginPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="admin@milkey.com"
-                                className="w-full px-4 py-3.5 bg-muted/50 border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-muted-foreground/60"
+                                className="w-full px-4 py-3.5 bg-muted/50 border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all placeholder:text-muted-foreground/60"
                                 required
                             />
                         </div>
@@ -172,7 +172,7 @@ export function LoginPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="Enter your password"
-                                    className="w-full px-4 py-3.5 bg-muted/50 border border-input rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all pr-12 placeholder:text-muted-foreground/60"
+                                    className="w-full px-4 py-3.5 bg-muted/50 border border-input rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all pr-12 placeholder:text-muted-foreground/60"
                                     required
                                 />
                                 <button
@@ -193,7 +193,7 @@ export function LoginPage() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all flex items-center justify-center gap-2 text-base"
+                            className="w-full py-4 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 transition-all flex items-center justify-center gap-2 text-base"
                         >
                             {isLoading ? (
                                 <>
@@ -217,7 +217,7 @@ export function LoginPage() {
                         <button
                             onClick={handleSetup}
                             disabled={isLoading}
-                            className="w-full py-3.5 bg-muted text-foreground rounded-xl font-medium hover:bg-muted/80 disabled:opacity-50 transition-all border border-border"
+                            className="w-full py-3.5 bg-muted text-foreground rounded-lg font-medium hover:bg-muted/80 disabled:opacity-50 transition-all border border-border"
                         >
                             Setup Default Admin
                         </button>

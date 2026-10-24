@@ -152,7 +152,7 @@ export function RegisterAdvancesPage() {
 
             {/* Filter Panel */}
             {showFilters && (
-                <div className="p-4 bg-card border border-border rounded-xl space-y-4">
+                <div className="p-4 bg-card border border-border rounded-lg space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {/* Owner Filter */}
                         <div>
@@ -228,7 +228,7 @@ export function RegisterAdvancesPage() {
             <div className="md:hidden space-y-3">
                 {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="bg-card border border-border rounded-xl p-4 animate-pulse">
+                        <div key={i} className="rounded-xl border bg-card p-4 shadow-soft animate-pulse">
                             <div className="flex justify-between mb-2">
                                 <div className="h-4 bg-muted rounded w-16" />
                                 <div className="h-5 bg-muted rounded w-24" />
@@ -238,14 +238,14 @@ export function RegisterAdvancesPage() {
                         </div>
                     ))
                 ) : advances.length === 0 ? (
-                    <div className="bg-card border border-border rounded-xl p-8 text-center">
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
                         <p className="text-sm text-muted-foreground">No advances found</p>
                     </div>
                 ) : (
                     advances.map((advance) => {
                         const isPaid = advance.status === 'settled'
                         return (
-                            <div key={advance._id} className="bg-card border border-border rounded-xl p-4">
+                            <div key={advance._id} className="rounded-xl border bg-card p-4 shadow-soft">
                                 <div className="flex items-start justify-between mb-2">
                                     <span className="font-mono text-sm text-foreground">
                                         {advance.farmer?.code || '-'}
@@ -286,11 +286,11 @@ export function RegisterAdvancesPage() {
             {loading ? (
                 <div className="hidden md:block"><TableSkeleton rows={10} columns={5} /></div>
             ) : advances.length === 0 ? (
-                <div className="hidden md:block text-center py-16 bg-card border border-border rounded-xl">
+                <div className="hidden md:block text-center py-16 bg-card border border-border rounded-lg">
                     <p className="text-muted-foreground">No advances found</p>
                 </div>
             ) : (
-                <div className="hidden md:block overflow-hidden rounded-xl border border-border">
+                <div className="hidden md:block overflow-hidden rounded-lg border border-border">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-muted/50">

@@ -240,7 +240,7 @@ export function CustomFormsPage() {
             ) : filteredForms.length === 0 ? (
                 <div className="bg-card border border-border rounded-lg p-8 text-center">
                     <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-foreground mb-2">No forms found</h3>
+                    <h3 className="text-lg font-semibold tracking-tight text-foreground mb-2">No forms found</h3>
                     <p className="text-muted-foreground">No custom forms have been submitted yet.</p>
                 </div>
             ) : (
@@ -338,9 +338,9 @@ export function CustomFormsPage() {
             {/* View Form Modal */}
             {showModal && selectedForm && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+                    <div className="bg-card border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden">
                         <div className="flex items-center justify-between p-4 border-b border-border">
-                            <h2 className="text-lg font-semibold text-foreground">Form Details</h2>
+                            <h2 className="text-lg font-semibold tracking-tight text-foreground">Form Details</h2>
                             <button
                                 onClick={() => setShowModal(false)}
                                 className="p-2 hover:bg-muted rounded-lg transition-colors"
@@ -351,7 +351,7 @@ export function CustomFormsPage() {
                         <div className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
                             {/* Form Name */}
                             <div className="mb-4">
-                                <h3 className="text-xl font-bold text-foreground">{selectedForm.formName}</h3>
+                                <h3 className="text-2xl font-bold tracking-tight text-foreground">{selectedForm.formName}</h3>
                                 <p className="text-sm text-muted-foreground">
                                     Submitted on {new Date(selectedForm.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                 </p>
@@ -457,7 +457,7 @@ export function CustomFormsPage() {
                             <button
                                 onClick={handleUpdateStatus}
                                 disabled={updating}
-                                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
                             >
                                 {updating ? 'Saving...' : 'Save Changes'}
                             </button>
@@ -469,12 +469,12 @@ export function CustomFormsPage() {
             {/* Delete Confirmation Modal */}
             {showDeleteModal && formToDelete && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-card border border-border rounded-xl w-full max-w-md p-6">
+                    <div className="bg-card border border-border rounded-lg w-full max-w-md p-6">
                         <div className="text-center">
                             <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <Trash2 className="w-6 h-6 text-red-600" />
                             </div>
-                            <h3 className="text-lg font-semibold text-foreground mb-2">Delete Form</h3>
+                            <h3 className="text-lg font-semibold tracking-tight text-foreground mb-2">Delete Form</h3>
                             <p className="text-muted-foreground mb-6">
                                 Are you sure you want to delete "{formToDelete.formName}"? This action cannot be undone.
                             </p>

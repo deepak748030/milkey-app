@@ -74,9 +74,9 @@ export function PaymentSettingsPage() {
 
             <div className="space-y-4">
                 {/* Online Payment */}
-                <div className="bg-card border border-border rounded-xl p-5 flex items-center justify-between">
+                <div className="bg-card border border-border rounded-lg p-5 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${onlineEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${onlineEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                             }`}>
                             <Wifi className="w-6 h-6" />
                         </div>
@@ -99,9 +99,9 @@ export function PaymentSettingsPage() {
                 </div>
 
                 {/* Cash on Delivery */}
-                <div className="bg-card border border-border rounded-xl p-5 flex items-center justify-between">
+                <div className="bg-card border border-border rounded-lg p-5 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${codEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${codEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
                             }`}>
                             <Banknote className="w-6 h-6" />
                         </div>
@@ -124,7 +124,7 @@ export function PaymentSettingsPage() {
                 </div>
             </div>
 
-            <div className="mt-6 p-4 bg-muted/50 rounded-xl border border-border">
+            <div className="mt-6 p-4 bg-muted/50 rounded-lg border border-border">
                 <p className="text-sm text-muted-foreground">
                     <strong className="text-foreground">Note:</strong> At least one payment method should be enabled.
                     Currently Online Payment is {onlineEnabled ? 'ON' : 'OFF'} and COD is {codEnabled ? 'ON' : 'OFF'}.

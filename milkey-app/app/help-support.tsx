@@ -49,11 +49,11 @@ export default function HelpSupportScreen() {
     },
     {
       question: 'How do I record milk collection?',
-      answer: 'Navigate to the Dairy tab, tap "Add Collection", select the farmer by code, enter quantity, FAT%, SNF%, and the rate will be auto-calculated based on your rate chart.',
+      answer: 'Navigate to the Dairy tab, tap "Add Collection", select the farmer by code, enter quantity, FAT%, SNF%, and the rate will be auto-calculated based on your rate setting.',
     },
     {
       question: 'How does the rate calculation work?',
-      answer: 'The app uses your configured rate chart to calculate the milk rate based on FAT and SNF values. You can customize the rate chart in the Dairy tab under "Rate Chart" section.',
+      answer: 'The app uses your configured rate setting to calculate the milk rate based on FAT and SNF values. You can customize the rate setting in the Dairy tab under "Rate Setting" section.',
     },
     {
       question: 'How do I make payments to farmers?',
@@ -68,8 +68,8 @@ export default function HelpSupportScreen() {
       answer: 'Go to the Selling tab, navigate to Reports section, select your date range, and use the PDF or Export buttons to download your milk collection or payment reports.',
     },
     {
-      question: 'How do I change my rate chart settings?',
-      answer: 'In the Dairy tab, go to "Rate Chart" section and tap "Edit Settings". You can modify base rate, FAT rate, SNF rate, and other parameters.',
+      question: 'How do I change my rate setting settings?',
+      answer: 'In the Dairy tab, go to "Rate Setting" section and tap "Edit Settings". You can modify base rate, FAT rate, SNF rate, and other parameters.',
     },
     {
       question: 'Can multiple users access the same data?',

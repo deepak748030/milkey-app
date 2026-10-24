@@ -1,0 +1,521 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const router = express.Router();
+const MemberPayment = require('../models/MemberPayment');
+const SellingEntry = require('../models/SellingEntry');
+const Member = require('../models/Member');
+const auth = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
+
+// GET /api/member-payments - Get all member payments
+router.get('/', auth, async (req, res) => {
+    try {
+        const { memberId, startDate, endDate, limit = 10, page = 1, latestPerMember } = req.query;
+
+        const query = { owner: req.userId };
+        if (memberId) query.member = memberId;
+
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.date.$lte = end;
+            }
+        }
+
+        // If latestPerMember is requested (and no specific memberId), aggregate to last payment per member
+        if (latestPerMember === 'true' && !memberId) {
+            const matchStage = { owner: new mongoose.Types.ObjectId(req.userId) };
+            if (query.date) matchStage.date = query.date;
+
+            const pipeline = [
+                { $match: matchStage },
+                { $sort: { date: -1 } },
+                {
+                    $group: {
+                        _id: '$member',
+                        doc: { $first: '$$ROOT' }
+                    }
+                },
+                { $replaceRoot: { newRoot: '$doc' } },
+                { $sort: { date: -1 } },
+                { $skip: (parseInt(page) - 1) * parseInt(limit) },
+                { $limit: parseInt(limit) }
+            ];
+
+            const aggPayments = await MemberPayment.aggregate(pipeline);
+            await MemberPayment.populate(aggPayments, [{ path: 'member', select: 'name mobile' }]);
+
+            const totalAgg = await MemberPayment.aggregate([
+                { $match: matchStage },
+                { $group: { _id: '$member' } },
+                { $count: 'total' }
+            ]);
+            const totalUnique = totalAgg.length > 0 ? totalAgg[0].total : 0;
+
+            return res.json({
+                success: true,
+                response: {
+                    data: aggPayments,
+                    count: totalUnique,
+                    pagination: {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        total: totalUnique,
+                        pages: Math.ceil(totalUnique / parseInt(limit))
+                    }
+                }
+            });
+        }
+
+        const payments = await MemberPayment.find(query)
+            .populate('member', 'name mobile')
+            .sort({ date: -1 })
+            .limit(parseInt(limit))
+            .skip((parseInt(page) - 1) * parseInt(limit))
+            .lean();
+
+        // Backfill derived fields for older payments that may have 0 values
+        // Compute from settledEntries (selling entries) for the selected period.
+        const paymentsNeedingFix = payments.filter(p => {
+            const qty = Number(p.totalQuantity ?? 0);
+            const rate = Number(p.milkRate ?? 0);
+            return (qty <= 0 || rate <= 0) && Array.isArray(p.settledEntries) && p.settledEntries.length > 0;
+        });
+
+        if (paymentsNeedingFix.length > 0) {
+            const allEntryIds = Array.from(
+                new Set(
+                    paymentsNeedingFix
+                        .flatMap(p => (p.settledEntries || []).map(id => String(id)))
+                )
+            );
+
+            const entries = await SellingEntry.find({ _id: { $in: allEntryIds } })
+                .select('_id morningQuantity eveningQuantity')
+                .lean();
+
+            const qtyByEntryId = new Map(entries.map(e => [String(e._id), Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0)]));
+
+            const bulkOps = [];
+
+            for (const p of paymentsNeedingFix) {
+                const computedQty = (p.settledEntries || []).reduce((sum, id) => sum + (qtyByEntryId.get(String(id)) || 0), 0);
+                const currentQty = Number(p.totalQuantity ?? 0);
+                const currentRate = Number(p.milkRate ?? 0);
+                const totalAmt = Number(p.totalSellAmount ?? 0);
+
+                const finalQty = currentQty > 0 ? currentQty : computedQty;
+                const finalRate = currentRate > 0 ? currentRate : (finalQty > 0 ? (totalAmt / finalQty) : 0);
+
+                // Update response payload
+                p.totalQuantity = finalQty;
+                p.milkRate = finalRate;
+
+                // Persist only if we computed meaningful values
+                if ((currentQty <= 0 && finalQty > 0) || (currentRate <= 0 && finalRate > 0)) {
+                    bulkOps.push({
+                        updateOne: {
+                            filter: { _id: p._id },
+                            update: { $set: { totalQuantity: finalQty, milkRate: finalRate } }
+                        }
+                    });
+                }
+            }
+
+            if (bulkOps.length > 0) {
+                await MemberPayment.bulkWrite(bulkOps);
+            }
+        }
+
+        const total = await MemberPayment.countDocuments(query);
+
+        res.json({
+            success: true,
+            response: {
+                data: payments,
+                count: total,
+                pagination: {
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    total,
+                    pages: Math.ceil(total / parseInt(limit))
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get member payments error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get member payments'
+        });
+    }
+});
+
+// GET /api/member-payments/member-summary/:memberId - Get pending summary for a member with date range
+// FIX: ensure currentBalance = last closing balance (fixes drift)
+router.get('/member-summary/:memberId', auth, async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+
+        const member = await Member.findOne({
+            _id: req.params.memberId,
+            owner: req.userId
+        });
+
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        // FIX: true currentBalance from latest member payment
+        const latestPaymentForBalance = await MemberPayment.findOne({
+            member: member._id,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('closingBalance')
+            .lean();
+
+        const trueCurrentBalance = latestPaymentForBalance ? (latestPaymentForBalance.closingBalance || 0) : (member.sellingPaymentBalance || 0);
+
+        if (latestPaymentForBalance && Math.abs((member.sellingPaymentBalance || 0) - trueCurrentBalance) > 0.01) {
+            Member.findByIdAndUpdate(member._id, { sellingPaymentBalance: trueCurrentBalance }).catch(() => {});
+        }
+
+        // Build date filter for entries (SellingEntry dates are stored at UTC start-of-day)
+        const dateFilter = {};
+        if (startDate || endDate) {
+            dateFilter.date = {};
+            if (startDate) {
+                dateFilter.date.$gte = new Date(startDate + 'T00:00:00.000Z');
+            }
+            if (endDate) {
+                dateFilter.date.$lte = new Date(endDate + 'T23:59:59.999Z');
+            }
+        }
+
+        // Get entries that are not yet paid AND not already included in a payment for this period
+        const entryQuery = {
+            member: member._id,
+            owner: req.userId,
+            isPaid: false,
+            ...dateFilter
+        };
+
+        const unpaidEntries = await SellingEntry.find(entryQuery)
+            .select('_id amount date morningQuantity eveningQuantity')
+            .lean();
+
+        const unpaidSellAmount = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+        const unpaidQuantity = unpaidEntries.reduce((sum, e) => sum + Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0), 0);
+
+        const currentBalance = Number(trueCurrentBalance || 0);
+        const netPayable = currentBalance + unpaidSellAmount;
+
+        res.json({
+            success: true,
+            response: {
+                member: {
+                    id: member._id,
+                    name: member.name,
+                    mobile: member.mobile,
+                    currentBalance
+                },
+                selling: {
+                    totalLiters: unpaidQuantity,
+                    totalAmount: unpaidSellAmount,
+                    unpaidAmount: unpaidSellAmount,
+                    entriesCount: unpaidEntries.length,
+                    entries: unpaidEntries.map(e => ({
+                        _id: e._id,
+                        date: e.date,
+                        amount: e.amount
+                    }))
+                },
+                period: {
+                    startDate: startDate || null,
+                    endDate: endDate || null
+                },
+                netPayable,
+                closingBalance: netPayable
+            }
+        });
+    } catch (error) {
+        console.error('Get member summary error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get member summary'
+        });
+    }
+});
+
+// POST /api/member-payments - Create payment (settle member dues) (requires selling subscription)
+router.post('/', auth, requireSubscription('selling'), async (req, res) => {
+    try {
+        const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds, totalQuantity: reqTotalQuantity, milkRate: reqMilkRate } = req.body;
+
+        if (!memberId || !amount) {
+            return res.status(400).json({
+                success: false,
+                message: 'Member ID and amount are required'
+            });
+        }
+
+        const member = await Member.findOne({
+            _id: memberId,
+            owner: req.userId
+        });
+
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        // Build date filter for getting unpaid entries (SellingEntry dates are stored at UTC start-of-day)
+        const dateFilter = {};
+        if (periodStart || periodEnd) {
+            dateFilter.date = {};
+            if (periodStart) {
+                dateFilter.date.$gte = new Date(periodStart + 'T00:00:00.000Z');
+            }
+            if (periodEnd) {
+                dateFilter.date.$lte = new Date(periodEnd + 'T23:59:59.999Z');
+            }
+        }
+
+        // Get unpaid selling entries for the period
+        const entryQuery = {
+            member: member._id,
+            owner: req.userId,
+            isPaid: false,
+            ...dateFilter
+        };
+
+        // If specific entry IDs provided, use those
+        if (entryIds && Array.isArray(entryIds) && entryIds.length > 0) {
+            entryQuery._id = { $in: entryIds };
+        }
+
+        const unpaidEntries = await SellingEntry.find(entryQuery).sort({ date: 1 });
+
+        const computedUnpaidTotal = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+        const computedTotalQuantity = unpaidEntries.reduce((sum, e) => sum + Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0), 0);
+
+        // Previous balance carried forward
+        const previousBalance = Number(member.sellingPaymentBalance || 0);
+
+        const paymentAmount = Number.parseFloat(amount);
+
+        // Use manual milk amount if provided, otherwise use computed unpaid total
+        let totalSellAmount = computedUnpaidTotal;
+        if (milkAmount !== undefined && milkAmount !== null) {
+            const manual = Number.parseFloat(milkAmount);
+            if (!Number.isNaN(manual)) totalSellAmount = manual;
+        }
+
+        // Use provided milkRate and totalQuantity only if they are valid (> 0), otherwise calculate from entries
+        const parsedReqMilkRate = Number(reqMilkRate);
+        const parsedReqTotalQuantity = Number(reqTotalQuantity);
+
+        // Always prioritize computed quantity from actual selling entries
+        const finalTotalQuantity = computedTotalQuantity > 0
+            ? computedTotalQuantity
+            : (Number.isFinite(parsedReqTotalQuantity) && parsedReqTotalQuantity > 0 ? parsedReqTotalQuantity : 0);
+
+        // For milk rate: use member's ratePerLiter if provided and valid, otherwise calculate from totalSellAmount / quantity
+        // This ensures the rate at the time of payment is saved (won't change if user updates their rate later)
+        const memberRateAtPayment = Number(member.ratePerLiter) || 0;
+        let finalMilkRate = 0;
+        if (Number.isFinite(parsedReqMilkRate) && parsedReqMilkRate > 0) {
+            finalMilkRate = parsedReqMilkRate;
+        } else if (memberRateAtPayment > 0) {
+            finalMilkRate = memberRateAtPayment;
+        } else if (finalTotalQuantity > 0 && totalSellAmount > 0) {
+            finalMilkRate = totalSellAmount / finalTotalQuantity;
+        }
+
+        // Log for debugging
+        console.log('Payment creation values:', {
+            reqMilkRate, reqTotalQuantity,
+            computedTotalQuantity, memberRateAtPayment,
+            finalTotalQuantity, finalMilkRate, totalSellAmount
+        });
+
+        const netPayable = previousBalance + totalSellAmount;
+        const closingBalance = netPayable - paymentAmount;
+
+        // Create payment record with period info
+        const payment = await MemberPayment.create({
+            member: member._id,
+            owner: req.userId,
+            amount: paymentAmount,
+            paymentMethod: paymentMethod || 'cash',
+            reference: reference?.trim() || '',
+            notes: notes?.trim() || '',
+            settledEntries: unpaidEntries.map(e => e._id),
+            totalSellAmount,
+            totalQuantity: finalTotalQuantity,
+            milkRate: finalMilkRate,
+            netPayable,
+            previousBalance,
+            closingBalance,
+            periodStart: periodStart ? new Date(periodStart) : null,
+            periodEnd: periodEnd ? new Date(periodEnd) : null
+        });
+
+        // Mark entries as paid
+        if (unpaidEntries.length > 0) {
+            await SellingEntry.updateMany(
+                { _id: { $in: unpaidEntries.map(e => e._id) } },
+                { isPaid: true }
+            );
+        }
+
+        // Update member - set sellingPaymentBalance to closingBalance
+        member.sellingPaymentBalance = closingBalance;
+        await member.save();
+
+        const populatedPayment = await MemberPayment.findById(payment._id)
+            .populate('member', 'name mobile')
+            .lean();
+
+        res.status(201).json({
+            success: true,
+            message: 'Payment recorded successfully',
+            response: populatedPayment
+        });
+    } catch (error) {
+        console.error('Create member payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to record payment'
+        });
+    }
+});
+
+// GET /api/member-payments/:id
+router.get('/:id', auth, async (req, res) => {
+    try {
+        const payment = await MemberPayment.findOne({
+            _id: req.params.id,
+            owner: req.userId
+        })
+            .populate('member', 'name mobile')
+            .populate('settledEntries')
+            .lean();
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: payment
+        });
+    } catch (error) {
+        console.error('Get member payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get payment'
+        });
+    }
+});
+
+// PUT /api/member-payments/:id - Update member payment
+// FIX: ensure currentBalance = last closing (fixes drift)
+router.put('/:id', auth, async (req, res) => {
+    try {
+        const { amount, paymentMethod, reference, notes, totalSellAmount, periodStart, periodEnd } = req.body;
+
+        const payment = await MemberPayment.findOne({
+            _id: req.params.id,
+            owner: req.userId
+        });
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found'
+            });
+        }
+
+        // Get member for balance update
+        const member = await Member.findById(payment.member);
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Associated member not found'
+            });
+        }
+
+        // Calculate the difference in payment amount
+        const oldPaymentAmount = payment.amount;
+        const newPaymentAmount = amount !== undefined ? parseFloat(amount) : oldPaymentAmount;
+
+        // Recalculate closing balance if amount or milk amount changes
+        const newMilkAmount = totalSellAmount !== undefined ? parseFloat(totalSellAmount) : payment.totalSellAmount;
+        const netPayable = newMilkAmount + payment.previousBalance;
+        const newClosingBalance = netPayable - newPaymentAmount;
+
+        // Update payment fields
+        payment.amount = newPaymentAmount;
+        payment.totalSellAmount = newMilkAmount;
+        payment.netPayable = netPayable;
+        payment.closingBalance = newClosingBalance;
+
+        if (paymentMethod) payment.paymentMethod = paymentMethod;
+        if (reference !== undefined) payment.reference = reference.trim();
+        if (notes !== undefined) payment.notes = notes.trim();
+
+        if (periodStart) {
+            payment.periodStart = new Date(periodStart + 'T12:00:00');
+        }
+        if (periodEnd) {
+            payment.periodEnd = new Date(periodEnd + 'T12:00:00');
+        }
+
+        await payment.save();
+
+        // FIX: always sync to latest closing (last closing stays same after old edit, current matches it)
+        const latestPayment = await MemberPayment.findOne({
+            member: payment.member,
+            owner: req.userId
+        })
+            .sort({ periodEnd: -1, date: -1, createdAt: -1 })
+            .select('_id closingBalance')
+            .lean();
+
+        if (latestPayment) {
+            member.sellingPaymentBalance = latestPayment.closingBalance || 0;
+            await member.save();
+        }
+
+        const populatedPayment = await MemberPayment.findById(payment._id)
+            .populate('member', 'name mobile')
+            .lean();
+
+        res.json({
+            success: true,
+            message: 'Payment updated successfully',
+            response: populatedPayment
+        });
+    } catch (error) {
+        console.error('Update member payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update payment'
+        });
+    }
+});
+
+module.exports = router;

@@ -182,9 +182,9 @@ export function ActiveSubscriptionsPage() {
             {/* Default Commission Modal */}
             {showDefaultModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md mx-4">
+                    <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md mx-4">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-foreground">Set Default Commission</h3>
+                            <h3 className="text-lg font-semibold tracking-tight text-foreground">Set Default Commission</h3>
                             <button
                                 onClick={() => setShowDefaultModal(false)}
                                 className="p-1 hover:bg-muted rounded"
@@ -222,7 +222,7 @@ export function ActiveSubscriptionsPage() {
                             <button
                                 onClick={handleUpdateDefaultCommission}
                                 disabled={savingDefault}
-                                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
                             >
                                 {savingDefault ? 'Saving...' : 'Apply to All'}
                             </button>
@@ -247,7 +247,7 @@ export function ActiveSubscriptionsPage() {
                     </button>
                     <button
                         onClick={fetchData}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg shadow-sm hover:bg-primary/90 transition-colors"
                     >
                         <RefreshCw className="w-4 h-4" />
                         Refresh
@@ -257,7 +257,7 @@ export function ActiveSubscriptionsPage() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-xl border bg-card p-4 shadow-soft">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                             <Users className="w-5 h-5 text-primary" />
@@ -268,7 +268,7 @@ export function ActiveSubscriptionsPage() {
                         </div>
                     </div>
                 </div>
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-xl border bg-card p-4 shadow-soft">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
                             <DollarSign className="w-5 h-5 text-green-500" />
@@ -279,7 +279,7 @@ export function ActiveSubscriptionsPage() {
                         </div>
                     </div>
                 </div>
-                <div className="bg-card border border-border rounded-xl p-4">
+                <div className="rounded-xl border bg-card p-4 shadow-soft">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
                             <Percent className="w-5 h-5 text-orange-500" />
@@ -335,7 +335,7 @@ export function ActiveSubscriptionsPage() {
             ) : activeTab === 'subscriptions' ? (
                 <>
                     {/* Subscriptions Table */}
-                    <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="rounded-xl border bg-card overflow-hidden shadow-soft">
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead className="bg-muted/50 border-b border-border">
@@ -426,7 +426,7 @@ export function ActiveSubscriptionsPage() {
             ) : (
                 <>
                     {/* Referrals Table */}
-                    <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="rounded-xl border bg-card overflow-hidden shadow-soft">
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead className="bg-muted/50 border-b border-border">
@@ -526,7 +526,7 @@ export function ActiveSubscriptionsPage() {
                     </div>
 
                     {/* Info about commission */}
-                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex items-start gap-3">
                         <AlertCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
                         <div>
                             <p className="text-sm font-medium text-foreground">How Commission Works</p>

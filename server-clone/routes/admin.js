@@ -1,0 +1,4123 @@
+const express = require('express');
+const { parsePaging, pagingResult } = require('../lib/pagination');
+const router = express.Router();
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const Admin = require('../models/Admin');
+const User = require('../models/User');
+const SocialLink = require('../models/SocialLink');
+const AppVersion = require('../models/AppVersion');
+const PaymentSettings = require('../models/PaymentSettings');
+const WhatsappSettings = require('../models/WhatsappSettings');
+const { sendTextMessage, sendWelcomeMessage, renderTemplate } = require('../lib/whatsappZyptos');
+const Order = require('../models/Order');
+const MilkCollection = require('../models/MilkCollection');
+const PurchaseFarmer = require('../models/PurchaseFarmer');
+const Member = require('../models/Member');
+const SellingEntry = require('../models/SellingEntry');
+const Subscription = require('../models/Subscription');
+const Farmer = require('../models/Farmer');
+const Banner = require('../models/Banner');
+const Product = require('../models/Product');
+const RateChartSettings = require('../models/RateChartSettings');
+const { uploadToCloudinary } = require('../lib/cloudinary');
+const Payment = require('../models/Payment');
+const Advance = require('../models/Advance');
+const MemberPayment = require('../models/MemberPayment');
+const { notifyWithdrawalSuccess, notifyCommissionEarned, notifyOrderStatusUpdate, notifyPaymentReceived } = require('../lib/pushNotifications');
+
+// Simple password hashing MemberPayment
+const hashPassword = (password) => {
+    return crypto.createHash('sha256').update(password).digest('hex');
+};
+
+// Generate JWT token
+const generateToken = (adminId) => {
+    return jwt.sign(
+        { adminId, type: 'admin' },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+    );
+};
+
+// Admin auth middleware
+const adminAuth = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                success: false,
+                message: 'Access denied. No token provided.'
+            });
+        }
+
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        if (decoded.type !== 'admin') {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid admin token.'
+            });
+        }
+
+        const admin = await Admin.findById(decoded.adminId).select('-password').lean();
+        if (!admin) {
+            return res.status(401).json({
+                success: false,
+                message: 'Admin not found.'
+            });
+        }
+
+        if (!admin.isActive) {
+            return res.status(403).json({
+                success: false,
+                message: 'Your account has been deactivated.'
+            });
+        }
+
+        req.admin = admin;
+        req.adminId = admin._id;
+        next();
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({
+                success: false,
+                message: 'Token has expired. Please login again.'
+            });
+        }
+        return res.status(401).json({
+            success: false,
+            message: 'Invalid token.'
+        });
+    }
+};
+
+// POST /api/admin/setup - First time admin creation
+router.post('/setup', async (req, res) => {
+    try {
+        // Check if any admin exists
+        const adminCount = await Admin.countDocuments();
+        if (adminCount > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Admin already exists. Please login.'
+            });
+        }
+
+        // Create default admin
+        const admin = new Admin({
+            name: 'Super Admin',
+            email: 'admin@milkey.com',
+            password: hashPassword('Admin@123'),
+            role: 'superadmin',
+            isActive: true
+        });
+
+        await admin.save();
+
+        res.status(201).json({
+            success: true,
+            message: 'Default admin created successfully',
+            response: {
+                email: admin.email,
+                name: admin.name
+            }
+        });
+    } catch (error) {
+        console.error('Setup error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create admin'
+        });
+    }
+});
+
+// POST /api/admin/login
+router.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and password are required'
+            });
+        }
+
+        const admin = await Admin.findOne({ email: email.toLowerCase() });
+        if (!admin) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid email or password'
+            });
+        }
+
+        if (!admin.isActive) {
+            return res.status(403).json({
+                success: false,
+                message: 'Your account has been deactivated'
+            });
+        }
+
+        const hashedPassword = hashPassword(password);
+        if (admin.password !== hashedPassword) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid email or password'
+            });
+        }
+
+        // Update last login
+        admin.lastLogin = new Date();
+        await admin.save();
+
+        const token = generateToken(admin._id);
+
+        res.json({
+            success: true,
+            message: 'Login successful',
+            response: {
+                token,
+                admin: {
+                    _id: admin._id,
+                    name: admin.name,
+                    email: admin.email,
+                    avatar: admin.avatar,
+                    role: admin.role
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Admin login error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Login failed. Please try again.'
+        });
+    }
+});
+
+// GET /api/admin/me
+router.get('/me', adminAuth, async (req, res) => {
+    try {
+        res.json({
+            success: true,
+            response: {
+                _id: req.admin._id,
+                name: req.admin.name,
+                email: req.admin.email,
+                avatar: req.admin.avatar,
+                role: req.admin.role
+            }
+        });
+    } catch (error) {
+        console.error('Get admin profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to get profile'
+        });
+    }
+});
+
+// PUT /api/admin/profile - Update admin profile (name, email, avatar)
+router.put('/profile', adminAuth, async (req, res) => {
+    try {
+        const { name, email, avatar } = req.body;
+        const updates = {};
+
+        if (name) updates.name = name.trim();
+        if (avatar !== undefined) updates.avatar = avatar;
+
+        // Handle email change
+        if (email && email !== req.admin.email) {
+            // Check if email is already taken
+            const existingAdmin = await Admin.findOne({
+                email: email.toLowerCase(),
+                _id: { $ne: req.adminId }
+            });
+            if (existingAdmin) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Email is already in use by another admin'
+                });
+            }
+            updates.email = email.toLowerCase().trim();
+        }
+
+        const admin = await Admin.findByIdAndUpdate(
+            req.adminId,
+            updates,
+            { new: true }
+        ).select('-password');
+
+        res.json({
+            success: true,
+            message: 'Profile updated successfully',
+            response: {
+                _id: admin._id,
+                name: admin.name,
+                email: admin.email,
+                avatar: admin.avatar,
+                role: admin.role
+            }
+        });
+    } catch (error) {
+        console.error('Update admin profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update profile'
+        });
+    }
+});
+
+// PUT /api/admin/password - Update admin password
+router.put('/password', adminAuth, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password and new password are required'
+            });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'New password must be at least 6 characters'
+            });
+        }
+
+        // Get admin with password
+        const admin = await Admin.findById(req.adminId);
+        if (!admin) {
+            return res.status(404).json({
+                success: false,
+                message: 'Admin not found'
+            });
+        }
+
+        // Verify current password
+        const hashedCurrentPassword = hashPassword(currentPassword);
+        if (admin.password !== hashedCurrentPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Current password is incorrect'
+            });
+        }
+
+        // Update password
+        admin.password = hashPassword(newPassword);
+        await admin.save();
+
+        res.json({
+            success: true,
+            message: 'Password updated successfully'
+        });
+    } catch (error) {
+        console.error('Update admin password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update password'
+        });
+    }
+});
+
+// ==================== IMAGE UPLOAD ROUTE ====================
+
+// POST /api/admin/upload - Upload image to Cloudinary
+router.post('/upload', adminAuth, async (req, res) => {
+    try {
+        const { image, folder } = req.body;
+
+        if (!image) {
+            return res.status(400).json({
+                success: false,
+                message: 'Image data is required'
+            });
+        }
+
+        // Validate image size (max ~10MB base64)
+        if (image.length > 15 * 1024 * 1024) {
+            return res.status(400).json({
+                success: false,
+                message: 'Image size too large. Maximum 10MB allowed.'
+            });
+        }
+
+        console.log('Uploading image to Cloudinary, folder:', folder || 'milkey');
+
+        const result = await uploadToCloudinary(image, folder || 'milkey');
+
+        if (!result.success) {
+            console.error('Cloudinary upload failed:', result.error);
+            return res.status(500).json({
+                success: false,
+                message: result.error || 'Failed to upload image'
+            });
+        }
+
+        console.log('Image uploaded successfully:', result.url);
+
+        res.json({
+            success: true,
+            message: 'Image uploaded successfully',
+            response: {
+                url: result.url,
+                public_id: result.public_id
+            }
+        });
+    } catch (error) {
+        console.error('Upload error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to upload image'
+        });
+    }
+});
+
+// GET /api/admin/users - Get users with server-side pagination, search, filter
+router.get('/users', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 10, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const status = req.query.status || 'all';
+
+        // Build query with indexed fields for O(log n) performance
+        const query = {};
+
+        // Status filter
+        if (status === 'active') {
+            query.isBlocked = false;
+        } else if (status === 'blocked') {
+            query.isBlocked = true;
+        } else if (status === 'new') {
+            // New users — registered in the last 7 days
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: sevenDaysAgo };
+            query.isBlocked = false;
+        } else if (status === 'verified') {
+            query.isVerified = true;
+        } else if (status === 'unverified') {
+            query.isVerified = { $ne: true };
+        }
+
+        // Search filter - uses regex but can be optimized with text index
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { phone: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Execute count and find in parallel for better performance
+        const [total, users] = await Promise.all([
+            User.countDocuments(query),
+            User.find(query)
+                .select('_id name email phone avatar isBlocked createdAt role address referralCode referralEarnings totalReferralEarnings isVerified lastLogin')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        const pages = Math.ceil(total / limit);
+
+        res.json({
+            success: true,
+            response: {
+                users,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get users error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch users'
+        });
+    }
+});
+
+// GET /api/admin/users/export - Get ALL users matching filters (no pagination) for CSV/Excel/PDF export
+router.get('/users/export', adminAuth, async (req, res) => {
+    try {
+        const search = req.query.search?.trim() || '';
+        const status = req.query.status || 'all';
+        const limit = Math.min(50000, Math.max(1, parseInt(req.query.limit) || 10000));
+
+        const query = {};
+        if (status === 'active') {
+            query.isBlocked = false;
+        } else if (status === 'blocked') {
+            query.isBlocked = true;
+        } else if (status === 'new') {
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: sevenDaysAgo };
+            query.isBlocked = false;
+        } else if (status === 'verified') {
+            query.isVerified = true;
+        } else if (status === 'unverified') {
+            query.isVerified = { $ne: true };
+        }
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { phone: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const users = await User.find(query)
+            .select('_id name email phone avatar isBlocked createdAt role address referralCode referralEarnings totalReferralEarnings lastLogin isVerified')
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
+
+        res.json({
+            success: true,
+            response: {
+                users,
+                total: users.length,
+                exportedAt: new Date().toISOString()
+            }
+        });
+    } catch (error) {
+        console.error('Export users error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to export users'
+        });
+    }
+});
+
+// GET /api/admin/users/list - Get all users for dropdowns (minimal data)
+router.get('/users/list', adminAuth, async (req, res) => {
+    try {
+        const users = await User.find({ isBlocked: false })
+            .select('_id name email phone')
+            .sort({ name: 1 })
+            .lean();
+
+        res.json({
+            success: true,
+            response: users
+        });
+    } catch (error) {
+        console.error('Get users list error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch users list'
+        });
+    }
+});
+
+// GET /api/admin/users/:id - Get single user
+router.get('/users/:id', adminAuth, async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id)
+            .select('-password -otp')
+            .lean();
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: user
+        });
+    } catch (error) {
+        console.error('Get user error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch user'
+        });
+    }
+});
+
+// PUT /api/admin/users/:id - Update user
+router.put('/users/:id', adminAuth, async (req, res) => {
+    try {
+        const { name, email, phone, address, role, avatar } = req.body;
+        const updates = {};
+
+        if (name) updates.name = name.trim();
+        if (email) updates.email = email.toLowerCase().trim();
+        if (phone) updates.phone = phone.trim();
+        if (address !== undefined) updates.address = address.trim();
+        if (avatar !== undefined) updates.avatar = avatar;
+        if (role && ['owner', 'staff', 'farmer'].includes(role)) {
+            updates.role = role;
+        }
+
+        // Check for duplicate email/phone
+        if (email || phone) {
+            const existingUser = await User.findOne({
+                _id: { $ne: req.params.id },
+                $or: [
+                    ...(email ? [{ email: email.toLowerCase() }] : []),
+                    ...(phone ? [{ phone }] : [])
+                ]
+            });
+
+            if (existingUser) {
+                return res.status(400).json({
+                    success: false,
+                    message: existingUser.email === email?.toLowerCase()
+                        ? 'Email already in use'
+                        : 'Phone number already in use'
+                });
+            }
+        }
+
+        const user = await User.findByIdAndUpdate(
+            req.params.id,
+            updates,
+            { new: true }
+        ).select('-password -otp');
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'User updated successfully',
+            response: user
+        });
+    } catch (error) {
+        console.error('Update user error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update user'
+        });
+    }
+});
+
+// PUT /api/admin/users/:id/commission - Update user commission (withdraw)
+router.put('/users/:id/commission', adminAuth, async (req, res) => {
+    try {
+        const { action, amount } = req.body;
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        if (action === 'withdraw') {
+            // Withdraw from referral earnings
+            if (!amount || amount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid amount'
+                });
+            }
+
+            if (amount > user.referralEarnings) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Insufficient balance'
+                });
+            }
+
+            user.referralEarnings -= amount;
+            await user.save();
+
+            // Send push notification about successful withdrawal
+            notifyWithdrawalSuccess(user._id.toString(), amount)
+                .catch(err => console.error('Error sending withdrawal notification:', err));
+
+            return res.json({
+                success: true,
+                message: `₹${amount} withdrawn successfully`,
+                response: {
+                    _id: user._id,
+                    referralEarnings: user.referralEarnings,
+                    totalReferralEarnings: user.totalReferralEarnings
+                }
+            });
+        } else if (action === 'add') {
+            // Add to referral earnings (manual credit)
+            if (!amount || amount <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid amount'
+                });
+            }
+
+            user.referralEarnings += amount;
+            user.totalReferralEarnings += amount;
+            await user.save();
+
+            // Send push notification about commission added
+            notifyCommissionEarned(user._id.toString(), amount, 'Admin')
+                .catch(err => console.error('Error sending commission notification:', err));
+
+            return res.json({
+                success: true,
+                message: `₹${amount} added successfully`,
+                response: {
+                    _id: user._id,
+                    referralEarnings: user.referralEarnings,
+                    totalReferralEarnings: user.totalReferralEarnings
+                }
+            });
+        } else if (action === 'set') {
+            // Set specific balance
+            if (amount === undefined || amount < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid amount'
+                });
+            }
+
+            user.referralEarnings = amount;
+            await user.save();
+
+            return res.json({
+                success: true,
+                message: `Balance set to ₹${amount}`,
+                response: {
+                    _id: user._id,
+                    referralEarnings: user.referralEarnings,
+                    totalReferralEarnings: user.totalReferralEarnings
+                }
+            });
+        }
+
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid action. Use: withdraw, add, or set'
+        });
+    } catch (error) {
+        console.error('Update commission error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update commission'
+        });
+    }
+});
+
+// PUT /api/admin/users/:id/block - Toggle user block status
+router.put('/users/:id/block', adminAuth, async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        user.isBlocked = !user.isBlocked;
+        await user.save();
+
+        res.json({
+            success: true,
+            message: user.isBlocked ? 'User blocked successfully' : 'User unblocked successfully',
+            response: {
+                _id: user._id,
+                isBlocked: user.isBlocked
+            }
+        });
+    } catch (error) {
+        console.error('Toggle block error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update user status'
+        });
+    }
+});
+
+// PUT /api/admin/users/:id/verify - Toggle user verification (marketing-contacted) status
+router.put('/users/:id/verify', adminAuth, async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Allow explicit value via body, otherwise toggle
+        if (typeof req.body?.isVerified === 'boolean') {
+            user.isVerified = req.body.isVerified;
+        } else {
+            user.isVerified = !user.isVerified;
+        }
+        await user.save();
+
+        res.json({
+            success: true,
+            message: user.isVerified ? 'User marked as verified' : 'User marked as new',
+            response: {
+                _id: user._id,
+                isVerified: user.isVerified
+            }
+        });
+    } catch (error) {
+        console.error('Toggle verify error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update verification status'
+        });
+    }
+});
+
+// GET /api/admin/dashboard - Comprehensive Dashboard analytics
+router.get('/dashboard', adminAuth, async (req, res) => {
+    try {
+        const filter = req.query.filter || 'monthly';
+
+        // Calculate date ranges
+        const now = new Date();
+        let startDate;
+        let previousStartDate;
+        let previousEndDate;
+
+        switch (filter) {
+            case 'today':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                previousStartDate = new Date(startDate);
+                previousStartDate.setDate(previousStartDate.getDate() - 1);
+                previousEndDate = startDate;
+                break;
+            case 'weekly':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                previousStartDate = new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+                previousEndDate = startDate;
+                break;
+            case 'yearly':
+                startDate = new Date(now.getFullYear(), 0, 1);
+                previousStartDate = new Date(now.getFullYear() - 1, 0, 1);
+                previousEndDate = startDate;
+                break;
+            case 'monthly':
+            default:
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                previousEndDate = startDate;
+                break;
+        }
+
+        // Execute all queries in parallel for maximum performance
+        const [
+            // User stats
+            totalUsers,
+            activeUsers,
+            blockedUsers,
+            newUsers,
+            previousNewUsers,
+            // Farmer stats
+            totalFarmers,
+            activeFarmers,
+            // Member stats
+            totalMembers,
+            activeMembers,
+            // Subscription stats
+            totalSubscriptions,
+            activeSubscriptions,
+            // Selling stats
+            totalSellingEntries,
+            paidSellingEntries,
+            unpaidSellingEntries,
+            // Purchase stats
+            totalMilkCollections,
+            paidMilkCollections,
+            unpaidMilkCollections,
+            // Banner stats
+            totalBanners,
+            activeBanners,
+            // Product stats
+            totalProducts,
+            activeProducts,
+            // Aggregations for amounts
+            sellingStats,
+            purchaseStats,
+            // Monthly growth data (last 6 months)
+            userGrowth,
+            sellingGrowth,
+            purchaseGrowth,
+            // Subscription distribution
+            subscriptionDistribution
+        ] = await Promise.all([
+            // User counts
+            User.countDocuments(),
+            User.countDocuments({ isBlocked: false }),
+            User.countDocuments({ isBlocked: true }),
+            User.countDocuments({ createdAt: { $gte: startDate } }),
+            User.countDocuments({ createdAt: { $gte: previousStartDate, $lt: previousEndDate } }),
+            // Farmer counts
+            Farmer.countDocuments(),
+            Farmer.countDocuments({ isActive: true }),
+            // Member counts
+            Member.countDocuments(),
+            Member.countDocuments({ isActive: true }),
+            // Subscription counts
+            Subscription.countDocuments(),
+            Subscription.countDocuments({ isActive: true }),
+            // Selling Entry counts
+            SellingEntry.countDocuments(),
+            SellingEntry.countDocuments({ isPaid: true }),
+            SellingEntry.countDocuments({ isPaid: false }),
+            // Milk Collection counts
+            MilkCollection.countDocuments(),
+            MilkCollection.countDocuments({ isPaid: true }),
+            MilkCollection.countDocuments({ isPaid: false }),
+            // Banner counts
+            Banner.countDocuments(),
+            Banner.countDocuments({ isActive: true }),
+            // Product counts
+            Product.countDocuments(),
+            Product.countDocuments({ isActive: true }),
+            // Selling aggregation
+            SellingEntry.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalAmount: { $sum: '$amount' },
+                        totalQuantity: { $sum: { $add: ['$morningQuantity', '$eveningQuantity'] } },
+                        paidAmount: { $sum: { $cond: ['$isPaid', '$amount', 0] } },
+                        unpaidAmount: { $sum: { $cond: ['$isPaid', 0, '$amount'] } }
+                    }
+                }
+            ]),
+            // Purchase aggregation
+            MilkCollection.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        totalAmount: { $sum: '$amount' },
+                        totalQuantity: { $sum: '$quantity' },
+                        paidAmount: { $sum: { $cond: ['$isPaid', '$amount', 0] } },
+                        unpaidAmount: { $sum: { $cond: ['$isPaid', 0, '$amount'] } }
+                    }
+                }
+            ]),
+            // User growth (last 6 months)
+            User.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                        count: { $sum: 1 }
+                    }
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } }
+            ]),
+            // Selling growth (last 6 months)
+            SellingEntry.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                        amount: { $sum: '$amount' },
+                        quantity: { $sum: { $add: ['$morningQuantity', '$eveningQuantity'] } }
+                    }
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } }
+            ]),
+            // Purchase growth (last 6 months)
+            MilkCollection.aggregate([
+                {
+                    $match: {
+                        createdAt: { $gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                        amount: { $sum: '$amount' },
+                        quantity: { $sum: '$quantity' }
+                    }
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } }
+            ]),
+            // Subscription tab distribution
+            Subscription.aggregate([
+                { $match: { isActive: true } },
+                { $unwind: '$applicableTabs' },
+                {
+                    $group: {
+                        _id: '$applicableTabs',
+                        count: { $sum: 1 }
+                    }
+                }
+            ])
+        ]);
+
+        // Process selling stats
+        const sellingData = sellingStats[0] || { totalAmount: 0, totalQuantity: 0, paidAmount: 0, unpaidAmount: 0 };
+        const purchaseData = purchaseStats[0] || { totalAmount: 0, totalQuantity: 0, paidAmount: 0, unpaidAmount: 0 };
+
+        // Format monthly growth data
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthlyGrowthData = [];
+
+        for (let i = 5; i >= 0; i--) {
+            const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const year = targetDate.getFullYear();
+            const month = targetDate.getMonth() + 1;
+            const monthName = monthNames[targetDate.getMonth()];
+
+            const userEntry = userGrowth.find(u => u._id.year === year && u._id.month === month);
+            const sellingEntry = sellingGrowth.find(s => s._id.year === year && s._id.month === month);
+            const purchaseEntry = purchaseGrowth.find(p => p._id.year === year && p._id.month === month);
+
+            monthlyGrowthData.push({
+                name: monthName,
+                users: userEntry?.count || 0,
+                sellingAmount: sellingEntry?.amount || 0,
+                purchaseAmount: purchaseEntry?.amount || 0,
+                sellingQty: sellingEntry?.quantity || 0,
+                purchaseQty: purchaseEntry?.quantity || 0
+            });
+        }
+
+        // Subscription distribution for pie chart
+        const subscriptionTabData = [
+            { name: 'Purchase', value: subscriptionDistribution.find(s => s._id === 'purchase')?.count || 0, color: '#8b5cf6' },
+            { name: 'Selling', value: subscriptionDistribution.find(s => s._id === 'selling')?.count || 0, color: '#3b82f6' },
+            { name: 'Register', value: subscriptionDistribution.find(s => s._id === 'register')?.count || 0, color: '#22c55e' }
+        ];
+
+        // User status distribution for pie chart
+        const userStatusData = [
+            { name: 'Active', value: activeUsers, color: '#22c55e' },
+            { name: 'Blocked', value: blockedUsers, color: '#ef4444' }
+        ];
+
+        // Selling payment status
+        const sellingPaymentData = [
+            { name: 'Paid', value: paidSellingEntries, color: '#22c55e' },
+            { name: 'Unpaid', value: unpaidSellingEntries, color: '#f59e0b' }
+        ];
+
+        // Purchase payment status
+        const purchasePaymentData = [
+            { name: 'Paid', value: paidMilkCollections, color: '#22c55e' },
+            { name: 'Unpaid', value: unpaidMilkCollections, color: '#f59e0b' }
+        ];
+
+        // Calculate user growth percentage
+        const userGrowthPercent = previousNewUsers > 0
+            ? Math.round(((newUsers - previousNewUsers) / previousNewUsers) * 100)
+            : newUsers > 0 ? 100 : 0;
+
+        res.json({
+            success: true,
+            response: {
+                overview: {
+                    totalUsers,
+                    activeUsers,
+                    blockedUsers,
+                    totalFarmers,
+                    activeFarmers,
+                    totalMembers,
+                    activeMembers,
+                    totalSubscriptions,
+                    activeSubscriptions,
+                    totalSellingEntries,
+                    paidSellingEntries,
+                    unpaidSellingEntries,
+                    totalMilkCollections,
+                    paidMilkCollections,
+                    unpaidMilkCollections,
+                    totalBanners,
+                    activeBanners,
+                    totalProducts,
+                    activeProducts
+                },
+                periodStats: {
+                    newUsers,
+                    userGrowthPercent,
+                    filter
+                },
+                selling: {
+                    totalAmount: sellingData.totalAmount,
+                    totalQuantity: sellingData.totalQuantity,
+                    paidAmount: sellingData.paidAmount,
+                    unpaidAmount: sellingData.unpaidAmount
+                },
+                purchase: {
+                    totalAmount: purchaseData.totalAmount,
+                    totalQuantity: purchaseData.totalQuantity,
+                    paidAmount: purchaseData.paidAmount,
+                    unpaidAmount: purchaseData.unpaidAmount
+                },
+                charts: {
+                    monthlyGrowth: monthlyGrowthData,
+                    subscriptionDistribution: subscriptionTabData,
+                    userStatusDistribution: userStatusData,
+                    sellingPaymentDistribution: sellingPaymentData,
+                    purchasePaymentDistribution: purchasePaymentData
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Dashboard error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch dashboard stats'
+        });
+    }
+});
+
+// GET /api/admin/orders - Get all orders with server-side pagination
+router.get('/orders', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 10, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const status = req.query.status || 'all';
+        const paymentStatus = req.query.paymentStatus || 'all';
+        const startDate = req.query.startDate || '';
+        const endDate = req.query.endDate || '';
+
+        // Build query
+        const query = {};
+
+        if (status && status !== 'all') {
+            query.status = status;
+        }
+
+        if (paymentStatus && paymentStatus !== 'all') {
+            query.paymentStatus = paymentStatus;
+        }
+
+        // Date filter
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) query.createdAt.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.createdAt.$lte = end;
+            }
+        }
+
+        // Search filter
+        if (search) {
+            query.$or = [
+                { orderNumber: { $regex: search, $options: 'i' } },
+                { deliveryAddress: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Execute count and find in parallel
+        const [total, orders] = await Promise.all([
+            Order.countDocuments(query),
+            Order.find(query)
+                .populate('user', 'name email phone')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        const pages = Math.ceil(total / limit);
+
+        res.json({
+            success: true,
+            response: {
+                orders,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get orders error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch orders'
+        });
+    }
+});
+
+// GET /api/admin/orders/:id
+router.get('/orders/:id', adminAuth, async (req, res) => {
+    try {
+        const order = await Order.findById(req.params.id)
+            .populate('user', 'name email phone address')
+            .lean();
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: order
+        });
+    } catch (error) {
+        console.error('Get order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch order'
+        });
+    }
+});
+
+// PUT /api/admin/orders/:id/status - Update order status
+router.put('/orders/:id/status', adminAuth, async (req, res) => {
+    try {
+        const { status, paymentStatus } = req.body;
+        const updates = {};
+
+        if (status) {
+            const validStatuses = ['pending', 'confirmed', 'processing', 'delivered', 'cancelled'];
+            if (!validStatuses.includes(status)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid status'
+                });
+            }
+            updates.status = status;
+        }
+
+        if (paymentStatus) {
+            const validPaymentStatuses = ['pending', 'paid', 'failed', 'refunded'];
+            if (!validPaymentStatuses.includes(paymentStatus)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid payment status'
+                });
+            }
+            updates.paymentStatus = paymentStatus;
+        }
+
+        const order = await Order.findByIdAndUpdate(
+            req.params.id,
+            updates,
+            { new: true }
+        ).populate('user', 'name email phone');
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+        }
+
+        // Send push notification for status update
+        if (status && order.user && order.user._id) {
+            console.log(`[Admin] Sending order status notification to user: ${order.user._id.toString()}, status: ${status}`);
+            notifyOrderStatusUpdate(
+                order.user._id.toString(),
+                order._id.toString(),
+                status,
+                order.totalAmount
+            ).then(result => {
+                console.log(`[Admin] Order notification result:`, JSON.stringify(result));
+            }).catch(err => console.error('[Admin] Error sending order status notification:', err));
+        } else {
+            console.log(`[Admin] Skipping notification - missing data: status=${status}, user=${order.user?._id}`);
+        }
+
+        res.json({
+            success: true,
+            message: 'Order updated successfully',
+            response: order
+        });
+    } catch (error) {
+        console.error('Update order status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update order'
+        });
+    }
+});
+
+// DELETE /api/admin/orders/:id
+router.delete('/orders/:id', adminAuth, async (req, res) => {
+    try {
+        const order = await Order.findByIdAndDelete(req.params.id);
+
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Order deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete order'
+        });
+    }
+});
+
+// ==================== MILK COLLECTIONS (PURCHASE) ROUTES ====================
+
+// GET /api/admin/milk-collections - Get all milk collections with filters
+router.get('/milk-collections', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 10, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const shift = req.query.shift || 'all';
+        const isPaid = req.query.isPaid || 'all';
+        const startDate = req.query.startDate || '';
+        const endDate = req.query.endDate || '';
+        const userId = req.query.userId || '';
+
+        // Build query
+        const query = {};
+
+        if (shift && shift !== 'all') {
+            query.shift = shift;
+        }
+
+        if (isPaid && isPaid !== 'all') {
+            query.isPaid = isPaid === 'true';
+        }
+
+        if (userId) {
+            query.owner = userId;
+        }
+
+        // Date filter
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.date.$lte = end;
+            }
+        }
+
+        // Search filter - by farmer code
+        if (search) {
+            query.$or = [
+                { farmerCode: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Execute count, find, and totals in parallel
+        const [total, collections, totals] = await Promise.all([
+            MilkCollection.countDocuments(query),
+            MilkCollection.find(query)
+                .populate('purchaseFarmer', 'code name mobile')
+                .populate('owner', 'name email phone')
+                .sort({ date: -1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            MilkCollection.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: null,
+                        totalQuantity: { $sum: '$quantity' },
+                        totalAmount: { $sum: '$amount' }
+                    }
+                }
+            ])
+        ]);
+
+        const pages = Math.ceil(total / limit);
+
+        res.json({
+            success: true,
+            response: {
+                collections,
+                totals: {
+                    quantity: totals[0]?.totalQuantity || 0,
+                    amount: totals[0]?.totalAmount || 0
+                },
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get milk collections error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch milk collections'
+        });
+    }
+});
+
+// GET /api/admin/milk-collections/report - Collection report with aggregation
+// IMPORTANT: This route MUST be before /milk-collections/:id to avoid "report" being treated as an ID
+router.get('/milk-collections/report', adminAuth, async (req, res) => {
+    try {
+        const { startDate, endDate, userId, groupBy = 'date' } = req.query;
+
+        const match = {};
+        if (userId) match.owner = require('mongoose').Types.ObjectId(userId);
+        if (startDate || endDate) {
+            match.date = {};
+            if (startDate) match.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                match.date.$lte = end;
+            }
+        }
+
+        let groupId;
+        if (groupBy === 'farmer') {
+            groupId = '$purchaseFarmer';
+        } else if (groupBy === 'shift') {
+            groupId = { date: { $dateToString: { format: '%Y-%m-%d', date: '$date' } }, shift: '$shift' };
+        } else {
+            groupId = { $dateToString: { format: '%Y-%m-%d', date: '$date' } };
+        }
+
+        const report = await MilkCollection.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: groupId,
+                    totalQuantity: { $sum: '$quantity' },
+                    totalAmount: { $sum: '$amount' },
+                    avgRate: { $avg: '$rate' },
+                    avgFat: { $avg: '$fat' },
+                    avgSnf: { $avg: '$snf' },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: -1 } }
+        ]);
+
+        // If grouped by farmer, populate farmer names
+        if (groupBy === 'farmer') {
+            const farmerIds = report.map(r => r._id).filter(Boolean);
+            const farmers = await PurchaseFarmer.find({ _id: { $in: farmerIds } }).select('code name mobile').lean();
+            const farmerMap = {};
+            farmers.forEach(f => { farmerMap[f._id.toString()] = f; });
+            report.forEach(r => {
+                r.farmer = r._id ? farmerMap[r._id.toString()] || null : null;
+            });
+        }
+
+        // Overall totals
+        const totals = await MilkCollection.aggregate([
+            { $match: match },
+            {
+                $group: {
+                    _id: null,
+                    totalQuantity: { $sum: '$quantity' },
+                    totalAmount: { $sum: '$amount' },
+                    avgRate: { $avg: '$rate' },
+                    avgFat: { $avg: '$fat' },
+                    avgSnf: { $avg: '$snf' },
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                report,
+                totals: totals[0] || { totalQuantity: 0, totalAmount: 0, avgRate: 0, avgFat: 0, avgSnf: 0, count: 0 }
+            }
+        });
+    } catch (error) {
+        console.error('Admin collection report error:', error);
+        res.status(500).json({ success: false, message: 'Failed to generate report' });
+    }
+});
+
+// GET /api/admin/milk-collections/:id
+router.get('/milk-collections/:id', adminAuth, async (req, res) => {
+    try {
+        const collection = await MilkCollection.findById(req.params.id)
+            .populate('purchaseFarmer', 'code name mobile address')
+            .populate('owner', 'name email phone')
+            .lean();
+
+        if (!collection) {
+            return res.status(404).json({
+                success: false,
+                message: 'Collection not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: collection
+        });
+    } catch (error) {
+        console.error('Get milk collection error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch collection'
+        });
+    }
+});
+
+// PUT /api/admin/milk-collections/:id - Update milk collection
+router.put('/milk-collections/:id', adminAuth, async (req, res) => {
+    try {
+        const { quantity, fat, snf, rate, isPaid, notes } = req.body;
+        const updates = {};
+
+        if (quantity !== undefined) updates.quantity = parseFloat(quantity);
+        if (fat !== undefined) updates.fat = parseFloat(fat);
+        if (snf !== undefined) updates.snf = parseFloat(snf);
+        if (rate !== undefined) updates.rate = parseFloat(rate);
+        if (isPaid !== undefined) updates.isPaid = isPaid;
+        if (notes !== undefined) updates.notes = notes.trim();
+
+        // Recalculate amount if quantity or rate changed
+        const collection = await MilkCollection.findById(req.params.id);
+        if (!collection) {
+            return res.status(404).json({
+                success: false,
+                message: 'Collection not found'
+            });
+        }
+
+        const oldAmount = collection.amount;
+        const oldQuantity = collection.quantity;
+
+        Object.assign(collection, updates);
+        collection.amount = collection.quantity * collection.rate;
+        await collection.save();
+
+        // Update purchase farmer totals
+        const amountDiff = collection.amount - oldAmount;
+        const qtyDiff = collection.quantity - oldQuantity;
+        if (collection.purchaseFarmer && (amountDiff !== 0 || qtyDiff !== 0)) {
+            await PurchaseFarmer.findByIdAndUpdate(collection.purchaseFarmer, {
+                $inc: { totalAmount: amountDiff, totalQuantity: qtyDiff }
+            });
+        }
+
+        const updatedCollection = await MilkCollection.findById(collection._id)
+            .populate('purchaseFarmer', 'code name mobile')
+            .populate('owner', 'name email phone')
+            .lean();
+
+        res.json({
+            success: true,
+            message: 'Collection updated successfully',
+            response: updatedCollection
+        });
+    } catch (error) {
+        console.error('Update milk collection error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update collection'
+        });
+    }
+});
+
+// DELETE /api/admin/milk-collections/:id
+router.delete('/milk-collections/:id', adminAuth, async (req, res) => {
+    try {
+        const collection = await MilkCollection.findById(req.params.id);
+
+        if (!collection) {
+            return res.status(404).json({
+                success: false,
+                message: 'Collection not found'
+            });
+        }
+
+        // Update purchase farmer totals
+        if (collection.purchaseFarmer) {
+            await PurchaseFarmer.findByIdAndUpdate(collection.purchaseFarmer, {
+                $inc: {
+                    totalQuantity: -collection.quantity,
+                    totalAmount: -collection.amount
+                }
+            });
+        }
+
+        await MilkCollection.findByIdAndDelete(req.params.id);
+
+        res.json({
+            success: true,
+            message: 'Collection deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete milk collection error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete collection'
+        });
+    }
+});
+
+// ==================== PURCHASE FARMERS (ADMIN) ROUTES ====================
+
+// GET /api/admin/purchase-farmers - Get all purchase farmers across all users
+router.get('/purchase-farmers', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 10, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const userId = req.query.userId || '';
+        const status = req.query.status || 'active'; // active | deleted | all
+
+        const query = {};
+        if (status === 'active') query.isActive = true;
+        else if (status === 'deleted') query.isActive = false;
+        // 'all' = no isActive filter
+
+        if (userId) query.owner = userId;
+        if (search) {
+            query.$or = [
+                { code: { $regex: search, $options: 'i' } },
+                { name: { $regex: search, $options: 'i' } },
+                { mobile: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const [total, farmers] = await Promise.all([
+            PurchaseFarmer.countDocuments(query),
+            PurchaseFarmer.find(query)
+                .populate('owner', 'name email phone')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                farmers,
+                pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+            }
+        });
+    } catch (error) {
+        console.error('Admin get purchase farmers error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch purchase farmers' });
+    }
+});
+
+// PUT /api/admin/purchase-farmers/:id/restore - Restore a deleted farmer
+router.put('/purchase-farmers/:id/restore', adminAuth, async (req, res) => {
+    try {
+        const farmer = await PurchaseFarmer.findByIdAndUpdate(
+            req.params.id,
+            { isActive: true },
+            { new: true }
+        );
+        if (!farmer) {
+            return res.status(404).json({ success: false, message: 'Farmer not found' });
+        }
+        res.json({ success: true, message: 'Farmer restored successfully', response: farmer });
+    } catch (error) {
+        console.error('Admin restore purchase farmer error:', error);
+        res.status(500).json({ success: false, message: 'Failed to restore farmer' });
+    }
+});
+
+// DELETE /api/admin/purchase-farmers/:id - Permanent delete (admin only)
+router.delete('/purchase-farmers/:id', adminAuth, async (req, res) => {
+    try {
+        const MilkCollection = require('../models/MilkCollection');
+
+        // Check if farmer has any milk collections
+        const collectionsCount = await MilkCollection.countDocuments({ purchaseFarmer: req.params.id });
+
+        // Delete or soft-delete based on collections
+        if (collectionsCount > 0) {
+            // Soft delete if has collections (to preserve history)
+            await PurchaseFarmer.findByIdAndUpdate(req.params.id, { isActive: false });
+        } else {
+            // Permanent delete if no collections
+            await PurchaseFarmer.findByIdAndDelete(req.params.id);
+        }
+
+        res.json({
+            success: true,
+            message: collectionsCount > 0
+                ? 'Farmer deactivated (has collection history)'
+                : 'Farmer permanently deleted'
+        });
+    } catch (error) {
+        console.error('Admin delete purchase farmer error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete farmer' });
+    }
+});
+
+// DELETE /api/admin/purchase-farmers/:id/permanent - Force permanent delete (admin only)
+router.delete('/purchase-farmers/:id/permanent', adminAuth, async (req, res) => {
+    try {
+        const MilkCollection = require('../models/MilkCollection');
+        const Advance = require('../models/Advance');
+        const Payment = require('../models/Payment');
+
+        // Delete all related data
+        await Promise.all([
+            MilkCollection.deleteMany({ purchaseFarmer: req.params.id }),
+            Advance.deleteMany({ farmer: req.params.id }),
+            Payment.deleteMany({ farmer: req.params.id }),
+        ]);
+
+        // Permanently delete the farmer
+        await PurchaseFarmer.findByIdAndDelete(req.params.id);
+
+        res.json({
+            success: true,
+            message: 'Farmer and all related data permanently deleted'
+        });
+    } catch (error) {
+        console.error('Admin permanent delete purchase farmer error:', error);
+        res.status(500).json({ success: false, message: 'Failed to permanently delete farmer' });
+    }
+});
+
+
+// ─── Rate Chart Settings (admin view) ─────────────────────────────────
+// GET /api/admin/rate-chart-settings — list all users' Collection Rate Chart quick settings.
+// Also returns per-user counts of how many purchase farmers have the Rate Chart icon enabled.
+router.get('/rate-chart-settings', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 20, maxLimit: 100 });
+        const search = (req.query.search || '').trim();
+        const userId = req.query.userId || '';
+
+        const query = {};
+        if (userId) query.owner = userId;
+
+        if (search && !userId) {
+            const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            const matched = await User.find({ $or: [{ name: rx }, { phone: rx }, { email: rx }] })
+                .select('_id').lean();
+            query.owner = { $in: matched.map(u => u._id) };
+        }
+
+        const [total, settings] = await Promise.all([
+            RateChartSettings.countDocuments(query),
+            RateChartSettings.find(query)
+                .populate('owner', 'name email phone')
+                .sort({ updatedAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+        ]);
+
+        const ownerIds = settings.map(s => s.owner?._id).filter(Boolean);
+        const counts = ownerIds.length
+            ? await Farmer.aggregate([
+                { $match: { owner: { $in: ownerIds }, isActive: true, $or: [{ showRateChart: true }, { showRateSetting: true }] } },
+                { $group: { _id: '$owner', count: { $sum: 1 } } },
+            ])
+            : [];
+        const countMap = new Map(counts.map(c => [String(c._id), c.count]));
+
+        const enriched = settings.map(s => ({
+            ...s,
+            rateChartFarmersCount: countMap.get(String(s.owner?._id)) || 0,
+            rateSettingFarmersCount: countMap.get(String(s.owner?._id)) || 0,
+        }));
+
+        res.json({
+            success: true,
+            response: {
+                data: enriched,
+                pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+            },
+        });
+    } catch (error) {
+        console.error('Admin get rate-chart settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch rate chart settings' });
+    }
+});
+
+router.get('/users-list', adminAuth, async (req, res) => {
+    try {
+        const users = await User.find({ isBlocked: false })
+            .select('_id name email phone')
+            .sort({ name: 1 })
+            .lean();
+
+        res.json({
+            success: true,
+            response: users
+        });
+    } catch (error) {
+        console.error('Get users list error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch users list'
+        });
+    }
+});
+
+// ==================== SELLING MODULE ROUTES ====================
+
+// ==================== SELLING MEMBERS ====================
+
+// GET /api/admin/selling-members - Get all selling members with pagination
+router.get('/selling-members', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 20, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const userId = req.query.userId || '';
+
+        const includeDeleted = req.query.includeDeleted === 'true';
+
+        const query = {};
+
+        // Include deleted filter
+        if (!includeDeleted) {
+            query.isActive = true;
+        }
+
+        if (userId) {
+            query.owner = userId;
+        }
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { mobile: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const [total, members] = await Promise.all([
+            Member.countDocuments(query),
+            Member.find(query)
+                .populate('owner', 'name email phone')
+                .sort({ name: 1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                data: members,
+                count: members.length,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get selling members error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch members'
+        });
+    }
+});
+
+// GET /api/admin/selling-members/list - Get all members for dropdown
+router.get('/selling-members/list', adminAuth, async (req, res) => {
+    try {
+        const userId = req.query.userId || '';
+        const query = { isActive: true };
+
+        if (userId) {
+            query.owner = userId;
+        }
+
+        const members = await Member.find(query)
+            .select('_id name mobile ratePerLiter owner')
+            .sort({ name: 1 })
+            .lean();
+
+        res.json({
+            success: true,
+            response: members
+        });
+    } catch (error) {
+        console.error('Get members list error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch members list'
+        });
+    }
+});
+
+// GET /api/admin/selling-members/:id
+router.get('/selling-members/:id', adminAuth, async (req, res) => {
+    try {
+        const member = await Member.findById(req.params.id)
+            .populate('owner', 'name email phone')
+            .lean();
+
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: member
+        });
+    } catch (error) {
+        console.error('Get member error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch member'
+        });
+    }
+});
+
+// PUT /api/admin/selling-members/:id
+router.put('/selling-members/:id', adminAuth, async (req, res) => {
+    try {
+        const { name, mobile, address, ratePerLiter } = req.body;
+        const updates = {};
+
+        if (name) updates.name = String(name).trim();
+        if (mobile) updates.mobile = String(mobile).trim();
+        if (address !== undefined) updates.address = address?.trim() || '';
+        if (ratePerLiter !== undefined) updates.ratePerLiter = parseFloat(ratePerLiter) || 50;
+
+        const member = await Member.findByIdAndUpdate(
+            req.params.id,
+            updates,
+            { new: true }
+        ).populate('owner', 'name email phone');
+
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Member updated successfully',
+            response: member
+        });
+    } catch (error) {
+        console.error('Update member error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update member'
+        });
+    }
+});
+
+// DELETE /api/admin/selling-members/:id
+router.delete('/selling-members/:id', adminAuth, async (req, res) => {
+    try {
+        const member = await Member.findByIdAndUpdate(
+            req.params.id,
+            { isActive: false },
+            { new: true }
+        );
+
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Member deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete member error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete member'
+        });
+    }
+});
+
+// PUT /api/admin/selling-members/:id/restore - Restore deleted member
+router.put('/selling-members/:id/restore', adminAuth, async (req, res) => {
+    try {
+        const member = await Member.findByIdAndUpdate(
+            req.params.id,
+            { isActive: true },
+            { new: true }
+        ).populate('owner', 'name email phone');
+
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Member restored successfully',
+            response: member
+        });
+    } catch (error) {
+        console.error('Restore member error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to restore member'
+        });
+    }
+});
+
+// DELETE /api/admin/selling-members/:id/permanent - Permanently delete member and all related data
+router.delete('/selling-members/:id/permanent', adminAuth, async (req, res) => {
+    try {
+        const memberId = req.params.id;
+
+        // Find the member first
+        const member = await Member.findById(memberId);
+        if (!member) {
+            return res.status(404).json({
+                success: false,
+                message: 'Member not found'
+            });
+        }
+
+        // Delete all related data
+        const [entriesDeleted, paymentsDeleted] = await Promise.all([
+            SellingEntry.deleteMany({ member: memberId }),
+            MemberPayment.deleteMany({ member: memberId })
+        ]);
+
+        // Delete the member
+        await Member.findByIdAndDelete(memberId);
+
+        res.json({
+            success: true,
+            message: 'Member and all related data permanently deleted',
+            response: {
+                entriesDeleted: entriesDeleted.deletedCount,
+                paymentsDeleted: paymentsDeleted.deletedCount
+            }
+        });
+    } catch (error) {
+        console.error('Permanent delete member error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to permanently delete member'
+        });
+    }
+});
+
+// ====================  SELLING ENTRIES ====================
+
+// GET /api/admin/selling-entries - Get all selling entries with filters
+router.get('/selling-entries', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 20, maxLimit: 50 });
+        const memberId = req.query.memberId || '';
+        const userId = req.query.userId || '';
+        const startDate = req.query.startDate || '';
+        const endDate = req.query.endDate || '';
+        const isPaid = req.query.isPaid || 'all';
+
+        const query = {};
+
+        if (memberId) {
+            query.member = memberId;
+        }
+
+        if (userId) {
+            query.owner = userId;
+        }
+
+        if (isPaid !== 'all') {
+            query.isPaid = isPaid === 'true';
+        }
+
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.date.$lte = end;
+            }
+        }
+
+        const [total, entries, totals] = await Promise.all([
+            SellingEntry.countDocuments(query),
+            SellingEntry.find(query)
+                .populate('member', 'name mobile ratePerLiter')
+                .populate('owner', 'name email phone')
+                .sort({ date: -1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            SellingEntry.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: null,
+                        totalMorning: { $sum: '$morningQuantity' },
+                        totalEvening: { $sum: '$eveningQuantity' },
+                        totalAmount: { $sum: '$amount' }
+                    }
+                }
+            ])
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                data: entries,
+                totals: {
+                    morningQuantity: totals[0]?.totalMorning || 0,
+                    eveningQuantity: totals[0]?.totalEvening || 0,
+                    totalQuantity: (totals[0]?.totalMorning || 0) + (totals[0]?.totalEvening || 0),
+                    amount: totals[0]?.totalAmount || 0
+                },
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get selling entries error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch entries'
+        });
+    }
+});
+
+// GET /api/admin/selling-entries/:id
+router.get('/selling-entries/:id', adminAuth, async (req, res) => {
+    try {
+        const entry = await SellingEntry.findById(req.params.id)
+            .populate('member', 'name mobile ratePerLiter')
+            .populate('owner', 'name email phone')
+            .lean();
+
+        if (!entry) {
+            return res.status(404).json({
+                success: false,
+                message: 'Entry not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: entry
+        });
+    } catch (error) {
+        console.error('Get entry error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch entry'
+        });
+    }
+});
+
+// PUT /api/admin/selling-entries/:id
+router.put('/selling-entries/:id', adminAuth, async (req, res) => {
+    try {
+        const { morningQuantity, eveningQuantity, rate, notes, isPaid } = req.body;
+
+        const entry = await SellingEntry.findById(req.params.id);
+        if (!entry) {
+            return res.status(404).json({
+                success: false,
+                message: 'Entry not found'
+            });
+        }
+
+        const oldAmount = entry.amount;
+        const oldQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+
+        if (morningQuantity !== undefined) entry.morningQuantity = parseFloat(morningQuantity) || 0;
+        if (eveningQuantity !== undefined) entry.eveningQuantity = parseFloat(eveningQuantity) || 0;
+        if (rate !== undefined) entry.rate = parseFloat(rate) || 0;
+        if (notes !== undefined) entry.notes = notes?.trim() || '';
+        if (isPaid !== undefined) entry.isPaid = isPaid;
+
+        await entry.save();
+
+        const newAmount = entry.amount;
+        const newQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+
+        // Update member totals
+        const amountDiff = newAmount - oldAmount;
+        const qtyDiff = newQty - oldQty;
+        if (entry.member && (amountDiff !== 0 || qtyDiff !== 0)) {
+            await Member.findByIdAndUpdate(entry.member, {
+                $inc: {
+                    totalLiters: qtyDiff,
+                    totalAmount: amountDiff,
+                    pendingAmount: amountDiff
+                }
+            });
+        }
+
+        const updatedEntry = await SellingEntry.findById(entry._id)
+            .populate('member', 'name mobile ratePerLiter')
+            .populate('owner', 'name email phone')
+            .lean();
+
+        res.json({
+            success: true,
+            message: 'Entry updated successfully',
+            response: updatedEntry
+        });
+    } catch (error) {
+        console.error('Update entry error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update entry'
+        });
+    }
+});
+
+// DELETE /api/admin/selling-entries/:id
+router.delete('/selling-entries/:id', adminAuth, async (req, res) => {
+    try {
+        const entry = await SellingEntry.findById(req.params.id);
+
+        if (!entry) {
+            return res.status(404).json({
+                success: false,
+                message: 'Entry not found'
+            });
+        }
+
+        // Reverse member totals
+        const totalQty = Number(entry.morningQuantity || 0) + Number(entry.eveningQuantity || 0);
+        if (entry.member) {
+            await Member.findByIdAndUpdate(entry.member, {
+                $inc: {
+                    totalLiters: -totalQty,
+                    totalAmount: -entry.amount,
+                    pendingAmount: -entry.amount
+                }
+            });
+        }
+
+        await SellingEntry.findByIdAndDelete(req.params.id);
+
+        res.json({
+            success: true,
+            message: 'Entry deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete entry error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete entry'
+        });
+    }
+});
+
+// ==================== MEMBER PAYMENTS ====================
+
+// GET /api/admin/member-payments - Get all member payments with filters
+router.get('/member-payments', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 20, maxLimit: 50 });
+        const memberId = req.query.memberId || '';
+        const userId = req.query.userId || '';
+        const startDate = req.query.startDate || '';
+        const endDate = req.query.endDate || '';
+
+        const query = {};
+
+        if (memberId) {
+            query.member = memberId;
+        }
+
+        if (userId) {
+            query.owner = userId;
+        }
+
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.date.$lte = end;
+            }
+        }
+
+        const [total, payments, totals] = await Promise.all([
+            MemberPayment.countDocuments(query),
+            MemberPayment.find(query)
+                .populate('member', 'name mobile')
+                .populate('owner', 'name email phone')
+                .sort({ date: -1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            MemberPayment.aggregate([
+                { $match: query },
+                {
+                    $group: {
+                        _id: null,
+                        totalAmount: { $sum: '$amount' },
+                        totalSellAmount: { $sum: '$totalSellAmount' },
+                        totalQuantity: { $sum: '$totalQuantity' }
+                    }
+                }
+            ])
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                data: payments,
+                totals: {
+                    amount: totals[0]?.totalAmount || 0,
+                    sellAmount: totals[0]?.totalSellAmount || 0,
+                    quantity: totals[0]?.totalQuantity || 0
+                },
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages: Math.ceil(total / limit)
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get member payments error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch payments'
+        });
+    }
+});
+
+// GET /api/admin/member-payments/:id
+router.get('/member-payments/:id', adminAuth, async (req, res) => {
+    try {
+        const payment = await MemberPayment.findById(req.params.id)
+            .populate('member', 'name mobile')
+            .populate('owner', 'name email phone')
+            .populate('settledEntries')
+            .lean();
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: payment
+        });
+    } catch (error) {
+        console.error('Get payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch payment'
+        });
+    }
+});
+
+// DELETE /api/admin/member-payments/:id - Delete payment and reverse entries
+router.delete('/member-payments/:id', adminAuth, async (req, res) => {
+    try {
+        const payment = await MemberPayment.findById(req.params.id);
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Payment not found'
+            });
+        }
+
+        // Reverse the settled entries to unpaid
+        if (payment.settledEntries && payment.settledEntries.length > 0) {
+            await SellingEntry.updateMany(
+                { _id: { $in: payment.settledEntries } },
+                { isPaid: false }
+            );
+        }
+
+        // Reverse the member's balance
+        if (payment.member) {
+            const balanceAdjustment = payment.amount - payment.totalSellAmount;
+            await Member.findByIdAndUpdate(payment.member, {
+                $inc: { sellingPaymentBalance: balanceAdjustment }
+            });
+        }
+
+        await MemberPayment.findByIdAndDelete(req.params.id);
+
+        res.json({
+            success: true,
+            message: 'Payment deleted and entries restored'
+        });
+    } catch (error) {
+        console.error('Delete payment error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete payment'
+        });
+    }
+});
+
+// ==================== SELLING BALANCE REPORT ====================
+
+// GET /api/admin/selling-report - Get balance report for all members
+router.get('/selling-report', adminAuth, async (req, res) => {
+    try {
+        const userId = req.query.userId || '';
+
+        const memberQuery = { isActive: true };
+        if (userId) {
+            memberQuery.owner = userId;
+        }
+
+        const members = await Member.find(memberQuery)
+            .populate('owner', 'name email phone')
+            .sort({ name: 1 })
+            .lean();
+
+        // Get all unpaid selling entries grouped by member with latest date (Till date)
+        const entryQuery = { isPaid: false };
+        if (userId) {
+            entryQuery.owner = userId;
+        }
+
+        const unpaidEntriesAggregation = await SellingEntry.aggregate([
+            { $match: entryQuery },
+            { $sort: { date: -1 } },
+            {
+                $group: {
+                    _id: '$member',
+                    unpaidAmount: { $sum: '$amount' },
+                    unpaidQuantity: { $sum: { $add: ['$morningQuantity', '$eveningQuantity'] } },
+                    unpaidEntriesCount: { $sum: 1 },
+                    tillDate: { $max: '$date' }  // Latest unpaid entry date
+                }
+            }
+        ]);
+
+        const unpaidByMember = new Map(
+            unpaidEntriesAggregation.map(item => [String(item._id), item])
+        );
+
+        // Get last payment date for each member
+        const paymentQuery = {};
+        if (userId) {
+            paymentQuery.owner = userId;
+        }
+
+        const lastPaymentsAggregation = await MemberPayment.aggregate([
+            { $match: paymentQuery },
+            { $sort: { date: -1 } },
+            {
+                $group: {
+                    _id: '$member',
+                    lastPaymentDate: { $first: '$date' },
+                    lastPeriodEnd: { $first: '$periodEnd' }
+                }
+            }
+        ]);
+
+        const lastPaymentByMember = new Map(
+            lastPaymentsAggregation.map(item => [String(item._id), item])
+        );
+
+        const reportData = members.map(member => {
+            const memberIdStr = String(member._id);
+            const unpaidData = unpaidByMember.get(memberIdStr) || {
+                unpaidAmount: 0,
+                unpaidQuantity: 0,
+                unpaidEntriesCount: 0,
+                tillDate: null
+            };
+            const lastPayment = lastPaymentByMember.get(memberIdStr);
+
+            const currentBalance = Number(member.sellingPaymentBalance || 0);
+            const totalBalance = currentBalance + unpaidData.unpaidAmount;
+
+            return {
+                _id: member._id,
+                name: member.name,
+                mobile: member.mobile,
+                ratePerLiter: member.ratePerLiter,
+                owner: member.owner,
+                currentBalance,
+                unpaidAmount: unpaidData.unpaidAmount,
+                totalBalance,
+                unpaidEntriesCount: unpaidData.unpaidEntriesCount,
+                unpaidQuantity: unpaidData.unpaidQuantity,
+                createdAt: member.createdAt,
+                lastPaymentDate: lastPayment?.lastPaymentDate || null,
+                lastPeriodEnd: lastPayment?.lastPeriodEnd || null,
+                tillDate: unpaidData.tillDate || null  // Till date from latest unpaid entry
+            };
+        });
+
+        const totalPositiveBalance = reportData
+            .filter(m => m.totalBalance > 0)
+            .reduce((sum, m) => sum + m.totalBalance, 0);
+
+        const totalNegativeBalance = reportData
+            .filter(m => m.totalBalance < 0)
+            .reduce((sum, m) => sum + Math.abs(m.totalBalance), 0);
+
+        const netBalance = reportData.reduce((sum, m) => sum + m.totalBalance, 0);
+        const totalUnpaidAmount = reportData.reduce((sum, m) => sum + m.unpaidAmount, 0);
+        const totalUnpaidQuantity = reportData.reduce((sum, m) => sum + m.unpaidQuantity, 0);
+
+        res.json({
+            success: true,
+            response: {
+                data: reportData,
+                summary: {
+                    totalMembers: members.length,
+                    totalReceivable: totalPositiveBalance,
+                    totalPayable: totalNegativeBalance,
+                    netBalance,
+                    totalUnpaidAmount,
+                    totalUnpaidQuantity
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get selling report error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch report'
+        });
+    }
+});
+
+// ==================== REGISTER FARMERS ROUTES ====================
+
+// const Farmer = require('../models/Farmer');
+
+// GET /api/admin/register-farmers - Get all register farmers with pagination, search, owner filter
+router.get('/register-farmers', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 20, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const userId = req.query.userId || '';
+        const includeDeleted = req.query.includeDeleted === 'true';
+
+        // Build query
+        const query = { type: 'farmer' };
+
+        // Include deleted filter
+        if (!includeDeleted) {
+            query.isActive = true;
+        }
+
+        // Owner filter
+        if (userId) {
+            query.owner = userId;
+        }
+
+        // Search filter
+        if (search) {
+            query.$or = [
+                { code: { $regex: search, $options: 'i' } },
+                { name: { $regex: search, $options: 'i' } },
+                { mobile: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Execute count and find in parallel
+        const [total, farmers] = await Promise.all([
+            Farmer.countDocuments(query),
+            Farmer.find(query)
+                .populate('owner', 'name email phone')
+                .sort({ code: 1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        const pages = Math.ceil(total / limit);
+
+        res.json({
+            success: true,
+            response: {
+                data: farmers,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get register farmers error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch farmers'
+        });
+    }
+});
+
+// GET /api/admin/register-farmers/:id - Get single farmer
+router.get('/register-farmers/:id', adminAuth, async (req, res) => {
+    try {
+        const farmer = await Farmer.findOne({
+            _id: req.params.id,
+            type: 'farmer',
+            isActive: true
+        }).populate('owner', 'name email phone').lean();
+
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: farmer
+        });
+    } catch (error) {
+        console.error('Get farmer error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch farmer'
+        });
+    }
+});
+
+// PUT /api/admin/register-farmers/:id - Update farmer
+router.put('/register-farmers/:id', adminAuth, async (req, res) => {
+    try {
+        const { name, mobile, address } = req.body;
+        const updates = {};
+
+        if (name) updates.name = name.trim();
+        if (mobile) updates.mobile = mobile.trim();
+        if (address !== undefined) updates.address = address.trim();
+
+        const farmer = await Farmer.findOneAndUpdate(
+            { _id: req.params.id, type: 'farmer', isActive: true },
+            updates,
+            { new: true }
+        ).populate('owner', 'name email phone');
+
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Farmer updated successfully',
+            response: farmer
+        });
+    } catch (error) {
+        console.error('Update farmer error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update farmer'
+        });
+    }
+});
+
+// DELETE /api/admin/register-farmers/:id - Soft delete farmer
+router.delete('/register-farmers/:id', adminAuth, async (req, res) => {
+    try {
+        const farmer = await Farmer.findOneAndUpdate(
+            { _id: req.params.id, type: 'farmer' },
+            { isActive: false },
+            { new: true }
+        );
+
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Farmer deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete farmer error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete farmer'
+        });
+    }
+});
+
+// PUT /api/admin/register-farmers/:id/restore - Restore deleted farmer
+router.put('/register-farmers/:id/restore', adminAuth, async (req, res) => {
+    try {
+        const farmer = await Farmer.findOneAndUpdate(
+            { _id: req.params.id, type: 'farmer' },
+            { isActive: true },
+            { new: true }
+        ).populate('owner', 'name email phone');
+
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Farmer restored successfully',
+            response: farmer
+        });
+    } catch (error) {
+        console.error('Restore farmer error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to restore farmer'
+        });
+    }
+});
+
+// DELETE /api/admin/register-farmers/:id/permanent - Permanently delete farmer and all related data
+router.delete('/register-farmers/:id/permanent', adminAuth, async (req, res) => {
+    try {
+        const farmerId = req.params.id;
+
+        // Find the farmer first
+        const farmer = await Farmer.findOne({ _id: farmerId, type: 'farmer' });
+        if (!farmer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Farmer not found'
+            });
+        }
+
+        // Delete all related data
+        const [collectionsDeleted, advancesDeleted, paymentsDeleted] = await Promise.all([
+            MilkCollection.deleteMany({ farmer: farmerId }),
+            Advance.deleteMany({ farmer: farmerId }),
+            Payment.deleteMany({ farmer: farmerId })
+        ]);
+
+        // Delete the farmer
+        await Farmer.findByIdAndDelete(farmerId);
+
+        res.json({
+            success: true,
+            message: 'Farmer and all related data permanently deleted',
+            response: {
+                collectionsDeleted: collectionsDeleted.deletedCount,
+                advancesDeleted: advancesDeleted.deletedCount,
+                paymentsDeleted: paymentsDeleted.deletedCount
+            }
+        });
+    } catch (error) {
+        console.error('Permanent delete farmer error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to permanently delete farmer'
+        });
+    }
+});
+
+// ==================== REGISTER ADVANCES ROUTES ====================
+
+// const Advance = require('../models/Advance');
+
+// GET /api/admin/register-advances - Get all advances with pagination, search, owner filter
+router.get('/register-advances', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 20, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const userId = req.query.userId || '';
+        const status = req.query.status || 'all';
+        const startDate = req.query.startDate || '';
+        const endDate = req.query.endDate || '';
+
+        // Build query
+        const query = {};
+
+        // Owner filter
+        if (userId) {
+            query.owner = userId;
+        }
+
+        // Status filter (pending = unpaid, settled = paid)
+        if (status === 'pending') {
+            query.status = 'pending';
+        } else if (status === 'settled') {
+            query.status = 'settled';
+        }
+
+        // Date filter
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.date.$lte = end;
+            }
+        }
+
+        // First get advances, then filter by farmer search if needed
+        let farmerFilter = null;
+        if (search) {
+            const matchingFarmers = await Farmer.find({
+                $or: [
+                    { code: { $regex: search, $options: 'i' } },
+                    { name: { $regex: search, $options: 'i' } }
+                ],
+                isActive: true
+            }).select('_id').lean();
+
+            farmerFilter = matchingFarmers.map(f => f._id);
+            query.farmer = { $in: farmerFilter };
+        }
+
+        // Execute count and find in parallel
+        const [total, advances] = await Promise.all([
+            Advance.countDocuments(query),
+            Advance.find(query)
+                .populate('farmer', 'code name mobile')
+                .populate('owner', 'name email phone')
+                .sort({ date: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        const pages = Math.ceil(total / limit);
+
+        res.json({
+            success: true,
+            response: {
+                data: advances,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get register advances error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch advances'
+        });
+    }
+});
+
+// ==================== REGISTER PAYMENTS ROUTES ====================
+
+// const Payment = require('../models/Payment');
+
+// GET /api/admin/register-payments - Get all payments with pagination, search, owner filter
+router.get('/register-payments', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 20, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const userId = req.query.userId || '';
+        const startDate = req.query.startDate || '';
+        const endDate = req.query.endDate || '';
+
+        // Build query
+        const query = {};
+
+        // Owner filter
+        if (userId) {
+            query.owner = userId;
+        }
+
+        // Date filter (on createdAt)
+        if (startDate || endDate) {
+            query.createdAt = {};
+            if (startDate) query.createdAt.$gte = new Date(startDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                query.createdAt.$lte = end;
+            }
+        }
+
+        // First get payments, then filter by farmer search if needed
+        if (search) {
+            const matchingFarmers = await Farmer.find({
+                $or: [
+                    { code: { $regex: search, $options: 'i' } },
+                    { name: { $regex: search, $options: 'i' } }
+                ],
+                isActive: true
+            }).select('_id').lean();
+
+            query.farmer = { $in: matchingFarmers.map(f => f._id) };
+        }
+
+        // Execute count and find in parallel
+        const [total, payments] = await Promise.all([
+            Payment.countDocuments(query),
+            Payment.find(query)
+                .populate('farmer', 'code name mobile')
+                .populate('owner', 'name email phone')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        const pages = Math.ceil(total / limit);
+
+        res.json({
+            success: true,
+            response: {
+                data: payments,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get register payments error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch payments'
+        });
+    }
+});
+
+// ==================== PRODUCT MANAGEMENT ROUTES ====================
+
+// const Product = require('../models/Product');
+
+// GET /api/admin/products - Get all products with filters
+router.get('/products', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 10, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const status = req.query.status || 'all';
+        const userId = req.query.userId || '';
+        const unit = req.query.unit || 'all';
+
+        const query = {};
+
+        if (status === 'active') {
+            query.isActive = true;
+        } else if (status === 'inactive') {
+            query.isActive = false;
+        }
+
+        if (userId) {
+            query.owner = userId;
+        }
+
+        if (unit && unit !== 'all') {
+            query.unit = unit;
+        }
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const [total, products] = await Promise.all([
+            Product.countDocuments(query),
+            Product.find(query)
+                .populate('owner', 'name email phone')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        const pages = Math.ceil(total / limit);
+
+        res.json({
+            success: true,
+            response: {
+                products,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get products error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch products'
+        });
+    }
+});
+
+// GET /api/admin/products/:id
+router.get('/products/:id', adminAuth, async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id)
+            .populate('owner', 'name email phone')
+            .lean();
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: product
+        });
+    } catch (error) {
+        console.error('Get product error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch product'
+        });
+    }
+});
+
+// POST /api/admin/products - Create new product (admin creates for themselves)
+router.post('/products', adminAuth, async (req, res) => {
+    try {
+        const { name, price, unit, icon, description, stock, isActive, image, subscriptionOnly } = req.body;
+
+        if (!name || price === undefined) {
+            return res.status(400).json({
+                success: false,
+                message: 'Name and price are required'
+            });
+        }
+
+        // Use admin's ID as owner - admin creates products for themselves
+        const product = await Product.create({
+            name: name.trim(),
+            price: parseFloat(price),
+            unit: unit || 'liter',
+            icon: icon || '🥛',
+            description: description?.trim() || '',
+            stock: parseInt(stock) || 0,
+            isActive: isActive !== false,
+            owner: req.adminId,
+            image: image || '',
+            subscriptionOnly: subscriptionOnly || false
+        });
+
+        const populatedProduct = await Product.findById(product._id)
+            .populate('owner', 'name email phone')
+            .lean();
+
+        res.status(201).json({
+            success: true,
+            message: 'Product created successfully',
+            response: populatedProduct
+        });
+    } catch (error) {
+        console.error('Create product error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create product'
+        });
+    }
+});
+
+// PUT /api/admin/products/:id - Update product
+router.put('/products/:id', adminAuth, async (req, res) => {
+    try {
+        const { name, price, unit, icon, description, stock, isActive, image, subscriptionOnly } = req.body;
+        const updates = {};
+
+        if (name) updates.name = name.trim();
+        if (price !== undefined) updates.price = parseFloat(price);
+        if (unit) updates.unit = unit;
+        if (icon) updates.icon = icon;
+        if (description !== undefined) updates.description = description.trim();
+        if (stock !== undefined) updates.stock = parseInt(stock);
+        if (isActive !== undefined) updates.isActive = isActive;
+        if (image !== undefined) updates.image = image;
+        if (subscriptionOnly !== undefined) updates.subscriptionOnly = subscriptionOnly;
+
+        const product = await Product.findByIdAndUpdate(
+            req.params.id,
+            updates,
+            { new: true }
+        ).populate('owner', 'name email phone');
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Product updated successfully',
+            response: product
+        });
+    } catch (error) {
+        console.error('Update product error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update product'
+        });
+    }
+});
+
+// DELETE /api/admin/products/:id
+router.delete('/products/:id', adminAuth, async (req, res) => {
+    try {
+        const product = await Product.findByIdAndDelete(req.params.id);
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Product deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete product error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete product'
+        });
+    }
+});
+
+// PUT /api/admin/products/:id/toggle - Toggle product status
+router.put('/products/:id/toggle', adminAuth, async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        product.isActive = !product.isActive;
+        await product.save();
+
+        res.json({
+            success: true,
+            message: product.isActive ? 'Product activated' : 'Product deactivated',
+            response: product
+        });
+    } catch (error) {
+        console.error('Toggle product error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to toggle product status'
+        });
+    }
+});
+
+// PUT /api/admin/products/:id/subscription - Toggle product subscription only
+router.put('/products/:id/subscription', adminAuth, async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        product.subscriptionOnly = !product.subscriptionOnly;
+        await product.save();
+
+        const populatedProduct = await Product.findById(product._id)
+            .populate('owner', 'name email phone')
+            .lean();
+
+        res.json({
+            success: true,
+            message: product.subscriptionOnly ? 'Product marked as subscription only' : 'Product available to all',
+            response: populatedProduct
+        });
+    } catch (error) {
+        console.error('Toggle product subscription error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to toggle subscription status'
+        });
+    }
+});
+
+// ==================== BANNER MANAGEMENT ROUTES ====================
+
+// const Banner = require('../models/Banner');
+
+// GET /api/admin/banners - Get all banners with filters
+router.get('/banners', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 10, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const status = req.query.status || 'all';
+
+        const query = {};
+
+        if (status === 'active') {
+            query.isActive = true;
+        } else if (status === 'inactive') {
+            query.isActive = false;
+        }
+
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { subtitle: { $regex: search, $options: 'i' } },
+                { badge: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        const [total, banners] = await Promise.all([
+            Banner.countDocuments(query),
+            Banner.find(query)
+                .sort({ order: 1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        const pages = Math.ceil(total / limit);
+
+        res.json({
+            success: true,
+            response: {
+                banners,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    pages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Get banners error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch banners'
+        });
+    }
+});
+
+// GET /api/admin/banners/:id
+router.get('/banners/:id', adminAuth, async (req, res) => {
+    try {
+        const banner = await Banner.findById(req.params.id).lean();
+
+        if (!banner) {
+            return res.status(404).json({
+                success: false,
+                message: 'Banner not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            response: banner
+        });
+    } catch (error) {
+        console.error('Get banner error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch banner'
+        });
+    }
+});
+
+// POST /api/admin/banners - Create new banner
+router.post('/banners', adminAuth, async (req, res) => {
+    try {
+        const { title, subtitle, image, badge, gradient, linkType, linkValue, order } = req.body;
+
+        if (!title || !image) {
+            return res.status(400).json({
+                success: false,
+                message: 'Title and image are required'
+            });
+        }
+
+        // Get the max order if not specified
+        let bannerOrder = order;
+        if (bannerOrder === undefined || bannerOrder === null) {
+            const maxOrderBanner = await Banner.findOne().sort({ order: -1 }).lean();
+            bannerOrder = maxOrderBanner ? maxOrderBanner.order + 1 : 0;
+        }
+
+        const banner = await Banner.create({
+            title: title.trim(),
+            subtitle: subtitle?.trim() || '',
+            image,
+            badge: badge?.trim() || '',
+            gradient: gradient || ['#22C55E', '#16A34A'],
+            linkType: linkType || 'category',
+            linkValue: linkValue || '',
+            order: parseInt(bannerOrder) || 0,
+            isActive: true
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Banner created successfully',
+            response: banner
+        });
+    } catch (error) {
+        console.error('Create banner error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create banner'
+        });
+    }
+});
+
+// PUT /api/admin/banners/:id - Update banner
+router.put('/banners/:id', adminAuth, async (req, res) => {
+    try {
+        const { title, subtitle, image, badge, gradient, linkType, linkValue, order, isActive } = req.body;
+        const updates = {};
+
+        if (title) updates.title = title.trim();
+        if (subtitle !== undefined) updates.subtitle = subtitle.trim();
+        if (image) updates.image = image;
+        if (badge !== undefined) updates.badge = badge.trim();
+        if (gradient) updates.gradient = gradient;
+        if (linkType) updates.linkType = linkType;
+        if (linkValue !== undefined) updates.linkValue = linkValue;
+        if (order !== undefined) updates.order = parseInt(order);
+        if (isActive !== undefined) updates.isActive = isActive;
+
+        const banner = await Banner.findByIdAndUpdate(
+            req.params.id,
+            updates,
+            { new: true }
+        ).lean();
+
+        if (!banner) {
+            return res.status(404).json({
+                success: false,
+                message: 'Banner not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Banner updated successfully',
+            response: banner
+        });
+    } catch (error) {
+        console.error('Update banner error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update banner'
+        });
+    }
+});
+
+// DELETE /api/admin/banners/:id
+router.delete('/banners/:id', adminAuth, async (req, res) => {
+    try {
+        const banner = await Banner.findByIdAndDelete(req.params.id);
+
+        if (!banner) {
+            return res.status(404).json({
+                success: false,
+                message: 'Banner not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Banner deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete banner error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete banner'
+        });
+    }
+});
+
+// PUT /api/admin/banners/:id/toggle - Toggle banner status
+router.put('/banners/:id/toggle', adminAuth, async (req, res) => {
+    try {
+        const banner = await Banner.findById(req.params.id);
+
+        if (!banner) {
+            return res.status(404).json({
+                success: false,
+                message: 'Banner not found'
+            });
+        }
+
+        banner.isActive = !banner.isActive;
+        await banner.save();
+
+        res.json({
+            success: true,
+            message: banner.isActive ? 'Banner activated' : 'Banner deactivated',
+            response: banner
+        });
+    } catch (error) {
+        console.error('Toggle banner error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to toggle banner status'
+        });
+    }
+});
+
+// PUT /api/admin/banners/reorder - Reorder banners
+router.put('/banners/reorder', adminAuth, async (req, res) => {
+    try {
+        const { bannerOrders } = req.body;
+
+        if (!bannerOrders || !Array.isArray(bannerOrders)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Banner orders array is required'
+            });
+        }
+
+        // Update each banner's order
+        await Promise.all(
+            bannerOrders.map(({ id, order }) =>
+                Banner.findByIdAndUpdate(id, { order: parseInt(order) })
+            )
+        );
+
+        res.json({
+            success: true,
+            message: 'Banners reordered successfully'
+        });
+    } catch (error) {
+        console.error('Reorder banners error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to reorder banners'
+        });
+    }
+});
+// ==================== SUBSCRIPTION ASSIGNMENT ====================
+
+const UserSubscription = require('../models/UserSubscription');
+const { sendPushNotification } = require('../lib/pushNotifications');
+const Notification = require('../models/Notification');
+
+// GET /api/admin/subscriptions/list - Get all subscriptions for dropdown
+router.get('/subscriptions/list', adminAuth, async (req, res) => {
+    try {
+        const subscriptions = await Subscription.find({ isActive: true })
+            .select('_id name amount durationMonths durationDays durationType durationValue applicableTabs isFree description')
+            .sort({ name: 1 })
+            .lean();
+
+        res.json({
+            success: true,
+            response: subscriptions
+        });
+    } catch (error) {
+        console.error('Get subscriptions list error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch subscriptions list'
+        });
+    }
+});
+
+// POST /api/admin/users/:id/assign-subscription - Assign subscription to user
+router.post('/users/:id/assign-subscription', adminAuth, async (req, res) => {
+    try {
+        const { subscriptionId, paymentMethod, transactionId, notes } = req.body;
+        const userId = req.params.id;
+
+        if (!subscriptionId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Subscription ID is required'
+            });
+        }
+
+        // Check user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Get subscription details
+        const subscription = await Subscription.findById(subscriptionId);
+        if (!subscription) {
+            return res.status(404).json({
+                success: false,
+                message: 'Subscription not found'
+            });
+        }
+
+        // Check if user already has an active subscription covering same tabs
+        const now = new Date();
+        const overlappingTabs = subscription.applicableTabs || [];
+
+        const existingActiveSubscription = await UserSubscription.findOne({
+            user: userId,
+            isActive: true,
+            paymentStatus: 'completed',
+            endDate: { $gte: now },
+            applicableTabs: { $in: overlappingTabs }
+        }).populate('subscription').lean();
+
+        // Calculate the new plan's duration as a date offset
+        const computeEndDate = (fromDate) => {
+            const d = new Date(fromDate);
+            if (subscription.durationType === 'days' || subscription.durationDays) {
+                const days = subscription.durationDays || (subscription.durationValue || 1) * 30;
+                d.setDate(d.getDate() + days);
+            } else if (subscription.durationType === 'years') {
+                const years = subscription.durationValue || 1;
+                d.setFullYear(d.getFullYear() + years);
+            } else {
+                const months = subscription.durationValue || subscription.durationMonths || 1;
+                d.setMonth(d.getMonth() + months);
+            }
+            return d;
+        };
+
+        // If user already has an active subscription on the same tabs,
+        // extend that existing subscription's endDate by the new plan's duration
+        // instead of creating a new one. App will keep showing the existing
+        // subscription with the additional days added.
+        if (existingActiveSubscription) {
+            const existingDoc = await UserSubscription.findById(existingActiveSubscription._id);
+            if (!existingDoc) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Existing active subscription not found'
+                });
+            }
+
+            const previousEndDate = new Date(existingDoc.endDate);
+            const newEndDate = computeEndDate(previousEndDate);
+            existingDoc.endDate = newEndDate;
+            await existingDoc.save();
+            await existingDoc.populate('subscription');
+
+            // Notify user about the extension
+            await sendPushNotification(
+                userId,
+                '🎉 Subscription Extended!',
+                `Your "${existingDoc.lockedSubscriptionName || existingDoc.subscription?.name || 'subscription'}" has been extended. New validity: ${newEndDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}.`,
+                'subscription_extended',
+                {
+                    subscriptionId: existingDoc.subscription?._id || existingDoc.subscription,
+                    subscriptionName: existingDoc.lockedSubscriptionName || existingDoc.subscription?.name,
+                    previousEndDate,
+                    newEndDate
+                }
+            );
+
+            console.log(`Admin ${req.admin.name} extended subscription for user ${user.name || user.phone}: ${previousEndDate.toISOString()} -> ${newEndDate.toISOString()}`);
+
+            return res.status(200).json({
+                success: true,
+                message: `Existing subscription extended successfully. New validity until ${newEndDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}.`,
+                response: existingDoc,
+                extended: true
+            });
+        }
+
+        // No active subscription — create a new one normally
+        const startDate = new Date();
+        const endDate = computeEndDate(startDate);
+
+        // Create user subscription with proper locked-in values
+        const userSubscription = new UserSubscription({
+            user: userId,
+            subscription: subscriptionId,
+            applicableTabs: subscription.applicableTabs,
+            startDate,
+            endDate,
+            amount: subscription.amount,
+            baseAmount: subscription.amount,
+            multiplier: 1,
+            lockedDurationDays: subscription.durationDays,
+            lockedDurationType: subscription.durationType || 'months',
+            lockedDurationValue: subscription.durationValue || subscription.durationMonths || 1,
+            lockedSubscriptionName: subscription.name,
+            isFree: subscription.isFree,
+            isActive: true,
+            paymentStatus: 'completed',
+            paymentMethod: paymentMethod || 'cash',
+            transactionId: transactionId || `ADMIN-${Date.now()}`
+        });
+
+        await userSubscription.save();
+        await userSubscription.populate('subscription');
+
+        // Send notification to user
+        await sendPushNotification(
+            userId,
+            '🎉 Subscription Assigned!',
+            `You've been assigned ${subscription.name} subscription valid until ${endDate.toLocaleDateString()}.`,
+            'subscription_assigned',
+            { subscriptionId, subscriptionName: subscription.name, endDate }
+        );
+
+        console.log(`Admin ${req.admin.name} assigned subscription ${subscription.name} to user ${user.name || user.phone}`);
+
+        res.status(201).json({
+            success: true,
+            message: `Subscription "${subscription.name}" assigned successfully until ${endDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+            response: userSubscription
+        });
+    } catch (error) {
+        console.error('Assign subscription error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to assign subscription'
+        });
+    }
+});
+
+// GET /api/admin/users/:id/subscriptions - Get user's subscriptions
+router.get('/users/:id/subscriptions', adminAuth, async (req, res) => {
+    try {
+        const userId = req.params.id;
+
+        const subscriptions = await UserSubscription.find({ user: userId })
+            .populate('subscription')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const now = new Date();
+        const active = subscriptions.filter(s =>
+            s.isActive && s.paymentStatus === 'completed' && new Date(s.endDate) >= now
+        );
+        const expired = subscriptions.filter(s =>
+            new Date(s.endDate) < now || !s.isActive
+        );
+
+        res.json({
+            success: true,
+            response: {
+                active,
+                expired,
+                all: subscriptions
+            }
+        });
+    } catch (error) {
+        console.error('Get user subscriptions error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch user subscriptions'
+        });
+    }
+});
+
+// ==================== SEND NOTIFICATIONS ====================
+
+// POST /api/admin/users/:id/send-notification - Send notification to single user
+router.post('/users/:id/send-notification', adminAuth, async (req, res) => {
+    try {
+        const { title, message, type } = req.body;
+        const userId = req.params.id;
+
+        if (!title || !message) {
+            return res.status(400).json({
+                success: false,
+                message: 'Title and message are required'
+            });
+        }
+
+        // Check user exists
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Send push notification (also saves to DB)
+        const result = await sendPushNotification(
+            userId,
+            title,
+            message,
+            type || 'admin_message',
+            { sentBy: req.admin.name, sentAt: new Date() }
+        );
+
+        console.log(`Admin ${req.admin.name} sent notification to user ${user.name || user.phone}: ${title}`);
+
+        res.json({
+            success: true,
+            message: 'Notification sent successfully',
+            response: {
+                pushSent: result.pushSent,
+                notificationId: result.notification?._id
+            }
+        });
+    } catch (error) {
+        console.error('Send notification error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send notification'
+        });
+    }
+});
+
+// POST /api/admin/send-bulk-notification - Send notification to multiple/all users
+router.post('/send-bulk-notification', adminAuth, async (req, res) => {
+    try {
+        const { title, message, type, userIds } = req.body;
+
+        if (!title || !message) {
+            return res.status(400).json({
+                success: false,
+                message: 'Title and message are required'
+            });
+        }
+
+        let targetUserIds = userIds;
+
+        // If no userIds provided, send to all users
+        if (!userIds || userIds.length === 0) {
+            const users = await User.find({ isBlocked: false }).select('_id').lean();
+            targetUserIds = users.map(u => u._id.toString());
+        }
+
+        // Send notifications in parallel with batching
+        const batchSize = 50;
+        let successful = 0;
+        let failed = 0;
+
+        for (let i = 0; i < targetUserIds.length; i += batchSize) {
+            const batch = targetUserIds.slice(i, i + batchSize);
+            const results = await Promise.allSettled(
+                batch.map(userId =>
+                    sendPushNotification(
+                        userId,
+                        title,
+                        message,
+                        type || 'admin_broadcast',
+                        { sentBy: req.admin.name, sentAt: new Date(), isBulk: true }
+                    )
+                )
+            );
+
+            successful += results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+            failed += results.filter(r => r.status === 'rejected' || !r.value?.success).length;
+        }
+
+        console.log(`Admin ${req.admin.name} sent bulk notification: ${title} (${successful} sent, ${failed} failed)`);
+
+        res.json({
+            success: true,
+            message: `Notification sent to ${successful} users`,
+            response: {
+                successful,
+                failed,
+                total: targetUserIds.length
+            }
+        });
+    } catch (error) {
+        console.error('Send bulk notification error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to send notifications'
+        });
+    }
+});
+
+// ==================== SOCIAL LINKS MANAGEMENT ROUTES ====================
+
+// GET /api/admin/social-links
+router.get('/social-links', adminAuth, async (req, res) => {
+    try {
+        const { page, limit, skip } = parsePaging(req.query, { page: 1, limit: 10, maxLimit: 50 });
+        const search = req.query.search?.trim() || '';
+        const status = req.query.status || 'all';
+
+        const query = {};
+        if (status === 'active') query.isActive = true;
+        else if (status === 'inactive') query.isActive = false;
+
+        if (search) {
+            query.title = { $regex: search, $options: 'i' };
+        }
+
+        const [total, socialLinks] = await Promise.all([
+            SocialLink.countDocuments(query),
+            SocialLink.find(query)
+                .sort({ order: 1, createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+        ]);
+
+        res.json({
+            success: true,
+            response: {
+                socialLinks,
+                pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+            }
+        });
+    } catch (error) {
+        console.error('Get social links error:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch social links' });
+    }
+});
+
+// POST /api/admin/social-links
+router.post('/social-links', adminAuth, async (req, res) => {
+    try {
+        const { title, image, link, order } = req.body;
+
+        if (!title || !image || !link) {
+            return res.status(400).json({ success: false, message: 'Title, image and link are required' });
+        }
+
+        let linkOrder = order;
+        if (linkOrder === undefined || linkOrder === null) {
+            const maxOrder = await SocialLink.findOne().sort({ order: -1 }).lean();
+            linkOrder = maxOrder ? maxOrder.order + 1 : 0;
+        }
+
+        const socialLink = await SocialLink.create({
+            title: title.trim(),
+            image,
+            link: link.trim(),
+            order: parseInt(linkOrder) || 0,
+            isActive: true
+        });
+
+        res.status(201).json({ success: true, message: 'Social link created', response: socialLink });
+    } catch (error) {
+        console.error('Create social link error:', error);
+        res.status(500).json({ success: false, message: 'Failed to create social link' });
+    }
+});
+
+// PUT /api/admin/social-links/:id
+router.put('/social-links/:id', adminAuth, async (req, res) => {
+    try {
+        const { title, image, link, order, isActive } = req.body;
+        const updates = {};
+
+        if (title) updates.title = title.trim();
+        if (image) updates.image = image;
+        if (link) updates.link = link.trim();
+        if (order !== undefined) updates.order = parseInt(order) || 0;
+        if (isActive !== undefined) updates.isActive = isActive;
+
+        const socialLink = await SocialLink.findByIdAndUpdate(req.params.id, updates, { new: true }).lean();
+        if (!socialLink) {
+            return res.status(404).json({ success: false, message: 'Social link not found' });
+        }
+
+        res.json({ success: true, message: 'Social link updated', response: socialLink });
+    } catch (error) {
+        console.error('Update social link error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update social link' });
+    }
+});
+
+// PUT /api/admin/social-links/:id/toggle
+router.put('/social-links/:id/toggle', adminAuth, async (req, res) => {
+    try {
+        const socialLink = await SocialLink.findById(req.params.id);
+        if (!socialLink) {
+            return res.status(404).json({ success: false, message: 'Social link not found' });
+        }
+        socialLink.isActive = !socialLink.isActive;
+        await socialLink.save();
+
+        res.json({ success: true, message: `Social link ${socialLink.isActive ? 'activated' : 'deactivated'}`, response: socialLink });
+    } catch (error) {
+        console.error('Toggle social link error:', error);
+        res.status(500).json({ success: false, message: 'Failed to toggle social link' });
+    }
+});
+
+// DELETE /api/admin/social-links/:id
+router.delete('/social-links/:id', adminAuth, async (req, res) => {
+    try {
+        const socialLink = await SocialLink.findByIdAndDelete(req.params.id);
+        if (!socialLink) {
+            return res.status(404).json({ success: false, message: 'Social link not found' });
+        }
+        res.json({ success: true, message: 'Social link deleted' });
+    } catch (error) {
+        console.error('Delete social link error:', error);
+        res.status(500).json({ success: false, message: 'Failed to delete social link' });
+    }
+});
+
+// ── App Version Management ──
+
+// GET app version (public - no auth needed for app to check)
+router.get('/app-version', async (req, res) => {
+    try {
+        let version = await AppVersion.findOne({ isActive: true }).sort({ updatedAt: -1 });
+        if (!version) {
+            version = await AppVersion.create({});
+        }
+        res.json({ success: true, response: version });
+    } catch (error) {
+        console.error('Get app version error:', error);
+        res.status(500).json({ success: false, message: 'Failed to get app version' });
+    }
+});
+
+// PUT update app version (admin only)
+router.put('/app-version', adminAuth, async (req, res) => {
+    try {
+        const { latestVersion, minVersion, playStoreLink, appStoreLink, forceUpdate, updateMessage, forceUpdateMessage } = req.body;
+        let version = await AppVersion.findOne({ isActive: true }).sort({ updatedAt: -1 });
+        if (!version) {
+            version = new AppVersion({});
+        }
+        if (latestVersion !== undefined) version.latestVersion = latestVersion;
+        if (minVersion !== undefined) version.minVersion = minVersion;
+        if (playStoreLink !== undefined) version.playStoreLink = playStoreLink;
+        if (appStoreLink !== undefined) version.appStoreLink = appStoreLink;
+        if (forceUpdate !== undefined) version.forceUpdate = forceUpdate;
+        if (updateMessage !== undefined) version.updateMessage = updateMessage;
+        if (forceUpdateMessage !== undefined) version.forceUpdateMessage = forceUpdateMessage;
+        await version.save();
+        res.json({ success: true, response: version, message: 'App version updated' });
+    } catch (error) {
+        console.error('Update app version error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update app version' });
+    }
+});
+
+// ============ Payment Settings ============
+
+// GET /api/admin/payment-settings
+router.get('/payment-settings', adminAuth, async (req, res) => {
+    try {
+        let settings = await PaymentSettings.findOne();
+        if (!settings) {
+            settings = await PaymentSettings.create({ codEnabled: false, onlineEnabled: true });
+        }
+        res.json({ success: true, response: settings });
+    } catch (error) {
+        console.error('Get payment settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to get payment settings' });
+    }
+});
+
+// PUT /api/admin/payment-settings
+router.put('/payment-settings', adminAuth, async (req, res) => {
+    try {
+        const { codEnabled, onlineEnabled } = req.body;
+        let settings = await PaymentSettings.findOne();
+        if (!settings) {
+            settings = new PaymentSettings();
+        }
+        if (codEnabled !== undefined) settings.codEnabled = codEnabled;
+        if (onlineEnabled !== undefined) settings.onlineEnabled = onlineEnabled;
+        await settings.save();
+        res.json({ success: true, response: settings, message: 'Payment settings updated' });
+    } catch (error) {
+        console.error('Update payment settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update payment settings' });
+    }
+});
+
+// Public route (no auth) - for app to fetch payment settings
+router.get('/payment-settings/public', async (req, res) => {
+    try {
+        let settings = await PaymentSettings.findOne();
+        if (!settings) {
+            settings = await PaymentSettings.create({ codEnabled: false, onlineEnabled: true });
+        }
+        res.json({ success: true, response: { codEnabled: settings.codEnabled, onlineEnabled: settings.onlineEnabled } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to get payment settings' });
+    }
+});
+
+// ============ WhatsApp (Zyptos) Welcome Message Settings ============
+
+// GET /api/admin/whatsapp-settings
+router.get('/whatsapp-settings', adminAuth, async (req, res) => {
+    try {
+        let settings = await WhatsappSettings.findOne();
+        if (!settings) settings = await WhatsappSettings.create({});
+        res.json({
+            success: true,
+            response: {
+                enabled: settings.enabled,
+                welcomeMessage: settings.welcomeMessage,
+                memberWelcomeMessage: settings.memberWelcomeMessage,
+                paymentSuccessMessage: settings.paymentSuccessMessage,
+                paymentFailedMessage: settings.paymentFailedMessage,
+                connectionId: settings.connectionId,
+                apiKeyConfigured: !!process.env.ZYPTOS_API_KEY
+            }
+        });
+    } catch (error) {
+        console.error('Get whatsapp settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to load WhatsApp settings' });
+    }
+});
+
+// PUT /api/admin/whatsapp-settings
+router.put('/whatsapp-settings', adminAuth, async (req, res) => {
+    try {
+        const {
+            enabled,
+            welcomeMessage,
+            memberWelcomeMessage,
+            paymentSuccessMessage,
+            paymentFailedMessage,
+            connectionId
+        } = req.body || {};
+        let settings = await WhatsappSettings.findOne();
+        if (!settings) settings = new WhatsappSettings();
+        if (enabled !== undefined) settings.enabled = !!enabled;
+
+        const messageFields = [
+            { key: 'welcomeMessage', value: welcomeMessage, label: 'Welcome message' },
+            { key: 'memberWelcomeMessage', value: memberWelcomeMessage, label: 'Member welcome message' },
+            { key: 'paymentSuccessMessage', value: paymentSuccessMessage, label: 'Payment success message' },
+            { key: 'paymentFailedMessage', value: paymentFailedMessage, label: 'Payment failed message' }
+        ];
+        for (const field of messageFields) {
+            if (field.value !== undefined) {
+                if (typeof field.value !== 'string' || !field.value.trim()) {
+                    return res.status(400).json({ success: false, message: `${field.label} cannot be empty` });
+                }
+                settings[field.key] = field.value.trim().slice(0, 4096);
+            }
+        }
+
+        if (connectionId !== undefined) settings.connectionId = Number(connectionId) || 0;
+        await settings.save();
+        res.json({
+            success: true,
+            message: 'WhatsApp settings updated',
+            response: {
+                enabled: settings.enabled,
+                welcomeMessage: settings.welcomeMessage,
+                memberWelcomeMessage: settings.memberWelcomeMessage,
+                paymentSuccessMessage: settings.paymentSuccessMessage,
+                paymentFailedMessage: settings.paymentFailedMessage,
+                connectionId: settings.connectionId,
+                apiKeyConfigured: !!process.env.ZYPTOS_API_KEY
+            }
+        });
+    } catch (error) {
+        console.error('Update whatsapp settings error:', error);
+        res.status(500).json({ success: false, message: 'Failed to update WhatsApp settings' });
+    }
+});
+
+// POST /api/admin/whatsapp-settings/test
+// Body: { phone, name? } — sends the configured welcome message to the given phone.
+router.post('/whatsapp-settings/test', adminAuth, async (req, res) => {
+    try {
+        const { phone, name } = req.body || {};
+        if (!phone) {
+            return res.status(400).json({ success: false, message: 'Phone is required' });
+        }
+        let settings = await WhatsappSettings.findOne();
+        if (!settings) settings = await WhatsappSettings.create({});
+        const message = renderTemplate(settings.welcomeMessage, {
+            name: name || 'there',
+            phone,
+            referralCode: 'TEST1234',
+            email: ''
+        });
+        const result = await sendTextMessage({
+            to: phone,
+            message,
+            connectionId: settings.connectionId
+        });
+        if (result?.success) {
+            return res.json({ success: true, message: 'Test message sent', response: result.data });
+        }
+        return res.status(502).json({
+            success: false,
+            message: result?.reason === 'missing_api_key'
+                ? 'ZYPTOS_API_KEY is not configured on the server'
+                : result?.message || 'Failed to send test message',
+            response: result
+        });
+    } catch (error) {
+        console.error('WhatsApp test send error:', error);
+        res.status(500).json({ success: false, message: 'Failed to send test message' });
+    }
+});
+
+module.exports = router;

@@ -33,8 +33,8 @@ export function PrivacyPolicyPage() {
                 </div>
 
                 {/* Apps Covered */}
-                <div className="bg-card border border-border rounded-xl p-6 mb-8">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">Applications Covered by This Policy</h3>
+                <div className="bg-card border border-border rounded-lg p-6 mb-8">
+                    <h3 className="text-lg font-semibold tracking-tight text-foreground mb-4">Applications Covered by This Policy</h3>
                     <div className="grid md:grid-cols-2 gap-4">
                         <div className="bg-background rounded-lg p-4 border border-border">
                             <h4 className="font-medium text-foreground mb-2">The Art Of भ ओ जन E-commerce App</h4>
@@ -288,8 +288,8 @@ export function PrivacyPolicyPage() {
                 </div>
 
                 {/* Contact Information */}
-                <div className="mt-10 bg-card border border-border rounded-xl p-6">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">Contact Us</h3>
+                <div className="mt-10 bg-card border border-border rounded-lg p-6">
+                    <h3 className="text-lg font-semibold tracking-tight text-foreground mb-4">Contact Us</h3>
                     <p className="text-sm text-muted-foreground mb-4">
                         If you have any questions about this Privacy Policy or our data practices, please contact us:
                     </p>
@@ -332,12 +332,12 @@ interface PolicySectionProps {
 
 function PolicySection({ icon, title, content }: PolicySectionProps) {
     return (
-        <div className="bg-card border border-border rounded-xl p-6">
+        <div className="bg-card border border-border rounded-lg p-6">
             <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
                     {icon}
                 </div>
-                <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+                <h3 className="text-lg font-semibold tracking-tight text-foreground">{title}</h3>
             </div>
             {content}
         </div>

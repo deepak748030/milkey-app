@@ -8,9 +8,9 @@ type SubTabBarProps = {
     screen: 'purchase' | 'selling' | 'register';
 };
 
-const PURCHASE_TABS: PurchaseTab[] = ['Purchase', 'Report', 'C-Farmer'];
-const SELLING_TABS: SellingTab[] = ['Entry', 'Payment', 'Reports', 'Member'];
-const REGISTER_TABS: RegisterTab[] = ['Payments', 'Advances', 'R-Farmer'];
+const PURCHASE_TABS: PurchaseTab[] = ['Purchase', 'Report', 'Farmer'];
+const SELLING_TABS: SellingTab[] = ['Entry', 'Payment', 'Reports', 'Customer'];
+const REGISTER_TABS: RegisterTab[] = ['Payments', 'Advances', 'Farmer'];
 
 export default function SubTabBar({ screen }: SubTabBarProps) {
     const { colors } = useTheme();
@@ -40,7 +40,7 @@ export default function SubTabBar({ screen }: SubTabBarProps) {
             Entry: t.selling?.entry || 'Entry',
             Payment: t.selling?.payment || 'Payment',
             Reports: t.selling?.reports || 'Reports',
-            Member: t.selling?.member || 'Member',
+            Customer: t.selling?.member || t.selling?.customer || 'Customer',
         };
     } else {
         tabs = REGISTER_TABS;
@@ -49,7 +49,7 @@ export default function SubTabBar({ screen }: SubTabBarProps) {
         labels = {
             Payments: t.register?.payments || 'Payments',
             Advances: t.register?.advances || 'Advances',
-            'R-Farmer': 'R-Farmer',
+            'Farmer': 'Farmer',
         };
     }
 
