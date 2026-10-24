@@ -230,13 +230,16 @@ const styles = StyleSheet.create({
   titleCol: {
     flex: 1,
     justifyContent: 'center',
+    maxWidth: 165,
+    paddingRight: 6,
   },
   appName: {
-    fontSize: 19,
+    fontSize: 14,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 0.2,
-    lineHeight: 20,
+    letterSpacing: 0.15,
+    lineHeight: 15,
+    maxWidth: 160,
   },
   appSub: {
     fontSize: 10.5,

@@ -11,7 +11,7 @@ import SellingBottomSheet from '@/components/SellingBottomSheet';
 import { AdPopupModal } from '@/components/AdPopupModal';
 import { checkAppVersion } from '@/lib/milkeyApi';
 import { useSubTabStore } from '@/lib/subTabStore';
-import { useTabSound, vibrate } from '@/hooks/useTabSound';
+import { useTabSound } from '@/hooks/useTabSound';
 import { consumeSuppressCollection, consumeSuppressSelling } from '@/lib/sheetSuppress';
 import Constants from 'expo-constants';
 
@@ -39,7 +39,7 @@ export default function TabLayout() {
   const [updateInfo, setUpdateInfo] = useState({ forceUpdate: false, message: '', storeLink: '', latestVersion: '1.0.0' });
   const [showCollectionSheet, setShowCollectionSheet] = useState(false);
   const [showSellingSheet, setShowSellingSheet] = useState(false);
-  const { purchaseTab, sellingTab, setPurchaseTab, setSellingTab, suppressCollectionSheet, suppressSellingSheet, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
+  const { purchaseTab, sellingTab, collectionTab, setPurchaseTab, setSellingTab, setCollectionTab, suppressCollectionSheet, suppressSellingSheet, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
   const playTabSound = useTabSound();
   const activeTabName = segments[segments.length - 1] as string || '';
   const tabBarHeight = 65 + insets.bottom;
@@ -81,7 +81,9 @@ export default function TabLayout() {
   }, []);
 
   const handleCollectionSelect = useCallback((tab: any) => {
-    playTabSound();
+    // persist sheet selection so reopen shows same active (including Payment/Advances)
+    // vibrate handled globally in app/_layout, no double
+    setCollectionTab(tab as any);
     if (tab === 'RateSetting') {
       router.push('/milk-rate-settings' as any);
       return;
@@ -93,9 +95,9 @@ export default function TabLayout() {
     }
     if (tab === 'Farmer') { setPurchaseTab('Farmer' as any); return; }
     setPurchaseTab(tab);
-  }, [setPurchaseTab, router, playTabSound]);
+  }, [setPurchaseTab, setCollectionTab, router]);
 
-  const handleSellingSelect = useCallback((tab: any) => { playTabSound(); setSellingTab(tab); }, [setSellingTab, playTabSound]);
+  const handleSellingSelect = useCallback((tab: any) => { setSellingTab(tab); }, [setSellingTab]);
 
   // Custom circle-style tab bar — active tab gets green circle like requested (Register removed)
   const renderTabBar = useCallback((props: any) => {
@@ -139,20 +141,17 @@ export default function TabLayout() {
           else if (route.name === 'profile') IconComp = User;
 
           const onPress = () => {
-            // Special: if already focused on Collection/Selling, open bottom sheet instead
+            // vibrate already via global capture in app/_layout, avoid double
             if (route.name === 'purchase' && isFocused) {
-              playTabSound();
               setShowCollectionSheet(true);
               return;
             }
             if (route.name === 'selling' && isFocused) {
-              playTabSound();
               setShowSellingSheet(true);
               return;
             }
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (!event.defaultPrevented) {
-              playTabSound();
               navigation.navigate(route.name, route.params);
             }
           };
@@ -201,10 +200,10 @@ export default function TabLayout() {
         })}
       </View>
     );
-  }, [colors, insets.bottom, tabBarHeight, playTabSound]);
+  }, [colors, insets.bottom, tabBarHeight]);
 
   return (
-    <View style={{ flex: 1 }} onStartShouldSetResponderCapture={() => { vibrate(); return false; }}>
+    <View style={{ flex: 1 }}>
       <UpdateModal visible={showUpdate} forceUpdate={updateInfo.forceUpdate} message={updateInfo.message} storeLink={updateInfo.storeLink} latestVersion={updateInfo.latestVersion} onSkip={() => setShowUpdate(false)} />
       <AdPopupModal />
       <Tabs
@@ -218,7 +217,7 @@ export default function TabLayout() {
         <Tabs.Screen name="profile" options={{ title: t.tabs.profile }} />
         <Tabs.Screen name="register" options={{ href: null, headerShown: false }} />
       </Tabs>
-      <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={purchaseTab} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
+      <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={collectionTab as any} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
       <SellingBottomSheet visible={showSellingSheet} onClose={() => setShowSellingSheet(false)} activeTab={sellingTab} onSelectTab={handleSellingSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
     </View>
   );
