@@ -62,15 +62,24 @@ app.disable('x-powered-by');
 // Strong ETags so conditional GETs (304) work for unchanged JSON.
 app.set('etag', 'strong');
 
-// Security middleware
-app.use(helmet());
-
-// CORS configuration
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+// Security middleware - keep helmet but don't block CORS
+app.use(helmet({
+    crossOriginResourcePolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false
 }));
+
+// CORS configuration - allow all by default (no env required)
+const corsOptions = {
+    origin: function (origin, callback) { callback(null, true); },
+    credentials: false,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Request-Method', 'Access-Control-Request-Headers'],
+    exposedHeaders: ['Content-Length', 'Content-Type'],
+    optionsSuccessStatus: 204
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Compression for better performance (skip already-compressed payloads)
 app.use(compression({
