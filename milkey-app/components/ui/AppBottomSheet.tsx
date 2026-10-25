@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity,
   useWindowDimensions, Animated, Easing, Platform, BackHandler,
 } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
@@ -38,7 +38,10 @@ type Props<T extends string> = {
 };
 
 /** Reserved height of the handle + title row + paddings inside the card. */
-const CARD_CHROME = 96;
+const CARD_CHROME = 92;
+/** Row height + gap used to size the card so it never needs to scroll. */
+const ROW_H = 48;
+const ROW_GAP = 7;
 /** How dark the screen behind the sheet goes (this layer). */
 const STAGE_DIM = 0.55;
 
@@ -63,8 +66,9 @@ const STAGE_DIM = 0.55;
  * Layout notes:
  *   • The sheet is drawn inline (no <Modal>) so it shares the tab bar's coordinate
  *     space — it can never climb over the tab bar or sit too high.
- *   • The list gets `maxHeight = 50% screen - card chrome`, so oversized content can
- *     never spill out of the card and reach the tab bar.
+ *   • The rows are NOT in a ScrollView. The card height is computed from the row count
+ *     (chrome + n * 48 + gaps) so every row is always visible; only a tiny screen caps it
+ *     at 80% of the window.
  *   • The card is flush with the tab bar (`marginBottom: 0`): no dark strip is left
  *     visible underneath the sheet.
  *   • The card has no Android elevation: any elevation shadow falls downwards onto the
@@ -76,8 +80,10 @@ function AppBottomSheet<T extends string>({
 }: Props<T>) {
   const { colors, isDark } = useTheme();
   const { height: screenHeight } = useWindowDimensions();
-  const maxSheetHeight = Math.round(screenHeight * 0.5);
-  const listMaxHeight = Math.max(140, maxSheetHeight - CARD_CHROME);
+  // The sheet is NOT scrollable: its height is computed from the number of rows so every
+  // row is always visible. Only a very small screen can cap it (80% of the window).
+  const neededHeight = CARD_CHROME + items.length * ROW_H + Math.max(0, items.length - 1) * ROW_GAP + 6;
+  const maxSheetHeight = Math.min(neededHeight, Math.round(screenHeight * 0.8));
 
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -180,13 +186,7 @@ function AppBottomSheet<T extends string>({
               </Pressable>
             </View>
 
-            <ScrollView
-              style={[s.scroll, { maxHeight: listMaxHeight }]}
-              contentContainerStyle={s.list}
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-              nestedScrollEnabled
-            >
+            <View style={s.list}>
               {items.map(item => {
                 const active = isActive ? isActive(activeKey, item) : activeKey === item.key;
                 const Icon = item.IconComp;
@@ -210,7 +210,7 @@ function AppBottomSheet<T extends string>({
                   </Pressable>
                 );
               })}
-            </ScrollView>
+            </View>
           </View>
         </Animated.View>
       </View>
@@ -289,8 +289,7 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 6, elevation: 4,
   },
-  scroll: { flexShrink: 1 },
-  list: { gap: 7, paddingBottom: 2 },
+  list: { gap: ROW_GAP, paddingBottom: 2 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     minHeight: 48, paddingHorizontal: 12,
