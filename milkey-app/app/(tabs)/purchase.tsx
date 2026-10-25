@@ -544,7 +544,10 @@ export default function PurchaseScreen() {
             } catch { showAlert('Error', 'Failed to delete'); }
             setDeletingId(null);
         });
-    }, []);
+        // fetchCollections must be in the deps: it closes over the selected date + shift,
+        // so a frozen first-render copy refreshed the wrong day after the user changed
+        // them and the deleted row stayed on screen (looked like delete did nothing).
+    }, [fetchCollections]);
 
     const applySelectCustomer = useCallback((c: PurchaseFarmer) => {
         setSelectedCustomer(c);
