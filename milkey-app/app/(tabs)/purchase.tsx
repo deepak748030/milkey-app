@@ -74,6 +74,9 @@ export default function PurchaseScreen() {
     const [showInlineSearch, setShowInlineSearch] = useState(false);
     const [inlineSearchCode, setInlineSearchCode] = useState('');
     const [inlineSearchResults, setInlineSearchResults] = useState<PurchaseFarmer[]>([]);
+    const [inlineSearchLoading, setInlineSearchLoading] = useState(false);
+    // Guards the async code search: only the newest keystroke may write results.
+    const inlineSearchReqId = useRef(0);
 
     // Entry state
     const [entryDate, setEntryDate] = useState(new Date());
@@ -160,6 +163,12 @@ export default function PurchaseScreen() {
     const [showPrintTypeModal, setShowPrintTypeModal] = useState(false);
     const [printSource, setPrintSource] = useState<'purchase' | 'report'>('purchase');
     const [actionMenuEntry, setActionMenuEntry] = useState<MilkCollection | null>(null);
+    // Entry opened through "Edit". The old row is removed only after the corrected
+    // entry has been saved — the old flow deleted it the moment Edit was tapped, so a
+    // cancelled/failed edit lost the entry entirely.
+    const [editingEntry, setEditingEntry] = useState<MilkCollection | null>(null);
+    // Suppresses the auto rate/fat/snf fill while an edit is restoring saved values.
+    const suppressAutoFillRef = useRef(false);
 
     const showAlert = useCallback((t: string, m: string) => { setAlertTitle(t); setAlertMessage(m); setAlertVisible(true); }, []);
     const showConfirm = useCallback((t: string, m: string, onConfirm: () => void) => { setConfirmData({ title: t, message: m, onConfirm }); setConfirmVisible(true); }, []);
@@ -317,17 +326,59 @@ export default function PurchaseScreen() {
         setFarmerLoadingMore(false);
     }, [farmerLoadingMore, farmerHasMore]);
 
-    // Inline search by code
+    // ── Inline farmer search by code — SERVER SIDE ───────────────────────────────
+    // `customers` is only the first page of the farmers list (and the customer modal
+    // replaces it with its own search result), so filtering it in the app could never
+    // find a farmer whose code was not in that page — the code simply "did not come".
+    // The search now asks the server every time:
+    //   1. GET /purchase-farmers/code/<code>  → exact code, no page limit at all,
+    //   2. GET /purchase-farmers?search=<q>   → partial code / name / mobile (also
+    //      server side, ranked so codes starting with what was typed come first).
     useEffect(() => {
-        if (!inlineSearchCode.trim()) {
+        const q = inlineSearchCode.trim();
+        if (!q) {
+            inlineSearchReqId.current++;
             setInlineSearchResults([]);
+            setInlineSearchLoading(false);
             return;
         }
-        const filtered = customers.filter(c =>
-            c.isActive !== false && c.code.toLowerCase().startsWith(inlineSearchCode.toLowerCase())
-        );
-        setInlineSearchResults(filtered.slice(0, 8));
-    }, [inlineSearchCode, customers]);
+        const reqId = ++inlineSearchReqId.current;
+        const timer = setTimeout(async () => {
+            if (reqId !== inlineSearchReqId.current) return;
+            setInlineSearchLoading(true);
+            let results: PurchaseFarmer[] = [];
+            try {
+                const exact = await purchaseFarmersApi.getByCode(q);
+                if (reqId !== inlineSearchReqId.current) return;
+                if (exact.success && exact.response) results = [exact.response as PurchaseFarmer];
+            } catch { }
+            if (results.length === 0) {
+                try {
+                    const res = await purchaseFarmersApi.getAll({ search: q });
+                    if (reqId !== inlineSearchReqId.current) return;
+                    const list = (res.success ? (res.response?.data || []) : [])
+                        .filter((c: any) => c && c.isActive !== false);
+                    const lower = q.toLowerCase();
+                    const rank = (code: string) => (code === lower ? 0 : code.startsWith(lower) ? 1 : 2);
+                    list.sort((a: any, b: any) => {
+                        const ac = String(a.code || '').toLowerCase();
+                        const bc = String(b.code || '').toLowerCase();
+                        const d = rank(ac) - rank(bc);
+                        if (d !== 0) return d;
+                        return ac.localeCompare(bc, undefined, { numeric: true });
+                    });
+                    results = list;
+                } catch { }
+            }
+            if (reqId !== inlineSearchReqId.current) return;
+            setInlineSearchResults(results.slice(0, 8));
+            setInlineSearchLoading(false);
+        }, 250);
+        return () => clearTimeout(timer);
+    }, [inlineSearchCode]);
+
+    // Never let a late response land after leaving the screen.
+    useEffect(() => () => { inlineSearchReqId.current++; }, []);
 
     useEffect(() => {
         if (selectedCustomer) {
@@ -341,6 +392,8 @@ export default function PurchaseScreen() {
     }, [milkType]);
 
     const autoFillRate = (customer: PurchaseFarmer, type: 'cow' | 'buffalo') => {
+        // An edit restores the saved FAT / SNF / rate — the auto fill must not wipe them.
+        if (suppressAutoFillRef.current) return;
         if (customer.priceBasis === 'rate') {
             setRateValue(type === 'cow' ? String(customer.cowRate || '') : String(customer.buffaloRate || ''));
             setFatValue('');
@@ -497,6 +550,11 @@ export default function PurchaseScreen() {
                 milkType,
             });
             if (res.success) {
+                // The corrected entry is in — only now drop the row that was edited.
+                if (editingEntry && editingEntry._id && editingEntry._id !== res.response?._id) {
+                    try { await milkCollectionsApi.delete(editingEntry._id); } catch { }
+                }
+                setEditingEntry(null);
                 showAlert('Success', 'Entry saved');
 
                 // Auto-print entry slip when a Bluetooth printer is connected,
@@ -532,7 +590,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -551,6 +609,7 @@ export default function PurchaseScreen() {
     }, [fetchCollections]);
 
     const applySelectCustomer = useCallback((c: PurchaseFarmer) => {
+        setEditingEntry(null);
         setSelectedCustomer(c);
         setShowCustomerModal(false);
         setShowInlineSearch(false);
@@ -981,7 +1040,7 @@ export default function PurchaseScreen() {
 
 
     // Ponytail ctx — single source for all tabs (no prop drilling duplication)
-    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>
@@ -1113,6 +1172,7 @@ export default function PurchaseScreen() {
                     // After editing/adding a farmer, deselect the current code so the
                     // form resets fresh and the user must re-pick the code for the next entry.
                     setSelectedCustomer(null);
+                    setEditingEntry(null);
                     setMilkQty(''); setFatValue(''); setSnfValue(''); setRateValue('');
                     setIsZero(false);
                 }}
@@ -1194,23 +1254,38 @@ export default function PurchaseScreen() {
                                 }
                             },
                             {
-                                icon: <Edit2 size={18} color={colors.primary} />, label: 'Edit', onPress: () => {
+                                icon: <Edit2 size={18} color={colors.primary} />, label: 'Edit', onPress: async () => {
                                     if (!actionMenuEntry) return;
                                     const e = actionMenuEntry;
                                     setActionMenuEntry(null);
-                                    // Find farmer and select, then fill form with entry data
-                                    const farmer = customers.find(c => c.code === e.farmerCode) || customers.find(c => c._id === (e as any).purchaseFarmer?._id);
-                                    if (farmer) {
-                                        setSelectedCustomer(farmer);
-                                        setMilkQty(String(e.quantity));
-                                        setFatValue(e.fat ? String(e.fat) : '');
-                                        setSnfValue((e as any).snf ? String((e as any).snf) : '');
-                                        setRateValue(String(e.rate));
-                                        setMilkType((e as any).milkType || 'buffalo');
-                                        setEntryShift(e.shift);
+                                    // The farmer may not be in the loaded page — ask the server.
+                                    let farmer: PurchaseFarmer | undefined =
+                                        customers.find(c => c.code === e.farmerCode)
+                                        || customers.find(c => c._id === (e as any).purchaseFarmer?._id);
+                                    if (!farmer && e.farmerCode) {
+                                        try {
+                                            const byCode = await purchaseFarmersApi.getByCode(e.farmerCode);
+                                            if (byCode.success && byCode.response) farmer = byCode.response as PurchaseFarmer;
+                                        } catch { }
                                     }
-                                    // Delete the old entry silently
-                                    milkCollectionsApi.delete(e._id).then(() => fetchCollections()).catch(() => { });
+                                    if (!farmer) {
+                                        showAlert('Error', `Farmer ${e.farmerCode || ''} not found — entry not changed`);
+                                        return;
+                                    }
+                                    // Restore the SAVED values (the auto fill would clear them)
+                                    suppressAutoFillRef.current = true;
+                                    setTimeout(() => { suppressAutoFillRef.current = false; }, 400);
+                                    setSelectedCustomer(farmer);
+                                    setShowInlineSearch(false);
+                                    setEditingEntry(e);
+                                    setEntryDate(new Date(e.date));
+                                    setEntryShift(e.shift);
+                                    setMilkType(((e as any).milkType as any) || 'buffalo');
+                                    setMilkQty(e.quantity != null ? String(e.quantity) : '');
+                                    setFatValue((e as any).fat ? String((e as any).fat) : '');
+                                    setSnfValue((e as any).snf ? String((e as any).snf) : '');
+                                    setRateValue(e.rate != null ? String(e.rate) : '');
+                                    setIsZero(false);
                                 }
                             },
                             {

@@ -7,7 +7,7 @@ import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Milk, Droplets
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseCollectionTab(props:any){
   const ctx = (props as any).ctx || props;
-  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
+  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
   const setSelectedCustomer = _setSelCust ?? (() => {});
   const setShowRateSetting = ctx.setShowRateSetting || ctx.setShowRateChart;
   const setShowRateChart = setShowRateSetting;
@@ -156,7 +156,12 @@ export function PurchaseCollectionTab(props:any){
             {/* Inline search results dropdown */}
             {showInlineSearch && inlineSearchCode.trim().length > 0 && (
                 <View style={s.inlineDropdown}>
-                    {inlineSearchResults.length > 0 ? (
+                    {inlineSearchLoading && inlineSearchResults.length === 0 ? (
+                        <View style={[s.emptyBox, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <Text style={s.emptyText}>Searching code {inlineSearchCode}…</Text>
+                        </View>
+                    ) : inlineSearchResults.length > 0 ? (
                         inlineSearchResults.map(item => (
                             <Pressable
                                 key={item._id}
