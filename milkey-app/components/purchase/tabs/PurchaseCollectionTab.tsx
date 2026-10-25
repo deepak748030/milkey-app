@@ -185,7 +185,11 @@ export function PurchaseCollectionTab(props:any){
                 <View style={s.entryCard}>
                     {/* Price Basis Label */}
                     <Text style={s.priceBasisLabel}>
-                        {selectedCustomer.priceBasis === 'rate' ? t.purchase.rateBased : selectedCustomer.priceBasis === 'fat_snf' ? 'Fat + SNF based' : t.purchase.fatBased}
+                        {!selectedCustomer.priceBasis || selectedCustomer.priceBasis === 'rate'
+                            ? t.purchase.rateBased
+                            : selectedCustomer.priceBasis === 'fat_snf'
+                                ? 'Fat + SNF based'
+                                : t.purchase.fatBased}
                     </Text>
 
                     {/* Input Row */}
@@ -208,7 +212,12 @@ export function PurchaseCollectionTab(props:any){
                             <Text style={s.fieldLabel}>SNF</Text>
                             <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '9.0' : '0.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                         </View>
-                        {selectedCustomer.priceBasis === 'rate' && (
+                        {/* Rate box: shown whenever the rate is NOT auto-derived
+                            (rate basis, no basis stored yet, or fat+SNF with no rate
+                            chart). Without this a farmer missing `priceBasis` had no
+                            way to enter a rate and the save failed validation. */}
+                        {selectedCustomer.priceBasis !== 'fat'
+                            && !(selectedCustomer.priceBasis === 'fat_snf' && todayRate > 0) && (
                             <View style={s.fieldBox}>
                                 <Text style={s.fieldLabel}>{t.common.rate}</Text>
                                 <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
