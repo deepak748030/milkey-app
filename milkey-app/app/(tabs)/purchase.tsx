@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking, Platform } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
-import { ScreenDim } from '@/components/ui/ScreenDim';
 import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -1261,8 +1260,6 @@ export default function PurchaseScreen() {
                     </View>
                 </View>
             </Modal>
-            {/* Dark layer for the Collection sheet (inside this screen => always on top) */}
-            <ScreenDim which="collection" />
         </View>
     );
 }

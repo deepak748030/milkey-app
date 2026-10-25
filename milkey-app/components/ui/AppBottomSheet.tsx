@@ -7,7 +7,6 @@ import { Pressable } from '@/components/ui/HapticPressable';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '@/hooks/useTheme';
-import { useSheetScrimStore } from '@/lib/sheetScrimStore';
 import { X, ChevronRight } from 'lucide-react-native';
 
 export type SheetItem<T extends string> = {
@@ -53,9 +52,10 @@ const STAGE_DIM = 0.66;
  * visible above the screen, then that View is above the screen, therefore its own
  * background IS above the screen too. No z-index / elevation / window guessing.
  *
- * That stage stops exactly at the top of the bottom tab bar (`bottom: bottomOffset`),
- * so:
- *   • status bar + green header + the whole screen behind the sheet go dark,
+ * That stage starts right below the green TopBar (`top: topOffset`) and stops exactly at
+ * the top of the bottom tab bar (`bottom: bottomOffset`), so:
+ *   • the header stays bright (only shielded against taps → tapping it closes the sheet),
+ *   • the content area behind the sheet goes dark,
  *   • the bottom tab bar stays 100% bright and tappable.
  *
  * Layout notes:
@@ -68,7 +68,7 @@ const STAGE_DIM = 0.66;
  */
 function AppBottomSheet<T extends string>({
   visible, onClose, title, items, activeKey, onSelect, isActive,
-  bottomOffset = 0,
+  bottomOffset = 0, topOffset = 0,
 }: Props<T>) {
   const { colors, isDark } = useTheme();
   const { height: screenHeight } = useWindowDimensions();
@@ -94,15 +94,6 @@ function AppBottomSheet<T extends string>({
     return () => sub.remove();
   }, [visible, onClose]);
 
-  // Second, independent dark layer living inside the screens (<ScreenDim />).
-  const showScreenDim = useSheetScrimStore((st) => st.showScreen);
-  const hideScreenDim = useSheetScrimStore((st) => st.hideScreen);
-  useEffect(() => {
-    if (!visible) return;
-    showScreenDim();
-    return () => hideScreenDim();
-  }, [visible, showScreenDim, hideScreenDim]);
-
   const handle = useCallback((k: T) => { onSelect(k); onClose(); }, [onSelect, onClose]);
   const s = styles(colors, isDark);
   if (!visible) return null;
@@ -110,10 +101,26 @@ function AppBottomSheet<T extends string>({
   const cardTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
 
   return (
-    <Animated.View
-      pointerEvents="box-none"
-      style={[s.stage, { bottom: bottomOffset, opacity: anim }]}
-    >
+    <>
+      {/* Header shield: the green TopBar must stay BRIGHT, but it must not be usable
+          while the sheet is open — tapping it simply closes the sheet. */}
+      {topOffset > 0 ? (
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={onClose}
+          style={{
+            position: 'absolute', top: 0, left: 0, right: 0,
+            height: topOffset, zIndex: 10000, elevation: 51,
+          }}
+        />
+      ) : null}
+
+      {/* The dark backdrop starts right BELOW the header and ends at the top edge of
+          the bottom tab bar → header bright, tab bar bright, content dark. */}
+      <Animated.View
+        pointerEvents="box-none"
+        style={[s.stage, { top: topOffset, bottom: bottomOffset, opacity: anim }]}
+      >
       {/* iOS only: real blur on top of the dark colour. Android has no native blur
           outside a dev build, so the dark colour carries it there. */}
       {Platform.OS === 'ios' ? (
@@ -194,7 +201,8 @@ function AppBottomSheet<T extends string>({
           </View>
         </Animated.View>
       </View>
-    </Animated.View>
+      </Animated.View>
+    </>
   );
 }
 
@@ -207,7 +215,6 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
    */
   stage: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
     zIndex: 9999,
