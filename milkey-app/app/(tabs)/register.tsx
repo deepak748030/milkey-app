@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -25,6 +25,7 @@ import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useSubTabStore, RegisterTab } from '@/lib/subTabStore';
 import { useFocusEffect } from 'expo-router';
+import { TZ_OFFSET_MINUTES } from '@/lib/purchaseConstants';
 
 // Helper function to format date as dd/mm/yyyy clear
 const formatDateDDMMYYYY = (dateStr: string) => {
@@ -130,6 +131,13 @@ export default function RegisterScreen() {
     const [paidAmount, setPaidAmount] = useState('');
     const [milkAmount, setMilkAmount] = useState('');
     const [savingPayment, setSavingPayment] = useState(false);
+    // Strict totals for the CURRENT Calculation Period only (timezone-aware, unpaid rows).
+    // Server summary totals are UTC-day based, which leaked rows from the day after the
+    // period end into the milk amount — these totals are the source of truth for display.
+    const [periodMilk, setPeriodMilk] = useState<{ quantity: number; amount: number; count: number } | null>(null);
+    // Guards the auto-refresh effect from re-fetching the same farmer+period twice
+    // (search already fetched it once).
+    const periodKeyRef = useRef('');
 
     // Advances state
     const [advCode, setAdvCode] = useState('');
@@ -317,15 +325,15 @@ export default function RegisterScreen() {
     // same duration. If the tentative end exceeds the month's last day (28/30/31),
     // clamp it to the month end so the last cycle of the month is auto-selected.
     // If there is no previous payment, keep the existing default (start of month → today).
-    useEffect(() => {
-        if (!paymentFarmer) return;
-
-        const farmerCode = paymentFarmer.farmer.code;
+    //
+    // Extracted into a callback so the Payment tab can compute the period BEFORE it
+    // fetches the farmer summary (search → correct period → correct collection amount).
+    const computeNextPeriodForFarmer = useCallback((farmerCode: string): { start: string; end: string } | null => {
         const prior = payments
             .filter(p => p.farmer?.code === farmerCode && p.periodStart && p.periodEnd)
             .sort((a, b) => new Date(b.periodEnd!).getTime() - new Date(a.periodEnd!).getTime());
 
-        if (prior.length === 0) return;
+        if (prior.length === 0) return null;
 
         const last = prior[0];
         const lastStart = new Date(last.periodStart!);
@@ -360,16 +368,26 @@ export default function RegisterScreen() {
         }
 
         // Skip if the computed range overlaps an existing settled period.
-        const overlaps = blockedPeriods.some(period => {
-            const bs = new Date(period.startDate);
-            const be = new Date(period.endDate);
+        const overlaps = prior.some(p => {
+            const bs = new Date(p.periodStart!);
+            const be = new Date(p.periodEnd!);
             return newStart <= be && finalEnd >= bs;
         });
-        if (overlaps) return;
+        if (overlaps) return null;
 
-        setDateStart(newStart.toISOString().split('T')[0]);
-        setDateEnd(finalEnd.toISOString().split('T')[0]);
-    }, [paymentFarmer, payments]);
+        return {
+            start: newStart.toISOString().split('T')[0],
+            end: finalEnd.toISOString().split('T')[0],
+        };
+    }, [payments]);
+
+    useEffect(() => {
+        if (!paymentFarmer) return;
+        const next = computeNextPeriodForFarmer(paymentFarmer.farmer.code);
+        if (!next) return;
+        setDateStart(next.start);
+        setDateEnd(next.end);
+    }, [paymentFarmer, computeNextPeriodForFarmer]);
 
     // Fetch advances with server-side pagination
     const fetchAdvances = async (page: number = 1, search: string = '', append: boolean = false) => {
@@ -593,27 +611,130 @@ export default function RegisterScreen() {
     };
 
 
+    // Exact, timezone-aware totals for ONE Calculation Period. The server summary
+    // aggregates on UTC calendar days, so a collection from the morning after the
+    // period end could be counted in ("saara data aa raha"). milk-collections applies
+    // the device timezone and returns full-query totals (not page-limited), so this is
+    // the value the Payment screen must show.
+    const fetchPeriodMilk = useCallback(async (farmerCode: string, start: string, end: string) => {
+        try {
+            const res = await milkCollectionsApi.getAll({
+                farmerCode,
+                startDate: start || undefined,
+                endDate: end || undefined,
+                isPaid: false,
+                limit: 1, // totals are aggregated over the whole query, rows aren't needed
+                tzOffsetMinutes: TZ_OFFSET_MINUTES,
+            });
+            if (res.success && res.response && res.response.totals) {
+                const totals = {
+                    quantity: Number(res.response.totals.quantity) || 0,
+                    amount: Number(res.response.totals.amount) || 0,
+                    count: Number(res.response.count) || 0,
+                };
+                setPeriodMilk(totals);
+                return totals;
+            }
+        } catch {
+            // offline-safe: fall back to the summary numbers
+        }
+        setPeriodMilk(null);
+        return null;
+    }, []);
+
+    // Whenever the Calculation Period changes (auto-picked or user-picked in the
+    // calendar) refresh the milk amount/quantity so they always belong to that period.
+    // Typed Milk/Paid inputs are intentionally left untouched.
+    useEffect(() => {
+        if (!paymentFarmer || !dateStart || !dateEnd) return;
+        const code = paymentFarmer.farmer.code;
+        const key = `${code}|${dateStart}|${dateEnd}`;
+        if (periodKeyRef.current === key) return;
+        periodKeyRef.current = key;
+        let cancelled = false;
+        (async () => {
+            const totals = await fetchPeriodMilk(code, dateStart, dateEnd);
+            if (cancelled) return;
+            try {
+                const res = await paymentsApi.getFarmerSummary(code, dateStart, dateEnd, TZ_OFFSET_MINUTES);
+                if (!cancelled && res.success && res.response) {
+                    const milk = res.response.milk;
+                    setPaymentFarmer(prev => (prev && prev.farmer.code === code)
+                        ? {
+                            ...prev,
+                            milk: {
+                                ...milk,
+                                totalAmount: totals ? totals.amount : milk.totalAmount,
+                                totalQuantity: totals ? totals.quantity : milk.totalQuantity,
+                                collections: totals ? totals.count : milk.collections,
+                            },
+                        }
+                        : prev);
+                }
+            } catch { /* offline-safe */ }
+        })();
+        return () => { cancelled = true; };
+    }, [paymentFarmer?.farmer.code, dateStart, dateEnd, fetchPeriodMilk]);
+
     // Payment tab: fetch farmer summary
     const handleFetchFarmerSummary = async () => {
         if (!paymentCode.trim()) {
             showAlert('Error', 'Please enter farmer code');
             return;
         }
+        const code = paymentCode.trim();
         setPaymentLoading(true);
+        setPeriodMilk(null);
         try {
-            const res = await paymentsApi.getFarmerSummary(paymentCode, dateStart, dateEnd);
-            if (res.success && res.response) {
-                setPaymentFarmer(res.response);
-                // Milk Amount equation: purchase amount is totalAmount, input is extra (start 0)
-                setMilkAmount('');
-                setPaidAmount('');
-                // Fetch farmer-specific payment history
-                await fetchFarmerPayments(res.response.farmer.id);
-            } else {
-                showAlert('Error', res.message || 'Farmer not found');
+            // 1) Resolve farmer + pending advances/current balance first.
+            const first = await paymentsApi.getFarmerSummary(code, dateStart, dateEnd, TZ_OFFSET_MINUTES);
+            if (!first.success || !first.response) {
+                showAlert('Error', first.message || 'Farmer not found');
                 setPaymentFarmer(null);
                 setFarmerPayments([]);
+                return;
             }
+
+            // 2) Work out the Calculation Period for this farmer BEFORE showing amounts,
+            //    otherwise the summary kept the previous (wider) range → extra data.
+            const suggested = computeNextPeriodForFarmer(code);
+            let start = dateStart;
+            let end = dateEnd;
+            if (suggested && (suggested.start !== dateStart || suggested.end !== dateEnd)) {
+                start = suggested.start;
+                end = suggested.end;
+                setDateStart(start);
+                setDateEnd(end);
+            }
+
+            // 3) Re-fetch the summary for the FINAL period so milk/period fields match it.
+            let summary = first.response;
+            if (start !== dateStart || end !== dateEnd) {
+                const second = await paymentsApi.getFarmerSummary(code, start, end, TZ_OFFSET_MINUTES);
+                if (second.success && second.response) summary = second.response;
+            }
+            setPaymentFarmer(summary);
+            // Milk Amount equation: purchase amount is totalAmount, input is extra (start 0)
+            setMilkAmount('');
+            setPaidAmount('');
+
+            // 4) Overwrite totals with the exact period-only collection values.
+            const totals = await fetchPeriodMilk(code, start, end);
+            if (totals) {
+                setPaymentFarmer(prev => prev ? {
+                    ...prev,
+                    milk: {
+                        ...prev.milk,
+                        totalAmount: totals.amount,
+                        totalQuantity: totals.quantity,
+                        collections: totals.count,
+                    },
+                } : prev);
+            }
+            periodKeyRef.current = `${code}|${start}|${end}`;
+
+            // Fetch farmer-specific payment history
+            await fetchFarmerPayments(summary.farmer.id);
         } catch (error) {
             showAlert('Error', 'Failed to fetch farmer');
         } finally {
@@ -700,6 +821,9 @@ export default function RegisterScreen() {
                 setPaymentFarmer(null);
                 setPaymentCode('');
                 setPaidAmount('');
+                setMilkAmount('');
+                setPeriodMilk(null);
+                periodKeyRef.current = '';
                 fetchData(); // Refresh data including advances
             } else {
                 showAlert('Error', res.message || 'Failed to save settlement');
@@ -717,6 +841,8 @@ export default function RegisterScreen() {
         setPaymentFarmer(null);
         setPaidAmount('');
         setMilkAmount('');
+        setPeriodMilk(null);
+        periodKeyRef.current = '';
         setFarmerPayments([]); // Clear farmer-specific payments
     };
 
@@ -1204,7 +1330,9 @@ export default function RegisterScreen() {
     };
 
     // Calculate milk amount equation: purchase amount (hardcoded) + input = total
-    const purchaseAmount = paymentFarmer ? paymentFarmer.milk.totalAmount : 0;
+    // Amounts below are strictly for the selected Calculation Period (periodMilk wins).
+    const purchaseAmount = paymentFarmer ? (periodMilk ? periodMilk.amount : paymentFarmer.milk.totalAmount) : 0;
+    const periodQuantity = paymentFarmer ? (periodMilk ? periodMilk.quantity : paymentFarmer.milk.totalQuantity) : 0;
     const milkExtra = parseFloat(milkAmount) || 0;
     const currentMilkAmount = purchaseAmount + milkExtra;
     const advanceAmount = paymentFarmer ? paymentFarmer.advances.totalPending : 0;
@@ -1346,7 +1474,7 @@ export default function RegisterScreen() {
                         }}
                     >
                         <Eye size={16} color={colors.primary} />
-                        <Text style={[styles.viewEntriesText, { color: colors.primary }]}>View Entries ({paymentFarmer.milk.totalQuantity.toFixed(1)}L)</Text>
+                        <Text style={[styles.viewEntriesText, { color: colors.primary }]}>View Entries ({periodQuantity.toFixed(1)}L)</Text>
                     </Pressable>
 
                     {/* Pending Advances List */}

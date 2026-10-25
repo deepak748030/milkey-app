@@ -752,10 +752,13 @@ export const paymentsApi = {
         return apiRequest<{ data: Payment[] }>(`/payments${query ? `?${query}` : ''}`);
     },
 
-    getFarmerSummary: async (farmerCode: string, startDate?: string, endDate?: string) => {
+    getFarmerSummary: async (farmerCode: string, startDate?: string, endDate?: string, tzOffsetMinutes?: number) => {
         const queryParams = new URLSearchParams();
         if (startDate) queryParams.append('startDate', startDate);
         if (endDate) queryParams.append('endDate', endDate);
+        // Device timezone as minutes AHEAD of UTC (IST = 330) so the server treats the
+        // Calculation Period's calendar days as the user's local days (no extra rows).
+        if (tzOffsetMinutes !== undefined) queryParams.append('tzOffsetMinutes', String(tzOffsetMinutes));
         const query = queryParams.toString();
         return apiRequest<FarmerPaymentSummary>(`/payments/farmer-summary/${farmerCode}${query ? `?${query}` : ''}`);
     },
