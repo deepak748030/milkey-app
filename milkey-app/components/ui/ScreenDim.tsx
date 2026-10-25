@@ -12,8 +12,14 @@ import { useSheetScrimStore } from '@/lib/sheetScrimStore';
  *
  * The bottom tab bar lives outside the screen, so it stays bright automatically.
  * pointerEvents="none" → it never blocks taps.
+ *
+ * NOTE: this is the SECOND layer. The primary dark layer lives inside the sheet's
+ * <Modal> window (AppBottomSheet), because a Modal is the only place that is
+ * guaranteed to paint above react-native-screens' native screen layers on Android.
+ * Both layers together give the near-black backdrop of the approved design; the dim
+ * here is kept lower (0.55) so the combination never crushes to pure black.
  */
-export function ScreenDim({ dim = 0.78 }: { dim?: number }) {
+export function ScreenDim({ dim = 0.55 }: { dim?: number }) {
   const screenCount = useSheetScrimStore((s) => s.screenCount);
   if (screenCount <= 0) return null;
   return (
