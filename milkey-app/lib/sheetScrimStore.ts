@@ -12,11 +12,16 @@ import { create } from 'zustand';
  * sheet): the scrim stays until the last one closes.
  */
 type State = {
+  /** Modal-based sheets (SheetBackdrop) → root-level scrim */
   count: number;
   dim: number;
   bottom: number;
   show: (dim?: number, bottom?: number) => void;
   hide: () => void;
+  /** In-screen sheets (Collection / Selling) → <ScreenDim /> inside each screen */
+  screenCount: number;
+  showScreen: () => void;
+  hideScreen: () => void;
   reset: () => void;
 };
 
@@ -24,10 +29,13 @@ export const useSheetScrimStore = create<State>((set) => ({
   count: 0,
   dim: 0.72,
   bottom: 0,
+  screenCount: 0,
   show: (dim = 0.72, bottom = 0) =>
     set((s) => ({ count: s.count + 1, dim: Math.max(s.dim, dim), bottom })),
   hide: () => set((s) => ({ count: Math.max(0, s.count - 1) })),
-  reset: () => set({ count: 0, dim: 0.72, bottom: 0 }),
+  showScreen: () => set((s) => ({ screenCount: s.screenCount + 1 })),
+  hideScreen: () => set((s) => ({ screenCount: Math.max(0, s.screenCount - 1) })),
+  reset: () => set({ count: 0, dim: 0.72, bottom: 0, screenCount: 0 }),
 }));
 
 export default useSheetScrimStore;

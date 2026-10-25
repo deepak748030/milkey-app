@@ -4,9 +4,9 @@ import {
   useWindowDimensions, Animated, Easing, Platform, BackHandler,
 } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/useTheme';
+import { useSheetScrimStore } from '@/lib/sheetScrimStore';
 import { X, ChevronRight } from 'lucide-react-native';
 
 export type SheetItem<T extends string> = {
@@ -80,6 +80,17 @@ function AppBottomSheet<T extends string>({
     return () => sub.remove();
   }, [visible, onClose]);
 
+  // Tell the active screen to draw its own dark layer (<ScreenDim />). That layer is
+  // inside the screen's own view tree, so it is guaranteed to sit above the content —
+  // a sibling overlay gets painted behind the navigator's screen views on Android.
+  const showScreenDim = useSheetScrimStore((st) => st.showScreen);
+  const hideScreenDim = useSheetScrimStore((st) => st.hideScreen);
+  useEffect(() => {
+    if (!visible) return;
+    showScreenDim();
+    return () => hideScreenDim();
+  }, [visible, showScreenDim, hideScreenDim]);
+
   const handle = useCallback((k: T) => { onSelect(k); onClose(); }, [onSelect, onClose]);
   const s = styles(colors, isDark);
   if (!visible) return null;
@@ -89,22 +100,16 @@ function AppBottomSheet<T extends string>({
 
   return (
     <View style={[s.overlay, StyleSheet.absoluteFill]} pointerEvents="box-none">
-      {/* Dark + blur layer. Painted above the screens (so the header goes dark too),
-          stops above the tab bar, and is NOT animated → it can never stay half-applied. */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, stopAboveTabBar]}>
-        {Platform.OS === 'ios' ? (
-          <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFill} />
-        ) : null}
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.72)' }]} />
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(6,20,12,0.18)' }]} />
-      </View>
+      {/* No scrim here: the dark layer is <ScreenDim /> inside the screen itself
+          (see app/(tabs)/purchase.tsx and selling.tsx). This overlay only floats the
+          card + catches outside taps, and the tab bar area stays tappable. */}
 
       {/* Tap outside (header included) to dismiss. Tab bar area is left free so the
           same tab can be tapped again to close the sheet. */}
       <TouchableOpacity
         activeOpacity={1}
         onPress={onClose}
-        style={[StyleSheet.absoluteFillObject, stopAboveTabBar]}
+        style={[StyleSheet.absoluteFillObject, stopAboveTabBar, { elevation: 61, zIndex: 10000 }]}
       />
 
       <Animated.View
@@ -115,6 +120,8 @@ function AppBottomSheet<T extends string>({
             maxHeight: maxSheetHeight,
             opacity: anim,
             transform: [{ translateY: sheetTranslateY }],
+            elevation: 70,
+            zIndex: 10001,
           },
         ]}
       >
