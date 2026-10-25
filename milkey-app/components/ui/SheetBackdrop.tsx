@@ -46,12 +46,8 @@ export function SheetBackdrop({ dim = 0.74, tint = true }: Props) {
         intensity={Platform.OS === 'ios' ? 60 : 70}
         tint="dark"
         style={StyleSheet.absoluteFill}
-        {...(Platform.OS === 'android'
-          ? {
-              blurMethod: 'dimezisBlurViewSdk31Plus' as const,
-              blurReductionFactor: 3,
-              ...(blurTarget ? { blurTarget } : {}),
-            }
+        {...(Platform.OS === 'android' && blurTarget
+          ? { blurMethod: 'dimezisBlurViewSdk31Plus' as const, blurReductionFactor: 3, blurTarget }
           : {})}
       />
       {/* Strong scrim: every bottom sheet must make the screen behind read black-ish */}

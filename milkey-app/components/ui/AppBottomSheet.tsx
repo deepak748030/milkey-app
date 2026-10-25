@@ -1,5 +1,8 @@
 import React, { memo, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Animated, Easing, BackHandler, Platform } from 'react-native';
+import {
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal,
+  useWindowDimensions, Animated, Easing, Platform,
+} from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,37 +23,40 @@ type Props<T extends string> = {
   visible: boolean;
   onClose: () => void;
   title: string;
-  /** Kept for API compatibility — the reference design has no subtitle. */
+  /** Kept for API compatibility — the approved design has no subtitle. */
   subtitle?: string;
   items: SheetItem<T>[];
   activeKey: T;
   onSelect: (k: T) => void;
   isActive?: (active: T, item: SheetItem<T>) => boolean;
+  /** Height of the bottom tab bar: the dark backdrop stops there so the tab bar stays bright. */
   bottomOffset?: number;
+  /** Kept for API compatibility. */
   topOffset?: number;
-  /** Ref of the <BlurTargetView> that wraps the screen content (Android blur). */
+  /** Kept for API compatibility (blur uses the Modal's own window). */
   blurTarget?: React.RefObject<any>;
-  /** Kept for API compatibility - the backdrop always covers the full screen now. */
-  topOffset?: number;
 };
 
 /**
- * Collection / Selling sheet — matches the approved screenshot exactly.
+ * Collection / Selling bottom sheet.
  *
- *  • Floating card: full width, rounded on ALL four corners (top and bottom look
- *    identical), 10px gap above the tab bar.
- *  • Header: soft green gradient glow from the top edge fading into the card,
- *    big black "Collection" title, white circular close button.
- *  • Rows: tinted pills with their coloured icon boxes, chevron on the right;
- *    the active row gets a green tint + green outline + green label.
- *  • Background behind: expo-blur (Android: dimezisBlurViewSdk31Plus + blurTarget)
- *    plus a dark scrim, so the screen behind goes dark. Rendered inline (no Modal)
- *    because a Modal is a separate native window and cannot be blurred.
- *  • Height stays below half of the screen (capped) with internal scroll.
+ * Backdrop (this is the important part):
+ *   The sheet lives in a transparent <Modal>. A Modal is guaranteed to paint above
+ *   the whole screen on both platforms, so the dark layer can never be "lost"
+ *   behind another view (which is exactly what happened with the inline overlay).
+ *   Inside the Modal we stack:
+ *      1. expo-blur (real blur on iOS; Android falls back to a dark translucent tint)
+ *      2. rgba(0,0,0,0.72) scrim  +  rgba(6,20,12,0.18) green tint
+ *   Both stop `bottomOffset` pixels above the bottom edge, so the tab bar of the
+ *   screen behind stays visible and bright — exactly like the reference.
+ *
+ * Sheet itself: full width, all four corners rounded, 10px above the tab bar,
+ * gradient green glow under the top edge, big title, white round close button,
+ * tinted icon rows, active row outlined in green.
  */
 function AppBottomSheet<T extends string>({
   visible, onClose, title, items, activeKey, onSelect, isActive,
-  bottomOffset = 0, blurTarget,
+  bottomOffset = 0,
 }: Props<T>) {
   const { colors, isDark } = useTheme();
   const { height: screenHeight } = useWindowDimensions();
@@ -68,131 +74,118 @@ function AppBottomSheet<T extends string>({
     }).start();
   }, [visible, anim]);
 
-  // Android hardware back closes the sheet (no Modal = no built-in handling).
-  useEffect(() => {
-    if (!visible || Platform.OS !== 'android') return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true; });
-    return () => sub.remove();
-  }, [visible, onClose]);
-
   const handle = useCallback((k: T) => { onSelect(k); onClose(); }, [onSelect, onClose]);
   const s = styles(colors, isDark);
   if (!visible) return null;
 
   const sheetTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
+  const stopAboveTabBar = bottomOffset ? { bottom: bottomOffset } : null;
 
   return (
-    <View style={s.overlay} pointerEvents="box-none">
-      {/* Dim + real blur behind the sheet.
-          Covers the WHOLE screen (header + status bar included) except the bottom tab
-          bar, and is NOT animated — so the background can never stay half-dimmed.
-          Layers: blur (where the platform allows) -> strong black scrim -> green tint. */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, bottomOffset ? { bottom: bottomOffset } : null]}>
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 55 : 60}
-          tint="dark"
-          style={StyleSheet.absoluteFillObject}
-          // SDK 57: on Android the blur only works with an explicit blurMethod AND a
-          // blurTarget; without them it silently falls back to "none" (no blur).
-          {...(Platform.OS === 'android'
-            ? { blurMethod: 'dimezisBlurViewSdk31Plus' as const, blurReductionFactor: 3, blurTarget }
-            : {})}
-        />
-        {/* Strong scrim -> the screen behind reads black-ish, not washed grey */}
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.78)' }]} />
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(6,20,12,0.18)' }]} />
-      </View>
-
-      {/* Tap anywhere outside the sheet (header included) to dismiss */}
-      <TouchableOpacity
-        activeOpacity={1}
-        onPress={onClose}
-        style={[StyleSheet.absoluteFillObject, bottomOffset ? { bottom: bottomOffset } : null]}
-      />
-
-      <Animated.View
-        style={[
-          s.wrap,
-          {
-            marginBottom: bottomOffset + 10,
-            maxHeight: maxSheetHeight,
-            opacity: anim,
-            transform: [{ translateY: sheetTranslateY }],
-          },
-        ]}
-      >
-        <View style={s.card}>
-          {/* Gradient green glow from the top edge, fading into the card */}
-          <LinearGradient
-            pointerEvents="none"
-            colors={
-              isDark
-                ? ['rgba(34,197,94,0.45)', 'rgba(34,197,94,0.10)', 'rgba(0,0,0,0)']
-                : ['rgba(34,197,94,0.42)', 'rgba(34,197,94,0.14)', 'rgba(255,255,255,0)']
-            }
-            locations={[0, 0.45, 1]}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={s.topGlow}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={onClose}
+      hardwareAccelerated
+    >
+      <View style={s.overlay}>
+        {/* 1) Blur + 2) dark scrim. pointerEvents none so taps fall through to the closer.
+            These are NOT animated, so the screen behind can never stay half-dimmed. */}
+        <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, stopAboveTabBar]}>
+          <BlurView
+            intensity={Platform.OS === 'ios' ? 45 : 40}
+            tint="dark"
+            style={StyleSheet.absoluteFillObject}
           />
-
-          <View style={s.handle} />
-
-          <View style={s.header}>
-            <Text numberOfLines={1} style={s.title}>{title}</Text>
-            <Pressable onPress={onClose} style={s.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <X size={19} color="#0A0A0A" strokeWidth={2.6} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            style={s.scroll}
-            contentContainerStyle={s.list}
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-            nestedScrollEnabled
-          >
-            {items.map(item => {
-              const active = isActive ? isActive(activeKey, item) : activeKey === item.key;
-              const Icon = item.IconComp;
-              const rowTint = isDark ? 'rgba(255,255,255,0.05)' : (item.tint || '#F5FAF6');
-              return (
-                <Pressable
-                  key={item.key}
-                  onPress={() => handle(item.key)}
-                  style={({ pressed }) => [
-                    s.row,
-                    { backgroundColor: active ? (isDark ? 'rgba(34,197,94,0.16)' : '#E9F8EE') : rowTint },
-                    active && s.rowActive,
-                    pressed && s.pressed,
-                  ]}
-                >
-                  <View style={[s.iconBox, { backgroundColor: item.iconBg }]}>
-                    <Icon size={17} color={item.iconColor} strokeWidth={2.1} />
-                  </View>
-                  <Text numberOfLines={1} style={[s.label, active && s.labelActive]}>{item.label}</Text>
-                  <ChevronRight size={17} color={active ? colors.primary : '#0F172A'} />
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.72)' }]} />
+          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(6,20,12,0.18)' }]} />
         </View>
-      </Animated.View>
-    </View>
+
+        {/* Tap anywhere outside the sheet (header / status bar included) to dismiss */}
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={onClose}
+          style={[StyleSheet.absoluteFillObject, stopAboveTabBar]}
+        />
+
+        <Animated.View
+          style={[
+            s.wrap,
+            {
+              marginBottom: bottomOffset + 10,
+              maxHeight: maxSheetHeight,
+              opacity: anim,
+              transform: [{ translateY: sheetTranslateY }],
+            },
+          ]}
+        >
+          <View style={s.card}>
+            {/* Gradient green glow from the top edge, fading into the card */}
+            <LinearGradient
+              pointerEvents="none"
+              colors={
+                isDark
+                  ? ['rgba(34,197,94,0.45)', 'rgba(34,197,94,0.10)', 'rgba(0,0,0,0)']
+                  : ['rgba(34,197,94,0.42)', 'rgba(34,197,94,0.14)', 'rgba(255,255,255,0)']
+              }
+              locations={[0, 0.45, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={s.topGlow}
+            />
+
+            <View style={s.handle} />
+
+            <View style={s.header}>
+              <Text numberOfLines={1} style={s.title}>{title}</Text>
+              <Pressable onPress={onClose} style={s.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <X size={19} color="#0A0A0A" strokeWidth={2.6} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={s.scroll}
+              contentContainerStyle={s.list}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              nestedScrollEnabled
+            >
+              {items.map(item => {
+                const active = isActive ? isActive(activeKey, item) : activeKey === item.key;
+                const Icon = item.IconComp;
+                const rowTint = isDark ? 'rgba(255,255,255,0.05)' : (item.tint || '#F5FAF6');
+                return (
+                  <Pressable
+                    key={item.key}
+                    onPress={() => handle(item.key)}
+                    style={({ pressed }) => [
+                      s.row,
+                      { backgroundColor: active ? (isDark ? 'rgba(34,197,94,0.16)' : '#E9F8EE') : rowTint },
+                      active && s.rowActive,
+                      pressed && s.pressed,
+                    ]}
+                  >
+                    <View style={[s.iconBox, { backgroundColor: item.iconBg }]}>
+                      <Icon size={17} color={item.iconColor} strokeWidth={2.1} />
+                    </View>
+                    <Text numberOfLines={1} style={[s.label, active && s.labelActive]}>{item.label}</Text>
+                    <ChevronRight size={17} color={active ? colors.primary : '#0F172A'} />
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = (c: any, dark: boolean) => StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 999,
-    elevation: 30,
-  },
+  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   wrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     borderRadius: 28,
     backgroundColor: c.card,
     shadowColor: '#000',
@@ -209,7 +202,7 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
     paddingHorizontal: 10,
     overflow: 'hidden',
   },
-  // Green glow hugging the top edge (replaces the hard border line).
+  // Green glow hugging the top edge.
   topGlow: {
     position: 'absolute',
     top: 0,
