@@ -12,6 +12,7 @@ import SellingBottomSheet from '@/components/SellingBottomSheet';
 import { AdPopupModal } from '@/components/AdPopupModal';
 import { checkAppVersion } from '@/lib/milkeyApi';
 import { useSubTabStore } from '@/lib/subTabStore';
+import { useLayoutStore } from '@/lib/layoutStore';
 import { useTabSound } from '@/hooks/useTabSound';
 import { consumeSuppressCollection, consumeSuppressSelling } from '@/lib/sheetSuppress';
 import Constants from 'expo-constants';
@@ -51,9 +52,11 @@ export default function TabLayout() {
   const { purchaseTab, sellingTab, collectionTab, setPurchaseTab, setSellingTab, setCollectionTab, suppressCollectionSheet, suppressSellingSheet, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
   const playTabSound = useTabSound();
   const activeTabName = segments[segments.length - 1] as string || '';
+  const measuredHeader = useLayoutStore((st) => st.headerHeight);
   const tabBarHeight = 65 + insets.bottom;
-  // TopBar = insets.top+6 paddingTop + 42 logo + 12 paddingBottom ≈ insets.top+60, use 62 to keep header 100% clear
-  const headerHeight = insets.top + 62;
+  // Real measured height of the green TopBar (-1 to avoid a hairline of undimmed
+  // background under it). Falls back to the computed value on the very first frame.
+  const headerHeight = (measuredHeader > 0 ? measuredHeader : insets.top + 62) - 1;
 
   useEffect(() => {
     if (activeTabName === 'purchase') {

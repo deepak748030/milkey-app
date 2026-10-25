@@ -136,6 +136,14 @@ function AppBottomSheet<T extends string>({
           stage, so tapping the same tab again still closes the sheet. */}
       <TouchableOpacity activeOpacity={1} onPress={onClose} style={StyleSheet.absoluteFillObject} />
 
+      {/* Card-coloured strip behind the card's bottom rounded corners. The card is flush
+          with the tab bar, so without this the dark backdrop shows through those two
+          corners as small dark triangles. */}
+      <View
+        pointerEvents="none"
+        style={[s.cornerFill, { backgroundColor: colors.card }]}
+      />
+
       <View pointerEvents="box-none" style={s.cardSlot}>
         <Animated.View
           style={[
@@ -228,6 +236,13 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
   cardSlot: {
     flex: 1,
     justifyContent: 'flex-end',
+  },
+  cornerFill: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 34,
   },
   wrap: {
     borderRadius: 28,
