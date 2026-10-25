@@ -6,6 +6,7 @@ import {
 import { Pressable } from '@/components/ui/HapticPressable';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/useTheme';
+import { useSheetScrimStore } from '@/lib/sheetScrimStore';
 import { X, ChevronRight } from 'lucide-react-native';
 
 export type SheetItem<T extends string> = {
@@ -40,8 +41,8 @@ type Props<T extends string> = {
  * Collection / Selling bottom sheet.
  *
  * Backdrop: the dark layer is NOT drawn here. It is a plain in-window View
- *   (<SheetScrimOverlay>) rendered by the tabs layout, which is the only variant
- *   that reliably darkens the header / status bar area too. This Modal is fully
+ *   (<SheetScrimOverlay>) rendered at the ROOT of the app, which is the only place
+ *   guaranteed to be painted above every screen, the TopBar and the status bar. This Modal is fully
  *   transparent and only floats the sheet card above everything else.
  *
  * Sheet itself: full width, all four corners rounded, 10px above the tab bar,
@@ -68,6 +69,15 @@ function AppBottomSheet<T extends string>({
     }).start();
   }, [visible, anim]);
 
+  // Ask the ROOT-level scrim to darken the whole screen while this sheet is open.
+  const showScrim = useSheetScrimStore((st) => st.show);
+  const hideScrim = useSheetScrimStore((st) => st.hide);
+  useEffect(() => {
+    if (!visible) return;
+    showScrim(0.72, bottomOffset);
+    return () => hideScrim();
+  }, [visible, bottomOffset, showScrim, hideScrim]);
+
   const handle = useCallback((k: T) => { onSelect(k); onClose(); }, [onSelect, onClose]);
   const s = styles(colors, isDark);
   if (!visible) return null;
@@ -85,8 +95,9 @@ function AppBottomSheet<T extends string>({
       hardwareAccelerated
     >
       <View style={s.overlay}>
-        {/* The dark layer for this sheet is rendered by <SheetScrimOverlay> in the tabs
-            layout (in-window, cannot be covered). This Modal only floats the card. */}
+        {/* The dark layer is rendered by <SheetScrimOverlay> at the app root
+            (same window as the screens => it can never be covered). This Modal only
+            floats the card, so the card itself stays 100% bright. */}
 
         {/* Tap anywhere outside the sheet (header / status bar included) to dismiss */}
         <TouchableOpacity

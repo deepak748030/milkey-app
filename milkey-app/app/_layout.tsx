@@ -20,6 +20,8 @@ import { usePendingSubscriptionSync } from '@/hooks/usePendingSubscriptionSync';
 import { BluetoothPrinterProvider } from '@/hooks/useBluetoothPrinter';
 import { useDeviceSync } from '@/hooks/useDeviceSync';
 import { useTheme } from '@/hooks/useTheme';
+import { SheetScrimOverlay } from '@/components/ui/SheetScrimOverlay';
+import { useSheetScrimStore } from '@/lib/sheetScrimStore';
 
 function RootLayoutContent() {
   useFrameworkReady();
@@ -31,6 +33,11 @@ function RootLayoutContent() {
   const isDark = !!theme?.isDark;
 
   const bg = (colors as any)?.background ?? '#ffffff';
+  // Root-level dark scrim: painted above every screen/top bar, so no sheet backdrop
+  // can ever be covered by the navigator or a native blur-target view.
+  const scrimCount = useSheetScrimStore((st) => st.count);
+  const scrimDim = useSheetScrimStore((st) => st.dim);
+  const scrimBottom = useSheetScrimStore((st) => st.bottom);
   // Haptics are NOT global anymore: only buttons (HapticPressable), inputs
   // (HapticTextInput), the bottom tab bar and AppBottomSheet rows vibrate.
   return (
@@ -56,6 +63,8 @@ function RootLayoutContent() {
         <Stack.Screen name="admin" />
         <Stack.Screen name="+not-found" />
       </Stack>
+      {/* Last child + high zIndex => above everything of the main window */}
+      <SheetScrimOverlay visible={scrimCount > 0} bottomOffset={scrimBottom} dim={scrimDim} />
       {/* Status bar matches app theme (light #FFFFFF white / dark #000000 black) */}
       <RNStatusBar backgroundColor={bg} barStyle={isDark ? 'light-content' : 'dark-content'} translucent={false} />
       <ExpoStatusBar style={isDark ? 'light' : 'dark'} backgroundColor={bg} />

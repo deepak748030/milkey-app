@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { BlurView, BlurTargetView } from 'expo-blur';
+import { useSheetScrimStore } from '@/lib/sheetScrimStore';
 
 /**
  * Shared sheet backdrop: dark scrim + real blur, used behind EVERY bottom sheet.
@@ -40,6 +41,14 @@ type Props = {
 
 export function SheetBackdrop({ dim = 0.74, tint = true }: Props) {
   const blurTarget = useBlurTarget();
+  // Also ask the ROOT scrim to darken the main window, so a sheet that lives inside a
+  // <Modal> still darkens the screen behind it reliably (belt and braces).
+  const showScrim = useSheetScrimStore((st) => st.show);
+  const hideScrim = useSheetScrimStore((st) => st.hide);
+  useEffect(() => {
+    showScrim(dim, 0);
+    return () => hideScrim();
+  }, [dim, showScrim, hideScrim]);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <BlurView
