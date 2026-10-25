@@ -30,6 +30,19 @@ import { useSubTabStore, RegisterTab } from '@/lib/subTabStore';
 import { useFocusEffect } from 'expo-router';
 import { TZ_OFFSET_MINUTES } from '@/lib/purchaseConstants';
 
+/** Calendar day (YYYY-MM-DD) of an instant in the DEVICE timezone.
+ *  Periods are stored as instants (e.g. 2026-10-01T06:30Z); slicing the ISO string
+ *  would give the previous UTC day and silently drop the last entries of a period. */
+const localDateKey = (value: any) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return typeof value === 'string' ? value.slice(0, 10) : '';
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+};
+
+
 // Helper function to format date as dd/mm/yyyy clear
 const formatDateDDMMYYYY = (dateStr: string) => {
     if (!dateStr) return '';
@@ -565,19 +578,33 @@ export default function RegisterScreen() {
         if (isPrinterConnected) {
             try {
                 let collections: any[] = [];
+                // 1) The collections this settlement paid — GET /payments/:id populates
+                //    them, so they are the exact purchase entries of the slip.
+                try {
+                    const raw = (p as any).settledCollections;
+                    if (Array.isArray(raw) && raw.length && typeof raw[0] === 'object' && (raw[0] as any)._id) {
+                        collections = raw.filter((r: any) => r && typeof r === 'object' && r._id);
+                    } else if (p._id) {
+                        const detail = await paymentsApi.getById(p._id);
+                        const d = (detail as any)?.response;
+                        if (detail.success && Array.isArray(d?.settledCollections)) {
+                            collections = d.settledCollections.filter((r: any) => r && typeof r === 'object' && r._id);
+                        }
+                    }
+                } catch { }
                 try {
                     const farmerCode = (p.farmer as any)?.code;
                     const start = p.periodStart || p.date;
                     const end = p.periodEnd || p.date;
-                    if (farmerCode) {
+                    if (collections.length === 0 && farmerCode) {
                         // Same query the Payment screen's "View Entries" uses (farmer code +
                         // calculation period + tz offset), so the printed slip carries the
                         // purchase entries instead of "- No entries -". Falls back to the
                         // unfiltered range when those rows are already marked paid.
                         const base: any = {
                             farmerCode,
-                            startDate: start ? String(start).slice(0, 10) : undefined,
-                            endDate: end ? String(end).slice(0, 10) : undefined,
+                            startDate: localDateKey(start) || undefined,
+                            endDate: localDateKey(end) || undefined,
                             limit: 200,
                             tzOffsetMinutes: TZ_OFFSET_MINUTES,
                         };

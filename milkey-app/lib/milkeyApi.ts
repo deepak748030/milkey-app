@@ -196,6 +196,8 @@ export interface Payment {
     periodEnd?: string;
     createdAt?: string;
     settledAdvances?: SettledAdvanceInPayment[];
+    /** Collections settled by this payment — populated (full documents) by GET /payments/:id. */
+    settledCollections?: any[];
 }
 
 export interface RateSetting {
