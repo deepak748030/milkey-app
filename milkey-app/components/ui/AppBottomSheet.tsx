@@ -21,10 +21,10 @@ type Props<T extends string> = {
 
 /**
  * Floating action sheet.
- * Deliberately NOT edge-to-edge: it sits as a separate rounded card with a
- * gradient green border + shadow so it clearly looks "lifted" out of the phone
- * screen, and it is hard-capped to under half the screen height (46%) with an
- * internal scroll when the item list grows. Rows are compact (44px) so all six
+ * Full screen width (edge-to-edge) but still visually separate: it floats above
+ * the tab bar, keeps a gradient green border all around, rounded corners and a
+ * shadow. Height is hard-capped below half the screen (46%) with an internal
+ * scroll when the item list grows. Rows are compact (44px) so all six
  * Collection/Selling options fit without eating the whole screen.
  */
 function AppBottomSheet<T extends string>({ visible, onClose, title, items, activeKey, onSelect, isActive, bottomOffset = 0, topOffset = 0 }: Props<T>) {
@@ -97,7 +97,9 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   // Floating card: inset from both sides, never taller than 46% of the screen.
   wrap: {
-    marginHorizontal: 14,
+    // Edge-to-edge width: the sheet spans the full screen width (0 side gap) and
+    // still floats 10px above the tab bar, with the gradient border all around.
+    marginHorizontal: 0,
     borderRadius: 24,
     shadowColor: '#052e16',
     shadowOffset: { width: 0, height: -6 },
