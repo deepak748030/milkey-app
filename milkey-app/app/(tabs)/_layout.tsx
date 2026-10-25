@@ -237,8 +237,15 @@ export default function TabLayout() {
           <Tabs.Screen name="profile" options={{ title: t.tabs.profile }} />
           <Tabs.Screen name="register" options={{ href: null, headerShown: false }} />
       </Tabs>
-      <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={collectionTab as any} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
-      <SellingBottomSheet visible={showSellingSheet} onClose={() => setShowSellingSheet(false)} activeTab={sellingTab} onSelectTab={handleSellingSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
+      {/* Absolute stage: floating sheets live here so <Tabs> always keeps its full
+          height (a normal sibling would squeeze the tab bar up into the screen). */}
+      <View
+        pointerEvents="box-none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, elevation: 50 }}
+      >
+        <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={collectionTab as any} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
+        <SellingBottomSheet visible={showSellingSheet} onClose={() => setShowSellingSheet(false)} activeTab={sellingTab} onSelectTab={handleSellingSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
+      </View>
     </View>
   );
 }

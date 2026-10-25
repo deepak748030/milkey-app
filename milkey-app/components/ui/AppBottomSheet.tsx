@@ -88,7 +88,7 @@ function AppBottomSheet<T extends string>({
   const stopAboveTabBar = bottomOffset ? { bottom: bottomOffset } : null;
 
   return (
-    <View style={s.overlay} pointerEvents="box-none">
+    <View style={[s.overlay, StyleSheet.absoluteFill]} pointerEvents="box-none">
       {/* Dark + blur layer. Painted above the screens (so the header goes dark too),
           stops above the tab bar, and is NOT animated → it can never stay half-applied. */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, stopAboveTabBar]}>
@@ -182,7 +182,6 @@ function AppBottomSheet<T extends string>({
 const styles = (c: any, dark: boolean) => StyleSheet.create({
   // Sits above the screens of this navigator; the tab bar stays outside the dim area.
   overlay: {
-    ...StyleSheet.absoluteFillObject,
     zIndex: 9999,
     elevation: 50,
     justifyContent: 'flex-end',
