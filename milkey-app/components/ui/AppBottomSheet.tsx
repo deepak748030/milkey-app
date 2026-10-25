@@ -30,6 +30,8 @@ type Props<T extends string> = {
   topOffset?: number;
   /** Ref of the <BlurTargetView> that wraps the screen content (Android blur). */
   blurTarget?: React.RefObject<any>;
+  /** Kept for API compatibility - the backdrop always covers the full screen now. */
+  topOffset?: number;
 };
 
 /**
@@ -48,7 +50,7 @@ type Props<T extends string> = {
  */
 function AppBottomSheet<T extends string>({
   visible, onClose, title, items, activeKey, onSelect, isActive,
-  bottomOffset = 0, topOffset = 0, blurTarget,
+  bottomOffset = 0, blurTarget,
 }: Props<T>) {
   const { colors, isDark } = useTheme();
   const { height: screenHeight } = useWindowDimensions();
@@ -77,19 +79,17 @@ function AppBottomSheet<T extends string>({
   const s = styles(colors, isDark);
   if (!visible) return null;
 
-  const insetStyle: any = {};
-  if (bottomOffset) insetStyle.bottom = bottomOffset;
-  if (topOffset) insetStyle.top = topOffset;
-  const hasInset = bottomOffset || topOffset;
-
   const sheetTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
 
   return (
     <View style={s.overlay} pointerEvents="box-none">
-      {/* Dim + real blur behind the sheet. Header and tab bar stay clear (insets). */}
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFillObject, hasInset ? insetStyle : null, { opacity: anim }]}>
+      {/* Dim + real blur behind the sheet.
+          Covers the WHOLE screen (header + status bar included) except the bottom tab
+          bar, and is NOT animated — so the background can never stay half-dimmed.
+          Layers: blur (where the platform allows) -> strong black scrim -> green tint. */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, bottomOffset ? { bottom: bottomOffset } : null]}>
         <BlurView
-          intensity={Platform.OS === 'ios' ? 60 : 70}
+          intensity={Platform.OS === 'ios' ? 55 : 60}
           tint="dark"
           style={StyleSheet.absoluteFillObject}
           // SDK 57: on Android the blur only works with an explicit blurMethod AND a
@@ -98,13 +98,17 @@ function AppBottomSheet<T extends string>({
             ? { blurMethod: 'dimezisBlurViewSdk31Plus' as const, blurReductionFactor: 3, blurTarget }
             : {})}
         />
-        {/* Dark scrim on top of the blur → the background reads as near-black */}
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.62)' }]} />
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(9,26,15,0.22)' }]} />
-      </Animated.View>
+        {/* Strong scrim -> the screen behind reads black-ish, not washed grey */}
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.78)' }]} />
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(6,20,12,0.18)' }]} />
+      </View>
 
-      {/* Tap outside to dismiss */}
-      <TouchableOpacity activeOpacity={1} onPress={onClose} style={[StyleSheet.absoluteFillObject, hasInset ? insetStyle : null]} />
+      {/* Tap anywhere outside the sheet (header included) to dismiss */}
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onClose}
+        style={[StyleSheet.absoluteFillObject, bottomOffset ? { bottom: bottomOffset } : null]}
+      />
 
       <Animated.View
         style={[

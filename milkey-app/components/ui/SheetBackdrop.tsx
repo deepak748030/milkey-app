@@ -38,7 +38,7 @@ type Props = {
   tint?: boolean;
 };
 
-export function SheetBackdrop({ dim = 0.62, tint = true }: Props) {
+export function SheetBackdrop({ dim = 0.74, tint = true }: Props) {
   const blurTarget = useBlurTarget();
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -54,8 +54,9 @@ export function SheetBackdrop({ dim = 0.62, tint = true }: Props) {
             }
           : {})}
       />
+      {/* Strong scrim: every bottom sheet must make the screen behind read black-ish */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${dim})` }]} />
-      {tint ? <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(9,26,15,0.22)' }]} /> : null}
+      {tint ? <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(6,20,12,0.18)' }]} /> : null}
     </View>
   );
 }
