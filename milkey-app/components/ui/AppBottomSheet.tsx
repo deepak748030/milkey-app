@@ -40,7 +40,7 @@ type Props<T extends string> = {
 /** Reserved height of the handle + title row + paddings inside the card. */
 const CARD_CHROME = 96;
 /** How dark the screen behind the sheet goes (this layer). */
-const STAGE_DIM = 0.66;
+const STAGE_DIM = 0.55;
 
 /**
  * Collection / Selling floating sheet.
@@ -123,7 +123,7 @@ function AppBottomSheet<T extends string>({
           the bottom tab bar → header bright, tab bar bright, content dark. */}
       <Animated.View
         pointerEvents="box-none"
-        style={[s.stage, { top: topOffset, bottom: bottomOffset, opacity: anim }]}
+        style={[s.stage, { top: topOffset, bottom: bottomOffset }]}
       >
       {/* iOS only: real blur on top of the dark colour. Android has no native blur
           outside a dev build, so the dark colour carries it there. */}
@@ -151,6 +151,7 @@ function AppBottomSheet<T extends string>({
             {
               marginBottom: 0,
               maxHeight: maxSheetHeight,
+              opacity: anim,
               transform: [{ translateY: cardTranslateY }],
             },
           ]}
@@ -230,7 +231,6 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 9999,
-    elevation: 50,
     backgroundColor: `rgba(0,0,0,${STAGE_DIM})`,
   },
   cardSlot: {
@@ -247,12 +247,12 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
   wrap: {
     borderRadius: 28,
     backgroundColor: c.card,
-    // No Android elevation shadow: it fell downwards onto the tab bar and greyed it.
-    // A shadow only upwards (iOS) keeps the card separated from the dark backdrop.
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
+    // No shadow on Android at all: elevation greyed the tab bar and shadow* goes through
+    // setShadowLayer there, which bleeds over the translucent backdrop. iOS keeps a soft
+    // upward shadow.
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.18, shadowRadius: 12 }
+      : null),
   },
   card: {
     backgroundColor: c.card,
