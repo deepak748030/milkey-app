@@ -138,8 +138,20 @@ export function buildJointCollectionPaymentSlipPayload(
         `${t.milkAmount} :`,
         `${purchaseAmountValue.toFixed(0)} + ${inputAmountValue.toFixed(0)} = ${milkAmountValue.toFixed(0)}`,
     );
-    payload += twoCol(`${t.advanceProduct} :`, (p.totalAdvanceDeduction || 0).toFixed(0));
-    payload += twoCol(`${t.totalPayable} :`, (p.netPayable || 0).toFixed(0));
+    // Advance / Total payable exactly like the Payment screen; if an older payment has
+    // no stored advance value, the settled advances of the payment are summed instead.
+    const settledAdvances: any[] = Array.isArray((p as any).settledAdvances) ? (p as any).settledAdvances : [];
+    const advanceFromRows = settledAdvances.reduce(
+        (sum, a: any) => sum + (Number(a?.settledAmount) || Number(a?.amount) || 0),
+        0,
+    );
+    const advanceValue = (p.totalAdvanceDeduction || 0) > 0 ? (p.totalAdvanceDeduction || 0) : advanceFromRows;
+    const payableValue =
+        (p.netPayable || 0) !== 0
+            ? (p.netPayable || 0)
+            : milkAmountValue - advanceValue + (p.previousBalance || 0);
+    payload += twoCol(`${t.advanceProduct} :`, advanceValue.toFixed(0));
+    payload += twoCol(`${t.totalPayable} :`, payableValue.toFixed(0));
     payload += twoCol(`${t.paidAmount} :`, (p.amount || 0).toFixed(0));
     payload += fmtLine();
     payload += twoCol(`${t.closingBal} :`, (p.closingBalance || 0).toFixed(0), { bold: true });
