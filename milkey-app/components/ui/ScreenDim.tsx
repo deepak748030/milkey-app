@@ -20,14 +20,18 @@ type Which = 'collection' | 'selling';
  * Because it stops at the bottom of the screen, the bottom tab bar (which lives
  * outside the screen) stays fully bright, exactly like the reference design.
  *
- * Two independent signals switch it on, so it can never "miss" the state:
+ * IMPORTANT: this is only the SECOND net. The primary dark backdrop is painted by
+ * AppBottomSheet itself (on the same View that holds the card, which is guaranteed to
+ * be above the screen). This one adds extra depth when it renders.
+ *
+ * Two independent signals switch it on:
  *   1. `useSubTabStore.collectionSheetOpen / sellingSheetOpen` — written by the tab
  *      layout, the same store the screens already re-render from.
  *   2. `useSheetScrimStore.screenCount` — written by AppBottomSheet itself.
  *
  * pointerEvents="none" → it never blocks a tap (tab bar toggle, sheet rows, etc).
  */
-export function ScreenDim({ dim = 0.72, which }: { dim?: number; which?: Which }) {
+export function ScreenDim({ dim = 0.5, which }: { dim?: number; which?: Which }) {
   const screenCount = useSheetScrimStore((s) => s.screenCount);
   const collectionOpen = useSubTabStore((s) => s.collectionSheetOpen);
   const sellingOpen = useSubTabStore((s) => s.sellingSheetOpen);
