@@ -9,6 +9,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, Download, Check, Plus, X, Zap, Power, Users, UserPlus } from 'lucide-react-native';
 import AmountFilterIcon from '@/components/AmountFilterIcon';
 import TopBar from '@/components/TopBar';
+import ScreenDim from '@/components/ui/ScreenDim';
 import { Calendar } from '@/components/Calendar';
 import { SellingPaymentCalendar } from '@/components/SellingPaymentCalendar';
 import { PaymentRangeCalendar } from '@/components/PaymentRangeCalendar';
@@ -3368,6 +3369,10 @@ export default function SellingScreen() {
                 onClose={() => setShowBulkEntryModal(false)}
                 onSuccess={fetchData}
             />
+
+            {/* Dark backdrop of the Selling sheet — drawn inside the screen so it can
+                never be covered by the page content. */}
+            <ScreenDim which="selling" />
         </View>
     );
 }

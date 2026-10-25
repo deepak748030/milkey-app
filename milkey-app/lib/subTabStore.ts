@@ -33,6 +33,13 @@ interface SubTabState {
     suppressSellingSheet: boolean;
     setSuppressCollectionSheet: (v: boolean) => void;
     setSuppressSellingSheet: (v: boolean) => void;
+    /** Live visibility of the Collection / Selling bottom sheet (mirrored from the tab
+     *  layout). The purchase & selling screens read it to paint their own dark layer —
+     *  the sheet's backdrop has to live inside the screen to be above the content. */
+    collectionSheetOpen: boolean;
+    sellingSheetOpen: boolean;
+    setCollectionSheetOpen: (v: boolean) => void;
+    setSellingSheetOpen: (v: boolean) => void;
 }
 export const useSubTabStore = create<SubTabState>((set) => ({
     purchaseTab: 'Purchase',
@@ -47,4 +54,8 @@ export const useSubTabStore = create<SubTabState>((set) => ({
     suppressSellingSheet: false,
     setSuppressCollectionSheet: (v) => set({ suppressCollectionSheet: v }),
     setSuppressSellingSheet: (v) => set({ suppressSellingSheet: v }),
+    collectionSheetOpen: false,
+    sellingSheetOpen: false,
+    setCollectionSheetOpen: (v) => set((st) => (st.collectionSheetOpen === v ? st : { collectionSheetOpen: v })),
+    setSellingSheetOpen: (v) => set((st) => (st.sellingSheetOpen === v ? st : { sellingSheetOpen: v })),
 }));

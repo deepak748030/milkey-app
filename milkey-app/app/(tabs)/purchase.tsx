@@ -14,6 +14,7 @@ import {
     MoreVertical, Share2, Table as TableIcon
 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
+import ScreenDim from '@/components/ui/ScreenDim';
 import {
     milkCollectionsApi, purchaseFarmersApi, rateChartsApi,
     MilkCollection, PurchaseFarmer, printSettingsApi, PrintSettings
@@ -1263,6 +1264,10 @@ export default function PurchaseScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Dark backdrop of the Collection sheet — last child, so it paints above
+                everything on this screen but below the floating sheet card. */}
+            <ScreenDim which="collection" />
         </View>
     );
 }

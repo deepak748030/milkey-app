@@ -1,6 +1,6 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect } from 'react';
 import { ClipboardEdit, IndianRupee, BarChart3, Users } from 'lucide-react-native';
-import { SellingTab } from '@/lib/subTabStore';
+import { SellingTab, useSubTabStore } from '@/lib/subTabStore';
 import AppBottomSheet, { SheetItem } from '@/components/ui/AppBottomSheet';
 type Props = { visible: boolean; onClose: () => void; activeTab: SellingTab; onSelectTab: (tab: SellingTab) => void; bottomOffset?: number; topOffset?: number; blurTarget?: React.RefObject<any> };
 const ITEMS: SheetItem<SellingTab>[] = [
@@ -10,6 +10,9 @@ const ITEMS: SheetItem<SellingTab>[] = [
   { key: 'Customer', label: 'Customer', IconComp: Users, iconBg: '#EEDCF8', iconColor: '#7B1FA2', tint: '#FAF2FE' },
 ];
 export default memo(function SellingBottomSheet({ visible, onClose, activeTab, onSelectTab, bottomOffset, topOffset, blurTarget }: Props){
+  // Second writer of the flag the selling screen reads for its dark backdrop.
+  const setOpen = useSubTabStore((st) => st.setSellingSheetOpen);
+  useEffect(() => { setOpen(!!visible); }, [visible, setOpen]);
   return <AppBottomSheet visible={visible} onClose={onClose} title="Selling"
     items={ITEMS} activeKey={activeTab} onSelect={onSelectTab} bottomOffset={bottomOffset} topOffset={topOffset} blurTarget={blurTarget} />;
 });

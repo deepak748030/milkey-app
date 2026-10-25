@@ -53,6 +53,13 @@ export default function TabLayout() {
   const playTabSound = useTabSound();
   const activeTabName = segments[segments.length - 1] as string || '';
   const measuredHeader = useLayoutStore((st) => st.headerHeight);
+  // Mirror the sheet visibility into the shared store: the purchase / selling screens
+  // read it to paint their dark backdrop INSIDE the screen (the only place that is
+  // guaranteed to be painted above the screen content on Android).
+  const setCollectionSheetOpen = useSubTabStore((st) => st.setCollectionSheetOpen);
+  const setSellingSheetOpen = useSubTabStore((st) => st.setSellingSheetOpen);
+  useEffect(() => { setCollectionSheetOpen(showCollectionSheet); }, [showCollectionSheet, setCollectionSheetOpen]);
+  useEffect(() => { setSellingSheetOpen(showSellingSheet); }, [showSellingSheet, setSellingSheetOpen]);
   const tabBarHeight = 65 + insets.bottom;
   // Real measured height of the green TopBar (-1 to avoid a hairline of undimmed
   // background under it). Falls back to the computed value on the very first frame.

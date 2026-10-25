@@ -43,7 +43,7 @@ const CARD_CHROME = 92;
 const ROW_H = 48;
 const ROW_GAP = 7;
 /** How dark the screen behind the sheet goes (this layer). */
-const STAGE_DIM = 0.55;
+const STAGE_DIM = 0.32;
 
 /**
  * Collection / Selling floating sheet.

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React, { memo, useEffect } from 'react';
 import { User, Milk, FileText, IndianRupee, Calendar } from 'lucide-react-native';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 import AppBottomSheet, { SheetItem } from '@/components/ui/AppBottomSheet';
@@ -16,6 +16,9 @@ function getDisplay(): SheetItem<PurchaseTab>[] {
   return PREF.map(k => ITEMS.find(i => i.key === k)! ).filter(Boolean);
 }
 export default memo(function CollectionBottomSheet({ visible, onClose, activeTab, onSelectTab, bottomOffset, topOffset, blurTarget }: Props){
+  // Second writer of the flag the purchase screen reads for its dark backdrop.
+  const setOpen = useSubTabStore((st) => st.setCollectionSheetOpen);
+  useEffect(() => { setOpen(!!visible); }, [visible, setOpen]);
   return <AppBottomSheet visible={visible} onClose={onClose} title="Collection"
     items={getDisplay()} activeKey={activeTab} onSelect={onSelectTab} bottomOffset={bottomOffset} topOffset={topOffset} blurTarget={blurTarget}
     isActive={(a, it) => a===it.key } />;
