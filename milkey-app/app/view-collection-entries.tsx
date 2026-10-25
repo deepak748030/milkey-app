@@ -6,6 +6,7 @@ import { ArrowLeft, Search } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { milkCollectionsApi, MilkCollection } from '@/lib/milkeyApi';
 import { getAuthToken } from '@/lib/authStore';
+import { TZ_OFFSET_MINUTES } from '@/lib/purchaseConstants';
 
 const formatDate = (iso?: string) => {
     if (!iso) return '-';
@@ -59,6 +60,8 @@ export default function ViewCollectionEntriesScreen() {
                 startDate: startDate || undefined,
                 endDate: endDate || undefined,
                 limit: 100,
+                isPaid: false,
+                tzOffsetMinutes: TZ_OFFSET_MINUTES,
             });
             if (res.success && res.response?.data) {
                 setEntries(res.response.data);

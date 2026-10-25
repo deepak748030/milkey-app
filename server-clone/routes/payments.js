@@ -5,6 +5,7 @@ const Payment = require('../models/Payment');
 const MilkCollection = require('../models/MilkCollection');
 const Advance = require('../models/Advance');
 const Farmer = require('../models/Farmer');
+const PurchaseFarmer = require('../models/PurchaseFarmer');
 const auth = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
 
@@ -177,11 +178,18 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
             Farmer.findByIdAndUpdate(farmer._id, { currentBalance: trueCurrentBalance }).catch(() => {});
         }
 
-        // Build date filter for milk collections
+        // Build date filter for milk collections - supports PurchaseFarmer + Farmer + farmerCode
+        const codePattern = new RegExp(`^${String(farmer.code).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        const purchaseFarmerForSummary = await PurchaseFarmer.findOne({ code: codePattern, owner: req.userId });
         const milkQuery = {
-            farmer: farmer._id,
             owner: req.userId,
-            isPaid: false
+            isPaid: false,
+            $or: [
+                ...(purchaseFarmerForSummary ? [{ purchaseFarmer: purchaseFarmerForSummary._id }] : []),
+                { purchaseFarmer: farmer._id },
+                { farmer: farmer._id },
+                { farmerCode: codePattern }
+            ]
         };
 
         if (startDate || endDate) {
@@ -338,12 +346,25 @@ router.post('/', auth, requireSubscription('register'), async (req, res) => {
             }
         }
 
-        // Get unpaid collections
-        const unpaidCollections = await MilkCollection.find({
-            farmer: farmer._id,
+        // Get unpaid collections - supports PurchaseFarmer linkage
+        const _codePatternUp = new RegExp(`^${String(farmer.code).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        const _purchaseFarmerUp = await PurchaseFarmer.findOne({ code: _codePatternUp, owner: req.userId });
+        const unpaidQuery = {
             owner: req.userId,
-            isPaid: false
-        }).sort({ date: 1 });
+            isPaid: false,
+            $or: [
+                ...(_purchaseFarmerUp ? [{ purchaseFarmer: _purchaseFarmerUp._id }] : []),
+                { purchaseFarmer: farmer._id },
+                { farmer: farmer._id },
+                { farmerCode: _codePatternUp }
+            ]
+        };
+        if (periodStart || periodEnd) {
+            unpaidQuery.date = {};
+            if (periodStart) unpaidQuery.date.$gte = periodStart;
+            if (periodEnd) unpaidQuery.date.$lte = periodEnd;
+        }
+        const unpaidCollections = await MilkCollection.find(unpaidQuery).sort({ date: 1 });
 
         // Get pending advances
         const pendingAdvances = await Advance.find({
