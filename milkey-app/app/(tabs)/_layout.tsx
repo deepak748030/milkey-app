@@ -44,6 +44,14 @@ export default function TabLayout() {
   // Android: expo-blur can only blur a view inside the same window, so the tab
   // screens are wrapped in a BlurTargetView and its ref is handed to the sheets.
   const blurTargetRef = useRef<View | null>(null);
+  // Pending 150ms auto-open timers. A quick second tap on the tab must win over the
+  // scheduled open, otherwise the sheet would pop back up right after being closed.
+  const collectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sellingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelAutoOpen = useCallback(() => {
+    if (collectionTimer.current) { clearTimeout(collectionTimer.current); collectionTimer.current = null; }
+    if (sellingTimer.current) { clearTimeout(sellingTimer.current); sellingTimer.current = null; }
+  }, []);
   const { purchaseTab, sellingTab, collectionTab, setPurchaseTab, setSellingTab, setCollectionTab, suppressCollectionSheet, suppressSellingSheet, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
   const playTabSound = useTabSound();
   const activeTabName = segments[segments.length - 1] as string || '';
@@ -55,16 +63,16 @@ export default function TabLayout() {
     if (activeTabName === 'purchase') {
       if (consumeSuppressCollection()) return;
       if (suppressCollectionSheet) { setSuppressCollectionSheet(false); return; }
-      const timer = setTimeout(() => setShowCollectionSheet(true), 150);
-      return () => clearTimeout(timer);
+      collectionTimer.current = setTimeout(() => { collectionTimer.current = null; setShowCollectionSheet(true); }, 150);
+      return () => { if (collectionTimer.current) { clearTimeout(collectionTimer.current); collectionTimer.current = null; } };
     }
   }, [activeTabName, suppressCollectionSheet, setSuppressCollectionSheet]);
   useEffect(() => {
     if (activeTabName === 'selling') {
       if (consumeSuppressSelling()) return;
       if (suppressSellingSheet) { setSuppressSellingSheet(false); return; }
-      const timer = setTimeout(() => setShowSellingSheet(true), 150);
-      return () => clearTimeout(timer);
+      sellingTimer.current = setTimeout(() => { sellingTimer.current = null; setShowSellingSheet(true); }, 150);
+      return () => { if (sellingTimer.current) { clearTimeout(sellingTimer.current); sellingTimer.current = null; } };
     }
   }, [activeTabName, suppressSellingSheet, setSuppressSellingSheet]);
   useEffect(() => {
@@ -146,15 +154,26 @@ export default function TabLayout() {
           else if (route.name === 'profile') IconComp = User;
 
           const onPress = () => {
-            // vibrate already via global capture in app/_layout, avoid double
+            // Haptics come from HapticPressable (this is a Pressable), no manual vibrate.
+            // Toggle: first tap opens the sheet, tapping the SAME tab again closes it.
+            // Earlier it only ever called setShow...(true), so the sheet felt "permanent"
+            // until you tapped outside / on a row.
             if (route.name === 'purchase' && isFocused) {
-              setShowCollectionSheet(true);
+              cancelAutoOpen();
+              setShowSellingSheet(false);
+              setShowCollectionSheet((v) => !v);
               return;
             }
             if (route.name === 'selling' && isFocused) {
-              setShowSellingSheet(true);
+              cancelAutoOpen();
+              setShowCollectionSheet(false);
+              setShowSellingSheet((v) => !v);
               return;
             }
+            // Leaving to another tab: drop any open sheet so it never lingers on return.
+            cancelAutoOpen();
+            setShowCollectionSheet(false);
+            setShowSellingSheet(false);
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (!event.defaultPrevented) {
               navigation.navigate(route.name, route.params);
@@ -205,7 +224,7 @@ export default function TabLayout() {
         })}
       </View>
     );
-  }, [colors, insets.bottom, tabBarHeight]);
+  }, [colors, insets.bottom, tabBarHeight, cancelAutoOpen]);
 
   return (
     <View style={{ flex: 1 }}>
