@@ -13,6 +13,7 @@ import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { brandedFooter, brandedHeader, twoCol, labelValueWrap, line as fmtLine, feed } from '@/lib/printFormat';
 import { getSlipLabels } from '@/lib/printTranslations';
 import { buildJointCollectionPaymentSlipPayload } from '@/lib/slipPrint';
+import { TZ_OFFSET_MINUTES } from '@/lib/purchaseConstants';
 
 const formatDateDDMMYYYY = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -48,18 +49,33 @@ export default function RegisterPaymentSlipScreen() {
 
             if (paymentRes?.success && paymentRes.response) {
                 setPayment(paymentRes.response);
-                // fetch milk collections for this farmer + period to build Joint slip like image
+                // Fetch the farmer's PURCHASE (milk collection) entries for the payment
+                // period — the exact same query the "View Entries" screen uses, including
+                // tzOffsetMinutes. Without the tz offset the server compares the range in
+                // UTC and every row stored with a local time silently disappeared, which is
+                // why the slip always printed "- No entries -".
                 try {
                     const p = paymentRes.response as Payment;
                     const farmerCode = (p.farmer as any)?.code;
-                    if (farmerCode && p.periodStart && p.periodEnd) {
+                    const start = p.periodStart || p.date;
+                    const end = p.periodEnd || p.date;
+                    if (farmerCode) {
                         const colRes = await milkCollectionsApi.getAll({
                             farmerCode,
-                            startDate: p.periodStart,
-                            endDate: p.periodEnd,
-                            limit: 100,
+                            startDate: start || undefined,
+                            endDate: end || undefined,
+                            limit: 200,
+                            tzOffsetMinutes: TZ_OFFSET_MINUTES,
                         });
-                        if (colRes.success && colRes.response?.data) setCollections(colRes.response.data);
+                        const rows: MilkCollection[] = colRes.success ? (colRes.response as any)?.data || [] : [];
+                        rows.sort((a: any, b: any) => {
+                            const da = new Date(a.date).getTime();
+                            const db = new Date(b.date).getTime();
+                            if (da !== db) return da - db;
+                            const rank = (x: any) => (x?.shift === 'evening' ? 1 : 0);
+                            return rank(a) - rank(b);
+                        });
+                        setCollections(rows);
                     }
                 } catch { }
             }
@@ -92,6 +108,19 @@ export default function RegisterPaymentSlipScreen() {
         return `${dd}/${mm}-${suf}`;
     };
 
+    // ── Slip totals ───────────────────────────────────────────────────────────────
+    // Quantity / rate / amount come from the real purchase entries of the period.
+    // "Milk Amount" is the value the Payment screen shows next to Milk Amount after the
+    // farmer code search: the saved `totalMilkAmount` when it has a value, otherwise the
+    // auto amount of those entries (what the entries add up to).
+    const slipQty = collections.reduce((s, c) => s + ((c as any).quantity || 0), 0);
+    const slipAmount = collections.reduce((s, c) => s + ((c as any).amount || 0), 0);
+    const slipAvgRate = slipQty > 0 ? slipAmount / slipQty : 0;
+    const slipMilkAmount =
+        payment && (payment.totalMilkAmount || 0) > 0
+            ? (payment.totalMilkAmount || 0)
+            : slipAmount;
+
     const generateHtml = () => {
         if (!payment) return '';
         const p = payment;
@@ -102,10 +131,10 @@ export default function RegisterPaymentSlipScreen() {
         const address = printSettings?.address || '';
         const dairyAddrLine = address ? address : 'Aligarh (U.P)';
         const dateRange = `${formatDateYY(p.periodStart || p.date)} -${formatDateYY(p.periodEnd || p.date)}`;
-        // totals from collections (or fallback to payment)
-        const totalQty = collections.length ? collections.reduce((s, c) => s + (c.quantity || 0), 0) : 0;
-        const totalAmt = collections.length ? collections.reduce((s, c) => s + (c.amount || 0), 0) : (p.totalMilkAmount || 0);
-        const avgRate = totalQty > 0 ? totalAmt / totalQty : 0;
+        // totals from the real entries of the period (no made-up placeholders)
+        const totalQty = slipQty;
+        const totalAmt = slipAmount;
+        const avgRate = slipAvgRate;
 
         const dots = '....................................................................................................';
         return `
@@ -167,13 +196,13 @@ export default function RegisterPaymentSlipScreen() {
           </tbody>
         </table>
         <div class="dotted">${dots}</div>
-        <div class="tot-row"><span class="lab">Total Qty :</span><span class="val">${totalQty ? totalQty.toFixed(2) : (100).toFixed(2)}</span></div>
-        <div class="tot-row"><span class="lab">Average Rate :</span><span class="val">${avgRate ? avgRate.toFixed(2) : '55.62'}</span></div>
-        <div class="tot-row"><span class="lab">Total Amount :</span><span class="val">${totalAmt ? totalAmt.toFixed(2) : (p.totalMilkAmount || 0).toFixed(2)}</span></div>
+        <div class="tot-row"><span class="lab">Total Qty :</span><span class="val">${totalQty.toFixed(2)}</span></div>
+        <div class="tot-row"><span class="lab">Average Rate :</span><span class="val">${avgRate.toFixed(2)}</span></div>
+        <div class="tot-row"><span class="lab">Total Amount :</span><span class="val">${totalAmt.toFixed(2)}</span></div>
         <div class="dotted">${dots}</div>
         <div class="sec-title">Payment Slip :</div>
         <div class="amt-row"><span class="lab">Last Payment :</span><span class="val">${(p.previousBalance || 0).toFixed(0)}</span></div>
-        <div class="amt-row"><span class="lab">Milk Amount :</span><span class="val-red">Auto AMT + Input = &nbsp;<span style="color:#000;font-weight:700;">${(p.totalMilkAmount || 0).toFixed(0)}</span></span></div>
+        <div class="amt-row"><span class="lab">Milk Amount :</span><span class="val-red">${slipMilkAmount.toFixed(0)}</span></div>
         <div class="amt-row"><span class="lab">Advance / Product :</span><span class="val">${(p.totalAdvanceDeduction || 0).toFixed(0)}</span></div>
         <div class="amt-row"><span class="lab">Total Payable :</span><span class="val">${(p.netPayable || 0).toFixed(0)}</span></div>
         <div class="amt-row"><span class="lab">Paid Amount :</span><span class="val">${(p.amount || 0).toFixed(0)}</span></div>
@@ -227,7 +256,7 @@ export default function RegisterPaymentSlipScreen() {
         payload += feed(1);
         payload += fmtLine();
         payload += twoCol(`${t.lastPayment}:`, (p.previousBalance || 0).toFixed(0));
-        payload += twoCol(`${t.milkAmount}:`, (p.totalMilkAmount || 0).toFixed(0));
+        payload += twoCol(`${t.milkAmount}:`, slipMilkAmount.toFixed(0));
         payload += twoCol(`${t.advanceProduct}:`, (p.totalAdvanceDeduction || 0).toFixed(0));
         payload += twoCol(`${t.totalPayable}:`, (p.netPayable || 0).toFixed(0));
         payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
@@ -279,7 +308,7 @@ export default function RegisterPaymentSlipScreen() {
                     <Pressable onPress={handlePrint} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
                         <Printer size={18} color={colors.primary} />
                     </Pressable>
-                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).farmer?.code||'',name:(p as any).farmer?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, (p as any).totalMilkAmount||0, (p as any).totalAdvanceDeduction||0, (p as any).netPayable||0, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).farmer?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
+                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).farmer?.code||'',name:(p as any).farmer?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, slipMilkAmount, (p as any).totalAdvanceDeduction||0, (p as any).netPayable||0, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).farmer?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
                         <MessageCircle size={18} color="#25D366" />
                     </Pressable>
                 </View>
@@ -329,15 +358,15 @@ export default function RegisterPaymentSlipScreen() {
                             </View>
                         ))}
                         <View style={styles.dottedLine} />
-                        {(() => { const tq = collections.length ? collections.reduce((s, c: any) => s + (c.quantity || 0), 0) : 0; const ta = collections.length ? collections.reduce((s, c: any) => s + (c.amount || 0), 0) : (p.totalMilkAmount || 0); const ar = tq > 0 ? ta / tq : 0; return (<>
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Qty :</Text><Text style={styles.valRed}>{tq ? tq.toFixed(2) : '100.00'}</Text></View>
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Average Rate :</Text><Text style={styles.valRed}>{ar ? ar.toFixed(2) : '55.62'}</Text></View>
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Amount :</Text><Text style={styles.valRed}>{ta ? ta.toFixed(2) : (p.totalMilkAmount || 0).toFixed(2)}</Text></View>
-                        </>); })()}
+                        <>
+                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Qty :</Text><Text style={styles.valRed}>{slipQty.toFixed(2)}</Text></View>
+                            <View style={styles.slipRow}><Text style={styles.labBlack}>Average Rate :</Text><Text style={styles.valRed}>{slipAvgRate.toFixed(2)}</Text></View>
+                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Amount :</Text><Text style={styles.valRed}>{slipAmount.toFixed(2)}</Text></View>
+                        </>
                         <View style={styles.dottedLine} />
                         <Text style={styles.secTitle}>Payment Slip :</Text>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Last Payment :</Text><Text style={styles.valBlack}>{(p.previousBalance || 0).toFixed(0)}</Text></View>
-                        <View style={styles.slipRow}><Text style={[styles.labBlack, { color: '#d32f2f' }]}>Milk Amount :</Text><Text style={styles.valRed}>Auto AMT + Input = <Text style={{ color: '#000' }}>{(p.totalMilkAmount || 0).toFixed(0)}</Text></Text></View>
+                        <View style={styles.slipRow}><Text style={[styles.labBlack, { color: '#d32f2f' }]}>Milk Amount :</Text><Text style={styles.valRed}>{slipMilkAmount.toFixed(0)}</Text></View>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Advance / Product :</Text><Text style={styles.valBlack}>{(p.totalAdvanceDeduction || 0).toFixed(0)}</Text></View>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Total Payable :</Text><Text style={styles.valBlack}>{(p.netPayable || 0).toFixed(0)}</Text></View>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Paid Amount :</Text><Text style={styles.valBlack}>{(p.amount || 0).toFixed(0)}</Text></View>

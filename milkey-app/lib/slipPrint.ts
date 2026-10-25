@@ -127,8 +127,10 @@ export function buildJointCollectionPaymentSlipPayload(
     // Payment Slip section
     payload += center(`${t.paymentSlip} :`, { bold: true });
     payload += twoCol(`${t.lastPayment} :`, (p.previousBalance || 0).toFixed(0));
-    // Milk Amount as Auto AMT + Input = value (image shows this exact string)
-    payload += twoCol(`${t.milkAmount} : Auto AMT + Input =`, (p.totalMilkAmount || 0).toFixed(0));
+    // Milk Amount = the number the Payment screen shows next to "Milk Amount" after the
+    // farmer code search (saved totalMilkAmount, else what the collection entries add up to).
+    const milkAmountValue = (p.totalMilkAmount || 0) > 0 ? (p.totalMilkAmount || 0) : totalAmt;
+    payload += twoCol(`${t.milkAmount} :`, milkAmountValue.toFixed(0));
     payload += twoCol(`${t.advanceProduct} :`, (p.totalAdvanceDeduction || 0).toFixed(0));
     payload += twoCol(`${t.totalPayable} :`, (p.netPayable || 0).toFixed(0));
     payload += twoCol(`${t.paidAmount} :`, (p.amount || 0).toFixed(0));
