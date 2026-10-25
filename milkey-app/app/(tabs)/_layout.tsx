@@ -8,6 +8,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import UpdateModal from '@/components/UpdateModal';
 import CollectionBottomSheet from '@/components/CollectionBottomSheet';
+import { SheetScrimOverlay } from '@/components/ui/SheetScrimOverlay';
 import SellingBottomSheet from '@/components/SellingBottomSheet';
 import { AdPopupModal } from '@/components/AdPopupModal';
 import { checkAppVersion } from '@/lib/milkeyApi';
@@ -237,6 +238,8 @@ export default function TabLayout() {
           <Tabs.Screen name="profile" options={{ title: t.tabs.profile }} />
           <Tabs.Screen name="register" options={{ href: null, headerShown: false }} />
       </Tabs>
+      {/* Dark layer for the Collection / Selling sheets — in-window, above every screen */}
+      <SheetScrimOverlay visible={showCollectionSheet || showSellingSheet} bottomOffset={tabBarHeight} dim={0.72} />
       <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={collectionTab as any} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
       <SellingBottomSheet visible={showSellingSheet} onClose={() => setShowSellingSheet(false)} activeTab={sellingTab} onSelectTab={handleSellingSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
     </View>

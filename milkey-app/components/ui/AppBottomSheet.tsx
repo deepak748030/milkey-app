@@ -4,7 +4,6 @@ import {
   useWindowDimensions, Animated, Easing, Platform,
 } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/useTheme';
 import { X, ChevronRight } from 'lucide-react-native';
@@ -40,15 +39,10 @@ type Props<T extends string> = {
 /**
  * Collection / Selling bottom sheet.
  *
- * Backdrop (this is the important part):
- *   The sheet lives in a transparent <Modal>. A Modal is guaranteed to paint above
- *   the whole screen on both platforms, so the dark layer can never be "lost"
- *   behind another view (which is exactly what happened with the inline overlay).
- *   Inside the Modal we stack:
- *      1. expo-blur (real blur on iOS; Android falls back to a dark translucent tint)
- *      2. rgba(0,0,0,0.72) scrim  +  rgba(6,20,12,0.18) green tint
- *   Both stop `bottomOffset` pixels above the bottom edge, so the tab bar of the
- *   screen behind stays visible and bright — exactly like the reference.
+ * Backdrop: the dark layer is NOT drawn here. It is a plain in-window View
+ *   (<SheetScrimOverlay>) rendered by the tabs layout, which is the only variant
+ *   that reliably darkens the header / status bar area too. This Modal is fully
+ *   transparent and only floats the sheet card above everything else.
  *
  * Sheet itself: full width, all four corners rounded, 10px above the tab bar,
  * gradient green glow under the top edge, big title, white round close button,
@@ -91,17 +85,8 @@ function AppBottomSheet<T extends string>({
       hardwareAccelerated
     >
       <View style={s.overlay}>
-        {/* 1) Blur + 2) dark scrim. pointerEvents none so taps fall through to the closer.
-            These are NOT animated, so the screen behind can never stay half-dimmed. */}
-        <View pointerEvents="none" style={[StyleSheet.absoluteFillObject, stopAboveTabBar]}>
-          <BlurView
-            intensity={Platform.OS === 'ios' ? 45 : 40}
-            tint="dark"
-            style={StyleSheet.absoluteFillObject}
-          />
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.72)' }]} />
-          <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(6,20,12,0.18)' }]} />
-        </View>
+        {/* The dark layer for this sheet is rendered by <SheetScrimOverlay> in the tabs
+            layout (in-window, cannot be covered). This Modal only floats the card. */}
 
         {/* Tap anywhere outside the sheet (header / status bar included) to dismiss */}
         <TouchableOpacity
