@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { ClipboardEdit, IndianRupee, BarChart3, Users, Store } from 'lucide-react-native';
+import { ClipboardEdit, IndianRupee, BarChart3, Users } from 'lucide-react-native';
 import { SellingTab } from '@/lib/subTabStore';
 import AppBottomSheet, { SheetItem } from '@/components/ui/AppBottomSheet';
 type Props = { visible: boolean; onClose: () => void; activeTab: SellingTab; onSelectTab: (tab: SellingTab) => void; bottomOffset?: number; topOffset?: number };
@@ -10,6 +10,6 @@ const ITEMS: SheetItem<SellingTab>[] = [
   { key: 'Customer', label: 'Customer', IconComp: Users, iconBg: '#F3E5F5', iconColor: '#7B1FA2', tint: '#FAF4FD' },
 ];
 export default memo(function SellingBottomSheet({ visible, onClose, activeTab, onSelectTab, bottomOffset, topOffset }: Props){
-  return <AppBottomSheet visible={visible} onClose={onClose} title="Selling" subtitle="Choose an option" headerIcon={Store}
+  return <AppBottomSheet visible={visible} onClose={onClose} title="Selling" subtitle="Choose an option"
     items={ITEMS} activeKey={activeTab} onSelect={onSelectTab} bottomOffset={bottomOffset} topOffset={topOffset} />;
 });

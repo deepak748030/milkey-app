@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, Modal, TouchableOpacity, ScrollView,
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/useTheme';
-import { X, ChevronRight, Package } from 'lucide-react-native';
+import { X, ChevronRight } from 'lucide-react-native';
 
 export type SheetItem<T extends string> = {
   key: T;
@@ -20,8 +20,6 @@ type Props<T extends string> = {
   onClose: () => void;
   title: string;
   subtitle?: string;
-  /** Badge icon shown next to the title (defaults to a package icon). */
-  headerIcon?: any;
   items: SheetItem<T>[];
   activeKey: T;
   onSelect: (k: T) => void;
@@ -33,21 +31,21 @@ type Props<T extends string> = {
 /**
  * Floating action sheet (reference design).
  * - Full screen width, floats 10px above the tab bar, rounded card + shadow.
- * - Green accent line on the TOP edge only (no left / right / bottom border).
- * - Compact header: icon badge + bold title + "Choose an option" + close circle,
- *   with soft green wave blobs behind it so it looks lifted out of the app.
- * - Softest per-item row tints, 1.5px green outline on the active row.
+ * - Thin BLACK border on the TOP edge only (no left / right / bottom border).
+ * - Icon-free header: bold title + "Choose an option" + close, with soft green
+ *   wave blobs behind it so it looks lifted out of the app.
+ * - Icon-free rows: label + chevron only, soft per-item tints and a 1.5px green
+ *   outline on the active row.
  * - Height is hard-capped below half the screen (46%): the exact same height as
  *   before, so the design change never eats more of the screen.
  */
 function AppBottomSheet<T extends string>({
-  visible, onClose, title, subtitle = 'Choose an option', headerIcon, items,
+  visible, onClose, title, subtitle = 'Choose an option', items,
   activeKey, onSelect, isActive, bottomOffset = 0, topOffset = 0,
 }: Props<T>) {
   const { colors, isDark } = useTheme();
   const { height: screenHeight } = useWindowDimensions();
   const maxSheetHeight = Math.round(screenHeight * 0.46);
-  const HeaderIcon = headerIcon || Package;
 
   // Title fades in on mount, then keeps a static palette fade (text → card colour).
   const titleFade = useRef(new Animated.Value(0)).current;
@@ -69,9 +67,8 @@ function AppBottomSheet<T extends string>({
   if (bottomOffset) insetStyle.bottom = bottomOffset;
   if (topOffset) insetStyle.top = topOffset;
   const hasInset = bottomOffset || topOffset;
-  const accentColors: [string, string, string] = isDark
-    ? ['#22C55E', '#14532D', '#4ADE80']
-    : ['#22C55E', '#86EFAC', '#15803D'];
+  // Thin black top border (kept light-on-dark so it stays visible in dark theme).
+  const topBorderColor = isDark ? 'rgba(255,255,255,0.45)' : '#0B0B0B';
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={s.overlay}>
@@ -84,14 +81,8 @@ function AppBottomSheet<T extends string>({
         <TouchableOpacity style={[StyleSheet.absoluteFillObject, hasInset ? insetStyle : null]} activeOpacity={1} onPress={onClose} />
         <View style={[s.wrap, { marginBottom: bottomOffset + 10, maxHeight: maxSheetHeight }]}>
           <View style={s.card}>
-            {/* Green accent line on the TOP edge only */}
-            <LinearGradient
-              colors={accentColors}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={s.topAccent}
-              pointerEvents="none"
-            />
+            {/* Thin black border on the TOP edge only */}
+            <View style={[s.topAccent, { backgroundColor: topBorderColor }]} pointerEvents="none" />
             {/* Soft green wave blobs behind the header (clipped by the card) */}
             <View pointerEvents="none" style={s.decorWrap}>
               <View style={[s.blob, { width: 260, height: 260, borderRadius: 130, right: -90, top: -140, backgroundColor: isDark ? 'rgba(34,197,94,0.10)' : '#E9F9EF' }]} />
@@ -100,11 +91,8 @@ function AppBottomSheet<T extends string>({
 
             <View style={s.handle} />
 
-            {/* Header: icon badge + faded title + subtitle + close */}
+            {/* Header: faded title + subtitle + close (no icons) */}
             <View style={s.header}>
-              <View style={s.headerBadge}>
-                <HeaderIcon size={20} color={colors.primary} strokeWidth={2.2} />
-              </View>
               <View style={s.titleWrap}>
                 <Animated.Text numberOfLines={1} style={[s.title, { opacity: titleFade }]}>{title}</Animated.Text>
                 <LinearGradient
@@ -131,7 +119,6 @@ function AppBottomSheet<T extends string>({
             >
               {items.map(item => {
                 const active = isActive ? isActive(activeKey, item) : activeKey === item.key;
-                const Icon = item.IconComp;
                 const rowTint = isDark
                   ? 'rgba(255,255,255,0.05)'
                   : (item.tint || '#F7FAF8');
@@ -146,7 +133,6 @@ function AppBottomSheet<T extends string>({
                       pressed && s.pressed,
                     ]}
                   >
-                    <View style={[s.iconBox, { backgroundColor: item.iconBg }]}><Icon size={15} color={item.iconColor} /></View>
                     <Text numberOfLines={1} style={[s.label, active && s.labelActive]}>{item.label}</Text>
                     <ChevronRight size={15} color={active ? colors.primary : colors.mutedForeground} />
                   </Pressable>
@@ -182,13 +168,13 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
     flexShrink: 1,
     overflow: 'hidden',
   },
-  // Accent line on the TOP edge only (no left / right / bottom border).
+  // Thin (1px) black border on the TOP edge only — no left / right / bottom border.
   topAccent: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 2.5,
+    height: 1,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
   },
@@ -197,15 +183,10 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
   // Neutral grab handle — the green accent line above is the only green border.
   handle: { width: 44, height: 4, borderRadius: 2, backgroundColor: dark ? 'rgba(255,255,255,0.22)' : '#D8DEE3', alignSelf: 'center', marginBottom: 8 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 6 },
-  headerBadge: {
-    width: 38, height: 38, borderRadius: 12,
-    backgroundColor: dark ? 'rgba(34,197,94,0.16)' : '#E7F8ED',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  titleWrap: { flexShrink: 1, overflow: 'hidden', paddingRight: 16 },
+  titleWrap: { flex: 1, flexShrink: 1, overflow: 'hidden', paddingRight: 16 },
   title: { fontSize: 17, fontWeight: '800', color: c.foreground, letterSpacing: 0.1 },
   // Faded subtitle: muted grey, fading out to the card colour on the right.
-  subtitle: { fontSize: 10.5, fontWeight: '600', color: c.mutedForeground, paddingLeft: 54, paddingRight: 40, marginTop: 1, marginBottom: 8 },
+  subtitle: { fontSize: 10.5, fontWeight: '600', color: c.mutedForeground, paddingLeft: 6, paddingRight: 40, marginTop: 1, marginBottom: 8 },
   closeBtn: {
     width: 30, height: 30, borderRadius: 15,
     backgroundColor: dark ? 'rgba(255,255,255,0.08)' : '#F1F5F3',
@@ -221,8 +202,7 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
   },
   rowActive: { borderWidth: 1.5, borderColor: '#16A34A' },
   pressed: { opacity: 0.72 },
-  iconBox: { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  label: { flex: 1, fontSize: 13.5, fontWeight: '700', color: c.foreground },
+  label: { flex: 1, fontSize: 14, fontWeight: '700', color: c.foreground },
   labelActive: { color: c.primary, fontWeight: '800' },
 });
 export default memo(AppBottomSheet) as typeof AppBottomSheet;

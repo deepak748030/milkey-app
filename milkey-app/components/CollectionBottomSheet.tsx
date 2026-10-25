@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { User, Milk, FileText, IndianRupee, Calendar, Package } from 'lucide-react-native';
+import { User, Milk, FileText, IndianRupee, Calendar } from 'lucide-react-native';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 import AppBottomSheet, { SheetItem } from '@/components/ui/AppBottomSheet';
 type Props = { visible: boolean; onClose: () => void; activeTab: PurchaseTab; onSelectTab: (tab: PurchaseTab) => void; bottomOffset?: number; topOffset?: number };
@@ -16,7 +16,7 @@ function getDisplay(): SheetItem<PurchaseTab>[] {
   return PREF.map(k => ITEMS.find(i => i.key === k)! ).filter(Boolean);
 }
 export default memo(function CollectionBottomSheet({ visible, onClose, activeTab, onSelectTab, bottomOffset, topOffset }: Props){
-  return <AppBottomSheet visible={visible} onClose={onClose} title="Collection" subtitle="Choose an option" headerIcon={Milk}
+  return <AppBottomSheet visible={visible} onClose={onClose} title="Collection" subtitle="Choose an option"
     items={getDisplay()} activeKey={activeTab} onSelect={onSelectTab} bottomOffset={bottomOffset} topOffset={topOffset}
     isActive={(a, it) => a===it.key } />;
 });
