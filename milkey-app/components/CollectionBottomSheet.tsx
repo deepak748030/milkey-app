@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { User, Milk, FileText, IndianRupee, Calendar } from 'lucide-react-native';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
 import AppBottomSheet, { SheetItem } from '@/components/ui/AppBottomSheet';
-type Props = { visible: boolean; onClose: () => void; activeTab: PurchaseTab; onSelectTab: (tab: PurchaseTab) => void; bottomOffset?: number; topOffset?: number };
+type Props = { visible: boolean; onClose: () => void; activeTab: PurchaseTab; onSelectTab: (tab: PurchaseTab) => void; bottomOffset?: number; topOffset?: number; blurTarget?: React.RefObject<any> };
 const ITEMS: SheetItem<PurchaseTab>[] = [
   { key: 'RateSetting' as PurchaseTab, label: 'Rate Setting', IconComp: FileText, iconBg: '#FFF3E0', iconColor: '#EF6C00', tint: '#FFF7EE' },
   { key: 'Farmer' as PurchaseTab, label: 'Farmer', IconComp: User, iconBg: '#E8F5E9', iconColor: '#2E7D32', tint: '#F2FBF5' },
@@ -15,8 +15,8 @@ const PREF: PurchaseTab[] = ['RateSetting','Farmer','Purchase','Report','Payment
 function getDisplay(): SheetItem<PurchaseTab>[] {
   return PREF.map(k => ITEMS.find(i => i.key === k)! ).filter(Boolean);
 }
-export default memo(function CollectionBottomSheet({ visible, onClose, activeTab, onSelectTab, bottomOffset, topOffset }: Props){
+export default memo(function CollectionBottomSheet({ visible, onClose, activeTab, onSelectTab, bottomOffset, topOffset, blurTarget }: Props){
   return <AppBottomSheet visible={visible} onClose={onClose} title="Collection" subtitle="Choose an option"
-    items={getDisplay()} activeKey={activeTab} onSelect={onSelectTab} bottomOffset={bottomOffset} topOffset={topOffset}
+    items={getDisplay()} activeKey={activeTab} onSelect={onSelectTab} bottomOffset={bottomOffset} topOffset={topOffset} blurTarget={blurTarget}
     isActive={(a, it) => a===it.key } />;
 });

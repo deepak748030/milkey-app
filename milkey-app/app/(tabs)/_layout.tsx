@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
+import { BlurTargetView } from 'expo-blur';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Home, Droplets, Store, Package, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +40,9 @@ export default function TabLayout() {
   const [updateInfo, setUpdateInfo] = useState({ forceUpdate: false, message: '', storeLink: '', latestVersion: '1.0.0' });
   const [showCollectionSheet, setShowCollectionSheet] = useState(false);
   const [showSellingSheet, setShowSellingSheet] = useState(false);
+  // Android: expo-blur can only blur a view inside the same window, so the tab
+  // screens are wrapped in a BlurTargetView and its ref is handed to the sheets.
+  const blurTargetRef = useRef<View | null>(null);
   const { purchaseTab, sellingTab, collectionTab, setPurchaseTab, setSellingTab, setCollectionTab, suppressCollectionSheet, suppressSellingSheet, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
   const playTabSound = useTabSound();
   const activeTabName = segments[segments.length - 1] as string || '';
@@ -206,19 +210,21 @@ export default function TabLayout() {
     <View style={{ flex: 1 }}>
       <UpdateModal visible={showUpdate} forceUpdate={updateInfo.forceUpdate} message={updateInfo.message} storeLink={updateInfo.storeLink} latestVersion={updateInfo.latestVersion} onSkip={() => setShowUpdate(false)} />
       <AdPopupModal />
-      <Tabs
-        tabBar={renderTabBar}
-        screenOptions={{ headerShown: false, animation: 'shift', freezeOnBlur: true }}
-      >
-        <Tabs.Screen name="index" options={{ title: t.tabs.home }} />
-        <Tabs.Screen name="purchase" options={{ title: t.tabs.purchase }} />
-        <Tabs.Screen name="selling" options={{ title: t.tabs.selling }} />
-        <Tabs.Screen name="inventory" options={{ title: t.tabs.inventory || 'Inventory' }} />
-        <Tabs.Screen name="profile" options={{ title: t.tabs.profile }} />
-        <Tabs.Screen name="register" options={{ href: null, headerShown: false }} />
-      </Tabs>
-      <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={collectionTab as any} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
-      <SellingBottomSheet visible={showSellingSheet} onClose={() => setShowSellingSheet(false)} activeTab={sellingTab} onSelectTab={handleSellingSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
+      <BlurTargetView ref={blurTargetRef} style={{ flex: 1 }} collapsable={false}>
+        <Tabs
+          tabBar={renderTabBar}
+          screenOptions={{ headerShown: false, animation: 'shift', freezeOnBlur: true }}
+        >
+          <Tabs.Screen name="index" options={{ title: t.tabs.home }} />
+          <Tabs.Screen name="purchase" options={{ title: t.tabs.purchase }} />
+          <Tabs.Screen name="selling" options={{ title: t.tabs.selling }} />
+          <Tabs.Screen name="inventory" options={{ title: t.tabs.inventory || 'Inventory' }} />
+          <Tabs.Screen name="profile" options={{ title: t.tabs.profile }} />
+          <Tabs.Screen name="register" options={{ href: null, headerShown: false }} />
+        </Tabs>
+      </BlurTargetView>
+      <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={collectionTab as any} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} blurTarget={blurTargetRef} />
+      <SellingBottomSheet visible={showSellingSheet} onClose={() => setShowSellingSheet(false)} activeTab={sellingTab} onSelectTab={handleSellingSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} blurTarget={blurTargetRef} />
     </View>
   );
 }
