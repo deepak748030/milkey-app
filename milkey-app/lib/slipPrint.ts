@@ -127,10 +127,17 @@ export function buildJointCollectionPaymentSlipPayload(
     // Payment Slip section
     payload += center(`${t.paymentSlip} :`, { bold: true });
     payload += twoCol(`${t.lastPayment} :`, (p.previousBalance || 0).toFixed(0));
-    // Milk Amount = the number the Payment screen shows next to "Milk Amount" after the
-    // farmer code search (saved totalMilkAmount, else what the collection entries add up to).
-    const milkAmountValue = (p.totalMilkAmount || 0) > 0 ? (p.totalMilkAmount || 0) : totalAmt;
-    payload += twoCol(`${t.milkAmount} :`, milkAmountValue.toFixed(0));
+    // Milk Amount = the same equation the Payment screen shows:
+    //   <collection amount of the dates> + <amount typed by the user> = <total>
+    // The typed part is not stored separately, so it is derived from the saved total.
+    const purchaseAmountValue = totalAmt;
+    const savedTotalValue = p.totalMilkAmount || 0;
+    const inputAmountValue = Math.max(0, savedTotalValue - purchaseAmountValue);
+    const milkAmountValue = savedTotalValue > 0 ? savedTotalValue : purchaseAmountValue;
+    payload += twoCol(
+        `${t.milkAmount} :`,
+        `${purchaseAmountValue.toFixed(0)} + ${inputAmountValue.toFixed(0)} = ${milkAmountValue.toFixed(0)}`,
+    );
     payload += twoCol(`${t.advanceProduct} :`, (p.totalAdvanceDeduction || 0).toFixed(0));
     payload += twoCol(`${t.totalPayable} :`, (p.netPayable || 0).toFixed(0));
     payload += twoCol(`${t.paidAmount} :`, (p.amount || 0).toFixed(0));

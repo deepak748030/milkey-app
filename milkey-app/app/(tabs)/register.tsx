@@ -567,14 +567,30 @@ export default function RegisterScreen() {
                 let collections: any[] = [];
                 try {
                     const farmerCode = (p.farmer as any)?.code;
-                    if (farmerCode && (p.periodStart || p.date) && (p.periodEnd || p.date)) {
-                        const res = await milkCollectionsApi.getAll({
+                    const start = p.periodStart || p.date;
+                    const end = p.periodEnd || p.date;
+                    if (farmerCode) {
+                        // Same query the Payment screen's "View Entries" uses (farmer code +
+                        // calculation period + tz offset), so the printed slip carries the
+                        // purchase entries instead of "- No entries -". Falls back to the
+                        // unfiltered range when those rows are already marked paid.
+                        const base: any = {
                             farmerCode,
-                            startDate: p.periodStart || p.date,
-                            endDate: p.periodEnd || p.date,
-                            limit: 100,
-                        });
-                        if (res.success && res.response?.data) collections = res.response.data;
+                            startDate: start ? String(start).slice(0, 10) : undefined,
+                            endDate: end ? String(end).slice(0, 10) : undefined,
+                            limit: 200,
+                            tzOffsetMinutes: TZ_OFFSET_MINUTES,
+                        };
+                        try {
+                            const unpaid = await milkCollectionsApi.getAll({ ...base, isPaid: false });
+                            if (unpaid.success) collections = (unpaid.response as any)?.data || [];
+                        } catch { }
+                        if (collections.length === 0) {
+                            try {
+                                const all = await milkCollectionsApi.getAll(base);
+                                if (all.success) collections = (all.response as any)?.data || [];
+                            } catch { }
+                        }
                     }
                 } catch { }
                 const payload = collections.length
