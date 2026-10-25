@@ -194,18 +194,20 @@ export function PurchaseCollectionTab(props:any){
                             <Text style={s.fieldLabel}>{t.purchase.qty}</Text>
                             <TextInput style={s.fieldInput} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '00.00' : '0.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                         </View>
-                        {selectedCustomer.priceBasis !== 'rate' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
-                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '6.5' : '0.0'} placeholderTextColor={colors.mutedForeground} />
-                            </View>
-                        )}
-                        {selectedCustomer.priceBasis === 'fat_snf' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>SNF</Text>
-                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="9.0" placeholderTextColor={colors.mutedForeground} />
-                            </View>
-                        )}
+                        {/* FAT and SNF are ALWAYS available, not only for fat / fat+SNF
+                            pricing. A rate-based farmer's milk still has a FAT / SNF
+                            reading, and without these two inputs the value was saved as 0
+                            and the columns stayed empty in the sale entries table, the
+                            payment slip, the reports and the PDF. Pricing itself is
+                            untouched: for a rate-based farmer the amount is qty x rate. */}
+                        <View style={s.fieldBox}>
+                            <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
+                            <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '6.5' : '0.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                        </View>
+                        <View style={s.fieldBox}>
+                            <Text style={s.fieldLabel}>SNF</Text>
+                            <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '9.0' : '0.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                        </View>
                         {selectedCustomer.priceBasis === 'rate' && (
                             <View style={s.fieldBox}>
                                 <Text style={s.fieldLabel}>{t.common.rate}</Text>
