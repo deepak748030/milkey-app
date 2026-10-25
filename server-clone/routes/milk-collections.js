@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const MilkCollection = require('../models/MilkCollection');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
+const Farmer = require('../models/Farmer');
 const auth = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
 
@@ -111,16 +112,22 @@ router.get('/', auth, async (req, res) => {
             query.$and = [...(query.$and || []), ...dateClauses];
         }
 
-        // If farmerCode provided, find purchase farmer first
+        // If farmerCode provided: support PurchaseFarmer + legacy Farmer + farmerCode string fallback + only unsettled
         if (farmerCode) {
-            const pFarmer = await PurchaseFarmer.findOne({ code: codeRegex(farmerCode), owner: req.userId });
-            if (pFarmer) {
-                query.purchaseFarmer = pFarmer._id;
-            } else {
-                return res.json({
-                    success: true,
-                    response: { data: [], count: 0, totals: { quantity: 0, amount: 0 } }
-                });
+            const normalizedCode = normalizeCode(farmerCode);
+            const codePattern = codeRegex(normalizedCode);
+            const pFarmer = await PurchaseFarmer.findOne({ code: codePattern, owner: req.userId });
+            const farmer = await Farmer.findOne({ code: codePattern, owner: req.userId });
+            const orConditions = [];
+            if (pFarmer) orConditions.push({ purchaseFarmer: pFarmer._id });
+            if (farmer) orConditions.push({ purchaseFarmer: farmer._id });
+            if (farmer) orConditions.push({ farmer: farmer._id });
+            orConditions.push({ farmerCode: codePattern });
+            if (orConditions.length > 0) {
+                query.$and = [...(query.$and || []), { $or: orConditions }];
+            }
+            if (isPaid === undefined) {
+                query.isPaid = false;
             }
         }
 
