@@ -49,6 +49,13 @@ export default function TabLayout() {
     if (sellingTimer.current) { clearTimeout(sellingTimer.current); sellingTimer.current = null; }
   }, []);
   const { purchaseTab, sellingTab, collectionTab, setPurchaseTab, setSellingTab, setCollectionTab, suppressCollectionSheet, suppressSellingSheet, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
+  const setCollectionSheetOpenFlag = useSubTabStore((st) => st.setCollectionSheetOpen);
+  const setSellingSheetOpenFlag = useSubTabStore((st) => st.setSellingSheetOpen);
+  // Mirror the sheet visibility into the shared store. The purchase / selling screens
+  // read it to paint their own dark layer (<ScreenDim />) — a layer rendered inside the
+  // screen is the only one that is really painted above the screen on Android.
+  useEffect(() => { setCollectionSheetOpenFlag(showCollectionSheet); }, [showCollectionSheet, setCollectionSheetOpenFlag]);
+  useEffect(() => { setSellingSheetOpenFlag(showSellingSheet); }, [showSellingSheet, setSellingSheetOpenFlag]);
   const playTabSound = useTabSound();
   const activeTabName = segments[segments.length - 1] as string || '';
   const tabBarHeight = 65 + insets.bottom;

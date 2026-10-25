@@ -1262,7 +1262,7 @@ export default function PurchaseScreen() {
                 </View>
             </Modal>
             {/* Dark layer for the Collection sheet (inside this screen => always on top) */}
-            <ScreenDim />
+            <ScreenDim which="collection" />
         </View>
     );
 }

@@ -1,11 +1,10 @@
 import React, { memo, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  useWindowDimensions, Animated, Easing, Platform, Modal,
+  useWindowDimensions, Animated, Easing, Platform, BackHandler,
 } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useTheme } from '@/hooks/useTheme';
 import { useSheetScrimStore } from '@/lib/sheetScrimStore';
 import { X, ChevronRight } from 'lucide-react-native';
@@ -30,7 +29,7 @@ type Props<T extends string> = {
   activeKey: T;
   onSelect: (k: T) => void;
   isActive?: (active: T, item: SheetItem<T>) => boolean;
-  /** Bottom tab bar height: the dark layer stops here so the tab bar stays bright. */
+  /** Height of the bottom tab bar: the sheet floats exactly this far above the bottom. */
   bottomOffset?: number;
   /** Kept for API compatibility. */
   topOffset?: number;
@@ -38,30 +37,30 @@ type Props<T extends string> = {
   blurTarget?: React.RefObject<any>;
 };
 
-/** Scrim strength of this sheet's own (Modal-window) dark layer. */
-const SCRIM_DIM = 0.72;
+/** Reserved height of handle + title row + paddings inside the card. */
+const CARD_CHROME = 96;
 
 /**
- * Collection / Selling bottom sheet.
+ * Collection / Selling floating sheet — INLINE overlay, no <Modal>.
  *
- * ── Why the dark layer lives in a <Modal> ────────────────────────────────────
- * Darkening the screen behind a sheet needs the dark View to be painted ABOVE the
- * navigator's screens. On Android that is impossible from a sibling of <Tabs>:
- * react-native-screens renders each screen in its own native layer, so every
- * in-app overlay (root-level, tabs-level, absolute stage, elevation 40…70) ends up
- * BEHIND those screen layers — that is why the background stayed bright.
+ * Two hard requirements drove this shape:
  *
- * A <Modal> is a separate Dialog window that sits above the whole activity, so a
- * scrim drawn inside it always darkens everything: status bar, green header, cards.
- * Every other sheet in this app already darkens correctly for exactly this reason.
+ * 1. It must float EXACTLY above the bottom tab bar and must never cover it.
+ *    A <Modal> puts the content in a separate Dialog window whose bottom edge is not
+ *    guaranteed to match the app window (edge-to-edge / navigation-bar insets), which
+ *    is exactly why the card ended up climbing over the tab bar. Inline = same
+ *    coordinate space as the tab bar, so `marginBottom: bottomOffset + 10` is always
+ *    pixel-correct. The list also gets its own maxHeight (`maxSheetHeight - CARD_CHROME`)
+ *    so an oversized list can never spill out of the card and reach the tab bar.
  *
- * The old problem with a Modal (the tab bar could not be tapped, so tapping
- * "Collection" twice never closed the sheet) is solved here instead of by removing
- * the Modal: the tap-to-close layer covers the WHOLE window, tab bar strip included,
- * so a second tap on the tab closes the sheet again.
+ * 2. The screen behind it must go dark. That dark layer does NOT live here — it is
+ *    <ScreenDim /> rendered inside purchase.tsx / selling.tsx, because only something
+ *    inside the screen's own view tree can be painted above react-native-screens'
+ *    native screen layers on Android (any sibling of <Tabs> is drawn behind them).
+ *    This component just tells it to switch on.
  *
- * The dark layer stops `bottomOffset` px above the bottom edge → only the bottom tab
- * bar stays fully bright, exactly like the reference design.
+ * The tab bar stays bright and tappable: the overlay + tap layer stop `bottomOffset`
+ * px above the bottom edge, so tapping the same tab again closes the sheet.
  */
 function AppBottomSheet<T extends string>({
   visible, onClose, title, items, activeKey, onSelect, isActive,
@@ -70,6 +69,7 @@ function AppBottomSheet<T extends string>({
   const { colors, isDark } = useTheme();
   const { height: screenHeight } = useWindowDimensions();
   const maxSheetHeight = Math.round(screenHeight * 0.5);
+  const listMaxHeight = Math.max(140, maxSheetHeight - CARD_CHROME);
 
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -83,9 +83,14 @@ function AppBottomSheet<T extends string>({
     }).start();
   }, [visible, anim]);
 
-  // Belt and braces: also dim the screen this sheet belongs to (<ScreenDim /> lives
-  // inside purchase.tsx / selling.tsx). If a device ever refuses the Modal window the
-  // screen still goes dark; when both work the result is the near-black of the design.
+  // Inline overlay has no Modal → handle the Android back button ourselves.
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { onClose(); return true; });
+    return () => sub.remove();
+  }, [visible, onClose]);
+
+  // Ask the owning screen to draw its dark layer (<ScreenDim />).
   const showScreenDim = useSheetScrimStore((st) => st.showScreen);
   const hideScreenDim = useSheetScrimStore((st) => st.hideScreen);
   useEffect(() => {
@@ -96,124 +101,100 @@ function AppBottomSheet<T extends string>({
 
   const handle = useCallback((k: T) => { onSelect(k); onClose(); }, [onSelect, onClose]);
   const s = styles(colors, isDark);
+  if (!visible) return null;
 
   const sheetTranslateY = anim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] });
+  const stopAboveTabBar = bottomOffset ? { bottom: bottomOffset } : null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      // Edge-to-edge on Android (Expo SDK 57): both translucent flags make this Dialog
-      // window cover exactly the same area as the app window, so `bottomOffset`
-      // (tab bar height incl. the safe-area inset) lines up perfectly.
-      {...(Platform.OS === 'android' ? { navigationBarTranslucent: true, hardwareAccelerated: true } : {})}
-      onRequestClose={onClose}
-    >
-      <View style={[s.overlay, StyleSheet.absoluteFill]} pointerEvents="box-none">
-        {/* ── Dark layer ────────────────────────────────────────────────────────
-            Full window WIDTH and from the very top (status bar / green header) down
-            to the top edge of the tab bar. Nothing of the app below stays bright. */}
-        <View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFillObject, { bottom: bottomOffset, zIndex: 1 }]}
-        >
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFill} />
-          ) : null}
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: `rgba(0,0,0,${SCRIM_DIM})` }]} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(6,20,12,0.18)' }]} />
-        </View>
+    <View style={[s.overlay, StyleSheet.absoluteFill]} pointerEvents="box-none">
+      {/* Tap outside (header included) to dismiss. Stops above the tab bar so the same
+          tab can still be tapped again to close the sheet. */}
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onClose}
+        style={[StyleSheet.absoluteFillObject, stopAboveTabBar, { zIndex: 10000, elevation: 61 }]}
+      />
 
-        {/* ── Tap-to-close ──────────────────────────────────────────────────────
-            Covers the whole window (tab bar strip too) → tapping the same tab again
-            closes the sheet, exactly like the toggle the user asked for. */}
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={onClose}
-          style={[StyleSheet.absoluteFillObject, { zIndex: 2, elevation: 2 }]}
-        />
+      <Animated.View
+        style={[
+          s.wrap,
+          {
+            marginBottom: bottomOffset + 10,
+            maxHeight: maxSheetHeight,
+            opacity: anim,
+            transform: [{ translateY: sheetTranslateY }],
+            zIndex: 10001,
+            elevation: 70,
+          },
+        ]}
+      >
+        <View style={s.card}>
+          {/* Gradient green glow from the top edge, fading into the card */}
+          <LinearGradient
+            pointerEvents="none"
+            colors={
+              isDark
+                ? ['rgba(34,197,94,0.45)', 'rgba(34,197,94,0.10)', 'rgba(0,0,0,0)']
+                : ['rgba(34,197,94,0.42)', 'rgba(34,197,94,0.14)', 'rgba(255,255,255,0)']
+            }
+            locations={[0, 0.45, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={s.topGlow}
+          />
 
-        {/* ── Sheet card ────────────────────────────────────────────────────── */}
-        <Animated.View
-          style={[
-            s.wrap,
-            {
-              marginBottom: bottomOffset + 10,
-              maxHeight: maxSheetHeight,
-              opacity: anim,
-              transform: [{ translateY: sheetTranslateY }],
-              zIndex: 3,
-              elevation: 3,
-            },
-          ]}
-        >
-          <View style={s.card}>
-            {/* Gradient green glow from the top edge, fading into the card */}
-            <LinearGradient
-              pointerEvents="none"
-              colors={
-                isDark
-                  ? ['rgba(34,197,94,0.45)', 'rgba(34,197,94,0.10)', 'rgba(0,0,0,0)']
-                  : ['rgba(34,197,94,0.42)', 'rgba(34,197,94,0.14)', 'rgba(255,255,255,0)']
-              }
-              locations={[0, 0.45, 1]}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={s.topGlow}
-            />
+          <View style={s.handle} />
 
-            <View style={s.handle} />
-
-            <View style={s.header}>
-              <Text numberOfLines={1} style={s.title}>{title}</Text>
-              <Pressable onPress={onClose} style={s.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <X size={19} color="#0A0A0A" strokeWidth={2.6} />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              style={s.scroll}
-              contentContainerStyle={s.list}
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-              nestedScrollEnabled
-            >
-              {items.map(item => {
-                const active = isActive ? isActive(activeKey, item) : activeKey === item.key;
-                const Icon = item.IconComp;
-                const rowTint = isDark ? 'rgba(255,255,255,0.05)' : (item.tint || '#F5FAF6');
-                return (
-                  <Pressable
-                    key={item.key}
-                    onPress={() => handle(item.key)}
-                    style={({ pressed }) => [
-                      s.row,
-                      { backgroundColor: active ? (isDark ? 'rgba(34,197,94,0.16)' : '#E9F8EE') : rowTint },
-                      active && s.rowActive,
-                      pressed && s.pressed,
-                    ]}
-                  >
-                    <View style={[s.iconBox, { backgroundColor: item.iconBg }]}>
-                      <Icon size={17} color={item.iconColor} strokeWidth={2.1} />
-                    </View>
-                    <Text numberOfLines={1} style={[s.label, active && s.labelActive]}>{item.label}</Text>
-                    <ChevronRight size={17} color={active ? colors.primary : '#0F172A'} />
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+          <View style={s.header}>
+            <Text numberOfLines={1} style={s.title}>{title}</Text>
+            <Pressable onPress={onClose} style={s.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <X size={19} color="#0A0A0A" strokeWidth={2.6} />
+            </Pressable>
           </View>
-        </Animated.View>
-      </View>
-    </Modal>
+
+          <ScrollView
+            style={[s.scroll, { maxHeight: listMaxHeight }]}
+            contentContainerStyle={s.list}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            nestedScrollEnabled
+          >
+            {items.map(item => {
+              const active = isActive ? isActive(activeKey, item) : activeKey === item.key;
+              const Icon = item.IconComp;
+              const rowTint = isDark ? 'rgba(255,255,255,0.05)' : (item.tint || '#F5FAF6');
+              return (
+                <Pressable
+                  key={item.key}
+                  onPress={() => handle(item.key)}
+                  style={({ pressed }) => [
+                    s.row,
+                    { backgroundColor: active ? (isDark ? 'rgba(34,197,94,0.16)' : '#E9F8EE') : rowTint },
+                    active && s.rowActive,
+                    pressed && s.pressed,
+                  ]}
+                >
+                  <View style={[s.iconBox, { backgroundColor: item.iconBg }]}>
+                    <Icon size={17} color={item.iconColor} strokeWidth={2.1} />
+                  </View>
+                  <Text numberOfLines={1} style={[s.label, active && s.labelActive]}>{item.label}</Text>
+                  <ChevronRight size={17} color={active ? colors.primary : '#0F172A'} />
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = (c: any, dark: boolean) => StyleSheet.create({
+  // Above the screens of this navigator. The tab bar itself sits outside this View.
   overlay: {
-    flex: 1,
+    zIndex: 9999,
+    elevation: 50,
     justifyContent: 'flex-end',
   },
   wrap: {

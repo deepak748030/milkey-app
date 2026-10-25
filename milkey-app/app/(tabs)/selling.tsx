@@ -3370,7 +3370,7 @@ export default function SellingScreen() {
                 onSuccess={fetchData}
             />
             {/* Dark layer for the Selling sheet (inside this screen => always on top) */}
-            <ScreenDim />
+            <ScreenDim which="selling" />
         </View>
     );
 }

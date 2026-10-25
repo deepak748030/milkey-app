@@ -2,33 +2,47 @@ import React from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSheetScrimStore } from '@/lib/sheetScrimStore';
+import { useSubTabStore } from '@/lib/subTabStore';
+
+type Which = 'collection' | 'selling';
 
 /**
- * Dark layer rendered INSIDE a screen (as its last child), so it is always painted
- * above that screen's own content — header, cards, table, everything. This is the
- * only variant that does not depend on Android's cross-sibling Z ordering (a plain
- * sibling overlay is drawn behind the navigator's screen views, which is why the
- * background used to stay bright).
+ * Dark layer for the Collection / Selling floating sheet.
  *
- * The bottom tab bar lives outside the screen, so it stays bright automatically.
- * pointerEvents="none" → it never blocks taps.
+ * It is rendered INSIDE the screen that owns the sheet (as the last child of the
+ * screen's root View), never as a sibling of <Tabs>. Reason: `react-native-screens`
+ * renders every screen in its own native layer on Android, and anything living next
+ * to <Tabs> (root scrim, tabs overlay, absolute stage, any elevation) is painted
+ * BEHIND those screen layers — that is why the background kept staying bright.
+ * As a child of the screen it is in the same view tree, so it is always painted above
+ * the header (TopBar), the cards and the table — guaranteed, no Z-order games.
  *
- * NOTE: this is the SECOND layer. The primary dark layer lives inside the sheet's
- * <Modal> window (AppBottomSheet), because a Modal is the only place that is
- * guaranteed to paint above react-native-screens' native screen layers on Android.
- * Both layers together give the near-black backdrop of the approved design; the dim
- * here is kept lower (0.55) so the combination never crushes to pure black.
+ * Because it stops at the bottom of the screen, the bottom tab bar (which lives
+ * outside the screen) stays fully bright, exactly like the reference design.
+ *
+ * Two independent signals switch it on, so it can never "miss" the state:
+ *   1. `useSubTabStore.collectionSheetOpen / sellingSheetOpen` — written by the tab
+ *      layout, the same store the screens already re-render from.
+ *   2. `useSheetScrimStore.screenCount` — written by AppBottomSheet itself.
+ *
+ * pointerEvents="none" → it never blocks a tap (tab bar toggle, sheet rows, etc).
  */
-export function ScreenDim({ dim = 0.55 }: { dim?: number }) {
+export function ScreenDim({ dim = 0.72, which }: { dim?: number; which?: Which }) {
   const screenCount = useSheetScrimStore((s) => s.screenCount);
-  if (screenCount <= 0) return null;
+  const collectionOpen = useSubTabStore((s) => s.collectionSheetOpen);
+  const sellingOpen = useSubTabStore((s) => s.sellingSheetOpen);
+
+  const storeOpen =
+    which === 'collection' ? collectionOpen :
+    which === 'selling' ? sellingOpen :
+    collectionOpen || sellingOpen;
+
+  if (screenCount <= 0 && !storeOpen) return null;
+
   return (
     <View
       pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFillObject,
-        { zIndex: 998, elevation: 30 },
-      ]}
+      style={[StyleSheet.absoluteFillObject, { zIndex: 999, elevation: 40 }]}
     >
       {Platform.OS === 'ios' ? (
         <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFill} />

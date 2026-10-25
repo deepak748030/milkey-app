@@ -33,6 +33,12 @@ interface SubTabState {
     suppressSellingSheet: boolean;
     setSuppressCollectionSheet: (v: boolean) => void;
     setSuppressSellingSheet: (v: boolean) => void;
+    /** Live visibility of the two floating sheets (Collection / Selling). The tab
+     *  layout writes it, the screens read it to paint their own dark layer. */
+    collectionSheetOpen: boolean;
+    sellingSheetOpen: boolean;
+    setCollectionSheetOpen: (v: boolean) => void;
+    setSellingSheetOpen: (v: boolean) => void;
 }
 export const useSubTabStore = create<SubTabState>((set) => ({
     purchaseTab: 'Purchase',
@@ -47,4 +53,8 @@ export const useSubTabStore = create<SubTabState>((set) => ({
     suppressSellingSheet: false,
     setSuppressCollectionSheet: (v) => set({ suppressCollectionSheet: v }),
     setSuppressSellingSheet: (v) => set({ suppressSellingSheet: v }),
+    collectionSheetOpen: false,
+    sellingSheetOpen: false,
+    setCollectionSheetOpen: (v) => set({ collectionSheetOpen: v }),
+    setSellingSheetOpen: (v) => set({ sellingSheetOpen: v }),
 }));
