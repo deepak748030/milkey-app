@@ -1,8 +1,6 @@
 import React, { memo, useCallback, useEffect, useRef } from 'react';
-import {
-  View, Text, Pressable, StyleSheet, TouchableOpacity, ScrollView,
-  useWindowDimensions, Animated, Easing, BackHandler, Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions, Animated, Easing, BackHandler, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/useTheme';

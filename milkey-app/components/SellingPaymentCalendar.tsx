@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 

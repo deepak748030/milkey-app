@@ -1,5 +1,6 @@
 import React, { useEffect, useState, memo } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { useSubscriptionStore } from '@/lib/subscriptionStore';
 import { AlertTriangle, Crown, Calendar, ChevronRight } from 'lucide-react-native';

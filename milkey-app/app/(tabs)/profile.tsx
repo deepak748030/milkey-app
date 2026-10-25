@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, Linking, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { AVAILABLE_LANGUAGES, LanguageCode } from '@/lib/translations';

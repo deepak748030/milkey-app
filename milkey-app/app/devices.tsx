@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, StatusBar } from 'react-native';
+import { View, Text, StatusBar } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { ArrowLeft, ShieldCheck } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';

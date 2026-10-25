@@ -1,5 +1,6 @@
 import React, { useEffect, useState, memo } from 'react';
-import { View, Text, StyleSheet, Pressable, Linking, Image, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Linking, Image, ActivityIndicator, ScrollView } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { PlayCircle, Video } from 'lucide-react-native';
 import { API_BASE_URL as API_BASE } from '@/lib/apiConfig';

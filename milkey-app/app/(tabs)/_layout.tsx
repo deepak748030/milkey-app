@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
+import { View, Text, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { BlurTargetView } from 'expo-blur';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Home, Droplets, Store, Package, User } from 'lucide-react-native';

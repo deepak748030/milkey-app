@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Milk, Droplets, Sun, Moon, TableIcon, Ban, Printer, Check } from 'lucide-react-native';
 
 // Ponytail reusable — single source, no duplication, no UI change

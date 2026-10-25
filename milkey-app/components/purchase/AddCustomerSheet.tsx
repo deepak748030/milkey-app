@@ -1,5 +1,8 @@
 import React, { useState, memo } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { X, Check, RotateCcw } from 'lucide-react-native';
 import { PurchaseFarmer, purchaseFarmersApi } from '@/lib/milkeyApi';
 import { SuccessModal } from '../SuccessModal';
@@ -125,6 +128,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
             <View style={s.overlay}>
+                <SheetBackdrop />
                 <Pressable style={{ flex: 1 }} onPress={onClose} />
                 <View style={s.sheet}>
                     <View style={s.handle} />
@@ -226,7 +230,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
 export const AddCustomerSheet = memo(AddCustomerSheetInner);
 
 const createSheetStyles = (colors: any, isDark: boolean) => StyleSheet.create({
-    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    overlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
     sheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
     handle: { width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginTop: 8 },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 12 },

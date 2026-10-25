@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Image, StatusBar } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShoppingCart, Bell, Sun, Moon, Bluetooth, BluetoothOff, AlertCircle, User } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';

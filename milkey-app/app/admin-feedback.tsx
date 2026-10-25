@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, RefreshControl, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, RefreshControl, Modal } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { ChevronLeft, MessageSquare, Check, Clock, AlertCircle, X, Send, Filter } from 'lucide-react-native';

@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, TextInput, FlatList, ActivityIndicator, ScrollView, Modal } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, ScrollView, Modal } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { Search, X, Plus, Download, FileText, Trash2, Printer, User, ArrowRight, ClipboardList, Calendar as CalendarIcon } from 'lucide-react-native';
 import { DateRangePicker } from '@/components/DateRangePicker';
 

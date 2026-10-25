@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { View, Image, StyleSheet, Pressable, ScrollView, Dimensions, Animated, Linking } from 'react-native';
+import { View, Image, StyleSheet, ScrollView, Dimensions, Animated, Linking } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { colors } from '@/lib/colors';
 import { API_BASE_URL } from '@/lib/apiConfig';
 

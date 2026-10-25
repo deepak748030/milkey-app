@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, ActivityIndicator, RefreshControl, Animated, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Image, ActivityIndicator, RefreshControl, Animated, Linking } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -18,7 +19,6 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { OverviewRangeModal } from '@/components/OverviewRangeModal';
 import { useSubTabStore } from '@/lib/subTabStore';
 import { setSuppressCollection, setSuppressSelling } from '@/lib/sheetSuppress';
-import { vibrate } from '@/hooks/useTabSound';
 import BannerCarousel from '@/components/BannerCarousel';
 import SubscriptionReminder from '@/components/SubscriptionReminder';
 import HomeFaqSection from '@/components/HomeFaqSection';
@@ -285,7 +285,7 @@ export default function HomeScreen() {
               <View style={styles.overviewHDivider} />
               {/* Bottom: Farmers | Customers — Farmers first with plant icon */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewBottomContent} style={styles.overviewBottomScroll}>
-                <Pressable style={styles.overviewBottomItem} onPress={() => { vibrate(); setSuppressCollection(true); setSuppressCollectionSheet(true); setPurchaseTab('Farmer'); router.push('/(tabs)/purchase' as any); }}>
+                <Pressable style={styles.overviewBottomItem} onPress={() => { setSuppressCollection(true); setSuppressCollectionSheet(true); setPurchaseTab('Farmer'); router.push('/(tabs)/purchase' as any); }}>
                   <View style={[styles.overviewIconSmall, { backgroundColor: isDark ? '#0f2e1a' : '#E8F5E9', width: 36, height: 36, borderRadius: 10 }]}>
                     <Image source={require('@/assets/images/farmer-hat-icon.png')} style={{ width: 26, height: 26 }} resizeMode="contain" />
                   </View>
@@ -296,7 +296,7 @@ export default function HomeScreen() {
                   <ChevronRight size={16} color={colors.mutedForeground} />
                 </Pressable>
                 <View style={styles.overviewVDividerSmall} />
-                <Pressable style={styles.overviewBottomItem} onPress={() => { vibrate(); setSuppressSelling(true); setSuppressSellingSheet(true); setSellingTab('Customer'); router.push('/(tabs)/selling?tab=Customer' as any); }}>
+                <Pressable style={styles.overviewBottomItem} onPress={() => { setSuppressSelling(true); setSuppressSellingSheet(true); setSellingTab('Customer'); router.push('/(tabs)/selling?tab=Customer' as any); }}>
                   <View style={[styles.overviewIconSmall, { backgroundColor: isDark ? '#3a2a12' : '#FEF9C3' }]}>
                     <Users size={14} color="#CA8A04" />
                   </View>

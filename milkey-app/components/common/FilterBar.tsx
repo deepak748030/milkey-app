@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
-import { View, StyleSheet, Pressable, Text } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { SearchInput } from '@/components/common/SearchInput';
 import { Calendar } from 'lucide-react-native';

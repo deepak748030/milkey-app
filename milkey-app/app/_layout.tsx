@@ -20,7 +20,7 @@ import { usePendingSubscriptionSync } from '@/hooks/usePendingSubscriptionSync';
 import { BluetoothPrinterProvider } from '@/hooks/useBluetoothPrinter';
 import { useDeviceSync } from '@/hooks/useDeviceSync';
 import { useTheme } from '@/hooks/useTheme';
-import { vibrate } from '@/hooks/useTabSound';
+import { BlurTargetProvider } from '@/components/ui/SheetBackdrop';
 
 function RootLayoutContent() {
   useFrameworkReady();
@@ -32,8 +32,12 @@ function RootLayoutContent() {
   const isDark = !!theme?.isDark;
 
   const bg = (colors as any)?.background ?? '#ffffff';
+  // Haptics are NOT global anymore: only buttons (HapticPressable), inputs
+  // (HapticTextInput), the bottom tab bar and AppBottomSheet rows vibrate.
   return (
-    <View style={{ flex: 1, backgroundColor: bg }} onStartShouldSetResponderCapture={() => { vibrate(); return false; }}>
+    <View style={{ flex: 1, backgroundColor: bg }}>
+      {/* Blur target: lets every bottom sheet blur the screen behind it */}
+      <BlurTargetProvider>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: bg } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" />
@@ -55,6 +59,7 @@ function RootLayoutContent() {
         <Stack.Screen name="admin" />
         <Stack.Screen name="+not-found" />
       </Stack>
+      </BlurTargetProvider>
       {/* Status bar matches app theme (light #FFFFFF white / dark #000000 black) */}
       <RNStatusBar backgroundColor={bg} barStyle={isDark ? 'light-content' : 'dark-content'} translucent={false} />
       <ExpoStatusBar style={isDark ? 'light' : 'dark'} backgroundColor={bg} />

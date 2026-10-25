@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, ScrollView } from 'react-native';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { Calendar, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 
@@ -110,6 +112,7 @@ export default function DatePickerModal({ visible, onClose, onSelect, selectedDa
     return (
         <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
             <View style={styles.overlay}>
+                <SheetBackdrop />
                 <View style={styles.container}>
                     <View style={styles.header}>
                         <Text style={styles.title}>{title}</Text>
@@ -163,7 +166,7 @@ export default function DatePickerModal({ visible, onClose, onSelect, selectedDa
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'transparent',
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,

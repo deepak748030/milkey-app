@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, ToastAndroid, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, ToastAndroid, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Download, Printer, MessageCircle } from 'lucide-react-native';

@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, Pressable, TextInput, ActivityIndicator, ScrollView, Modal } from 'react-native';
+import { View, Text, ActivityIndicator, ScrollView, Modal } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { Calendar as CalendarIcon, Search, Trash2, FileText, Printer, Edit2, DollarSign, User, X, Zap, Check } from 'lucide-react-native';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import AmountFilterIcon from '@/components/AmountFilterIcon';

@@ -1,16 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    Pressable,
-    Modal,
-    Dimensions,
-    ActivityIndicator,
-    Alert,
-    Linking,
-    Platform,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, Dimensions, ActivityIndicator, Alert, Linking, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 import { useTheme } from '@/hooks/useTheme';

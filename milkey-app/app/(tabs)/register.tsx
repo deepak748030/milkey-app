@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -1585,7 +1588,7 @@ export default function RegisterScreen() {
                 animationType="slide"
                 onRequestClose={() => setShowSettlementDatePicker(false)}
             >
-                <View style={styles.dateModalOverlay}>
+                <View style={styles.dateModalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowSettlementDatePicker(false)} />
                     <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
                         <View style={styles.dateModalHeader}>
@@ -1767,7 +1770,7 @@ export default function RegisterScreen() {
                 animationType="slide"
                 onRequestClose={() => setShowBalancePrintModal(false)}
             >
-                <View style={styles.dateModalOverlay}>
+                <View style={styles.dateModalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowBalancePrintModal(false)} />
                     <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
                         <View style={styles.dateModalHeader}>
@@ -1913,7 +1916,7 @@ export default function RegisterScreen() {
                 animationType="slide"
                 onRequestClose={() => setShowAdvDatePicker(false)}
             >
-                <View style={styles.dateModalOverlay}>
+                <View style={styles.dateModalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowAdvDatePicker(false)} />
                     <View style={[styles.dateModalContent, { backgroundColor: colors.card }]}>
                         <View style={styles.dateModalHeader}>
@@ -2331,6 +2334,7 @@ export default function RegisterScreen() {
                     behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                     style={styles.dateModalOverlay}
                 >
+                    <SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={closeEditPaymentModal} />
                     <View
                         style={[
@@ -2536,7 +2540,7 @@ export default function RegisterScreen() {
                             animationType="slide"
                             onRequestClose={() => setShowEditStartDatePicker(false)}
                         >
-                            <View style={styles.dateModalOverlay}>
+                            <View style={styles.dateModalOverlay}><SheetBackdrop />
                                 <Pressable style={{ flex: 1 }} onPress={() => setShowEditStartDatePicker(false)} />
                                 <View style={[styles.dateModalContent, { backgroundColor: isDark ? colors.card : '#fff' }]}>
                                     <PaymentRangeCalendar
@@ -2564,7 +2568,7 @@ export default function RegisterScreen() {
                             animationType="slide"
                             onRequestClose={() => setShowEditEndDatePicker(false)}
                         >
-                            <View style={styles.dateModalOverlay}>
+                            <View style={styles.dateModalOverlay}><SheetBackdrop />
                                 <Pressable style={{ flex: 1 }} onPress={() => setShowEditEndDatePicker(false)} />
                                 <View style={[styles.dateModalContent, { backgroundColor: isDark ? colors.card : '#fff' }]}>
                                     <PaymentRangeCalendar
@@ -2605,7 +2609,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     },
     dateModalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'transparent',
         justifyContent: 'flex-end',
     },
     dateModalContent: {

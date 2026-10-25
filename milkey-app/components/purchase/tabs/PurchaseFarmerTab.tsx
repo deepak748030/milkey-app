@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { Search, X, Printer, Plus, User, Edit2, Trash2, Power, Users, UserPlus } from 'lucide-react-native';
 
 // Ponytail reusable — Load More type pagination 10 properly

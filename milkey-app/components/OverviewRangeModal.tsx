@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Modal } from 'react-native';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { X } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { DateRangePicker } from '@/components/DateRangePicker';
@@ -49,6 +51,7 @@ export function OverviewRangeModal({ visible, kind, onClose, onRangeSelect, init
     return (
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
             <Pressable style={styles.overlay} onPress={onClose}>
+                <SheetBackdrop />
                 <Pressable style={styles.card} onPress={() => { }}>
                     <View style={styles.header}>
                         <Text style={styles.title}>{title}</Text>
@@ -81,7 +84,7 @@ export function OverviewRangeModal({ visible, kind, onClose, onRangeSelect, init
 
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     overlay: {
-        flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+        flex: 1, backgroundColor: 'transparent',
         justifyContent: 'center', paddingHorizontal: 16,
     },
     card: {

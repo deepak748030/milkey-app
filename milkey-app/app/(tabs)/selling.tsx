@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ToastAndroid } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ToastAndroid } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -3080,7 +3083,7 @@ export default function SellingScreen() {
 
             {/* Date Picker Modal - Bottom Sheet Style */}
             <Modal visible={showDatePicker} animationType="slide" transparent onRequestClose={() => setShowDatePicker(false)}>
-                <View style={styles.modalOverlay}>
+                <View style={styles.modalOverlay}><SheetBackdrop />
                     <View style={styles.dateModalContent}>
                         <View style={styles.dateModalHeader}>
                             <Text style={styles.dateModalTitle}>
@@ -3111,7 +3114,7 @@ export default function SellingScreen() {
 
             {/* Calculation Period Date Picker Modal */}
             <Modal visible={showCalcDatePicker} animationType="slide" transparent onRequestClose={() => setShowCalcDatePicker(false)}>
-                <View style={styles.modalOverlay}>
+                <View style={styles.modalOverlay}><SheetBackdrop />
                     <View style={styles.dateModalContent}>
                         <View style={styles.dateModalHeader}>
                             <Text style={styles.dateModalTitle}>Select Till Date</Text>
@@ -3141,7 +3144,7 @@ export default function SellingScreen() {
 
             {/* Add Range Modal */}
             <Modal visible={showAddRangeModal} animationType="slide" transparent onRequestClose={() => setShowAddRangeModal(false)}>
-                <View style={styles.modalOverlay}>
+                <View style={styles.modalOverlay}><SheetBackdrop />
                     <View style={styles.addRangeModalContent}>
                         <View style={styles.dateModalHeader}>
                             <Text style={styles.dateModalTitle}>Add Date Range</Text>
@@ -3257,6 +3260,7 @@ export default function SellingScreen() {
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={styles.editPaymentModalOverlay}
                 >
+                    <SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setEditPaymentVisible(false)} />
                     <View style={[styles.editPaymentModalContent, { backgroundColor: colors.card }]}>
                         <View style={styles.editPaymentModalHeader}>
@@ -4127,7 +4131,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     // Bottom sheet modal styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'transparent',
         justifyContent: 'flex-end',
     },
     dateModalContent: {
@@ -4186,7 +4190,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     // Bottom sheet member modal styles
     bottomSheetOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'transparent',
         justifyContent: 'flex-end',
     },
     bottomSheetContent: {
@@ -4982,7 +4986,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     // Edit Payment Modal styles
     editPaymentModalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'transparent',
         justifyContent: 'flex-end',
     },
     editPaymentModalContent: {

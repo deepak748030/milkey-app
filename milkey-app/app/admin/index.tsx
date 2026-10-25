@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { ArrowLeft, HelpCircle, Video, LayoutDashboard, Shield, Tag, Smartphone, Bell, UsersRound, TrendingUp, Activity } from 'lucide-react-native';
 import { router } from 'expo-router';

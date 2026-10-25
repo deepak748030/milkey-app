@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState, memo, useCallback } from 'react';
-import {
-    View, Text, Modal, Pressable, TextInput, ScrollView, StyleSheet, Platform,
-    ActivityIndicator, FlatList,
-} from 'react-native';
+import { View, Text, Modal, ScrollView, StyleSheet, Platform, ActivityIndicator, FlatList } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, RefreshCw, Table as TableIcon } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';

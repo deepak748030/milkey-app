@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-    View, Text, StyleSheet, Pressable, TextInput, FlatList,
-    ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking, Platform
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -1022,7 +1022,7 @@ export default function PurchaseScreen() {
 
             {/* ── Modals ── */}
             <Modal visible={showDateModal} animationType="slide" transparent onRequestClose={() => setShowDateModal(false)}>
-                <View style={s.modalOverlay}>
+                <View style={s.modalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowDateModal(false)} />
                     <View style={s.modalSheet}>
                         <View style={s.modalHandle} />
@@ -1036,7 +1036,7 @@ export default function PurchaseScreen() {
             </Modal>
 
             <Modal visible={showCustomerModal} animationType="slide" transparent onRequestClose={() => setShowCustomerModal(false)}>
-                <View style={s.modalOverlay}>
+                <View style={s.modalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowCustomerModal(false)} />
                     <View style={[s.modalSheet, { maxHeight: '80%' }]}>
                         <View style={s.modalHandle} />
@@ -1119,7 +1119,7 @@ export default function PurchaseScreen() {
 
             {/* Print Type Selection Modal */}
             <Modal visible={showPrintTypeModal} transparent animationType="fade" onRequestClose={() => setShowPrintTypeModal(false)}>
-                <View style={s.modalOverlay}>
+                <View style={s.modalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowPrintTypeModal(false)} />
                     <View style={[s.modalSheet, { paddingBottom: 30 }]}>
                         <View style={s.modalHandle} />
@@ -1150,6 +1150,7 @@ export default function PurchaseScreen() {
             {/* Entry Action Menu */}
             <Modal visible={!!actionMenuEntry} transparent animationType="fade" onRequestClose={() => setActionMenuEntry(null)}>
                 <Pressable style={s.modalOverlay} onPress={() => setActionMenuEntry(null)}>
+                    <SheetBackdrop />
                     <View style={[s.modalSheet, { paddingHorizontal: 16, paddingTop: 12 }]}>
                         <View style={s.modalHandle} />
                         <Text style={[s.modalTitle, { textAlign: 'center', marginVertical: 10 }]}>Actions</Text>
@@ -1483,7 +1484,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     emptyText: { fontSize: 11, color: colors.mutedForeground },
 
     // Modal
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalOverlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
     modalSheet: { backgroundColor: colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 16 },
     modalHandle: { width: 32, height: 3, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginTop: 8 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 10 },

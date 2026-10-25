@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions, FlatList, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, FlatList, Image, StatusBar } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { router } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';

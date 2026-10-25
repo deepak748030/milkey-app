@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { Search, X, Printer, FileText, Droplets, MoreVertical } from 'lucide-react-native';
 import AmountFilterIcon from '@/components/AmountFilterIcon';
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, ScrollView, Pressable, StyleSheet, ActivityIndicator, Dimensions, StatusBar, Alert } from 'react-native';
+import { View, Text, Modal, ScrollView, StyleSheet, ActivityIndicator, Dimensions, StatusBar, Alert } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { Crown, Check, Star, Zap, X, ShieldCheck, Clock, Wallet, ChevronRight, Sparkles, Lock } from 'lucide-react-native';
 import { Subscription, userSubscriptionsApi, formatSubscriptionDuration } from '@/lib/milkeyApi';

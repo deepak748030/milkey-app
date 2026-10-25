@@ -1,18 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    Pressable,
-    ActivityIndicator,
-    RefreshControl,
-    TextInput,
-    Modal,
-    KeyboardAvoidingView,
-    Platform,
-    ToastAndroid,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ToastAndroid } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { ArrowLeft, Trash2, Edit2, X, Save, Calendar as CalendarIcon, Download, Share2, Zap } from 'lucide-react-native';
