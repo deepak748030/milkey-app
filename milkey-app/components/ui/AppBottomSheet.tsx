@@ -1,5 +1,5 @@
-import React, { memo, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, Modal, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
+import React, { memo, useCallback, useEffect, useRef } from 'react';
+import { View, Text, Pressable, StyleSheet, Modal, TouchableOpacity, ScrollView, useWindowDimensions, Animated, Easing } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/hooks/useTheme';
@@ -33,6 +33,21 @@ function AppBottomSheet<T extends string>({ visible, onClose, title, items, acti
   // Hard cap: the sheet must never take half of the phone screen.
   const { height: screenHeight } = useWindowDimensions();
   const maxSheetHeight = Math.round(screenHeight * 0.46);
+
+  // Sheet title ("Collection" / "Selling") fades in on mount, then keeps a static
+  // palette fade (app green → card colour) so it looks like it was pulled out of
+  // the navigation/tab bar. Same for both sheets and both themes.
+  const titleFade = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!visible) { titleFade.setValue(0); return; }
+    titleFade.setValue(0);
+    Animated.timing(titleFade, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [visible, titleFade]);
   const handle = useCallback((k: T) => { onSelect(k); onClose(); }, [onSelect, onClose]);
   const s = styles(colors, isDark);
   if (!visible) return null;
@@ -65,7 +80,23 @@ function AppBottomSheet<T extends string>({ visible, onClose, title, items, acti
             />
             <View style={s.handle} />
             <View style={s.header}>
-              <Text style={s.title}>{title}</Text>
+              {/* Faded title: palette green text, fading out to the card colour on the right */}
+              <View style={s.titleWrap}>
+                <Animated.Text
+                  numberOfLines={1}
+                  style={[s.title, { opacity: titleFade }]}
+                >
+                  {title}
+                </Animated.Text>
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={['transparent', colors.card]}
+                  locations={[0.45, 1]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              </View>
               <Pressable onPress={onClose} style={s.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <X size={15} color={colors.foreground} />
               </Pressable>
@@ -130,7 +161,9 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
   // Neutral grab handle — the green accent line above is now the only green border.
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: dark ? 'rgba(255,255,255,0.22)' : '#D8E3DA', alignSelf: 'center', marginBottom: 6 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, paddingHorizontal: 6 },
-  title: { fontSize: 15, fontWeight: '800', color: c.foreground, letterSpacing: 0.2 },
+  // Title is app-palette green with a fade-to-card gradient on top (see header markup).
+  titleWrap: { flexShrink: 1, overflow: 'hidden', paddingRight: 18 },
+  title: { fontSize: 15, fontWeight: '800', color: c.primary, letterSpacing: 0.2 },
   closeBtn: {
     width: 26, height: 26, borderRadius: 13,
     backgroundColor: dark ? 'rgba(255,255,255,0.08)' : '#F1F5F1',
