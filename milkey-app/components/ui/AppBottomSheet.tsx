@@ -56,15 +56,19 @@ const STAGE_DIM = 0.66;
  * the top of the bottom tab bar (`bottom: bottomOffset`), so:
  *   • the header stays bright (only shielded against taps → tapping it closes the sheet),
  *   • the content area behind the sheet goes dark,
- *   • the bottom tab bar stays 100% bright and tappable.
+ *   • the bottom tab bar stays 100% bright and tappable,
+ *   • the card sits directly on the tab bar (no gap), so nothing dark is ever visible
+ *     below the sheet.
  *
  * Layout notes:
  *   • The sheet is drawn inline (no <Modal>) so it shares the tab bar's coordinate
  *     space — it can never climb over the tab bar or sit too high.
  *   • The list gets `maxHeight = 50% screen - card chrome`, so oversized content can
  *     never spill out of the card and reach the tab bar.
- *   • Card elevation is kept small; a huge elevation made its shadow grey out the
- *     tab bar strip below it.
+ *   • The card is flush with the tab bar (`marginBottom: 0`): no dark strip is left
+ *     visible underneath the sheet.
+ *   • The card has no Android elevation: any elevation shadow falls downwards onto the
+ *     bottom tab bar and greys it out.
  */
 function AppBottomSheet<T extends string>({
   visible, onClose, title, items, activeKey, onSelect, isActive,
@@ -137,7 +141,7 @@ function AppBottomSheet<T extends string>({
           style={[
             s.wrap,
             {
-              marginBottom: 10,
+              marginBottom: 0,
               maxHeight: maxSheetHeight,
               transform: [{ translateY: cardTranslateY }],
             },
@@ -228,11 +232,12 @@ const styles = (c: any, dark: boolean) => StyleSheet.create({
   wrap: {
     borderRadius: 28,
     backgroundColor: c.card,
+    // No Android elevation shadow: it fell downwards onto the tab bar and greyed it.
+    // A shadow only upwards (iOS) keeps the card separated from the dark backdrop.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    elevation: 22,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
   },
   card: {
     backgroundColor: c.card,
