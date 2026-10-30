@@ -16,8 +16,8 @@ import {
 import TopBar from '@/components/TopBar';
 import ScreenDim from '@/components/ui/ScreenDim';
 import {
-    milkCollectionsApi, purchaseFarmersApi, rateChartsApi,
-    MilkCollection, PurchaseFarmer, printSettingsApi, PrintSettings
+    milkCollectionsApi, purchaseFarmersApi, rateChartsApi, milkRateSettingsApi,
+    MilkCollection, PurchaseFarmer, printSettingsApi, PrintSettings, MilkRateSettingsDoc
 } from '@/lib/milkeyApi';
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
@@ -91,16 +91,23 @@ export default function PurchaseScreen() {
     const [saving, setSaving] = useState(false);
     const [showRateSetting, setShowRateSetting] = useState(false);
     const [todayRate, setTodayRate] = useState<number>(0);
+    const [milkRateSettings, setMilkRateSettings] = useState<MilkRateSettingsDoc | null>(null);
+    const [purchaseModeOverride, setPurchaseModeOverride] = useState<'rate' | 'fat' | 'fat_snf' | null>(null);
 
-    // Fetch the current Rate Setting "today rate" (from persisted quick settings)
-    // so it can be displayed in the summary bar for rate-chart customers.
+    // Fetch today's rate + global MilkRateSettings (Fixed/Fat/FatSNF) — single source for purchase entry logic
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                const res = await rateChartsApi.getQuickSettings();
-                if (!cancelled && res?.success && res.response && (res.response as any).rate != null) {
-                    setTodayRate(Number((res.response as any).rate) || 0);
+                const [quickRes, mrRes] = await Promise.all([
+                    rateChartsApi.getQuickSettings().catch(() => null),
+                    milkRateSettingsApi.get().catch(() => null),
+                ]);
+                if (!cancelled && quickRes?.success && quickRes.response && (quickRes.response as any).rate != null) {
+                    setTodayRate(Number((quickRes.response as any).rate) || 0);
+                }
+                if (!cancelled && mrRes?.success && mrRes.response) {
+                    setMilkRateSettings(mrRes.response as MilkRateSettingsDoc);
                 }
             } catch { /* offline-safe */ }
         })();
@@ -380,6 +387,8 @@ export default function PurchaseScreen() {
     // Never let a late response land after leaving the screen.
     useEffect(() => () => { inlineSearchReqId.current++; }, []);
 
+    useEffect(() => { setPurchaseModeOverride(null); }, [selectedCustomer?._id]);
+
     useEffect(() => {
         if (selectedCustomer) {
             setMilkType(selectedCustomer.defaultMilk || 'buffalo');
@@ -394,48 +403,57 @@ export default function PurchaseScreen() {
     const autoFillRate = (customer: PurchaseFarmer, type: 'cow' | 'buffalo') => {
         // An edit restores the saved FAT / SNF / rate — the auto fill must not wipe them.
         if (suppressAutoFillRef.current) return;
-        if (customer.priceBasis === 'rate') {
-            setRateValue(type === 'cow' ? String(customer.cowRate || '') : String(customer.buffaloRate || ''));
+        const effectiveBasis = (purchaseModeOverride || customer.priceBasis) as any;
+        // If global Fixed Rate is defined, prefer it for Fixed method
+        const globalFixed = type === 'cow' ? (milkRateSettings?.fixedRate?.cow || 0) : (milkRateSettings?.fixedRate?.buffalo || 0);
+        if (effectiveBasis === 'rate') {
+            const perFarmer = type === 'cow' ? (customer.cowRate || 0) : (customer.buffaloRate || 0);
+            const fixedToUse = globalFixed > 0 ? globalFixed : perFarmer;
+            setRateValue(fixedToUse ? String(fixedToUse) : '');
             setFatValue('');
             setSnfValue('');
-        } else if (customer.priceBasis === 'fat') {
-            // For fat-based, cowFat/buffaloFat is the fatRate (price per unit fat)
+        } else if (effectiveBasis === 'fat') {
+            // For fat-based, use farmer's cowFat/buffaloFat OR global fatRate as fallback
             setFatValue('');
             setRateValue('');
             setSnfValue('');
         } else {
-            // fat_snf - clear all, user enters fat, snf, and rate manually
+            // fat_snf / Rate Chart - clear all, user enters fat, snf, rate auto from chart
             setFatValue('');
             setSnfValue('');
             setRateValue('');
         }
     };
 
-    // For fat-based pricing: rate = fat × farmer's fatRate (cowFat/buffaloFat)
+    // For fat-based pricing: rate = fat × farmer's fatRate (cowFat/buffaloFat) OR global fatRate
     useEffect(() => {
-        if (!selectedCustomer || selectedCustomer.priceBasis !== 'fat') return;
+        const basis = (purchaseModeOverride || selectedCustomer?.priceBasis) as any;
+        if (!selectedCustomer || basis !== 'fat') return;
         const fat = parseFloat(fatValue) || 0;
         if (fat <= 0) { setRateValue(''); return; }
-        const fatRate = milkType === 'cow' ? (selectedCustomer.cowFat || 0) : (selectedCustomer.buffaloFat || 0);
+        const perFarmer = milkType === 'cow' ? (selectedCustomer.cowFat || 0) : (selectedCustomer.buffaloFat || 0);
+        const globalFatRate = milkType === 'cow' ? (milkRateSettings?.fatRate?.cow || 0) : (milkRateSettings?.fatRate?.buffalo || 0);
+        const fatRate = perFarmer > 0 ? perFarmer : globalFatRate;
         const rate = fat * fatRate;
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
-    }, [fatValue, selectedCustomer, milkType]);
+    }, [fatValue, selectedCustomer, milkType, purchaseModeOverride, milkRateSettings]);
 
     // For rate-chart customers: auto-compute rate from FAT + SNF using the
     // saved rate setting's "today rate" (FatRate = rate*0.08, SnfRate = rate*0.053333).
-    // rate = fat * fatRate + snf * snfRate
+    // rate = fat * fatRate + snf * snfRate — respects purchaseModeOverride when Fixed not defined
     useEffect(() => {
         if (!selectedCustomer) return;
+        const effectiveBasis = (purchaseModeOverride || selectedCustomer.priceBasis) as any;
         const isRateSetting =
             ((selectedCustomer as any).showRateSetting === true || (selectedCustomer as any).showRateChart === true) ||
-            selectedCustomer.priceBasis === 'fat_snf';
+            effectiveBasis === 'fat_snf' || selectedCustomer.priceBasis === 'fat_snf';
         if (!isRateSetting) return;
         const fat = parseFloat(fatValue) || 0;
         const snf = parseFloat(snfValue) || 0;
         if (fat <= 0 || snf <= 0 || todayRate <= 0) { setRateValue(''); return; }
         const rate = fat * (todayRate * FAT_RATIO) + snf * (todayRate * SNF_RATIO);
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
-    }, [fatValue, snfValue, selectedCustomer, todayRate]);
+    }, [fatValue, snfValue, selectedCustomer, todayRate, purchaseModeOverride]);
 
     const computeAmount = (): number => {
         if (isZero) return 0;
@@ -1040,7 +1058,7 @@ export default function PurchaseScreen() {
 
 
     // Ponytail ctx — single source for all tabs (no prop drilling duplication)
-    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, milkRateSettings, purchaseModeOverride, setPurchaseModeOverride, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>

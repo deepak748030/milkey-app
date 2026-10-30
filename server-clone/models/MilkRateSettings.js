@@ -29,6 +29,11 @@ const milkRateSettingsSchema = new mongoose.Schema({
       col3: { type: Number, default: 0 },
     },
   },
+  // Advance Rate (Min/Max) - 0,0 = no limit (backward compat)
+  advanceRate: {
+    min: { type: Number, default: 0 },
+    max: { type: Number, default: 0 },
+  },
   // Bonus
   bonus: {
     type: { type: String, enum: ['perLitre', 'percent'], default: 'perLitre' },

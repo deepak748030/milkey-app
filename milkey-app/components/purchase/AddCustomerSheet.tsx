@@ -4,7 +4,7 @@ import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { TextInput } from '@/components/ui/HapticTextInput';
 import { X, Check, RotateCcw } from 'lucide-react-native';
-import { PurchaseFarmer, purchaseFarmersApi } from '@/lib/milkeyApi';
+import { PurchaseFarmer, purchaseFarmersApi, rateChartsApi } from '@/lib/milkeyApi';
 import { SuccessModal } from '../SuccessModal';
 import { useDebounce } from '@/hooks/useDebounce';
 
@@ -18,9 +18,9 @@ interface AddCustomerSheetProps {
 }
 
 const PRICE_BASIS_OPTIONS = [
-    { value: 'fat', label: 'Fat' },
-    { value: 'rate', label: 'Rate' },
-    { value: 'fat_snf', label: 'Rate Setting' },
+    { value: 'rate', label: 'Fixed Rate' },
+    { value: 'fat', label: 'Rate by Quantity/Quality' },
+    { value: 'fat_snf', label: 'Rate Chart' },
 ];
 
 const ALERT_METHOD_OPTIONS = [
@@ -36,6 +36,9 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
     const [address, setAddress] = useState('');
     const [defaultMilk, setDefaultMilk] = useState<'cow' | 'buffalo'>('buffalo');
     const [priceBasis, setPriceBasis] = useState<'rate' | 'fat' | 'fat_snf'>('rate');
+    const [linkedRateChartId, setLinkedRateChartId] = useState<string | null>(null);
+    const [rateCharts, setRateCharts] = useState<any[]>([]);
+    const [loadingCharts, setLoadingCharts] = useState(false);
     const [alertMethod, setAlertMethod] = useState<'sms' | 'whatsapp' | 'none'>('none');
     const [saving, setSaving] = useState(false);
     const [codeAvailable, setCodeAvailable] = useState<boolean | null>(null);
@@ -55,6 +58,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 setAddress((editingFarmer as any).address || '');
                 setDefaultMilk(editingFarmer.defaultMilk || 'buffalo');
                 setPriceBasis(editingFarmer.priceBasis || 'rate');
+                setLinkedRateChartId((editingFarmer as any).linkedRateChartId || null);
                 setAlertMethod((editingFarmer as any).alertMethod || 'none');
                 setCodeAvailable(null);
             } else {
@@ -62,6 +66,24 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
             }
         }
     }, [visible, editingFarmer]);
+
+    // Fetch existing rate charts only when Rate Chart selected — no new chart creation
+    React.useEffect(() => {
+        if (!visible || priceBasis !== 'fat_snf') return;
+        let cancelled = false;
+        (async () => {
+            setLoadingCharts(true);
+            try {
+                const res = await rateChartsApi.getAll();
+                if (!cancelled && res.success) {
+                    const data = (res.response as any)?.data || (res.response as any) || [];
+                    setRateCharts(Array.isArray(data) ? data : []);
+                }
+            } catch { }
+            if (!cancelled) setLoadingCharts(false);
+        })();
+        return () => { cancelled = true; };
+    }, [visible, priceBasis]);
 
     React.useEffect(() => {
         if (debouncedCode && !editingFarmer && debouncedCode.trim().length > 0) {
@@ -71,7 +93,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
 
     const resetForm = () => {
         setCode(''); setName(''); setPhone(''); setAddress('');
-        setDefaultMilk('buffalo'); setPriceBasis('rate'); setAlertMethod('none');
+        setDefaultMilk('buffalo'); setPriceBasis('rate'); setLinkedRateChartId(null); setAlertMethod('none');
         setCodeAvailable(null);
     };
 
@@ -98,6 +120,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                 address: address.trim(),
                 defaultMilk,
                 priceBasis,
+                linkedRateChartId: linkedRateChartId || null,
                 alertMethod,
                 // defaults for hidden fields to keep backend happy
                 cowEnabled: true,
@@ -122,7 +145,7 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
     const s = createSheetStyles(colors, isDark);
 
     const resetOtherSettings = () => {
-        setDefaultMilk('buffalo'); setPriceBasis('rate'); setAlertMethod('none');
+        setDefaultMilk('buffalo'); setPriceBasis('rate'); setLinkedRateChartId(null); setAlertMethod('none');
     };
 
     return (
@@ -201,6 +224,30 @@ function AddCustomerSheetInner({ visible, onClose, onSuccess, editingFarmer, col
                                     </Pressable>
                                 ))}
                             </View>
+                            {priceBasis === 'fat_snf' && (
+                                <View style={{ marginTop: 10 }}>
+                                    <Text style={s.fieldLabel}>Select Existing Rate Chart (no new creation)</Text>
+                                    {loadingCharts ? <ActivityIndicator size="small" color={colors.primary} /> : rateCharts.length === 0 ? (
+                                        <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 4 }}>No rate chart found — use Settings to create one</Text>
+                                    ) : (
+                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 6 }}>
+                                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                {rateCharts.map((ch: any) => (
+                                                    <Pressable key={ch._id} onPress={() => setLinkedRateChartId(ch._id)} style={[s.milkChip, linkedRateChartId === ch._id && s.milkChipActive]}>
+                                                        {linkedRateChartId === ch._id && <Check size={12} color="#fff" style={{ marginRight: 3 }} />}
+                                                        <Text style={[s.milkChipText, linkedRateChartId === ch._id && { color: '#fff' }]}>{ch.name || 'Rate Chart'}</Text>
+                                                    </Pressable>
+                                                ))}
+                                                <Pressable onPress={() => setLinkedRateChartId(null)} style={[s.milkChip, !linkedRateChartId && s.milkChipActive]}>
+                                                    {!linkedRateChartId && <Check size={12} color="#fff" style={{ marginRight: 3 }} />}
+                                                    <Text style={[s.milkChipText, !linkedRateChartId && { color: '#fff' }]}>Default (Global)</Text>
+                                                </Pressable>
+                                            </View>
+                                        </ScrollView>
+                                    )}
+                                    <Text style={[s.resetHint, { textAlign: 'left', marginTop: 6 }]}>Purchase me ek baar select karne ke baad har baar auto apply hoga</Text>
+                                </View>
+                            )}
                         </View>
 
                         <View style={s.sectionCard}>

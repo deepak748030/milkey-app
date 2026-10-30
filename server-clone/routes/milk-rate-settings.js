@@ -48,6 +48,10 @@ router.put('/', auth, async (req, res) => {
         if (b.clrProRata.proRata.col3 !== undefined) update['clrProRata.proRata.col3'] = clampNum(b.clrProRata.proRata.col3, 0);
       }
     }
+    if (b.advanceRate) {
+      if (b.advanceRate.min !== undefined) update['advanceRate.min'] = clampNum(b.advanceRate.min, 0);
+      if (b.advanceRate.max !== undefined) update['advanceRate.max'] = clampNum(b.advanceRate.max, 0);
+    }
     if (b.bonus) {
       if (b.bonus.type) update['bonus.type'] = b.bonus.type === 'percent' ? 'percent' : 'perLitre';
       if (b.bonus.perLitre !== undefined) update['bonus.perLitre'] = clampNum(b.bonus.perLitre, 0);

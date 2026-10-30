@@ -98,6 +98,12 @@ const purchaseFarmerSchema = new mongoose.Schema({
         enum: ['default', 'yes', 'no'],
         default: 'default'
     },
+    // Linked Rate Chart (existing chart selection) - optional
+    linkedRateChartId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'RateChart',
+        default: null
+    },
     // Whether the Rate Chart icon should be shown in Purchase for this customer
     showRateChart: {
         type: Boolean,

@@ -83,6 +83,7 @@ export interface PurchaseFarmer {
     printEntrySlip?: 'default' | 'yes' | 'no';
     showRateChart?: boolean;
     showRateSetting?: boolean;
+    linkedRateChartId?: string | null;
 }
 
 export interface Advance {
@@ -2094,6 +2095,7 @@ export interface MilkRateSettingsDoc {
   fixedRate: { buffalo: number; cow: number };
   fatRate: { buffalo: number; cow: number };
   clrProRata: { clrToSnf: number; proRataEnabled: boolean; proRata: { col1: number; col2: number; col3: number } };
+  advanceRate?: { min: number; max: number };
   bonus: { type: 'perLitre' | 'percent'; perLitre: number; percent: number };
   createdAt?: string;
   updatedAt?: string;

@@ -8,7 +8,7 @@ import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { milkRateSettingsApi, MilkRateSettingsDoc, purchaseFarmersApi } from '@/lib/milkeyApi';
 
-type Expanded = 'fatSnf' | 'fixed' | 'fat' | 'bonus' | null;
+type Expanded = 'fatSnf' | 'fixed' | 'fat' | 'advanceRate' | 'bonus' | null;
 
 function useDebouncedSave(fn: () => void, delay = 600) {
   const t = useRef<any>(null);
@@ -27,12 +27,14 @@ export default function MilkRateSettingsScreen() {
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<Expanded>('fatSnf');
 
-  // form state — exactly 4 Based on options
+  // form state — Advance Rate added, Rate Chart screen untouched
   const [fatSnfRate, setFatSnfRate] = useState('');
   const [fixedBuffalo, setFixedBuffalo] = useState('');
   const [fixedCow, setFixedCow] = useState('');
   const [fatRateBuffalo, setFatRateBuffalo] = useState('');
   const [fatRateCow, setFatRateCow] = useState('');
+  const [advanceMin, setAdvanceMin] = useState('');
+  const [advanceMax, setAdvanceMax] = useState('');
   const [bonusType, setBonusType] = useState<'perLitre' | 'percent'>('perLitre');
   const [bonusPerLitre, setBonusPerLitre] = useState('');
   const [bonusPercent, setBonusPercent] = useState('');
@@ -57,6 +59,8 @@ export default function MilkRateSettingsScreen() {
           setFixedCow(d.fixedRate?.cow ? String(d.fixedRate.cow) : '');
           setFatRateBuffalo(d.fatRate?.buffalo ? String(d.fatRate.buffalo) : '');
           setFatRateCow(d.fatRate?.cow ? String(d.fatRate.cow) : '');
+          setAdvanceMin((d as any).advanceRate?.min ? String((d as any).advanceRate.min) : '');
+          setAdvanceMax((d as any).advanceRate?.max ? String((d as any).advanceRate.max) : '');
           setBonusType(d.bonus?.type || 'perLitre');
           setBonusPerLitre(d.bonus?.perLitre ? String(d.bonus.perLitre) : '');
           setBonusPercent(d.bonus?.percent ? String(d.bonus.percent) : '');
@@ -82,11 +86,12 @@ export default function MilkRateSettingsScreen() {
         fatSnfRate: { buffalo: fatSnfNum, cow: fatSnfNum, baseLabel: '65/90' } as any,
         fixedRate: { buffalo: parseFloat(fixedBuffalo) || 0, cow: parseFloat(fixedCow) || 0 },
         fatRate: { buffalo: parseFloat(fatRateBuffalo) || 0, cow: parseFloat(fatRateCow) || 0 },
+        advanceRate: { min: parseFloat(advanceMin) || 0, max: parseFloat(advanceMax) || 0 } as any,
         bonus: { type: bonusType, perLitre: parseFloat(bonusPerLitre) || 0, percent: parseFloat(bonusPercent) || 0 } as any,
       } as any);
     } catch {}
     setSaving(false);
-  }, [fatSnfRate, fixedBuffalo, fixedCow, fatRateBuffalo, fatRateCow, bonusType, bonusPerLitre, bonusPercent]);
+  }, [fatSnfRate, fixedBuffalo, fixedCow, fatRateBuffalo, fatRateCow, advanceMin, advanceMax, bonusType, bonusPerLitre, bonusPercent]);
 
   const debouncedSave = useDebouncedSave(save, 700);
 
@@ -185,7 +190,26 @@ export default function MilkRateSettingsScreen() {
           <View style={s.banner}><Text style={s.bannerText}>{counts ? `${counts.fat} members will change` : '— members will change'}</Text></View>
         </CollapsibleCard>
 
-        {/* 4. Bonus — Fix qty bonus, Amount percent bonus */}
+        {/* 4. Advance Rate — Minimum & Maximum (like 55 rate) */}
+        <CollapsibleCard title="Advance Rate" subtitle={expanded === 'advanceRate' ? '(₹)' : undefined} expanded={expanded === 'advanceRate'} onToggle={() => toggle('advanceRate')} colors={colors} isDark={isDark}>
+          <View style={s.greenTable}>
+            <View style={s.tableHeaderRow}>
+              <View style={[s.tableCell, s.tableHeaderCell]}><Text style={s.headerCellText}>Minimum</Text></View>
+              <View style={[s.tableCell, s.tableHeaderCell]}><Text style={s.headerCellText}>Maximum</Text></View>
+            </View>
+            <View style={s.tableRow}>
+              <View style={[s.tableCell, s.inputCell]}>
+                <TextInput value={advanceMin} onChangeText={onChange(setAdvanceMin)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+              </View>
+              <View style={[s.tableCell, s.inputCell]}>
+                <TextInput value={advanceMax} onChangeText={onChange(setAdvanceMax)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+              </View>
+            </View>
+          </View>
+          <Text style={s.helper}>Advance Min/Max — 0 means no limit. Existing functionality same.</Text>
+        </CollapsibleCard>
+
+        {/* 5. Bonus — Fix qty bonus, Amount percent bonus */}
         <CollapsibleCard title="Bonus" expanded={expanded === 'bonus'} onToggle={() => toggle('bonus')} colors={colors} isDark={isDark}>
           <View style={s.bonusTabs}>
             <Pressable onPress={() => { setBonusType('perLitre'); debouncedSave(); }} style={[s.bonusTab, bonusType === 'perLitre' && s.bonusTabActive]}>
