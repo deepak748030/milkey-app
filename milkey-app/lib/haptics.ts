@@ -4,18 +4,18 @@ import { Platform } from 'react-native';
 /**
  * Central haptic policy.
  *
- * Haptics fire ONLY for real interactions:
+ * Haptics fire ONLY for completed interactions:
  *   • button / pressable taps  (wrap: @/components/ui/HapticPressable)
- *   • text inputs (focus)      (wrap: @/components/ui/HapticTextInput)
+ *   • text-input taps that focus the field without scrolling
  *   • bottom tab bar taps      (rendered with the same HapticPressable)
  *   • AppBottomSheet rows / close (same HapticPressable)
  *
- * Nothing else vibes: plain screen taps, scrolling, cards without press
- * handlers etc. do NOT trigger a haptic.
+ * Nothing else vibes: touches that become scrolls, plain screen taps, and cards
+ * without press handlers do NOT trigger a haptic.
  *
- * ONE buzz per tap. HapticPressable asks for it on press-in and only fills in on
- * release when press-in didn't buzz (see the `buzzedRef` guard there); the tiny
- * throttle below additionally absorbs press-in + focus landing on the same ms.
+ * HapticPressable waits for React Native's successful `onPress`. HapticTextInput
+ * waits for a focused touch to end without movement. The tiny throttle below also
+ * absorbs near-simultaneous interactions.
  */
 let lastAt = 0;
 const MIN_GAP_MS = 45;
