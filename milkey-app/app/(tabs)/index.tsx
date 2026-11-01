@@ -251,7 +251,7 @@ export default function HomeScreen() {
             <View style={styles.overviewCardNew}>
               {/* Top: Collection | Selling */}
               <View style={styles.overviewTopRow}>
-                <Pressable style={styles.overviewCol} onPress={() => setOverviewRangeKind('collection')}>
+                <View style={styles.overviewCol}>
                   <View style={styles.overviewColHeader}>
                     <View style={[styles.overviewIcon, { backgroundColor: isDark ? '#0f2e1a' : '#DCFCE7' }]}>
                       <Milk size={14} color={colors.primary} />
@@ -266,9 +266,9 @@ export default function HomeScreen() {
                     <View style={styles.metricCol}><Text style={styles.metricLabel}>Avg Rate</Text><Text style={styles.metricValue}>₹{collRate.toFixed(2)}</Text></View>
                     <View style={styles.metricCol}><Text style={styles.metricLabel}>Amount</Text><Text style={[styles.metricValue, styles.metricValueAmount]}>₹{collAmt.toFixed(0)}</Text></View>
                   </View>
-                </Pressable>
+                </View>
                 <View style={styles.overviewVDivider} />
-                <Pressable style={styles.overviewCol} onPress={() => setOverviewRangeKind('selling')}>
+                <View style={styles.overviewCol}>
                   <View style={styles.overviewColHeader}>
                     <View style={[styles.overviewIcon, { backgroundColor: isDark ? '#1e293b' : '#DBEAFE' }]}>
                       <ShoppingCart size={14} color="#2563EB" />
@@ -280,7 +280,7 @@ export default function HomeScreen() {
                     <View style={styles.metricCol}><Text style={styles.metricLabel}>Avg Rate</Text><Text style={styles.metricValue}>₹{sellRate.toFixed(2)}</Text></View>
                     <View style={styles.metricCol}><Text style={styles.metricLabel}>Amount</Text><Text style={[styles.metricValue, { color: '#2563EB' }]}>₹{sellAmt.toFixed(0)}</Text></View>
                   </View>
-                </Pressable>
+                </View>
               </View>
               <View style={styles.overviewHDivider} />
               {/* Bottom: Farmers | Customers — Farmers first with plant icon */}
