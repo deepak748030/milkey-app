@@ -244,9 +244,8 @@ export default function HomeScreen() {
           const sellAmt = useRange ? rangeStats!.sellAmt : (homeStats?.todaySell.amount || 0);
           const sellRate = sellQty > 0 ? sellAmt / sellQty : 0;
           const customers = homeStats?.totalMembers || 0;
-          // Fix double-count: Farmer & PurchaseFarmer share same collection (Farmer model).
-          // Use collection count directly (now filtered isActive:true in server-clone) — matches Farmer Management (140).
-          const farmers = homeStats?.totalCollectionFarmers ?? homeStats?.totalFarmers ?? 0;
+          // Prefer the active purchase-farmer count; fall back to the legacy farmer-only count.
+          const farmers = homeStats?.totalCollectionFarmers || homeStats?.totalFarmers || 0;
           return (
             <View style={styles.overviewCardNew}>
               {/* Top: Collection | Selling */}
