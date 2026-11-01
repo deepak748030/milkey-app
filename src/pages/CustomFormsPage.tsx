@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FileText, Trash2, Eye, Search, Filter, X, User, Mail, Phone, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { TableSkeleton } from '../components/TableSkeleton'
 import { Pagination } from '../components/Pagination'
+import { API_BASE_URL } from '../lib/apiConfig'
 
 interface FormField {
     label: string
@@ -24,10 +25,6 @@ interface CustomForm {
         phone: string
     }
 }
-
-// Same-origin by default (proxied by Vite in dev, rewritten by Vercel in prod),
-// so the browser never issues a CORS preflight. See src/lib/api.ts.
-const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 export function CustomFormsPage() {
     const [forms, setForms] = useState<CustomForm[]>([])
@@ -57,7 +54,7 @@ export function CustomFormsPage() {
             })
             if (statusFilter) params.append('status', statusFilter)
 
-            const response = await fetch(`${API_URL}/custom-forms/admin?${params}`, {
+            const response = await fetch(`${API_BASE_URL}/custom-forms/admin?${params}`, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                 },
@@ -91,7 +88,7 @@ export function CustomFormsPage() {
         try {
             setUpdating(true)
             const token = localStorage.getItem('admin_token')
-            const response = await fetch(`${API_URL}/custom-forms/${selectedForm._id}/status`, {
+            const response = await fetch(`${API_BASE_URL}/custom-forms/${selectedForm._id}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -124,7 +121,7 @@ export function CustomFormsPage() {
         try {
             setUpdating(true)
             const token = localStorage.getItem('admin_token')
-            const response = await fetch(`${API_URL}/custom-forms/admin/${formToDelete._id}`, {
+            const response = await fetch(`${API_BASE_URL}/custom-forms/admin/${formToDelete._id}`, {
                 method: 'DELETE',
                 headers: {
                     Authorization: `Bearer ${token}`,
