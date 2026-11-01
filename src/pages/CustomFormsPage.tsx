@@ -25,7 +25,9 @@ interface CustomForm {
     }
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+// Same-origin by default (proxied by Vite in dev, rewritten by Vercel in prod),
+// so the browser never issues a CORS preflight. See src/lib/api.ts.
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 export function CustomFormsPage() {
     const [forms, setForms] = useState<CustomForm[]>([])

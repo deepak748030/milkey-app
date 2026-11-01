@@ -1,7 +1,11 @@
 // File: src/lib/api.ts
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+// Same-origin by default: the Vite dev server proxies /api → backend (see
+// vite.config.ts), and Vercel rewrites /api/* (see vercel.json). Same-origin means
+// the browser never runs a CORS preflight, so no CORS errors in the console.
+// Set VITE_API_URL to an absolute URL to talk to another backend directly.
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 const api = axios.create({
     baseURL: API_URL,
