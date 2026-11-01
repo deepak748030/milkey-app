@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { X, Search, Sun, Moon, Check, Calendar as CalendarIcon, Zap, Users } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { sellingEntriesApi, BulkEntryMember, BulkSession, BulkEntryPayloadItem } from '@/lib/milkeyApi';

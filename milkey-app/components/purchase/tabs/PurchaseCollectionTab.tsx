@@ -1,14 +1,24 @@
 import React from 'react';
-import { View, Text, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Milk, Droplets, Sun, Moon, TableIcon, Ban, Printer, Check } from 'lucide-react-native';
 
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseCollectionTab(props:any){
   const ctx = (props as any).ctx || props;
-  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
+  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
+  const milkRateSettings = (ctx as any).milkRateSettings || null;
+  const purchaseModeOverride = (ctx as any).purchaseModeOverride || null;
+  const setPurchaseModeOverride = (ctx as any).setPurchaseModeOverride || (() => {});
   const setSelectedCustomer = _setSelCust ?? (() => {});
   const setShowRateSetting = ctx.setShowRateSetting || ctx.setShowRateChart;
   const setShowRateChart = setShowRateSetting;
+  // Effective basis: if user picked via chooser (when Fixed not defined), use override, else farmer's basis
+  const effectiveBasis: any = purchaseModeOverride || (selectedCustomer as any)?.priceBasis || 'rate';
+  const globalFixedDefined = milkRateSettings ? ((milkRateSettings as any).fixedRate?.buffalo > 0 || (milkRateSettings as any).fixedRate?.cow > 0) : false;
+  const currentFixedRate = milkRateSettings ? ((milkType === 'cow' ? (milkRateSettings as any).fixedRate?.cow : (milkRateSettings as any).fixedRate?.buffalo) || 0) : 0;
+  const showMethodChooser = !!selectedCustomer && !globalFixedDefined;
   return (
         <View style={{ flex: 1 }}>
             {/* Top Controls: Date + Shift + Add */}
@@ -154,7 +164,12 @@ export function PurchaseCollectionTab(props:any){
             {/* Inline search results dropdown */}
             {showInlineSearch && inlineSearchCode.trim().length > 0 && (
                 <View style={s.inlineDropdown}>
-                    {inlineSearchResults.length > 0 ? (
+                    {inlineSearchLoading && inlineSearchResults.length === 0 ? (
+                        <View style={[s.emptyBox, { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }]}>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <Text style={s.emptyText}>Searching code {inlineSearchCode}…</Text>
+                        </View>
+                    ) : inlineSearchResults.length > 0 ? (
                         inlineSearchResults.map(item => (
                             <Pressable
                                 key={item._id}
@@ -178,46 +193,68 @@ export function PurchaseCollectionTab(props:any){
                 </View>
             )}
 
-            {/* Entry Fields */}
+            {/* Entry Fields — Ordered: Quantity → Quality → Rate auto → Amount */}
             {selectedCustomer && (
                 <View style={s.entryCard}>
-                    {/* Price Basis Label */}
+                    {/* Method label + Chooser when Fixed not defined */}
                     <Text style={s.priceBasisLabel}>
-                        {selectedCustomer.priceBasis === 'rate' ? t.purchase.rateBased : selectedCustomer.priceBasis === 'fat_snf' ? 'Fat + SNF based' : t.purchase.fatBased}
+                        {effectiveBasis === 'rate' ? 'Fixed Rate' : effectiveBasis === 'fat' ? 'Rate by Quantity/Quality' : 'Rate Chart'} {globalFixedDefined && currentFixedRate ? `— ₹\${currentFixedRate}/L fixed` : ''}
                     </Text>
-
-                    {/* Input Row */}
-                    <View style={s.fieldsRow}>
-                        <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>{t.purchase.qty}</Text>
-                            <TextInput style={s.fieldInput} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '00.00' : '0.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                    {showMethodChooser && (
+                        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                            {[
+                                { value: 'rate', label: 'Fixed Rate' },
+                                { value: 'fat', label: 'Qty/Quality' },
+                                { value: 'fat_snf', label: 'Rate Chart' },
+                            ].map(opt => (
+                                <Pressable key={opt.value} onPress={() => setPurchaseModeOverride(opt.value as any)} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: effectiveBasis === opt.value ? colors.primary : colors.background }}>
+                                    {effectiveBasis === opt.value && <Check size={12} color="#fff" style={{ marginRight: 4 }} />}
+                                    <Text style={{ fontSize: 12, fontWeight: '600', color: effectiveBasis === opt.value ? '#fff' : colors.foreground }}>{opt.label}</Text>
+                                </Pressable>
+                            ))}
                         </View>
-                        {selectedCustomer.priceBasis !== 'rate' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>{t.purchase.fat}</Text>
-                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={selectedCustomer.priceBasis === 'fat_snf' ? '6.5' : '0.0'} placeholderTextColor={colors.mutedForeground} />
-                            </View>
-                        )}
-                        {selectedCustomer.priceBasis === 'fat_snf' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>SNF</Text>
-                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="9.0" placeholderTextColor={colors.mutedForeground} />
-                            </View>
-                        )}
-                        {selectedCustomer.priceBasis === 'rate' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>{t.common.rate}</Text>
-                                <TextInput style={s.fieldInput} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                            </View>
-                        )}
+                    )}
+
+                    {/* 1. Quantity — sabse pehle, bada input */}
+                    <View style={s.fieldBox}>
+                        <Text style={[s.fieldLabel, { textAlign: 'left' }]}>1. Quantity (Litre)</Text>
+                        <TextInput style={[s.fieldInput, { fontSize: 20 }]} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                        {!milkQty && !isZero && <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>Quantity bharo — amount auto ₹0 rahega</Text>}
                     </View>
 
-                    {/* Computed Values Display */}
-                    <View style={s.computedRow}>
-                        {(selectedCustomer.priceBasis === 'fat' || selectedCustomer.priceBasis === 'fat_snf') && (
-                            <Text style={s.computedText}>{t.common.rate}: <Text style={s.computedValue}>{rateValue || '0'}</Text></Text>
+                    {/* 2. Quality — Fat / SNF (visibility by method) */}
+                    <View style={[s.fieldsRow, { marginTop: 8 }]}>
+                        {(effectiveBasis === 'fat' || effectiveBasis === 'fat_snf') && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>2. Quality — Fat</Text>
+                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={effectiveBasis === 'fat_snf' ? '6.5' : '4.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                            </View>
                         )}
-                        <Text style={s.computedText}>{t.common.amount}: <Text style={[s.computedValue, { color: colors.primary }]}>₹{computeAmount().toFixed(1)}</Text></Text>
+                        {effectiveBasis === 'fat_snf' && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>SNF</Text>
+                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="9.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                            </View>
+                        )}
+                        {/* Fixed Rate needs no quality — hide Fat/SNF for fixed */}
+                        {effectiveBasis === 'rate' && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>2. Quality</Text>
+                                <Text style={{ fontSize: 11, color: colors.mutedForeground, paddingVertical: 10, textAlign: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.muted }}>Fixed rate — quality not needed</Text>
+                            </View>
+                        )}
+                        {/* Rate — auto calculate, editable override */}
+                        <View style={s.fieldBox}>
+                            <Text style={s.fieldLabel}>3. Rate (auto)</Text>
+                            <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                            {rateValue ? <Text style={{ fontSize: 10, color: colors.primary, marginTop: 2, textAlign: 'center' }}>Auto — edit kar sakte ho</Text> : null}
+                        </View>
+                    </View>
+
+                    {/* 4. Amount — Rate × Quantity, qty khali → 0 */}
+                    <View style={[s.computedRow, { marginTop: 10, backgroundColor: colors.primary + '08', borderRadius: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary + '15' }]}>
+                        <Text style={s.computedText}>Amount: <Text style={[s.computedValue, { color: computeAmount() === 0 ? colors.mutedForeground : colors.primary }]}>₹{computeAmount().toFixed(2)}</Text></Text>
+                        {computeAmount() === 0 && <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2, textAlign: 'center' }}>Quantity ya Rate khali hai → Amount ₹0</Text>}
                     </View>
 
                     {/* Actions */}

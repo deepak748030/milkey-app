@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 
 type Props = {
@@ -7,53 +8,37 @@ type Props = {
   onToggle: () => void;
 };
 
-// Red filter icon like image: 3 horizontal bars with varying lengths
-// none = 100% / 60% / 100% centered (image top), asc = 60% / 80% / 100%, desc = 100% / 80% / 60%
-// All red when active, muted gray when inactive
+// Ascending / descending filter icon: 3 horizontal bars with varying lengths.
+// none = 100% / 60% / 100% centred, asc = 60% / 80% / 100%, desc = 100% / 80% / 60%
+// Active state is GREEN (app palette) and the whole control is smaller so it sits
+// neatly next to the PDF / Print buttons.
 export default function AmountFilterIcon({ sort, onToggle }: Props) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const isActive = sort !== null;
-  // widths matching image: 22 ~ 100%, 17 ~ 77%, 12 ~ 55%
-  const w1 = sort === 'asc' ? 12 : sort === 'desc' ? 22 : 22;
-  const w2 = sort === null ? 13 : 17;
-  const w3 = sort === 'asc' ? 22 : sort === 'desc' ? 12 : 22;
+  const activeColor = colors.primary;          // green
+  const inactiveColor = colors.mutedForeground;
+  const barColor = isActive ? activeColor : inactiveColor;
+  // widths: 18 ≈ 100%, 14 ≈ 77%, 10 ≈ 55%
+  const w1 = sort === 'asc' ? 10 : sort === 'desc' ? 18 : 18;
+  const w2 = sort === null ? 11 : 14;
+  const w3 = sort === 'asc' ? 18 : sort === 'desc' ? 10 : 18;
   return (
     <Pressable
       onPress={onToggle}
+      hitSlop={6}
       style={({ pressed }) => [
         styles.btn,
-        { backgroundColor: colors.card, borderColor: isActive ? '#E30613' : colors.border },
+        {
+          backgroundColor: isActive ? (isDark ? 'rgba(34,197,94,0.14)' : '#EAF8EF') : colors.card,
+          borderColor: isActive ? activeColor : colors.border,
+        },
         pressed && { opacity: 0.7 },
       ]}
     >
       <View style={styles.iconWrap}>
-        <View
-          style={[
-            styles.bar,
-            {
-              width: w1,
-              backgroundColor: isActive ? '#E30613' : colors.mutedForeground,
-            },
-          ]}
-        />
-        <View
-          style={[
-            styles.bar,
-            {
-              width: w2,
-              backgroundColor: isActive ? '#E30613' : colors.mutedForeground,
-            },
-          ]}
-        />
-        <View
-          style={[
-            styles.bar,
-            {
-              width: w3,
-              backgroundColor: isActive ? '#E30613' : colors.mutedForeground,
-            },
-          ]}
-        />
+        <View style={[styles.bar, { width: w1, backgroundColor: barColor }]} />
+        <View style={[styles.bar, { width: w2, backgroundColor: barColor }]} />
+        <View style={[styles.bar, { width: w3, backgroundColor: barColor }]} />
       </View>
     </Pressable>
   );
@@ -61,20 +46,19 @@ export default function AmountFilterIcon({ sort, onToggle }: Props) {
 
 const styles = StyleSheet.create({
   btn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 7,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
   },
   iconWrap: {
-    gap: 3,
+    gap: 2.5,
     alignItems: 'flex-start',
   },
   bar: {
-    height: 4,
-    borderRadius: 2,
+    height: 3,
+    borderRadius: 1.5,
   },
 });

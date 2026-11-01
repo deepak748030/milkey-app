@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { ArrowLeft, TrendingUp, DollarSign, Calendar } from 'lucide-react-native';
 import { router } from 'expo-router';

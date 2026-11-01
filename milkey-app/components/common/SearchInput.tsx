@@ -1,5 +1,7 @@
 import React, { memo } from 'react';
-import { View, TextInput, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import { TextInput } from '@/components/ui/HapticTextInput';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { Search, X } from 'lucide-react-native';
 

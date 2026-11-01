@@ -1,17 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  Modal,
-  View,
-  Image,
-  Pressable,
-  Text,
-  Dimensions,
-  ActivityIndicator,
-  StyleSheet,
-  ScrollView,
-  Linking,
-  Platform,
-} from 'react-native';
+import { Modal, View, Image, Text, Dimensions, ActivityIndicator, StyleSheet, ScrollView, Linking, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X } from 'lucide-react-native';
 import { API_BASE_URL } from '@/lib/apiConfig';

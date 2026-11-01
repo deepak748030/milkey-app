@@ -1,5 +1,6 @@
 import React, { useEffect, useState, memo } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, ScrollView } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '@/hooks/useTheme';
 import { X, GraduationCap } from 'lucide-react-native';

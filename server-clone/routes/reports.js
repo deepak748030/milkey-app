@@ -5,7 +5,6 @@ const Payment = require('../models/Payment');
 const Farmer = require('../models/Farmer');
 const Member = require('../models/Member');
 const SellingEntry = require('../models/SellingEntry');
-const PurchaseFarmer = require('../models/PurchaseFarmer');
 const auth = require('../middleware/auth');
 
 // Get milk collection report
@@ -420,12 +419,13 @@ router.get('/home-stats', auth, async (req, res) => {
                     }
                 }
             ]),
-            // Total farmers from Farmer model with type 'farmer' (legacy — kept for compat, same as collection)
+            // Legacy farmer-only count retained for API compatibility.
             Farmer.countDocuments({ owner: req.user._id, isActive: true, type: 'farmer' }),
             // Total members from Member model
             Member.countDocuments({ owner: req.user._id, isActive: true }),
-            // Total collection (purchase) farmers — must match Farmer Management (active only)
-            PurchaseFarmer.countDocuments({ owner: req.user._id, isActive: true }),
+            // The purchase-farmers route uses the shared Farmer collection in this clone.
+            // Match its active-only list instead of querying the unused legacy model.
+            Farmer.countDocuments({ owner: req.user._id, isActive: true }),
             // Today's total collection quantity from MilkCollection
             MilkCollection.aggregate([
                 { $match: { owner: req.user._id, date: { $gte: today, $lte: todayEnd } } },

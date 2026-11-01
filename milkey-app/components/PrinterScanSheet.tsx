@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, FlatList, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Modal, ActivityIndicator, FlatList, ScrollView, Platform } from 'react-native';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { X, Bluetooth, BluetoothOff, RefreshCw, Unplug, Wifi, Printer, Settings, Activity, Copy, Check } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
@@ -190,6 +192,7 @@ export default function PrinterScanSheet({
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
             <View style={styles.overlay}>
                 <Pressable style={styles.overlayBg} onPress={onClose} />
+                <SheetBackdrop />
                 <View style={[styles.sheet, { backgroundColor: colors.background, borderColor: colors.border }]}>
                     <View style={[styles.handle, { backgroundColor: colors.border }]} />
 
@@ -388,7 +391,7 @@ export default function PrinterScanSheet({
 
 const styles = StyleSheet.create({
     overlay: { flex: 1, justifyContent: 'flex-end' },
-    overlayBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+    overlayBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'transparent' },
     sheet: {
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,

@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { View, Text, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Home, Droplets, Store, Package, User } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,8 +12,9 @@ import SellingBottomSheet from '@/components/SellingBottomSheet';
 import { AdPopupModal } from '@/components/AdPopupModal';
 import { checkAppVersion } from '@/lib/milkeyApi';
 import { useSubTabStore } from '@/lib/subTabStore';
+import { useLayoutStore } from '@/lib/layoutStore';
 import { useTabSound } from '@/hooks/useTabSound';
-import { consumeSuppressCollection, consumeSuppressSelling } from '@/lib/sheetSuppress';
+import { consumeSuppressCollection, consumeSuppressSelling, setSuppressCollection } from '@/lib/sheetSuppress';
 import Constants from 'expo-constants';
 
 const APP_VERSION = Constants.expoConfig?.version || '1.0.0';
@@ -39,27 +41,44 @@ export default function TabLayout() {
   const [updateInfo, setUpdateInfo] = useState({ forceUpdate: false, message: '', storeLink: '', latestVersion: '1.0.0' });
   const [showCollectionSheet, setShowCollectionSheet] = useState(false);
   const [showSellingSheet, setShowSellingSheet] = useState(false);
+  // Pending 150ms auto-open timers. A quick second tap on the tab must win over the
+  // scheduled open, otherwise the sheet would pop back up right after being closed.
+  const collectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sellingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelAutoOpen = useCallback(() => {
+    if (collectionTimer.current) { clearTimeout(collectionTimer.current); collectionTimer.current = null; }
+    if (sellingTimer.current) { clearTimeout(sellingTimer.current); sellingTimer.current = null; }
+  }, []);
   const { purchaseTab, sellingTab, collectionTab, setPurchaseTab, setSellingTab, setCollectionTab, suppressCollectionSheet, suppressSellingSheet, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
   const playTabSound = useTabSound();
   const activeTabName = segments[segments.length - 1] as string || '';
+  const measuredHeader = useLayoutStore((st) => st.headerHeight);
+  // Mirror the sheet visibility into the shared store: the purchase / selling screens
+  // read it to paint their dark backdrop INSIDE the screen (the only place that is
+  // guaranteed to be painted above the screen content on Android).
+  const setCollectionSheetOpen = useSubTabStore((st) => st.setCollectionSheetOpen);
+  const setSellingSheetOpen = useSubTabStore((st) => st.setSellingSheetOpen);
+  useEffect(() => { setCollectionSheetOpen(showCollectionSheet); }, [showCollectionSheet, setCollectionSheetOpen]);
+  useEffect(() => { setSellingSheetOpen(showSellingSheet); }, [showSellingSheet, setSellingSheetOpen]);
   const tabBarHeight = 65 + insets.bottom;
-  // TopBar = insets.top+6 paddingTop + 42 logo + 12 paddingBottom ≈ insets.top+60, use 62 to keep header 100% clear
-  const headerHeight = insets.top + 62;
+  // Real measured height of the green TopBar (-1 to avoid a hairline of undimmed
+  // background under it). Falls back to the computed value on the very first frame.
+  const headerHeight = (measuredHeader > 0 ? measuredHeader : insets.top + 62) - 1;
 
   useEffect(() => {
     if (activeTabName === 'purchase') {
       if (consumeSuppressCollection()) return;
       if (suppressCollectionSheet) { setSuppressCollectionSheet(false); return; }
-      const timer = setTimeout(() => setShowCollectionSheet(true), 150);
-      return () => clearTimeout(timer);
+      collectionTimer.current = setTimeout(() => { collectionTimer.current = null; setShowCollectionSheet(true); }, 150);
+      return () => { if (collectionTimer.current) { clearTimeout(collectionTimer.current); collectionTimer.current = null; } };
     }
   }, [activeTabName, suppressCollectionSheet, setSuppressCollectionSheet]);
   useEffect(() => {
     if (activeTabName === 'selling') {
       if (consumeSuppressSelling()) return;
       if (suppressSellingSheet) { setSuppressSellingSheet(false); return; }
-      const timer = setTimeout(() => setShowSellingSheet(true), 150);
-      return () => clearTimeout(timer);
+      sellingTimer.current = setTimeout(() => { sellingTimer.current = null; setShowSellingSheet(true); }, 150);
+      return () => { if (sellingTimer.current) { clearTimeout(sellingTimer.current); sellingTimer.current = null; } };
     }
   }, [activeTabName, suppressSellingSheet, setSuppressSellingSheet]);
   useEffect(() => {
@@ -81,13 +100,18 @@ export default function TabLayout() {
   }, []);
 
   const handleCollectionSelect = useCallback((tab: any) => {
-    // persist sheet selection so reopen shows same active (including Payment/Advances)
-    // vibrate handled globally in app/_layout, no double
-    setCollectionTab(tab as any);
+    // Rate Settings is a separate stack screen, not a purchase sub-tab. Keeping it
+    // in purchaseTab made purchase.tsx push the same route a second time; close the
+    // sheet and suppress its auto-open when returning from the settings screen.
     if (tab === 'RateSetting') {
+      setShowCollectionSheet(false);
+      setSuppressCollection(true);
       router.push('/milk-rate-settings' as any);
       return;
     }
+    // Persist sheet selection so reopen shows same active (including Payment/Advances).
+    // Haptics are handled globally in app/_layout, no double.
+    setCollectionTab(tab as any);
     if (tab === 'Payment' || tab === 'Payments' || tab === 'Advances') {
       const target = tab === 'Payment' ? 'Payments' : 'Advances';
       router.push({ pathname: '/(tabs)/register', params: { tab: target } } as any);
@@ -95,7 +119,7 @@ export default function TabLayout() {
     }
     if (tab === 'Farmer') { setPurchaseTab('Farmer' as any); return; }
     setPurchaseTab(tab);
-  }, [setPurchaseTab, setCollectionTab, router]);
+  }, [setPurchaseTab, setCollectionTab, setShowCollectionSheet, router]);
 
   const handleSellingSelect = useCallback((tab: any) => { setSellingTab(tab); }, [setSellingTab]);
 
@@ -141,15 +165,26 @@ export default function TabLayout() {
           else if (route.name === 'profile') IconComp = User;
 
           const onPress = () => {
-            // vibrate already via global capture in app/_layout, avoid double
+            // Haptics come from HapticPressable (this is a Pressable), no manual vibrate.
+            // Toggle: first tap opens the sheet, tapping the SAME tab again closes it.
+            // Earlier it only ever called setShow...(true), so the sheet felt "permanent"
+            // until you tapped outside / on a row.
             if (route.name === 'purchase' && isFocused) {
-              setShowCollectionSheet(true);
+              cancelAutoOpen();
+              setShowSellingSheet(false);
+              setShowCollectionSheet((v) => !v);
               return;
             }
             if (route.name === 'selling' && isFocused) {
-              setShowSellingSheet(true);
+              cancelAutoOpen();
+              setShowCollectionSheet(false);
+              setShowSellingSheet((v) => !v);
               return;
             }
+            // Leaving to another tab: drop any open sheet so it never lingers on return.
+            cancelAutoOpen();
+            setShowCollectionSheet(false);
+            setShowSellingSheet(false);
             const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
             if (!event.defaultPrevented) {
               navigation.navigate(route.name, route.params);
@@ -200,7 +235,7 @@ export default function TabLayout() {
         })}
       </View>
     );
-  }, [colors, insets.bottom, tabBarHeight]);
+  }, [colors, insets.bottom, tabBarHeight, cancelAutoOpen]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -210,15 +245,22 @@ export default function TabLayout() {
         tabBar={renderTabBar}
         screenOptions={{ headerShown: false, animation: 'shift', freezeOnBlur: true }}
       >
-        <Tabs.Screen name="index" options={{ title: t.tabs.home }} />
-        <Tabs.Screen name="purchase" options={{ title: t.tabs.purchase }} />
-        <Tabs.Screen name="selling" options={{ title: t.tabs.selling }} />
-        <Tabs.Screen name="inventory" options={{ title: t.tabs.inventory || 'Inventory' }} />
-        <Tabs.Screen name="profile" options={{ title: t.tabs.profile }} />
-        <Tabs.Screen name="register" options={{ href: null, headerShown: false }} />
+          <Tabs.Screen name="index" options={{ title: t.tabs.home }} />
+          <Tabs.Screen name="purchase" options={{ title: t.tabs.purchase }} />
+          <Tabs.Screen name="selling" options={{ title: t.tabs.selling }} />
+          <Tabs.Screen name="inventory" options={{ title: t.tabs.inventory || 'Inventory' }} />
+          <Tabs.Screen name="profile" options={{ title: t.tabs.profile }} />
+          <Tabs.Screen name="register" options={{ href: null, headerShown: false }} />
       </Tabs>
-      <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={collectionTab as any} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
-      <SellingBottomSheet visible={showSellingSheet} onClose={() => setShowSellingSheet(false)} activeTab={sellingTab} onSelectTab={handleSellingSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
+      {/* Absolute stage: floating sheets live here so <Tabs> always keeps its full
+          height (a normal sibling would squeeze the tab bar up into the screen). */}
+      <View
+        pointerEvents="box-none"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, elevation: 50 }}
+      >
+        <CollectionBottomSheet visible={showCollectionSheet} onClose={() => setShowCollectionSheet(false)} activeTab={collectionTab as any} onSelectTab={handleCollectionSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
+        <SellingBottomSheet visible={showSellingSheet} onClose={() => setShowSellingSheet(false)} activeTab={sellingTab} onSelectTab={handleSellingSelect} bottomOffset={tabBarHeight} topOffset={headerHeight} />
+      </View>
     </View>
   );
 }

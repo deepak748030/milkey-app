@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Linking } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, Shield, Database, Lock, Eye, UserCheck, CreditCard, RefreshCw, XCircle, AlertCircle, CheckCircle, Mail } from 'lucide-react-native';

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
+import { View, Text, StyleSheet, Modal } from 'react-native';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { Calendar as CalendarIcon } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { PaymentRangeCalendar, BlockedPeriod } from '@/components/PaymentRangeCalendar';
@@ -94,6 +96,7 @@ export function DateRangePicker({
                     style={styles.overlay}
                     onPress={() => setVisible(false)}
                 >
+                    <SheetBackdrop />
                     <Pressable onPress={() => { }} style={[styles.calendarContainer, {
                         backgroundColor: isDark ? colors.card : '#fff',
                         borderColor: colors.border,
@@ -150,7 +153,7 @@ const styles = StyleSheet.create({
     },
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'transparent',
         justifyContent: 'center',
         paddingHorizontal: 16,
     },

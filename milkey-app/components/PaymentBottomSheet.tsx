@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, Dimensions, ActivityIndicator } from 'react-native';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, CreditCard, Banknote, Wallet, Check } from 'lucide-react-native';
@@ -174,6 +176,7 @@ export default function PaymentBottomSheet({ visible, onClose, total, onSuccess 
             >
                 <View style={styles.overlay}>
                     <Pressable style={styles.backdrop} onPress={handleClose} />
+                    <SheetBackdrop />
                     <View style={styles.sheet}>
                         <View style={styles.handle} />
 
@@ -297,7 +300,7 @@ const createStyles = (colors: any, isDark: boolean, insets: any) => StyleSheet.c
     },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'transparent',
     },
     sheet: {
         backgroundColor: colors.card,

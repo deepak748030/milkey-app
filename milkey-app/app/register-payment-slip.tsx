@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, ToastAndroid, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, ToastAndroid, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ChevronLeft, Download, Printer, MessageCircle } from 'lucide-react-native';
@@ -12,6 +13,19 @@ import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { brandedFooter, brandedHeader, twoCol, labelValueWrap, line as fmtLine, feed } from '@/lib/printFormat';
 import { getSlipLabels } from '@/lib/printTranslations';
 import { buildJointCollectionPaymentSlipPayload } from '@/lib/slipPrint';
+import { TZ_OFFSET_MINUTES } from '@/lib/purchaseConstants';
+
+/** Calendar day of an instant/payload in the DEVICE timezone (YYYY-MM-DD).
+ *  The API stores period days as instants (e.g. 2026-10-01T06:30Z) — slicing the ISO
+ *  string would return the previous UTC day and silently drop the last entries. */
+const localDateKey = (value: any) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return typeof value === 'string' ? value.slice(0, 10) : '';
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+};
 
 const formatDateDDMMYYYY = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -30,6 +44,9 @@ export default function RegisterPaymentSlipScreen() {
     const [payment, setPayment] = useState<Payment | null>(null);
     const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
     const [collections, setCollections] = useState<MilkCollection[]>([]);
+    // Server-aggregated totals for the whole query (not page limited) — the same numbers
+    // the Payment screen uses for the auto "purchase amount" of the calculation period.
+    const [periodTotals, setPeriodTotals] = useState<{ quantity: number; amount: number } | null>(null);
     const [downloading, setDownloading] = useState(false);
     const autoPrintDoneRef = useRef(false);
 
@@ -47,18 +64,93 @@ export default function RegisterPaymentSlipScreen() {
 
             if (paymentRes?.success && paymentRes.response) {
                 setPayment(paymentRes.response);
-                // fetch milk collections for this farmer + period to build Joint slip like image
+                // Fetch the farmer's PURCHASE (milk collection) entries for the payment
+                // period — the exact same query the "View Entries" screen uses, including
+                // tzOffsetMinutes. Without the tz offset the server compares the range in
+                // UTC and every row stored with a local time silently disappeared, which is
+                // why the slip always printed "- No entries -".
                 try {
                     const p = paymentRes.response as Payment;
                     const farmerCode = (p.farmer as any)?.code;
-                    if (farmerCode && p.periodStart && p.periodEnd) {
-                        const colRes = await milkCollectionsApi.getAll({
-                            farmerCode,
-                            startDate: p.periodStart,
-                            endDate: p.periodEnd,
-                            limit: 100,
+                    const start = p.periodStart || p.date;
+                    const end = p.periodEnd || p.date;
+
+                    // 1) The exact rows this settlement paid.
+                    //    GET /payments/:id populates `settledCollections` with the real
+                    //    MilkCollection documents, so this needs no farmer-code lookup and
+                    //    no date window — it is exactly the purchase data of the payment.
+                    const settledRaw = (p as any).settledCollections;
+                    const settledRows: MilkCollection[] = Array.isArray(settledRaw)
+                        ? settledRaw.filter((r: any) => r && typeof r === 'object' && r._id && r.date !== undefined)
+                        : [];
+                    if (settledRows.length > 0) {
+                        // Keep the rows that fall inside the Calculation Period; if the
+                        // stored period is unusable keep all settled rows.
+                        const startKey = localDateKey(start);
+                        const endKey = localDateKey(end);
+                        const inPeriod = settledRows.filter((r: any) => {
+                            const k = localDateKey(r.date);
+                            return (!startKey || k >= startKey) && (!endKey || k <= endKey);
                         });
-                        if (colRes.success && colRes.response?.data) setCollections(colRes.response.data);
+                        const rows = (inPeriod.length > 0 ? inPeriod : settledRows).slice();
+                        rows.sort((a: any, b: any) => {
+                            const da = new Date(a.date).getTime();
+                            const db = new Date(b.date).getTime();
+                            if (da !== db) return da - db;
+                            const rank = (x: any) => (x?.shift === 'evening' ? 1 : 0);
+                            return rank(a) - rank(b);
+                        });
+                        setCollections(rows);
+                        setPeriodTotals({
+                            quantity: rows.reduce((sum, r: any) => sum + (Number(r.quantity) || 0), 0),
+                            amount: rows.reduce((sum, r: any) => sum + (Number(r.amount) || 0), 0),
+                        });
+                    } else if (farmerCode) {
+                        // Same query as the Payment screen's "View Entries"
+                        // (/view-collection-entries): farmer code + calculation period +
+                        // tz offset. isPaid:false is what that screen sends; if the rows were
+                        // already marked paid (normal right after a settlement) the same
+                        // range is fetched again without that filter, so the slip never
+                        // loses the purchase entries it was made from.
+                        const base: any = {
+                            farmerCode,
+                            startDate: start ? String(start).slice(0, 10) : undefined,
+                            endDate: end ? String(end).slice(0, 10) : undefined,
+                            limit: 200,
+                            tzOffsetMinutes: TZ_OFFSET_MINUTES,
+                        };
+                        let rows: MilkCollection[] = [];
+                        let totals: any = null;
+                        try {
+                            const unpaid = await milkCollectionsApi.getAll({ ...base, isPaid: false });
+                            if (unpaid.success) {
+                                rows = ((unpaid.response as any)?.data || []) as MilkCollection[];
+                                totals = (unpaid.response as any)?.totals || null;
+                            }
+                        } catch { /* fall through to the unfiltered query */ }
+                        if (rows.length === 0) {
+                            try {
+                                const all = await milkCollectionsApi.getAll(base);
+                                if (all.success) {
+                                    rows = ((all.response as any)?.data || []) as MilkCollection[];
+                                    totals = (all.response as any)?.totals || totals;
+                                }
+                            } catch { }
+                        }
+                        rows.sort((a: any, b: any) => {
+                            const da = new Date(a.date).getTime();
+                            const db = new Date(b.date).getTime();
+                            if (da !== db) return da - db;
+                            const rank = (x: any) => (x?.shift === 'evening' ? 1 : 0);
+                            return rank(a) - rank(b);
+                        });
+                        setCollections(rows);
+                        if (totals) {
+                            setPeriodTotals({
+                                quantity: Number(totals.quantity) || 0,
+                                amount: Number(totals.amount) || 0,
+                            });
+                        }
                     }
                 } catch { }
             }
@@ -91,6 +183,42 @@ export default function RegisterPaymentSlipScreen() {
         return `${dd}/${mm}-${suf}`;
     };
 
+    // ── Slip totals ───────────────────────────────────────────────────────────────
+    // Quantity / rate / amount come from the real purchase entries of the calculation
+    // period (server totals when present, else the sum of the rows).
+    const rowsQty = collections.reduce((s, c) => s + ((c as any).quantity || 0), 0);
+    const rowsAmount = collections.reduce((s, c) => s + ((c as any).amount || 0), 0);
+    const slipQty = periodTotals ? periodTotals.quantity : rowsQty;
+    const slipAmount = periodTotals ? periodTotals.amount : rowsAmount;
+    const slipAvgRate = slipQty > 0 ? slipAmount / slipQty : 0;
+
+    // Milk Amount is the same equation the Payment screen shows:
+    //    <collection amount of the dates>  +  <amount typed by the user>  =  <total>
+    // The typed part is not stored separately, so it is derived from the saved total:
+    //   input = savedTotal - collectionAmount (never negative).
+    const slipPurchaseAmount = slipAmount || rowsAmount;
+    const slipSavedTotal = payment?.totalMilkAmount || 0;
+    const slipInputAmount = Math.max(0, slipSavedTotal - slipPurchaseAmount);
+    const slipMilkAmount = slipSavedTotal > 0 ? slipSavedTotal : slipPurchaseAmount;
+
+    // Advance / Product and Total Payable come from the saved settlement, exactly like
+    // the Payment screen shows them. When an older record has no stored advance value,
+    // the settled advances of the payment are summed instead (never a bare 0).
+    const slipSettledAdvances: any[] = Array.isArray((payment as any)?.settledAdvances) ? (payment as any).settledAdvances : [];
+    const slipAdvanceFromRows = slipSettledAdvances.reduce((sum, a: any) => {
+        const amt = Number(a?.settledAmount) || Number(a?.amount) || 0;
+        return sum + amt;
+    }, 0);
+    const slipAdvance =
+        (payment?.totalAdvanceDeduction || 0) > 0
+            ? (payment?.totalAdvanceDeduction || 0)
+            : slipAdvanceFromRows;
+    const slipPreviousBalance = payment?.previousBalance || 0;
+    const slipTotalPayable =
+        (payment?.netPayable || 0) !== 0
+            ? (payment?.netPayable || 0)
+            : slipMilkAmount - slipAdvance + slipPreviousBalance;
+
     const generateHtml = () => {
         if (!payment) return '';
         const p = payment;
@@ -101,10 +229,10 @@ export default function RegisterPaymentSlipScreen() {
         const address = printSettings?.address || '';
         const dairyAddrLine = address ? address : 'Aligarh (U.P)';
         const dateRange = `${formatDateYY(p.periodStart || p.date)} -${formatDateYY(p.periodEnd || p.date)}`;
-        // totals from collections (or fallback to payment)
-        const totalQty = collections.length ? collections.reduce((s, c) => s + (c.quantity || 0), 0) : 0;
-        const totalAmt = collections.length ? collections.reduce((s, c) => s + (c.amount || 0), 0) : (p.totalMilkAmount || 0);
-        const avgRate = totalQty > 0 ? totalAmt / totalQty : 0;
+        // totals from the real entries of the period (no made-up placeholders)
+        const totalQty = slipQty;
+        const totalAmt = slipAmount;
+        const avgRate = slipAvgRate;
 
         const dots = '....................................................................................................';
         return `
@@ -166,15 +294,15 @@ export default function RegisterPaymentSlipScreen() {
           </tbody>
         </table>
         <div class="dotted">${dots}</div>
-        <div class="tot-row"><span class="lab">Total Qty :</span><span class="val">${totalQty ? totalQty.toFixed(2) : (100).toFixed(2)}</span></div>
-        <div class="tot-row"><span class="lab">Average Rate :</span><span class="val">${avgRate ? avgRate.toFixed(2) : '55.62'}</span></div>
-        <div class="tot-row"><span class="lab">Total Amount :</span><span class="val">${totalAmt ? totalAmt.toFixed(2) : (p.totalMilkAmount || 0).toFixed(2)}</span></div>
+        <div class="tot-row"><span class="lab">Total Qty :</span><span class="val">${totalQty.toFixed(2)}</span></div>
+        <div class="tot-row"><span class="lab">Average Rate :</span><span class="val">${avgRate.toFixed(2)}</span></div>
+        <div class="tot-row"><span class="lab">Total Amount :</span><span class="val">${totalAmt.toFixed(2)}</span></div>
         <div class="dotted">${dots}</div>
         <div class="sec-title">Payment Slip :</div>
         <div class="amt-row"><span class="lab">Last Payment :</span><span class="val">${(p.previousBalance || 0).toFixed(0)}</span></div>
-        <div class="amt-row"><span class="lab">Milk Amount :</span><span class="val-red">Auto AMT + Input = &nbsp;<span style="color:#000;font-weight:700;">${(p.totalMilkAmount || 0).toFixed(0)}</span></span></div>
-        <div class="amt-row"><span class="lab">Advance / Product :</span><span class="val">${(p.totalAdvanceDeduction || 0).toFixed(0)}</span></div>
-        <div class="amt-row"><span class="lab">Total Payable :</span><span class="val">${(p.netPayable || 0).toFixed(0)}</span></div>
+        <div class="amt-row"><span class="lab">Milk Amount :</span><span class="val-red">${slipPurchaseAmount.toFixed(0)} + ${slipInputAmount.toFixed(0)} = ${slipMilkAmount.toFixed(0)}</span></div>
+        <div class="amt-row"><span class="lab">Advance / Product :</span><span class="val">${slipAdvance.toFixed(0)}</span></div>
+        <div class="amt-row"><span class="lab">Total Payable :</span><span class="val">${slipTotalPayable.toFixed(0)}</span></div>
         <div class="amt-row"><span class="lab">Paid Amount :</span><span class="val">${(p.amount || 0).toFixed(0)}</span></div>
         <div class="dotted">${dots}</div>
         <div class="closing"><span>Closingh Bal :</span><span style="color:${(p.closingBalance || 0) < 0 ? '#d32f2f' : '#000'}">${(p.closingBalance || 0).toFixed(0)}</span></div>
@@ -226,9 +354,9 @@ export default function RegisterPaymentSlipScreen() {
         payload += feed(1);
         payload += fmtLine();
         payload += twoCol(`${t.lastPayment}:`, (p.previousBalance || 0).toFixed(0));
-        payload += twoCol(`${t.milkAmount}:`, (p.totalMilkAmount || 0).toFixed(0));
-        payload += twoCol(`${t.advanceProduct}:`, (p.totalAdvanceDeduction || 0).toFixed(0));
-        payload += twoCol(`${t.totalPayable}:`, (p.netPayable || 0).toFixed(0));
+        payload += twoCol(`${t.milkAmount}:`, `${slipPurchaseAmount.toFixed(0)} + ${slipInputAmount.toFixed(0)} = ${slipMilkAmount.toFixed(0)}`);
+        payload += twoCol(`${t.advanceProduct}:`, slipAdvance.toFixed(0));
+        payload += twoCol(`${t.totalPayable}:`, slipTotalPayable.toFixed(0));
         payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
         payload += fmtLine();
         payload += twoCol(`${t.closingBal}:`, (p.closingBalance || 0).toFixed(0), { bold: true });
@@ -278,7 +406,7 @@ export default function RegisterPaymentSlipScreen() {
                     <Pressable onPress={handlePrint} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
                         <Printer size={18} color={colors.primary} />
                     </Pressable>
-                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).farmer?.code||'',name:(p as any).farmer?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, (p as any).totalMilkAmount||0, (p as any).totalAdvanceDeduction||0, (p as any).netPayable||0, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).farmer?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
+                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).farmer?.code||'',name:(p as any).farmer?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, slipMilkAmount, slipAdvance, slipTotalPayable, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).farmer?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
                         <MessageCircle size={18} color="#25D366" />
                     </Pressable>
                 </View>
@@ -328,17 +456,17 @@ export default function RegisterPaymentSlipScreen() {
                             </View>
                         ))}
                         <View style={styles.dottedLine} />
-                        {(() => { const tq = collections.length ? collections.reduce((s, c: any) => s + (c.quantity || 0), 0) : 0; const ta = collections.length ? collections.reduce((s, c: any) => s + (c.amount || 0), 0) : (p.totalMilkAmount || 0); const ar = tq > 0 ? ta / tq : 0; return (<>
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Qty :</Text><Text style={styles.valRed}>{tq ? tq.toFixed(2) : '100.00'}</Text></View>
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Average Rate :</Text><Text style={styles.valRed}>{ar ? ar.toFixed(2) : '55.62'}</Text></View>
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Amount :</Text><Text style={styles.valRed}>{ta ? ta.toFixed(2) : (p.totalMilkAmount || 0).toFixed(2)}</Text></View>
-                        </>); })()}
+                        <>
+                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Qty :</Text><Text style={styles.valRed}>{slipQty.toFixed(2)}</Text></View>
+                            <View style={styles.slipRow}><Text style={styles.labBlack}>Average Rate :</Text><Text style={styles.valRed}>{slipAvgRate.toFixed(2)}</Text></View>
+                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Amount :</Text><Text style={styles.valRed}>{slipAmount.toFixed(2)}</Text></View>
+                        </>
                         <View style={styles.dottedLine} />
                         <Text style={styles.secTitle}>Payment Slip :</Text>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Last Payment :</Text><Text style={styles.valBlack}>{(p.previousBalance || 0).toFixed(0)}</Text></View>
-                        <View style={styles.slipRow}><Text style={[styles.labBlack, { color: '#d32f2f' }]}>Milk Amount :</Text><Text style={styles.valRed}>Auto AMT + Input = <Text style={{ color: '#000' }}>{(p.totalMilkAmount || 0).toFixed(0)}</Text></Text></View>
-                        <View style={styles.slipRow}><Text style={styles.labBlack}>Advance / Product :</Text><Text style={styles.valBlack}>{(p.totalAdvanceDeduction || 0).toFixed(0)}</Text></View>
-                        <View style={styles.slipRow}><Text style={styles.labBlack}>Total Payable :</Text><Text style={styles.valBlack}>{(p.netPayable || 0).toFixed(0)}</Text></View>
+                        <View style={styles.slipRow}><Text style={[styles.labBlack, { color: '#d32f2f' }]}>Milk Amount :</Text><Text style={styles.valRed}>{slipPurchaseAmount.toFixed(0)} + {slipInputAmount.toFixed(0)} = {slipMilkAmount.toFixed(0)}</Text></View>
+                        <View style={styles.slipRow}><Text style={styles.labBlack}>Advance / Product :</Text><Text style={styles.valBlack}>{slipAdvance.toFixed(0)}</Text></View>
+                        <View style={styles.slipRow}><Text style={styles.labBlack}>Total Payable :</Text><Text style={styles.valBlack}>{slipTotalPayable.toFixed(0)}</Text></View>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Paid Amount :</Text><Text style={styles.valBlack}>{(p.amount || 0).toFixed(0)}</Text></View>
                         <View style={styles.dottedLine} />
                         <View style={styles.slipRow}><Text style={[styles.labBlack, { fontWeight: '700' }]}>Closingh Bal :</Text><Text style={[styles.valRed, { fontWeight: '800' }]}>{(p.closingBalance || 0).toFixed(0)}</Text></View>

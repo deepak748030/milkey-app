@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { Heart, MapPin, Star } from 'lucide-react-native';
 import { colors } from '@/lib/colors';
 import { getImageUrl } from '@/lib/api';

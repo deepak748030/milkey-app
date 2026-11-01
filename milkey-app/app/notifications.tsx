@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bell, CheckCheck, Trash2, ChevronLeft, Gift, CreditCard, AlertCircle, Package, Users } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';

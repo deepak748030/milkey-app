@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Image, StatusBar } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ShoppingCart, Bell, Sun, Moon, Bluetooth, BluetoothOff, AlertCircle, User } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
@@ -9,9 +10,11 @@ import PrinterScanSheet from '@/components/PrinterScanSheet';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { printSettingsApi, PrintSettings } from '@/lib/milkeyApi';
+import { useLayoutStore } from '@/lib/layoutStore';
 
 export default function TopBar() {
   const insets = useSafeAreaInsets();
+  const setHeaderHeight = useLayoutStore((st) => st.setHeaderHeight);
   const { colors, isDark, toggleTheme } = useTheme();
   const { getItemCount, loadCart } = useCartStore();
   const [showPrinterSheet, setShowPrinterSheet] = useState(false);
@@ -60,6 +63,7 @@ export default function TopBar() {
     <>
       <StatusBar backgroundColor={headerBg} barStyle="light-content" translucent={false} />
       <View
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
         style={[
           styles.headerWrap,
           {

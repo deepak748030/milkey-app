@@ -1,5 +1,7 @@
 import React, { useState, useCallback, memo, useRef, useEffect } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { View, Text, ScrollView, KeyboardAvoidingView, Platform, Image, ActivityIndicator, Modal, FlatList } from 'react-native';
+import { TextInput } from '@/components/ui/HapticTextInput';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
@@ -149,7 +151,7 @@ const PrimaryButton = memo(({ onPress, label, disabled, loading, colors, style, 
 });
 
 const OtpBoxes = memo(({ value, onChange, colors, autoFocus }: { value: string; onChange: (v: string) => void; colors: any; autoFocus?: boolean }) => {
-    const inputRef = useRef<TextInput | null>(null);
+    const inputRef = useRef<any>(null);
     const digits = (value || '').padEnd(6, ' ').slice(0, 6).split('');
 
     useEffect(() => {

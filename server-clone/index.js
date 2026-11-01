@@ -77,12 +77,25 @@ app.use(helmet({
 }));
 
 // CORS configuration - allow all by default (no env required)
+//
+// NOTE: `allowedHeaders` must NOT be a fixed list. The Expo app sends custom
+// request headers (e.g. `X-Device-Id` from lib/milkeyApi.ts + lib/device.ts) and
+// the web admin / Expo-web run on a different origin, so a fixed list made the
+// browser reject the preflight with
+//   "Request header field x-device-id is not allowed by
+//    Access-Control-Allow-Headers in preflight response."
+// Native builds never enforce CORS, which is why this only ever showed up on web.
+// Leaving `allowedHeaders` unset makes the `cors` middleware echo back exactly
+// what the browser asked for in `Access-Control-Request-Headers`, so any current
+// or future custom header works without another server change.
 const corsOptions = {
-    origin: function (origin, callback) { callback(null, true); },
-    credentials: false,
+    // Reflect the caller's origin (`true` when a native client sends no Origin).
+    origin: function (origin, callback) { callback(null, origin || true); },
+    credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Access-Control-Request-Method', 'Access-Control-Request-Headers'],
-    exposedHeaders: ['Content-Length', 'Content-Type'],
+    exposedHeaders: ['Content-Length', 'Content-Type', 'Content-Disposition'],
+    // Cache the preflight for a day — fewer OPTIONS round-trips from the web apps.
+    maxAge: 86400,
     optionsSuccessStatus: 204
 };
 app.use(cors(corsOptions));

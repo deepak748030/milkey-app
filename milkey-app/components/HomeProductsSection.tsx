@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, memo } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, ActivityIndicator, Dimensions } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { Package, ChevronRight, ShoppingCart, Star } from 'lucide-react-native';
 import { productsApi, Product } from '@/lib/milkeyApi';

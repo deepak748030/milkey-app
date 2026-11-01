@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-    View, Text, StyleSheet, Pressable, TextInput, FlatList,
-    ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking, Platform
-} from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, RefreshControl, Modal, ScrollView, Keyboard, KeyboardAvoidingView, Linking, Platform } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -14,9 +14,10 @@ import {
     MoreVertical, Share2, Table as TableIcon
 } from 'lucide-react-native';
 import TopBar from '@/components/TopBar';
+import ScreenDim from '@/components/ui/ScreenDim';
 import {
-    milkCollectionsApi, purchaseFarmersApi, rateChartsApi,
-    MilkCollection, PurchaseFarmer, printSettingsApi, PrintSettings
+    milkCollectionsApi, purchaseFarmersApi, rateChartsApi, milkRateSettingsApi,
+    MilkCollection, PurchaseFarmer, printSettingsApi, PrintSettings, MilkRateSettingsDoc
 } from '@/lib/milkeyApi';
 import * as ExpoPrint from 'expo-print';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
@@ -40,6 +41,7 @@ import { PurchaseFarmerTab } from '@/components/purchase/tabs/PurchaseFarmerTab'
 import { FAT_RATIO, SNF_RATIO } from '@/lib/rateSetting';
 import { TAB_ORDERS } from '@/components/common/AppTabs';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
+import { setSuppressCollection } from '@/lib/sheetSuppress';
 
 type TabType = PurchaseTab;
 const TAB_ORDER = TAB_ORDERS.purchase as unknown as TabType[];
@@ -73,6 +75,9 @@ export default function PurchaseScreen() {
     const [showInlineSearch, setShowInlineSearch] = useState(false);
     const [inlineSearchCode, setInlineSearchCode] = useState('');
     const [inlineSearchResults, setInlineSearchResults] = useState<PurchaseFarmer[]>([]);
+    const [inlineSearchLoading, setInlineSearchLoading] = useState(false);
+    // Guards the async code search: only the newest keystroke may write results.
+    const inlineSearchReqId = useRef(0);
 
     // Entry state
     const [entryDate, setEntryDate] = useState(new Date());
@@ -87,16 +92,23 @@ export default function PurchaseScreen() {
     const [saving, setSaving] = useState(false);
     const [showRateSetting, setShowRateSetting] = useState(false);
     const [todayRate, setTodayRate] = useState<number>(0);
+    const [milkRateSettings, setMilkRateSettings] = useState<MilkRateSettingsDoc | null>(null);
+    const [purchaseModeOverride, setPurchaseModeOverride] = useState<'rate' | 'fat' | 'fat_snf' | null>(null);
 
-    // Fetch the current Rate Setting "today rate" (from persisted quick settings)
-    // so it can be displayed in the summary bar for rate-chart customers.
+    // Fetch today's rate + global MilkRateSettings (Fixed/Fat/FatSNF) — single source for purchase entry logic
     React.useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                const res = await rateChartsApi.getQuickSettings();
-                if (!cancelled && res?.success && res.response && (res.response as any).rate != null) {
-                    setTodayRate(Number((res.response as any).rate) || 0);
+                const [quickRes, mrRes] = await Promise.all([
+                    rateChartsApi.getQuickSettings().catch(() => null),
+                    milkRateSettingsApi.get().catch(() => null),
+                ]);
+                if (!cancelled && quickRes?.success && quickRes.response && (quickRes.response as any).rate != null) {
+                    setTodayRate(Number((quickRes.response as any).rate) || 0);
+                }
+                if (!cancelled && mrRes?.success && mrRes.response) {
+                    setMilkRateSettings(mrRes.response as MilkRateSettingsDoc);
                 }
             } catch { /* offline-safe */ }
         })();
@@ -107,9 +119,11 @@ export default function PurchaseScreen() {
     // If somehow activeTab becomes RateSetting (deep link), redirect to the page.
     React.useEffect(() => {
         if (activeTab === 'RateSetting') {
-            router.push('/milk-rate-settings' as any);
-            // reset tab so back navigation lands on Purchase, not blank RateSetting view
+            // Legacy sub-tab redirect. Reset the tab before pushing, and do not reopen
+            // the collection sheet when the settings screen returns to this route.
             setActiveTab('Purchase' as any);
+            setSuppressCollection(true);
+            router.push('/milk-rate-settings' as any);
         }
     }, [activeTab]);
 
@@ -159,6 +173,12 @@ export default function PurchaseScreen() {
     const [showPrintTypeModal, setShowPrintTypeModal] = useState(false);
     const [printSource, setPrintSource] = useState<'purchase' | 'report'>('purchase');
     const [actionMenuEntry, setActionMenuEntry] = useState<MilkCollection | null>(null);
+    // Entry opened through "Edit". The old row is removed only after the corrected
+    // entry has been saved — the old flow deleted it the moment Edit was tapped, so a
+    // cancelled/failed edit lost the entry entirely.
+    const [editingEntry, setEditingEntry] = useState<MilkCollection | null>(null);
+    // Suppresses the auto rate/fat/snf fill while an edit is restoring saved values.
+    const suppressAutoFillRef = useRef(false);
 
     const showAlert = useCallback((t: string, m: string) => { setAlertTitle(t); setAlertMessage(m); setAlertVisible(true); }, []);
     const showConfirm = useCallback((t: string, m: string, onConfirm: () => void) => { setConfirmData({ title: t, message: m, onConfirm }); setConfirmVisible(true); }, []);
@@ -316,17 +336,61 @@ export default function PurchaseScreen() {
         setFarmerLoadingMore(false);
     }, [farmerLoadingMore, farmerHasMore]);
 
-    // Inline search by code
+    // ── Inline farmer search by code — SERVER SIDE ───────────────────────────────
+    // `customers` is only the first page of the farmers list (and the customer modal
+    // replaces it with its own search result), so filtering it in the app could never
+    // find a farmer whose code was not in that page — the code simply "did not come".
+    // The search now asks the server every time:
+    //   1. GET /purchase-farmers/code/<code>  → exact code, no page limit at all,
+    //   2. GET /purchase-farmers?search=<q>   → partial code / name / mobile (also
+    //      server side, ranked so codes starting with what was typed come first).
     useEffect(() => {
-        if (!inlineSearchCode.trim()) {
+        const q = inlineSearchCode.trim();
+        if (!q) {
+            inlineSearchReqId.current++;
             setInlineSearchResults([]);
+            setInlineSearchLoading(false);
             return;
         }
-        const filtered = customers.filter(c =>
-            c.isActive !== false && c.code.toLowerCase().startsWith(inlineSearchCode.toLowerCase())
-        );
-        setInlineSearchResults(filtered.slice(0, 8));
-    }, [inlineSearchCode, customers]);
+        const reqId = ++inlineSearchReqId.current;
+        const timer = setTimeout(async () => {
+            if (reqId !== inlineSearchReqId.current) return;
+            setInlineSearchLoading(true);
+            let results: PurchaseFarmer[] = [];
+            try {
+                const exact = await purchaseFarmersApi.getByCode(q);
+                if (reqId !== inlineSearchReqId.current) return;
+                if (exact.success && exact.response) results = [exact.response as PurchaseFarmer];
+            } catch { }
+            if (results.length === 0) {
+                try {
+                    const res = await purchaseFarmersApi.getAll({ search: q });
+                    if (reqId !== inlineSearchReqId.current) return;
+                    const list = (res.success ? (res.response?.data || []) : [])
+                        .filter((c: any) => c && c.isActive !== false);
+                    const lower = q.toLowerCase();
+                    const rank = (code: string) => (code === lower ? 0 : code.startsWith(lower) ? 1 : 2);
+                    list.sort((a: any, b: any) => {
+                        const ac = String(a.code || '').toLowerCase();
+                        const bc = String(b.code || '').toLowerCase();
+                        const d = rank(ac) - rank(bc);
+                        if (d !== 0) return d;
+                        return ac.localeCompare(bc, undefined, { numeric: true });
+                    });
+                    results = list;
+                } catch { }
+            }
+            if (reqId !== inlineSearchReqId.current) return;
+            setInlineSearchResults(results.slice(0, 8));
+            setInlineSearchLoading(false);
+        }, 250);
+        return () => clearTimeout(timer);
+    }, [inlineSearchCode]);
+
+    // Never let a late response land after leaving the screen.
+    useEffect(() => () => { inlineSearchReqId.current++; }, []);
+
+    useEffect(() => { setPurchaseModeOverride(null); }, [selectedCustomer?._id]);
 
     useEffect(() => {
         if (selectedCustomer) {
@@ -340,48 +404,59 @@ export default function PurchaseScreen() {
     }, [milkType]);
 
     const autoFillRate = (customer: PurchaseFarmer, type: 'cow' | 'buffalo') => {
-        if (customer.priceBasis === 'rate') {
-            setRateValue(type === 'cow' ? String(customer.cowRate || '') : String(customer.buffaloRate || ''));
+        // An edit restores the saved FAT / SNF / rate — the auto fill must not wipe them.
+        if (suppressAutoFillRef.current) return;
+        const effectiveBasis = (purchaseModeOverride || customer.priceBasis) as any;
+        // If global Fixed Rate is defined, prefer it for Fixed method
+        const globalFixed = type === 'cow' ? (milkRateSettings?.fixedRate?.cow || 0) : (milkRateSettings?.fixedRate?.buffalo || 0);
+        if (effectiveBasis === 'rate') {
+            const perFarmer = type === 'cow' ? (customer.cowRate || 0) : (customer.buffaloRate || 0);
+            const fixedToUse = globalFixed > 0 ? globalFixed : perFarmer;
+            setRateValue(fixedToUse ? String(fixedToUse) : '');
             setFatValue('');
             setSnfValue('');
-        } else if (customer.priceBasis === 'fat') {
-            // For fat-based, cowFat/buffaloFat is the fatRate (price per unit fat)
+        } else if (effectiveBasis === 'fat') {
+            // For fat-based, use farmer's cowFat/buffaloFat OR global fatRate as fallback
             setFatValue('');
             setRateValue('');
             setSnfValue('');
         } else {
-            // fat_snf - clear all, user enters fat, snf, and rate manually
+            // fat_snf / Rate Chart - clear all, user enters fat, snf, rate auto from chart
             setFatValue('');
             setSnfValue('');
             setRateValue('');
         }
     };
 
-    // For fat-based pricing: rate = fat × farmer's fatRate (cowFat/buffaloFat)
+    // For fat-based pricing: rate = fat × farmer's fatRate (cowFat/buffaloFat) OR global fatRate
     useEffect(() => {
-        if (!selectedCustomer || selectedCustomer.priceBasis !== 'fat') return;
+        const basis = (purchaseModeOverride || selectedCustomer?.priceBasis) as any;
+        if (!selectedCustomer || basis !== 'fat') return;
         const fat = parseFloat(fatValue) || 0;
         if (fat <= 0) { setRateValue(''); return; }
-        const fatRate = milkType === 'cow' ? (selectedCustomer.cowFat || 0) : (selectedCustomer.buffaloFat || 0);
+        const perFarmer = milkType === 'cow' ? (selectedCustomer.cowFat || 0) : (selectedCustomer.buffaloFat || 0);
+        const globalFatRate = milkType === 'cow' ? (milkRateSettings?.fatRate?.cow || 0) : (milkRateSettings?.fatRate?.buffalo || 0);
+        const fatRate = perFarmer > 0 ? perFarmer : globalFatRate;
         const rate = fat * fatRate;
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
-    }, [fatValue, selectedCustomer, milkType]);
+    }, [fatValue, selectedCustomer, milkType, purchaseModeOverride, milkRateSettings]);
 
     // For rate-chart customers: auto-compute rate from FAT + SNF using the
     // saved rate setting's "today rate" (FatRate = rate*0.08, SnfRate = rate*0.053333).
-    // rate = fat * fatRate + snf * snfRate
+    // rate = fat * fatRate + snf * snfRate — respects purchaseModeOverride when Fixed not defined
     useEffect(() => {
         if (!selectedCustomer) return;
+        const effectiveBasis = (purchaseModeOverride || selectedCustomer.priceBasis) as any;
         const isRateSetting =
             ((selectedCustomer as any).showRateSetting === true || (selectedCustomer as any).showRateChart === true) ||
-            selectedCustomer.priceBasis === 'fat_snf';
+            effectiveBasis === 'fat_snf' || selectedCustomer.priceBasis === 'fat_snf';
         if (!isRateSetting) return;
         const fat = parseFloat(fatValue) || 0;
         const snf = parseFloat(snfValue) || 0;
         if (fat <= 0 || snf <= 0 || todayRate <= 0) { setRateValue(''); return; }
         const rate = fat * (todayRate * FAT_RATIO) + snf * (todayRate * SNF_RATIO);
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
-    }, [fatValue, snfValue, selectedCustomer, todayRate]);
+    }, [fatValue, snfValue, selectedCustomer, todayRate, purchaseModeOverride]);
 
     const computeAmount = (): number => {
         if (isZero) return 0;
@@ -496,6 +571,11 @@ export default function PurchaseScreen() {
                 milkType,
             });
             if (res.success) {
+                // The corrected entry is in — only now drop the row that was edited.
+                if (editingEntry && editingEntry._id && editingEntry._id !== res.response?._id) {
+                    try { await milkCollectionsApi.delete(editingEntry._id); } catch { }
+                }
+                setEditingEntry(null);
                 showAlert('Success', 'Entry saved');
 
                 // Auto-print entry slip when a Bluetooth printer is connected,
@@ -531,7 +611,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -544,9 +624,13 @@ export default function PurchaseScreen() {
             } catch { showAlert('Error', 'Failed to delete'); }
             setDeletingId(null);
         });
-    }, []);
+        // fetchCollections must be in the deps: it closes over the selected date + shift,
+        // so a frozen first-render copy refreshed the wrong day after the user changed
+        // them and the deleted row stayed on screen (looked like delete did nothing).
+    }, [fetchCollections]);
 
     const applySelectCustomer = useCallback((c: PurchaseFarmer) => {
+        setEditingEntry(null);
         setSelectedCustomer(c);
         setShowCustomerModal(false);
         setShowInlineSearch(false);
@@ -977,7 +1061,7 @@ export default function PurchaseScreen() {
 
 
     // Ponytail ctx — single source for all tabs (no prop drilling duplication)
-    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, milkRateSettings, purchaseModeOverride, setPurchaseModeOverride, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>
@@ -1003,7 +1087,7 @@ export default function PurchaseScreen() {
                         <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: 20 }}>
                             Manage Fixed Rate, FAT Rate & FAT+SNF Rate like your screenshots. Tap to open the new page.
                         </Text>
-                        <Pressable onPress={() => router.push('/milk-rate-settings' as any)} style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Pressable onPress={() => { setSuppressCollection(true); router.push('/milk-rate-settings' as any); }} style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <TableIcon size={16} color="#fff" />
                             <Text style={{ color: '#fff', fontWeight: '700' }}>Open Milk Rate Settings</Text>
                         </Pressable>
@@ -1022,7 +1106,7 @@ export default function PurchaseScreen() {
 
             {/* ── Modals ── */}
             <Modal visible={showDateModal} animationType="slide" transparent onRequestClose={() => setShowDateModal(false)}>
-                <View style={s.modalOverlay}>
+                <View style={s.modalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowDateModal(false)} />
                     <View style={s.modalSheet}>
                         <View style={s.modalHandle} />
@@ -1036,7 +1120,7 @@ export default function PurchaseScreen() {
             </Modal>
 
             <Modal visible={showCustomerModal} animationType="slide" transparent onRequestClose={() => setShowCustomerModal(false)}>
-                <View style={s.modalOverlay}>
+                <View style={s.modalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowCustomerModal(false)} />
                     <View style={[s.modalSheet, { maxHeight: '80%' }]}>
                         <View style={s.modalHandle} />
@@ -1109,6 +1193,7 @@ export default function PurchaseScreen() {
                     // After editing/adding a farmer, deselect the current code so the
                     // form resets fresh and the user must re-pick the code for the next entry.
                     setSelectedCustomer(null);
+                    setEditingEntry(null);
                     setMilkQty(''); setFatValue(''); setSnfValue(''); setRateValue('');
                     setIsZero(false);
                 }}
@@ -1119,7 +1204,7 @@ export default function PurchaseScreen() {
 
             {/* Print Type Selection Modal */}
             <Modal visible={showPrintTypeModal} transparent animationType="fade" onRequestClose={() => setShowPrintTypeModal(false)}>
-                <View style={s.modalOverlay}>
+                <View style={s.modalOverlay}><SheetBackdrop />
                     <Pressable style={{ flex: 1 }} onPress={() => setShowPrintTypeModal(false)} />
                     <View style={[s.modalSheet, { paddingBottom: 30 }]}>
                         <View style={s.modalHandle} />
@@ -1150,6 +1235,7 @@ export default function PurchaseScreen() {
             {/* Entry Action Menu */}
             <Modal visible={!!actionMenuEntry} transparent animationType="fade" onRequestClose={() => setActionMenuEntry(null)}>
                 <Pressable style={s.modalOverlay} onPress={() => setActionMenuEntry(null)}>
+                    <SheetBackdrop />
                     <View style={[s.modalSheet, { paddingHorizontal: 16, paddingTop: 12 }]}>
                         <View style={s.modalHandle} />
                         <Text style={[s.modalTitle, { textAlign: 'center', marginVertical: 10 }]}>Actions</Text>
@@ -1189,23 +1275,38 @@ export default function PurchaseScreen() {
                                 }
                             },
                             {
-                                icon: <Edit2 size={18} color={colors.primary} />, label: 'Edit', onPress: () => {
+                                icon: <Edit2 size={18} color={colors.primary} />, label: 'Edit', onPress: async () => {
                                     if (!actionMenuEntry) return;
                                     const e = actionMenuEntry;
                                     setActionMenuEntry(null);
-                                    // Find farmer and select, then fill form with entry data
-                                    const farmer = customers.find(c => c.code === e.farmerCode) || customers.find(c => c._id === (e as any).purchaseFarmer?._id);
-                                    if (farmer) {
-                                        setSelectedCustomer(farmer);
-                                        setMilkQty(String(e.quantity));
-                                        setFatValue(e.fat ? String(e.fat) : '');
-                                        setSnfValue((e as any).snf ? String((e as any).snf) : '');
-                                        setRateValue(String(e.rate));
-                                        setMilkType((e as any).milkType || 'buffalo');
-                                        setEntryShift(e.shift);
+                                    // The farmer may not be in the loaded page — ask the server.
+                                    let farmer: PurchaseFarmer | undefined =
+                                        customers.find(c => c.code === e.farmerCode)
+                                        || customers.find(c => c._id === (e as any).purchaseFarmer?._id);
+                                    if (!farmer && e.farmerCode) {
+                                        try {
+                                            const byCode = await purchaseFarmersApi.getByCode(e.farmerCode);
+                                            if (byCode.success && byCode.response) farmer = byCode.response as PurchaseFarmer;
+                                        } catch { }
                                     }
-                                    // Delete the old entry silently
-                                    milkCollectionsApi.delete(e._id).then(() => fetchCollections()).catch(() => { });
+                                    if (!farmer) {
+                                        showAlert('Error', `Farmer ${e.farmerCode || ''} not found — entry not changed`);
+                                        return;
+                                    }
+                                    // Restore the SAVED values (the auto fill would clear them)
+                                    suppressAutoFillRef.current = true;
+                                    setTimeout(() => { suppressAutoFillRef.current = false; }, 400);
+                                    setSelectedCustomer(farmer);
+                                    setShowInlineSearch(false);
+                                    setEditingEntry(e);
+                                    setEntryDate(new Date(e.date));
+                                    setEntryShift(e.shift);
+                                    setMilkType(((e as any).milkType as any) || 'buffalo');
+                                    setMilkQty(e.quantity != null ? String(e.quantity) : '');
+                                    setFatValue((e as any).fat ? String((e as any).fat) : '');
+                                    setSnfValue((e as any).snf ? String((e as any).snf) : '');
+                                    setRateValue(e.rate != null ? String(e.rate) : '');
+                                    setIsZero(false);
                                 }
                             },
                             {
@@ -1259,6 +1360,10 @@ export default function PurchaseScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Dark backdrop of the Collection sheet — last child, so it paints above
+                everything on this screen but below the floating sheet card. */}
+            <ScreenDim which="collection" />
         </View>
     );
 }
@@ -1483,7 +1588,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     emptyText: { fontSize: 11, color: colors.mutedForeground },
 
     // Modal
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalOverlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
     modalSheet: { backgroundColor: colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: 16 },
     modalHandle: { width: 32, height: 3, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginTop: 8 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 10 },

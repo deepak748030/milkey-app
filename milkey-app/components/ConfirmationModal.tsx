@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Modal, Animated, Dimensions } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { AlertTriangle, X, Trash2, AlertCircle } from 'lucide-react-native';
 

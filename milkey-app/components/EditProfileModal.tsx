@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Modal, Alert, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, Alert, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
+import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Camera, User as UserIcon } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';

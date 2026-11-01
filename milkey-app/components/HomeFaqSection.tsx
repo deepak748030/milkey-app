@@ -1,5 +1,6 @@
 import React, { useEffect, useState, memo } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { ChevronDown, HelpCircle } from 'lucide-react-native';
 import { API_BASE_URL as API_BASE } from '@/lib/apiConfig';

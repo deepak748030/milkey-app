@@ -91,6 +91,11 @@ const purchaseFarmerSchema = new mongoose.Schema({
         enum: ['default', 'yes', 'no'],
         default: 'default'
     },
+    linkedRateChartId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'RateChart',
+        default: null
+    },
     showRateChart: {
         type: Boolean,
         default: false

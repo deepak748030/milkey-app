@@ -1,15 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    Pressable,
-    Modal,
-    Dimensions,
-    ActivityIndicator,
-    Linking,
-    Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal, Dimensions, ActivityIndicator, Linking, Alert } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Check, RefreshCw, AlertCircle, Clock } from 'lucide-react-native';

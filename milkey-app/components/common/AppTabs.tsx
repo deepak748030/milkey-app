@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 
 // Ponytail reusable Tabs - single source for Purchase/Selling/Register TAB_ORDER

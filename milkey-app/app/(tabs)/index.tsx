@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, Image, ActivityIndicator, RefreshControl, Animated, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Image, ActivityIndicator, RefreshControl, Animated, Linking } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
@@ -18,7 +19,6 @@ import { SuccessModal } from '@/components/SuccessModal';
 import { OverviewRangeModal } from '@/components/OverviewRangeModal';
 import { useSubTabStore } from '@/lib/subTabStore';
 import { setSuppressCollection, setSuppressSelling } from '@/lib/sheetSuppress';
-import { vibrate } from '@/hooks/useTabSound';
 import BannerCarousel from '@/components/BannerCarousel';
 import SubscriptionReminder from '@/components/SubscriptionReminder';
 import HomeFaqSection from '@/components/HomeFaqSection';
@@ -244,14 +244,13 @@ export default function HomeScreen() {
           const sellAmt = useRange ? rangeStats!.sellAmt : (homeStats?.todaySell.amount || 0);
           const sellRate = sellQty > 0 ? sellAmt / sellQty : 0;
           const customers = homeStats?.totalMembers || 0;
-          // Fix double-count: Farmer & PurchaseFarmer share same collection (Farmer model).
-          // Use collection count directly (now filtered isActive:true in server-clone) — matches Farmer Management (140).
-          const farmers = homeStats?.totalCollectionFarmers ?? homeStats?.totalFarmers ?? 0;
+          // Prefer the active purchase-farmer count; fall back to the legacy farmer-only count.
+          const farmers = homeStats?.totalCollectionFarmers || homeStats?.totalFarmers || 0;
           return (
             <View style={styles.overviewCardNew}>
               {/* Top: Collection | Selling */}
               <View style={styles.overviewTopRow}>
-                <Pressable style={styles.overviewCol} onPress={() => setOverviewRangeKind('collection')}>
+                <View style={styles.overviewCol}>
                   <View style={styles.overviewColHeader}>
                     <View style={[styles.overviewIcon, { backgroundColor: isDark ? '#0f2e1a' : '#DCFCE7' }]}>
                       <Milk size={14} color={colors.primary} />
@@ -266,9 +265,9 @@ export default function HomeScreen() {
                     <View style={styles.metricCol}><Text style={styles.metricLabel}>Avg Rate</Text><Text style={styles.metricValue}>₹{collRate.toFixed(2)}</Text></View>
                     <View style={styles.metricCol}><Text style={styles.metricLabel}>Amount</Text><Text style={[styles.metricValue, styles.metricValueAmount]}>₹{collAmt.toFixed(0)}</Text></View>
                   </View>
-                </Pressable>
+                </View>
                 <View style={styles.overviewVDivider} />
-                <Pressable style={styles.overviewCol} onPress={() => setOverviewRangeKind('selling')}>
+                <View style={styles.overviewCol}>
                   <View style={styles.overviewColHeader}>
                     <View style={[styles.overviewIcon, { backgroundColor: isDark ? '#1e293b' : '#DBEAFE' }]}>
                       <ShoppingCart size={14} color="#2563EB" />
@@ -280,12 +279,12 @@ export default function HomeScreen() {
                     <View style={styles.metricCol}><Text style={styles.metricLabel}>Avg Rate</Text><Text style={styles.metricValue}>₹{sellRate.toFixed(2)}</Text></View>
                     <View style={styles.metricCol}><Text style={styles.metricLabel}>Amount</Text><Text style={[styles.metricValue, { color: '#2563EB' }]}>₹{sellAmt.toFixed(0)}</Text></View>
                   </View>
-                </Pressable>
+                </View>
               </View>
               <View style={styles.overviewHDivider} />
               {/* Bottom: Farmers | Customers — Farmers first with plant icon */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.overviewBottomContent} style={styles.overviewBottomScroll}>
-                <Pressable style={styles.overviewBottomItem} onPress={() => { vibrate(); setSuppressCollection(true); setSuppressCollectionSheet(true); setPurchaseTab('Farmer'); router.push('/(tabs)/purchase' as any); }}>
+                <Pressable style={styles.overviewBottomItem} onPress={() => { setSuppressCollection(true); setSuppressCollectionSheet(true); setPurchaseTab('Farmer'); router.push('/(tabs)/purchase' as any); }}>
                   <View style={[styles.overviewIconSmall, { backgroundColor: isDark ? '#0f2e1a' : '#E8F5E9', width: 36, height: 36, borderRadius: 10 }]}>
                     <Image source={require('@/assets/images/farmer-hat-icon.png')} style={{ width: 26, height: 26 }} resizeMode="contain" />
                   </View>
@@ -296,7 +295,7 @@ export default function HomeScreen() {
                   <ChevronRight size={16} color={colors.mutedForeground} />
                 </Pressable>
                 <View style={styles.overviewVDividerSmall} />
-                <Pressable style={styles.overviewBottomItem} onPress={() => { vibrate(); setSuppressSelling(true); setSuppressSellingSheet(true); setSellingTab('Customer'); router.push('/(tabs)/selling?tab=Customer' as any); }}>
+                <Pressable style={styles.overviewBottomItem} onPress={() => { setSuppressSelling(true); setSuppressSellingSheet(true); setSellingTab('Customer'); router.push('/(tabs)/selling?tab=Customer' as any); }}>
                   <View style={[styles.overviewIconSmall, { backgroundColor: isDark ? '#3a2a12' : '#FEF9C3' }]}>
                     <Users size={14} color="#CA8A04" />
                   </View>

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, ScrollView, Image, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, Image, StyleSheet, Dimensions } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { ArrowLeft, Heart } from 'lucide-react-native';
 import { colors } from '@/lib/colors';
 import { getImageUrl } from '@/lib/api';

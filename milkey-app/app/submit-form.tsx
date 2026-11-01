@@ -1,15 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    TextInput,
-    Pressable,
-    ActivityIndicator,
-    Alert,
-    Image,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
+import { TextInput } from '@/components/ui/HapticTextInput';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';

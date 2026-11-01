@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert, ScrollView, RefreshControl, Modal } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, ScrollView, RefreshControl, Modal } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { Smartphone, LogOut, ShieldCheck, ShieldAlert, Monitor, Clock, Info, RefreshCcw, Phone } from 'lucide-react-native';
 import { devicesApi, DeviceInfo } from '@/lib/milkeyApi';

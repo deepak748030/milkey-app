@@ -147,7 +147,7 @@ router.get('/', auth, async (req, res) => {
 // FIX: ensure currentBalance always equals last closing balance (fixes 690 vs 877 mismatch)
 router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, tzOffsetMinutes } = req.query;
 
         const farmer = await Farmer.findOne({
             code: req.params.farmerCode,
@@ -192,14 +192,54 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
             ]
         };
 
+        // Date filter for the Calculation Period.
+        // The app sends plain calendar days (YYYY-MM-DD) picked on the device, so the
+        // whole *local* day must be matched (client sends tzOffsetMinutes, IST = 330).
+        // The old code used `new Date('YYYY-MM-DD')` (UTC midnight) and pushed the end to
+        // server-local 23:59, which pulled rows from the morning AFTER the period end into
+        // the milk amount and dropped early-morning rows on the first day — that's why the
+        // Payment screen showed extra collection data. Same logic as milk-collections.
         if (startDate || endDate) {
-            milkQuery.date = {};
-            if (startDate) milkQuery.date.$gte = new Date(startDate);
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                milkQuery.date.$lte = end;
+            const tzOffsetParam = parseInt(tzOffsetMinutes, 10);
+            const clientTzOffsetMinutes = Number.isFinite(tzOffsetParam) ? tzOffsetParam : 330;
+            const DAY_MS = 24 * 60 * 60 * 1000;
+            const DATE_KEY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+            const localDayStart = (dateKey) => {
+                const match = DATE_KEY_RE.exec(String(dateKey).trim());
+                if (!match) return null;
+                const [, y, m, d] = match;
+                return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)) - clientTzOffsetMinutes * 60000);
+            };
+
+            const dateRange = {};
+            const stringRange = {};
+
+            if (startDate) {
+                const startKey = String(startDate).trim();
+                const start = localDayStart(startKey);
+                dateRange.$gte = start || new Date(startKey);
+                if (start) stringRange.$gte = startKey;
             }
+            if (endDate) {
+                const endKey = String(endDate).trim();
+                const end = localDayStart(endKey);
+                if (end) {
+                    // end date is inclusive: until local 00:00 of the next day
+                    dateRange.$lt = new Date(end.getTime() + DAY_MS);
+                    stringRange.$lte = endKey;
+                } else {
+                    const endFallback = new Date(endKey);
+                    endFallback.setHours(23, 59, 59, 999);
+                    dateRange.$lte = endFallback;
+                }
+            }
+
+            const rangeOr = [{ date: dateRange }];
+            // rows stored as plain "YYYY-MM-DD" strings must match too
+            if (Object.keys(stringRange).length > 0) rangeOr.push({ date: stringRange });
+
+            milkQuery.$and = [...(milkQuery.$and || []), { $or: rangeOr }];
         }
 
         // Get unpaid milk collections in date range

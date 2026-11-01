@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Linking } from 'react-native';
+import { Pressable } from '@/components/ui/HapticPressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ArrowLeft, FileQuestionMark as FileQuestion, MessageCircle, Mail, Phone, ChevronRight, ChevronDown } from 'lucide-react-native';
