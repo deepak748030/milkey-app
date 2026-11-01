@@ -9,11 +9,15 @@ export default defineConfig(({ mode }) => {
     // the dev proxy (process.env alone does not contain Vite's .env values).
     const env = loadEnv(mode, process.cwd(), "");
     const apiProxyTarget = env.VITE_API_PROXY_TARGET || "http://localhost:5000";
+    const publicApiUrl = env.VITE_API_URL || env.EXPO_PUBLIC_API_URL || env.API_URL || "";
 
     return {
         plugins: [react(), mode === 'development' && componentTagger()].filter(Boolean),
         resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
         envPrefix: ["VITE_", "EXPO_PUBLIC_"],
+        // API_URL is intentionally exposed as a single public build value (not an
+        // env prefix), so one root .env setting also works for Vite web builds.
+        define: { __MILKEY_API_URL__: JSON.stringify(publicApiUrl) },
         server: {
             port: 8080,
             host: "0.0.0.0",

@@ -2,6 +2,7 @@
 // by the Expo app (APK / Expo Web); VITE_API_URL remains available as a web-only
 // override. Both accept a host with or without the trailing /api path.
 const configuredBase = (
+    __MILKEY_API_URL__ ||
     import.meta.env.VITE_API_URL ||
     import.meta.env.EXPO_PUBLIC_API_URL ||
     '/api'
