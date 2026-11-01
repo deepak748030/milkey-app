@@ -3,7 +3,9 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-nat
 import { Pressable } from '@/components/ui/HapticPressable';
 import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useNavigation, usePreventRemove } from 'expo-router';
+import { router, useNavigation } from 'expo-router';
+// Expo Router 57 keeps this hook in its navigation core but no longer re-exports it.
+import { usePreventRemove } from 'expo-router/build/react-navigation/core/usePreventRemove';
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { milkRateSettingsApi, MilkRateSettingsDoc, purchaseFarmersApi } from '@/lib/milkeyApi';
