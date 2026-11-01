@@ -41,6 +41,7 @@ import { PurchaseFarmerTab } from '@/components/purchase/tabs/PurchaseFarmerTab'
 import { FAT_RATIO, SNF_RATIO } from '@/lib/rateSetting';
 import { TAB_ORDERS } from '@/components/common/AppTabs';
 import { useSubTabStore, PurchaseTab } from '@/lib/subTabStore';
+import { setSuppressCollection } from '@/lib/sheetSuppress';
 
 type TabType = PurchaseTab;
 const TAB_ORDER = TAB_ORDERS.purchase as unknown as TabType[];
@@ -118,9 +119,11 @@ export default function PurchaseScreen() {
     // If somehow activeTab becomes RateSetting (deep link), redirect to the page.
     React.useEffect(() => {
         if (activeTab === 'RateSetting') {
-            router.push('/milk-rate-settings' as any);
-            // reset tab so back navigation lands on Purchase, not blank RateSetting view
+            // Legacy sub-tab redirect. Reset the tab before pushing, and do not reopen
+            // the collection sheet when the settings screen returns to this route.
             setActiveTab('Purchase' as any);
+            setSuppressCollection(true);
+            router.push('/milk-rate-settings' as any);
         }
     }, [activeTab]);
 
@@ -1084,7 +1087,7 @@ export default function PurchaseScreen() {
                         <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: 'center', paddingHorizontal: 20 }}>
                             Manage Fixed Rate, FAT Rate & FAT+SNF Rate like your screenshots. Tap to open the new page.
                         </Text>
-                        <Pressable onPress={() => router.push('/milk-rate-settings' as any)} style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Pressable onPress={() => { setSuppressCollection(true); router.push('/milk-rate-settings' as any); }} style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <TableIcon size={16} color="#fff" />
                             <Text style={{ color: '#fff', fontWeight: '700' }}>Open Milk Rate Settings</Text>
                         </Pressable>

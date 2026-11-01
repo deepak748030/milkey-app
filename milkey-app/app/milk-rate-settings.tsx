@@ -3,20 +3,47 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-nat
 import { Pressable } from '@/components/ui/HapticPressable';
 import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useNavigation, usePreventRemove } from 'expo-router';
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { milkRateSettingsApi, MilkRateSettingsDoc, purchaseFarmersApi } from '@/lib/milkeyApi';
 
 type Expanded = 'fatSnf' | 'fixed' | 'fat' | 'advanceRate' | 'bonus' | null;
+type RateSettingsForm = {
+  fatSnfRate: string;
+  fixedBuffalo: string;
+  fixedCow: string;
+  fatRateBuffalo: string;
+  fatRateCow: string;
+  advanceMin: string;
+  advanceMax: string;
+  bonusType: 'perLitre' | 'percent';
+  bonusPerLitre: string;
+  bonusPercent: string;
+};
+type RateSettingsTextField = Exclude<keyof RateSettingsForm, 'bonusType'>;
 
-function useDebouncedSave(fn: () => void, delay = 600) {
-  const t = useRef<any>(null);
-  return useCallback(() => {
-    if (t.current) clearTimeout(t.current);
-    t.current = setTimeout(fn, delay);
-  }, [fn, delay]);
-}
+const EMPTY_FORM: RateSettingsForm = {
+  fatSnfRate: '',
+  fixedBuffalo: '',
+  fixedCow: '',
+  fatRateBuffalo: '',
+  fatRateCow: '',
+  advanceMin: '',
+  advanceMax: '',
+  bonusType: 'perLitre',
+  bonusPerLitre: '',
+  bonusPercent: '',
+};
+
+const toRateNumber = (value: string) => parseFloat(value) || 0;
+const toUpdatePayload = (values: RateSettingsForm) => ({
+  fatSnfRate: { buffalo: toRateNumber(values.fatSnfRate), cow: toRateNumber(values.fatSnfRate), baseLabel: '65/90' },
+  fixedRate: { buffalo: toRateNumber(values.fixedBuffalo), cow: toRateNumber(values.fixedCow) },
+  fatRate: { buffalo: toRateNumber(values.fatRateBuffalo), cow: toRateNumber(values.fatRateCow) },
+  advanceRate: { min: toRateNumber(values.advanceMin), max: toRateNumber(values.advanceMax) },
+  bonus: { type: values.bonusType, perLitre: toRateNumber(values.bonusPerLitre), percent: toRateNumber(values.bonusPercent) },
+});
 
 export default function MilkRateSettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -38,9 +65,102 @@ export default function MilkRateSettingsScreen() {
   const [bonusType, setBonusType] = useState<'perLitre' | 'percent'>('perLitre');
   const [bonusPerLitre, setBonusPerLitre] = useState('');
   const [bonusPercent, setBonusPercent] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [leaving, setLeaving] = useState(false);
+
+  const formRef = useRef<RateSettingsForm>({ ...EMPTY_FORM });
+  const hydratedRef = useRef(false);
+  const dirtyRef = useRef(false);
+  const changeVersionRef = useRef(0);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightRef = useRef<Promise<boolean> | null>(null);
+  const leavingRef = useRef(false);
+  const pendingRemovalActionRef = useRef<any>(null);
+  const [resumeRemovalKey, setResumeRemovalKey] = useState(0);
+  const navigation = useNavigation();
 
   // members count banners
   const [counts, setCounts] = useState<{ rate: number; fat: number; fatSnf: number } | null>(null);
+
+  const saveLatest = useCallback(async (): Promise<boolean> => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (!hydratedRef.current) return true;
+
+    // Serialize saves. If another edit arrives while a request is in flight, send
+    // the latest ref snapshot after it completes so an older request cannot win.
+    while (dirtyRef.current) {
+      if (inFlightRef.current) {
+        const previousSaveSucceeded = await inFlightRef.current;
+        if (!previousSaveSucceeded) return false;
+        continue;
+      }
+
+      const version = changeVersionRef.current;
+      const request = (async () => {
+        try {
+          const result = await milkRateSettingsApi.update(toUpdatePayload({ ...formRef.current }));
+          if (!result.success) throw new Error(result.message || 'Unable to save rate settings.');
+          return true;
+        } catch (error) {
+          setSaveError(error instanceof Error ? error.message : 'Unable to save rate settings.');
+          return false;
+        }
+      })();
+      inFlightRef.current = request;
+      setSaving(true);
+      const succeeded = await request;
+      if (inFlightRef.current === request) inFlightRef.current = null;
+      setSaving(!!inFlightRef.current);
+
+      if (!succeeded) {
+        dirtyRef.current = true;
+        setHasUnsavedChanges(true);
+        return false;
+      }
+      if (changeVersionRef.current === version) {
+        dirtyRef.current = false;
+        setHasUnsavedChanges(false);
+        setSaveError('');
+      }
+    }
+    return true;
+  }, []);
+
+  const scheduleSave = useCallback(() => {
+    if (!hydratedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      void saveLatest();
+    }, 700);
+  }, [saveLatest]);
+
+  const markDirty = useCallback(() => {
+    dirtyRef.current = true;
+    changeVersionRef.current += 1;
+    setHasUnsavedChanges(true);
+    setSaveError('');
+  }, []);
+
+  const onChange = (key: RateSettingsTextField, setter: (value: string) => void) => (text: string) => {
+    if (leavingRef.current || (text !== '' && !/^\d*\.?\d*$/.test(text))) return;
+    formRef.current = { ...formRef.current, [key]: text };
+    setter(text);
+    markDirty();
+    scheduleSave();
+  };
+
+  const selectBonusType = (type: 'perLitre' | 'percent') => {
+    if (leavingRef.current || formRef.current.bonusType === type) return;
+    formRef.current = { ...formRef.current, bonusType: type };
+    setBonusType(type);
+    markDirty();
+    scheduleSave();
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -54,16 +174,29 @@ export default function MilkRateSettingsScreen() {
           const d = settingsRes.response as MilkRateSettingsDoc;
           // Fat SNF: single value — use buffalo if present, else cow, or 65/90 label's value
           const fatSnfVal = (d as any).fatSnfRate?.buffalo || (d as any).fatSnfRate?.cow || (d as any).fatSnfRate?.value || 0;
-          setFatSnfRate(fatSnfVal ? String(fatSnfVal) : '');
-          setFixedBuffalo(d.fixedRate?.buffalo ? String(d.fixedRate.buffalo) : '');
-          setFixedCow(d.fixedRate?.cow ? String(d.fixedRate.cow) : '');
-          setFatRateBuffalo(d.fatRate?.buffalo ? String(d.fatRate.buffalo) : '');
-          setFatRateCow(d.fatRate?.cow ? String(d.fatRate.cow) : '');
-          setAdvanceMin((d as any).advanceRate?.min ? String((d as any).advanceRate.min) : '');
-          setAdvanceMax((d as any).advanceRate?.max ? String((d as any).advanceRate.max) : '');
-          setBonusType(d.bonus?.type || 'perLitre');
-          setBonusPerLitre(d.bonus?.perLitre ? String(d.bonus.perLitre) : '');
-          setBonusPercent(d.bonus?.percent ? String(d.bonus.percent) : '');
+          const values: RateSettingsForm = {
+            fatSnfRate: fatSnfVal ? String(fatSnfVal) : '',
+            fixedBuffalo: d.fixedRate?.buffalo ? String(d.fixedRate.buffalo) : '',
+            fixedCow: d.fixedRate?.cow ? String(d.fixedRate.cow) : '',
+            fatRateBuffalo: d.fatRate?.buffalo ? String(d.fatRate.buffalo) : '',
+            fatRateCow: d.fatRate?.cow ? String(d.fatRate.cow) : '',
+            advanceMin: d.advanceRate?.min ? String(d.advanceRate.min) : '',
+            advanceMax: d.advanceRate?.max ? String(d.advanceRate.max) : '',
+            bonusType: d.bonus?.type || 'perLitre',
+            bonusPerLitre: d.bonus?.perLitre ? String(d.bonus.perLitre) : '',
+            bonusPercent: d.bonus?.percent ? String(d.bonus.percent) : '',
+          };
+          formRef.current = values;
+          setFatSnfRate(values.fatSnfRate);
+          setFixedBuffalo(values.fixedBuffalo);
+          setFixedCow(values.fixedCow);
+          setFatRateBuffalo(values.fatRateBuffalo);
+          setFatRateCow(values.fatRateCow);
+          setAdvanceMin(values.advanceMin);
+          setAdvanceMax(values.advanceMax);
+          setBonusType(values.bonusType);
+          setBonusPerLitre(values.bonusPerLitre);
+          setBonusPercent(values.bonusPercent);
         }
         if (!cancelled && farmersRes.success) {
           const arr: any[] = (farmersRes.response as any)?.data || (farmersRes.response as any) || [];
@@ -73,32 +206,39 @@ export default function MilkRateSettingsScreen() {
           setCounts({ rate, fat, fatSnf });
         }
       } catch {}
-      if (!cancelled) setLoading(false);
+      if (!cancelled) {
+        hydratedRef.current = true;
+        setLoading(false);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  const save = useCallback(async () => {
-    setSaving(true);
-    try {
-      const fatSnfNum = parseFloat(fatSnfRate) || 0;
-      await milkRateSettingsApi.update({
-        fatSnfRate: { buffalo: fatSnfNum, cow: fatSnfNum, baseLabel: '65/90' } as any,
-        fixedRate: { buffalo: parseFloat(fixedBuffalo) || 0, cow: parseFloat(fixedCow) || 0 },
-        fatRate: { buffalo: parseFloat(fatRateBuffalo) || 0, cow: parseFloat(fatRateCow) || 0 },
-        advanceRate: { min: parseFloat(advanceMin) || 0, max: parseFloat(advanceMax) || 0 } as any,
-        bonus: { type: bonusType, perLitre: parseFloat(bonusPerLitre) || 0, percent: parseFloat(bonusPercent) || 0 } as any,
-      } as any);
-    } catch {}
-    setSaving(false);
-  }, [fatSnfRate, fixedBuffalo, fixedCow, fatRateBuffalo, fatRateCow, advanceMin, advanceMax, bonusType, bonusPerLitre, bonusPercent]);
+  usePreventRemove(hasUnsavedChanges, ({ data }) => {
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    setLeaving(true);
+    void saveLatest().then((saved) => {
+      if (!saved) {
+        leavingRef.current = false;
+        setLeaving(false);
+        return;
+      }
+      pendingRemovalActionRef.current = data.action;
+      setResumeRemovalKey((key) => key + 1);
+    });
+  });
 
-  const debouncedSave = useDebouncedSave(save, 700);
-
-  const onChange = (setter: (v: string) => void) => (text: string) => {
-    if (text === '' || /^\d*\.?\d*$/.test(text)) setter(text);
-    debouncedSave();
-  };
+  useEffect(() => {
+    if (resumeRemovalKey === 0) return;
+    const action = pendingRemovalActionRef.current;
+    if (!action) return;
+    pendingRemovalActionRef.current = null;
+    // Let the successful save clear the prevent-remove guard before replaying the
+    // original back action. This also makes a single Android back tap sufficient.
+    const timer = setTimeout(() => navigation.dispatch(action), 0);
+    return () => clearTimeout(timer);
+  }, [resumeRemovalKey, navigation]);
 
   const toggle = (k: Expanded) => setExpanded((prev) => (prev === k ? null : k));
 
@@ -114,7 +254,7 @@ export default function MilkRateSettingsScreen() {
   return (
     <View style={[s.root, { backgroundColor: '#F2F2F2' }]}>
       <View style={[s.header, { paddingTop: insets.top + 6, backgroundColor: '#0E7A2B' }]}>
-        <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={8}>
+        <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={8} disabled={leaving}>
           <ArrowLeft size={22} color="#fff" />
         </Pressable>
         <Text style={s.headerTitle}>Milk rate settings</Text>
@@ -128,6 +268,11 @@ export default function MilkRateSettingsScreen() {
             <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>Saving…</Text>
           </View>
         )}
+        {saveError ? (
+          <Text style={{ color: '#B91C1C', fontSize: 12, textAlign: 'center' }}>
+            Save failed: {saveError}. Tap Back to retry.
+          </Text>
+        ) : null}
 
         {/* 1. FAT + SNF Rate Chart — single value, NO Cow/Buffalo */}
         <CollapsibleCard
@@ -142,7 +287,7 @@ export default function MilkRateSettingsScreen() {
             <View style={s.tableRow}>
               <View style={[s.tableCell, s.rowLabelCell]}><Text style={s.rowLabelText}>65/90</Text></View>
               <View style={[s.tableCell, s.inputCell, { flex: 1 }]}>
-                <TextInput value={fatSnfRate} onChangeText={onChange(setFatSnfRate)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+                <TextInput value={fatSnfRate} onChangeText={onChange('fatSnfRate', setFatSnfRate)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
               </View>
             </View>
           </View>
@@ -161,10 +306,10 @@ export default function MilkRateSettingsScreen() {
             </View>
             <View style={s.tableRow}>
               <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={fixedBuffalo} onChangeText={onChange(setFixedBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+                <TextInput value={fixedBuffalo} onChangeText={onChange('fixedBuffalo', setFixedBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
               </View>
               <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={fixedCow} onChangeText={onChange(setFixedCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+                <TextInput value={fixedCow} onChangeText={onChange('fixedCow', setFixedCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
               </View>
             </View>
           </View>
@@ -180,10 +325,10 @@ export default function MilkRateSettingsScreen() {
             </View>
             <View style={s.tableRow}>
               <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={fatRateBuffalo} onChangeText={onChange(setFatRateBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+                <TextInput value={fatRateBuffalo} onChangeText={onChange('fatRateBuffalo', setFatRateBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
               </View>
               <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={fatRateCow} onChangeText={onChange(setFatRateCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+                <TextInput value={fatRateCow} onChangeText={onChange('fatRateCow', setFatRateCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
               </View>
             </View>
           </View>
@@ -199,10 +344,10 @@ export default function MilkRateSettingsScreen() {
             </View>
             <View style={s.tableRow}>
               <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={advanceMin} onChangeText={onChange(setAdvanceMin)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+                <TextInput value={advanceMin} onChangeText={onChange('advanceMin', setAdvanceMin)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
               </View>
               <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={advanceMax} onChangeText={onChange(setAdvanceMax)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
+                <TextInput value={advanceMax} onChangeText={onChange('advanceMax', setAdvanceMax)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
               </View>
             </View>
           </View>
@@ -212,10 +357,10 @@ export default function MilkRateSettingsScreen() {
         {/* 5. Bonus — Fix qty bonus, Amount percent bonus */}
         <CollapsibleCard title="Bonus" expanded={expanded === 'bonus'} onToggle={() => toggle('bonus')} colors={colors} isDark={isDark}>
           <View style={s.bonusTabs}>
-            <Pressable onPress={() => { setBonusType('perLitre'); debouncedSave(); }} style={[s.bonusTab, bonusType === 'perLitre' && s.bonusTabActive]}>
+            <Pressable onPress={() => selectBonusType('perLitre')} style={[s.bonusTab, bonusType === 'perLitre' && s.bonusTabActive]}>
               <Text style={[s.bonusTabText, bonusType === 'perLitre' && s.bonusTabTextActive]}>Fix qty bonus (₹/L)</Text>
             </Pressable>
-            <Pressable onPress={() => { setBonusType('percent'); debouncedSave(); }} style={[s.bonusTab, bonusType === 'percent' && s.bonusTabActive]}>
+            <Pressable onPress={() => selectBonusType('percent')} style={[s.bonusTab, bonusType === 'percent' && s.bonusTabActive]}>
               <Text style={[s.bonusTabText, bonusType === 'percent' && s.bonusTabTextActive]}>Amount percent bonus (%)</Text>
             </Pressable>
           </View>
@@ -224,7 +369,7 @@ export default function MilkRateSettingsScreen() {
               <View style={[s.tableCell, s.inputCell, { flex: 1 }]}>
                 <TextInput
                   value={bonusType === 'perLitre' ? bonusPerLitre : bonusPercent}
-                  onChangeText={bonusType === 'perLitre' ? onChange(setBonusPerLitre) : onChange(setBonusPercent)}
+                  onChangeText={bonusType === 'perLitre' ? onChange('bonusPerLitre', setBonusPerLitre) : onChange('bonusPercent', setBonusPercent)}
                   keyboardType="decimal-pad"
                   placeholder="₹"
                   placeholderTextColor="#9AA0A6"

@@ -14,7 +14,7 @@ import { checkAppVersion } from '@/lib/milkeyApi';
 import { useSubTabStore } from '@/lib/subTabStore';
 import { useLayoutStore } from '@/lib/layoutStore';
 import { useTabSound } from '@/hooks/useTabSound';
-import { consumeSuppressCollection, consumeSuppressSelling } from '@/lib/sheetSuppress';
+import { consumeSuppressCollection, consumeSuppressSelling, setSuppressCollection } from '@/lib/sheetSuppress';
 import Constants from 'expo-constants';
 
 const APP_VERSION = Constants.expoConfig?.version || '1.0.0';
@@ -100,13 +100,18 @@ export default function TabLayout() {
   }, []);
 
   const handleCollectionSelect = useCallback((tab: any) => {
-    // persist sheet selection so reopen shows same active (including Payment/Advances)
-    // vibrate handled globally in app/_layout, no double
-    setCollectionTab(tab as any);
+    // Rate Settings is a separate stack screen, not a purchase sub-tab. Keeping it
+    // in purchaseTab made purchase.tsx push the same route a second time; close the
+    // sheet and suppress its auto-open when returning from the settings screen.
     if (tab === 'RateSetting') {
+      setShowCollectionSheet(false);
+      setSuppressCollection(true);
       router.push('/milk-rate-settings' as any);
       return;
     }
+    // Persist sheet selection so reopen shows same active (including Payment/Advances).
+    // Haptics are handled globally in app/_layout, no double.
+    setCollectionTab(tab as any);
     if (tab === 'Payment' || tab === 'Payments' || tab === 'Advances') {
       const target = tab === 'Payment' ? 'Payments' : 'Advances';
       router.push({ pathname: '/(tabs)/register', params: { tab: target } } as any);
@@ -114,7 +119,7 @@ export default function TabLayout() {
     }
     if (tab === 'Farmer') { setPurchaseTab('Farmer' as any); return; }
     setPurchaseTab(tab);
-  }, [setPurchaseTab, setCollectionTab, router]);
+  }, [setPurchaseTab, setCollectionTab, setShowCollectionSheet, router]);
 
   const handleSellingSelect = useCallback((tab: any) => { setSellingTab(tab); }, [setSellingTab]);
 
