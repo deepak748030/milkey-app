@@ -293,17 +293,6 @@ export default function MilkRateSettingsScreen() {
           onToggle={() => toggle('fatSnf')}
           colors={colors}
         >
-          <View style={s.rowBetween}>
-            <Text style={s.rowLabel}>65/90</Text>
-            <TextInput
-              value={fatSnfRate}
-              onChangeText={onChange('fatSnfRate', setFatSnfRate)}
-              keyboardType="decimal-pad"
-              placeholder="₹"
-              placeholderTextColor={colors.mutedForeground}
-              style={s.valueInput}
-            />
-          </View>
           {counts && counts.fatSnf > 0 ? (
             <Text style={s.note}>{counts.fatSnf} members use this basis</Text>
           ) : null}
