@@ -95,25 +95,28 @@ export default function PurchaseScreen() {
     const [milkRateSettings, setMilkRateSettings] = useState<MilkRateSettingsDoc | null>(null);
     const [purchaseModeOverride, setPurchaseModeOverride] = useState<'rate' | 'fat' | 'fat_snf' | null>(null);
 
-    // Fetch today's rate + global MilkRateSettings (Fixed/Fat/FatSNF) — single source for purchase entry logic
+    // Fetch today's rate + global MilkRateSettings (Fixed/Fat/FatSNF) — single source for purchase entry logic.
+    // Also refetched when the screen regains focus (e.g. after returning from the
+    // Milk Rate Settings screen) so a newly saved default rate is picked up
+    // immediately instead of waiting for an app restart.
+    const loadRateSettings = useCallback(async () => {
+        try {
+            const [quickRes, mrRes] = await Promise.all([
+                rateChartsApi.getQuickSettings().catch(() => null),
+                milkRateSettingsApi.get().catch(() => null),
+            ]);
+            if (quickRes?.success && quickRes.response && (quickRes.response as any).rate != null) {
+                setTodayRate(Number((quickRes.response as any).rate) || 0);
+            }
+            if (mrRes?.success && mrRes.response) {
+                setMilkRateSettings(mrRes.response as MilkRateSettingsDoc);
+            }
+        } catch { /* offline-safe */ }
+    }, []);
+
     React.useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            try {
-                const [quickRes, mrRes] = await Promise.all([
-                    rateChartsApi.getQuickSettings().catch(() => null),
-                    milkRateSettingsApi.get().catch(() => null),
-                ]);
-                if (!cancelled && quickRes?.success && quickRes.response && (quickRes.response as any).rate != null) {
-                    setTodayRate(Number((quickRes.response as any).rate) || 0);
-                }
-                if (!cancelled && mrRes?.success && mrRes.response) {
-                    setMilkRateSettings(mrRes.response as MilkRateSettingsDoc);
-                }
-            } catch { /* offline-safe */ }
-        })();
-        return () => { cancelled = true; };
-    }, [showRateSetting]);
+        void loadRateSettings();
+    }, [loadRateSettings, showRateSetting]);
 
     // RateSetting now directly opens Milk Rate Settings page via bottom sheet handler.
     // If somehow activeTab becomes RateSetting (deep link), redirect to the page.
@@ -303,7 +306,9 @@ export default function PurchaseScreen() {
             printSettingsApi.get()
                 .then(res => { if (res.success && res.response) setPrintSettings(res.response); })
                 .catch(() => { });
-        }, [])
+            // Pick up any default rate saved on the Milk Rate Settings screen.
+            void loadRateSettings();
+        }, [loadRateSettings])
     );
     useEffect(() => { fetchCollections(); }, [fetchCollections]);
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
@@ -394,14 +399,31 @@ export default function PurchaseScreen() {
 
     useEffect(() => {
         if (selectedCustomer) {
-            setMilkType(selectedCustomer.defaultMilk || 'buffalo');
-            autoFillRate(selectedCustomer, selectedCustomer.defaultMilk || 'buffalo');
+            const cowEnabled = selectedCustomer.cowEnabled !== false;
+            const buffaloEnabled = selectedCustomer.buffaloEnabled !== false;
+            const preferred = selectedCustomer.defaultMilk || 'buffalo';
+            // Never leave the form on a milk type this member cannot supply.
+            const nextType: 'cow' | 'buffalo' =
+                preferred === 'cow' && cowEnabled ? 'cow'
+                    : preferred === 'buffalo' && buffaloEnabled ? 'buffalo'
+                        : cowEnabled ? 'cow' : 'buffalo';
+            setMilkType(nextType);
+            autoFillRate(selectedCustomer, nextType);
         }
     }, [selectedCustomer]);
 
     useEffect(() => {
         if (selectedCustomer) autoFillRate(selectedCustomer, milkType);
     }, [milkType]);
+
+    // When the operator picks a method from the inline chooser (e.g. Fixed Rate
+    // for a member whose default is Rate Chart), immediately refill the rate for
+    // that method instead of leaving the previous method's value behind.
+    useEffect(() => {
+        if (selectedCustomer && purchaseModeOverride) {
+            autoFillRate(selectedCustomer, milkType);
+        }
+    }, [purchaseModeOverride]);
 
     const autoFillRate = (customer: PurchaseFarmer, type: 'cow' | 'buffalo') => {
         // An edit restores the saved FAT / SNF / rate — the auto fill must not wipe them.
@@ -411,8 +433,10 @@ export default function PurchaseScreen() {
         const globalFixed = type === 'cow' ? (milkRateSettings?.fixedRate?.cow || 0) : (milkRateSettings?.fixedRate?.buffalo || 0);
         if (effectiveBasis === 'rate') {
             const perFarmer = type === 'cow' ? (customer.cowRate || 0) : (customer.buffaloRate || 0);
-            const fixedToUse = globalFixed > 0 ? globalFixed : perFarmer;
-            setRateValue(fixedToUse ? String(fixedToUse) : '');
+            // Member's own fixed rate wins over the dairy default. If neither is
+            // set, leave the rate input blank — the operator must set a rate.
+            const fixedToUse = perFarmer > 0 ? perFarmer : globalFixed;
+            setRateValue(fixedToUse > 0 ? String(fixedToUse) : '');
             setFatValue('');
             setSnfValue('');
         } else if (effectiveBasis === 'fat') {
@@ -447,9 +471,7 @@ export default function PurchaseScreen() {
     useEffect(() => {
         if (!selectedCustomer) return;
         const effectiveBasis = (purchaseModeOverride || selectedCustomer.priceBasis) as any;
-        const isRateSetting =
-            ((selectedCustomer as any).showRateSetting === true || (selectedCustomer as any).showRateChart === true) ||
-            effectiveBasis === 'fat_snf' || selectedCustomer.priceBasis === 'fat_snf';
+        const isRateSetting = effectiveBasis === 'fat_snf';
         if (!isRateSetting) return;
         const fat = parseFloat(fatValue) || 0;
         const snf = parseFloat(snfValue) || 0;
@@ -540,12 +562,15 @@ export default function PurchaseScreen() {
         const rate = parseFloat(rateValue) || 0;
         if (!isZero && (qty <= 0 || rate <= 0)) { showAlert('Error', 'Enter valid quantity and rate'); return; }
 
-        // Validate fat for fat-based pricing
-        if (selectedCustomer.priceBasis === 'fat' && !isZero) {
+        // Validate the method the operator actually selected, not the member's
+        // default — otherwise choosing Fixed Rate for a Rate Chart member would
+        // still demand Fat/SNF and block the save.
+        const effectiveBasis = (purchaseModeOverride || selectedCustomer.priceBasis) as any;
+        if (effectiveBasis === 'fat' && !isZero) {
             const fat = parseFloat(fatValue) || 0;
             if (fat <= 0) { showAlert('Error', 'Enter fat value'); return; }
         }
-        if (selectedCustomer.priceBasis === 'fat_snf' && !isZero) {
+        if (effectiveBasis === 'fat_snf' && !isZero) {
             const fat = parseFloat(fatValue) || 0;
             const snf = parseFloat(snfValue) || 0;
             if (fat <= 0) { showAlert('Error', 'Enter fat value'); return; }
@@ -611,7 +636,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry, purchaseModeOverride]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -718,8 +743,8 @@ export default function PurchaseScreen() {
         return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
     };
 
-    const showCow = selectedCustomer ? selectedCustomer.cowEnabled : true;
-    const showBuffalo = selectedCustomer ? selectedCustomer.buffaloEnabled : true;
+    const showCow = selectedCustomer ? selectedCustomer.cowEnabled !== false : true;
+    const showBuffalo = selectedCustomer ? selectedCustomer.buffaloEnabled !== false : true;
     const isMorning = entryShift === 'morning';
 
     // Report state for farmer filter

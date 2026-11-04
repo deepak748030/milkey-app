@@ -316,6 +316,7 @@ export default function MilkRateSettingsScreen() {
             </View>
           </View>
           <View style={s.banner}><Text style={s.bannerText}>{counts ? `${counts.rate} members will change` : '— members will change'}</Text></View>
+          <Text style={s.helper}>Khaali chhode to purchase me rate blank rahega. Member ka apna rate ho to wahi pehle use hoga.</Text>
         </CollapsibleCard>
 
         {/* 3. FAT Rate — Cow, Buffalo */}
