@@ -17,7 +17,6 @@ export function PurchaseCollectionTab(props:any){
   // Effective basis: if user picked via chooser (when Fixed not defined), use override, else farmer's basis
   const effectiveBasis: any = purchaseModeOverride || (selectedCustomer as any)?.priceBasis || 'rate';
   const globalFixedDefined = milkRateSettings ? ((milkRateSettings as any).fixedRate?.buffalo > 0 || (milkRateSettings as any).fixedRate?.cow > 0) : false;
-  const currentFixedRate = milkRateSettings ? ((milkType === 'cow' ? (milkRateSettings as any).fixedRate?.cow : (milkRateSettings as any).fixedRate?.buffalo) || 0) : 0;
   const showMethodChooser = !!selectedCustomer && !globalFixedDefined;
   return (
         <View style={{ flex: 1 }}>
@@ -196,10 +195,7 @@ export function PurchaseCollectionTab(props:any){
             {/* Entry Fields — Ordered: Quantity → Quality → Rate auto → Amount */}
             {selectedCustomer && (
                 <View style={s.entryCard}>
-                    {/* Method label + Chooser when Fixed not defined */}
-                    <Text style={s.priceBasisLabel}>
-                        {effectiveBasis === 'rate' ? 'Fixed Rate' : effectiveBasis === 'fat' ? 'Rate by Quantity/Quality' : 'Rate Chart'} {globalFixedDefined && currentFixedRate ? `— ₹\${currentFixedRate}/L fixed` : ''}
-                    </Text>
+                    {/* Method chooser when Fixed not defined */}
                     {showMethodChooser && (
                         <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
                             {[
@@ -215,46 +211,54 @@ export function PurchaseCollectionTab(props:any){
                         </View>
                     )}
 
-                    {/* 1. Quantity — sabse pehle, bada input */}
-                    <View style={s.fieldBox}>
-                        <Text style={[s.fieldLabel, { textAlign: 'left' }]}>1. Quantity (Litre)</Text>
-                        <TextInput style={[s.fieldInput, { fontSize: 20 }]} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                        {!milkQty && !isZero && <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>Quantity bharo — amount auto ₹0 rahega</Text>}
-                    </View>
-
-                    {/* 2. Quality — Fat / SNF (visibility by method) */}
-                    <View style={[s.fieldsRow, { marginTop: 8 }]}>
-                        {(effectiveBasis === 'fat' || effectiveBasis === 'fat_snf') && (
+                    {effectiveBasis === 'rate' ? (
+                        /* Fixed Rate: Quantity + Rate side by side, no Quality box */
+                        <View style={s.fieldsRow}>
                             <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>2. Quality — Fat</Text>
-                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={effectiveBasis === 'fat_snf' ? '6.5' : '4.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                                <Text style={[s.fieldLabel, { textAlign: 'left' }]}>1. Quantity (Litre)</Text>
+                                <TextInput style={[s.fieldInput, { fontSize: 20 }]} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                                {!milkQty && !isZero && <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>Quantity bharo — amount auto ₹0 rahega</Text>}
                             </View>
-                        )}
-                        {effectiveBasis === 'fat_snf' && (
                             <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>SNF</Text>
-                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="9.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                                <Text style={s.fieldLabel}>2. Rate (auto)</Text>
+                                <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                                {rateValue ? <Text style={{ fontSize: 10, color: colors.primary, marginTop: 2, textAlign: 'center' }}>Auto — edit kar sakte ho</Text> : null}
+                                {!rateValue && !isZero ? (
+                                    <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2, textAlign: 'center' }}>
+                                        Default rate set nahi hai — Rate Setting se daalein
+                                    </Text>
+                                ) : null}
                             </View>
-                        )}
-                        {/* Fixed Rate needs no quality — hide Fat/SNF for fixed */}
-                        {effectiveBasis === 'rate' && (
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>2. Quality</Text>
-                                <Text style={{ fontSize: 11, color: colors.mutedForeground, paddingVertical: 10, textAlign: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.muted }}>Fixed rate — quality not needed</Text>
-                            </View>
-                        )}
-                        {/* Rate — auto calculate, editable override */}
-                        <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>3. Rate (auto)</Text>
-                            <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                            {rateValue ? <Text style={{ fontSize: 10, color: colors.primary, marginTop: 2, textAlign: 'center' }}>Auto — edit kar sakte ho</Text> : null}
-                            {!rateValue && !isZero && effectiveBasis === 'rate' ? (
-                                <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2, textAlign: 'center' }}>
-                                    Default rate set nahi hai — Rate Setting se daalein
-                                </Text>
-                            ) : null}
                         </View>
-                    </View>
+                    ) : (
+                        <>
+                            {/* 1. Quantity */}
+                            <View style={s.fieldBox}>
+                                <Text style={[s.fieldLabel, { textAlign: 'left' }]}>1. Quantity (Litre)</Text>
+                                <TextInput style={[s.fieldInput, { fontSize: 20 }]} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                                {!milkQty && !isZero && <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>Quantity bharo — amount auto ₹0 rahega</Text>}
+                            </View>
+
+                            {/* 2. Quality — Fat / SNF + 3. Rate */}
+                            <View style={[s.fieldsRow, { marginTop: 8 }]}>
+                                <View style={s.fieldBox}>
+                                    <Text style={s.fieldLabel}>2. Quality — Fat</Text>
+                                    <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={effectiveBasis === 'fat_snf' ? '6.5' : '4.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                                </View>
+                                {effectiveBasis === 'fat_snf' && (
+                                    <View style={s.fieldBox}>
+                                        <Text style={s.fieldLabel}>SNF</Text>
+                                        <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="9.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                                    </View>
+                                )}
+                                <View style={s.fieldBox}>
+                                    <Text style={s.fieldLabel}>3. Rate (auto)</Text>
+                                    <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                                    {rateValue ? <Text style={{ fontSize: 10, color: colors.primary, marginTop: 2, textAlign: 'center' }}>Auto — edit kar sakte ho</Text> : null}
+                                </View>
+                            </View>
+                        </>
+                    )}
 
                     {/* 4. Amount — Rate × Quantity, qty khali → 0 */}
                     <View style={[s.computedRow, { marginTop: 10, backgroundColor: colors.primary + '08', borderRadius: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary + '15' }]}>
