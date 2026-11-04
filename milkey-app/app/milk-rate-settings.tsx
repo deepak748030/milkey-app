@@ -287,23 +287,11 @@ export default function MilkRateSettingsScreen() {
         {/* 1. Fat SNF — Rate Chart */}
         <CollapsibleCard
           title="Fat SNF — Rate Chart"
-          subtitle={expanded === 'fatSnf' ? '₹/litre' : undefined}
           icon={<TableIcon size={15} color={colors.primary} />}
           expanded={expanded === 'fatSnf'}
           onToggle={() => toggle('fatSnf')}
           colors={colors}
         >
-          <View style={s.rowBetween}>
-            <Text style={s.rowLabel}>65/90</Text>
-            <TextInput
-              value={fatSnfRate}
-              onChangeText={onChange('fatSnfRate', setFatSnfRate)}
-              keyboardType="decimal-pad"
-              placeholder="₹"
-              placeholderTextColor={colors.mutedForeground}
-              style={s.valueInput}
-            />
-          </View>
           {counts && counts.fatSnf > 0 ? (
             <Text style={s.note}>{counts.fatSnf} members use this basis</Text>
           ) : null}
@@ -460,7 +448,7 @@ function makeStyles(colors: any, isDark: boolean) {
     card: { borderRadius: 10, borderWidth: 1, overflow: 'hidden', marginBottom: 6 },
     cardHeader: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 10, paddingVertical: 12,
+      paddingHorizontal: 10, paddingVertical: 13,
     },
     cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
     cardHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -469,20 +457,21 @@ function makeStyles(colors: any, isDark: boolean) {
     cardSub: { fontSize: 11, fontWeight: '600' },
     cardBody: { paddingHorizontal: 10, paddingBottom: 10, borderTopWidth: 1, gap: 6 },
 
-    rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 },
+    rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48 },
     rowLabel: { fontSize: 13, fontWeight: '600', color: colors.foreground },
     rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
     valueInput: {
-      minWidth: 96, textAlign: 'right', fontSize: 15, fontWeight: '700',
-      color: colors.foreground, backgroundColor: colors.muted,
-      borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+      minWidth: 96, height: 42, textAlign: 'right', fontSize: 15, fontWeight: '700',
+      color: colors.foreground, backgroundColor: colors.input,
+      borderRadius: 8, borderWidth: 1.5, borderColor: colors.border,
+      paddingHorizontal: 12, paddingVertical: 0,
     },
     note: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
 
     ghostBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
       borderWidth: 1, borderColor: colors.border, backgroundColor: colors.secondary,
-      borderRadius: 9, paddingVertical: 9, marginTop: 4,
+      borderRadius: 9, height: 40, marginTop: 4,
     },
     ghostBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
 
@@ -490,14 +479,14 @@ function makeStyles(colors: any, isDark: boolean) {
       flexDirection: 'row', backgroundColor: colors.muted,
       borderRadius: 9, padding: 3, gap: 3, marginTop: 2,
     },
-    segmentItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 7, borderRadius: 7 },
+    segmentItem: { flex: 1, height: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 7 },
     segmentItemActive: { backgroundColor: colors.primary },
     segmentText: { fontSize: 12, fontWeight: '700', color: colors.mutedForeground },
     segmentTextActive: { color: '#fff' },
 
-    toggle: { width: 42, height: 24, borderRadius: 12, backgroundColor: colors.border, padding: 2, justifyContent: 'center' },
+    toggle: { width: 46, height: 26, borderRadius: 13, backgroundColor: colors.border, padding: 2, justifyContent: 'center' },
     toggleActive: { backgroundColor: colors.primary },
-    toggleKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', alignSelf: 'flex-start' },
+    toggleKnob: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', alignSelf: 'flex-start' },
     toggleKnobActive: { alignSelf: 'flex-end' },
   });
 }
