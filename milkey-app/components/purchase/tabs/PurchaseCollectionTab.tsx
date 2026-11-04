@@ -7,7 +7,7 @@ import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Milk, Droplets
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseCollectionTab(props:any){
   const ctx = (props as any).ctx || props;
-  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
+  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, computeBaseAmount, computeBonusAmount, bonusEnabled, bonusType, bonusApplied, setBonusApplied, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
   const setSelectedCustomer = _setSelCust ?? (() => {});
   const effectiveBasis: any = (selectedCustomer as any)?.priceBasis || 'rate';
   return (
@@ -203,10 +203,44 @@ export function PurchaseCollectionTab(props:any){
                         </View>
                     </View>
 
-                    {/* Amount — Rate × Quantity */}
+                    {/* Amount — Rate × Quantity (+ bonus when enabled) */}
                     <View style={[s.computedRow, { marginTop: 10, backgroundColor: colors.primary + '08', borderRadius: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary + '15' }]}>
                         <Text style={s.computedText}>Amount: <Text style={[s.computedValue, { color: computeAmount() === 0 ? colors.mutedForeground : colors.primary }]}>₹{computeAmount().toFixed(2)}</Text></Text>
                     </View>
+
+                    {/* Bonus — shown only when Rate Setting > Bonus is ON */}
+                    {!!bonusEnabled && (
+                        <View style={{ marginTop: 8, gap: 6 }}>
+                            <Pressable
+                                onPress={() => setBonusApplied(!bonusApplied)}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: bonusApplied ? colors.primary : colors.border, backgroundColor: bonusApplied ? colors.primary + '10' : colors.background }}
+                            >
+                                <Text style={{ fontSize: 12, fontWeight: '700', color: bonusApplied ? colors.primary : colors.mutedForeground }}>
+                                    {bonusType === 'percent' ? 'Bonus (%)' : 'Bonus (₹/L)'}
+                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Text style={{ fontSize: 12, fontWeight: '700', color: bonusApplied ? colors.primary : colors.mutedForeground }}>
+                                        {bonusApplied ? 'ON' : 'OFF'}
+                                    </Text>
+                                    <View style={{ width: 34, height: 18, borderRadius: 9, padding: 2, justifyContent: 'center', backgroundColor: bonusApplied ? colors.primary : colors.border }}>
+                                        <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#fff', alignSelf: bonusApplied ? 'flex-end' : 'flex-start' }} />
+                                    </View>
+                                </View>
+                            </Pressable>
+                            {bonusApplied && (
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>
+                                    <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Milk</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '600', color: colors.foreground }}>₹{computeBaseAmount().toFixed(2)}</Text>
+                                </View>
+                            )}
+                            {bonusApplied && (
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>
+                                    <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Bonus</Text>
+                                    <Text style={{ fontSize: 11, fontWeight: '600', color: colors.primary }}>+ ₹{computeBonusAmount().toFixed(2)}</Text>
+                                </View>
+                            )}
+                        </View>
+                    )}
 
                     {/* Actions */}
                     <View style={s.actionsRow}>

@@ -468,11 +468,36 @@ export default function PurchaseScreen() {
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
     }, [fatValue, snfValue, selectedCustomer, todayRate]);
 
-    const computeAmount = (): number => {
+    // Bonus (Rate Setting > Bonus). Only active when the owner turned it ON there.
+    const bonusSettings = (milkRateSettings as any)?.bonus || null;
+    const bonusEnabled = !!bonusSettings?.enabled;
+    const bonusType: 'perLitre' | 'percent' = bonusSettings?.type === 'percent' ? 'percent' : 'perLitre';
+    const bonusRate = bonusEnabled
+        ? (bonusType === 'percent' ? (bonusSettings?.percent || 0) : (bonusSettings?.perLitre || 0))
+        : 0;
+    // [bonusEnabled, setter] so the entry form can opt out for one farmer
+    const [bonusApplied, setBonusApplied] = useState(true);
+
+    const computeBaseAmount = (): number => {
         if (isZero) return 0;
         const qty = parseFloat(milkQty) || 0;
         const rate = parseFloat(rateValue) || 0;
         return parseFloat((qty * rate).toFixed(2));
+    };
+
+    const computeBonusAmount = (): number => {
+        if (!bonusEnabled || !bonusApplied || isZero || bonusRate <= 0) return 0;
+        const qty = parseFloat(milkQty) || 0;
+        if (qty <= 0) return 0;
+        const base = computeBaseAmount();
+        if (bonusType === 'perLitre') return parseFloat((qty * bonusRate).toFixed(2));
+        if (base <= 0) return 0;
+        return parseFloat(((base * bonusRate) / 100).toFixed(2));
+    };
+
+    const computeAmount = (): number => {
+        if (isZero) return 0;
+        return parseFloat((computeBaseAmount() + computeBonusAmount()).toFixed(2));
     };
 
     // Open SMS or WhatsApp with collection info
@@ -557,6 +582,7 @@ export default function PurchaseScreen() {
             const snf = parseFloat(snfValue) || 0;
             const amount = computeAmount();
 
+            const bonusAmount = computeBonusAmount();
             const res = await milkCollectionsApi.create({
                 farmerCode: selectedCustomer.code,
                 purchaseFarmerId: selectedCustomer._id,
@@ -567,6 +593,8 @@ export default function PurchaseScreen() {
                 fat,
                 snf,
                 milkType,
+                bonusType: bonusAmount > 0 ? bonusType : undefined,
+                bonusRate: bonusAmount > 0 ? bonusRate : undefined,
             });
             if (res.success) {
                 // The corrected entry is in — only now drop the row that was edited.
@@ -599,6 +627,7 @@ export default function PurchaseScreen() {
 
                 setMilkQty(''); setFatValue(''); setSnfValue(''); setRateValue('');
                 setIsZero(false);
+                setBonusApplied(true);
                 setNoPrint(false);
                 // Auto-deselect the farmer/code after save so user must re-select for next entry.
                 // This prevents accidental double entries on the same code.
@@ -609,7 +638,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry, computeBonusAmount, bonusType, bonusRate]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -1061,7 +1090,7 @@ export default function PurchaseScreen() {
 
 
     // Ponytail ctx — single source for all tabs (no prop drilling duplication)
-    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, milkRateSettings, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, milkRateSettings, showCow, showBuffalo, bonusEnabled, bonusType, bonusRate, bonusApplied, setBonusApplied, computeBaseAmount, computeBonusAmount, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>

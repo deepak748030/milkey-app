@@ -18,11 +18,12 @@ type RateSettingsForm = {
   fixedCow: string;
   fatRateBuffalo: string;
   fatRateCow: string;
+  bonusEnabled: boolean;
   bonusType: 'perLitre' | 'percent';
   bonusPerLitre: string;
   bonusPercent: string;
 };
-type RateSettingsTextField = Exclude<keyof RateSettingsForm, 'bonusType'>;
+type RateSettingsTextField = Exclude<keyof RateSettingsForm, 'bonusType' | 'bonusEnabled'>;
 
 const EMPTY_FORM: RateSettingsForm = {
   fatSnfRate: '',
@@ -30,6 +31,7 @@ const EMPTY_FORM: RateSettingsForm = {
   fixedCow: '',
   fatRateBuffalo: '',
   fatRateCow: '',
+  bonusEnabled: false,
   bonusType: 'perLitre',
   bonusPerLitre: '',
   bonusPercent: '',
@@ -40,7 +42,7 @@ const toUpdatePayload = (values: RateSettingsForm) => ({
   fatSnfRate: { buffalo: toRateNumber(values.fatSnfRate), cow: toRateNumber(values.fatSnfRate), baseLabel: '65/90' },
   fixedRate: { buffalo: toRateNumber(values.fixedBuffalo), cow: toRateNumber(values.fixedCow) },
   fatRate: { buffalo: toRateNumber(values.fatRateBuffalo), cow: toRateNumber(values.fatRateCow) },
-  bonus: { type: values.bonusType, perLitre: toRateNumber(values.bonusPerLitre), percent: toRateNumber(values.bonusPercent) },
+  bonus: { enabled: values.bonusEnabled, type: values.bonusType, perLitre: toRateNumber(values.bonusPerLitre), percent: toRateNumber(values.bonusPercent) },
 });
 
 export default function MilkRateSettingsScreen() {
@@ -58,6 +60,7 @@ export default function MilkRateSettingsScreen() {
   const [fixedCow, setFixedCow] = useState('');
   const [fatRateBuffalo, setFatRateBuffalo] = useState('');
   const [fatRateCow, setFatRateCow] = useState('');
+  const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusType, setBonusType] = useState<'perLitre' | 'percent'>('perLitre');
   const [bonusPerLitre, setBonusPerLitre] = useState('');
   const [bonusPercent, setBonusPercent] = useState('');
@@ -152,6 +155,15 @@ export default function MilkRateSettingsScreen() {
     scheduleSave();
   };
 
+  const toggleBonus = () => {
+    if (leavingRef.current) return;
+    const next = !formRef.current.bonusEnabled;
+    formRef.current = { ...formRef.current, bonusEnabled: next };
+    setBonusEnabled(next);
+    markDirty();
+    scheduleSave();
+  };
+
   const selectBonusType = (type: 'perLitre' | 'percent') => {
     if (leavingRef.current || formRef.current.bonusType === type) return;
     formRef.current = { ...formRef.current, bonusType: type };
@@ -178,6 +190,7 @@ export default function MilkRateSettingsScreen() {
             fixedCow: d.fixedRate?.cow ? String(d.fixedRate.cow) : '',
             fatRateBuffalo: d.fatRate?.buffalo ? String(d.fatRate.buffalo) : '',
             fatRateCow: d.fatRate?.cow ? String(d.fatRate.cow) : '',
+            bonusEnabled: !!(d.bonus as any)?.enabled,
             bonusType: d.bonus?.type || 'perLitre',
             bonusPerLitre: d.bonus?.perLitre ? String(d.bonus.perLitre) : '',
             bonusPercent: d.bonus?.percent ? String(d.bonus.percent) : '',
@@ -188,6 +201,7 @@ export default function MilkRateSettingsScreen() {
           setFixedCow(values.fixedCow);
           setFatRateBuffalo(values.fatRateBuffalo);
           setFatRateCow(values.fatRateCow);
+          setBonusEnabled(values.bonusEnabled);
           setBonusType(values.bonusType);
           setBonusPerLitre(values.bonusPerLitre);
           setBonusPercent(values.bonusPercent);
@@ -335,7 +349,13 @@ export default function MilkRateSettingsScreen() {
         </CollapsibleCard>
 
         {/* 4. Bonus — Fix qty bonus, Amount percent bonus */}
-        <CollapsibleCard title="Bonus" expanded={expanded === 'bonus'} onToggle={() => toggle('bonus')} colors={colors} isDark={isDark}>
+        <CollapsibleCard title="Bonus" subtitle={expanded === 'bonus' ? (bonusEnabled ? 'ON' : 'OFF') : undefined} expanded={expanded === 'bonus'} onToggle={() => toggle('bonus')} colors={colors} isDark={isDark}>
+          <View style={s.bonusToggleRow}>
+            <Text style={s.bonusToggleLabel}>{bonusEnabled ? 'Bonus ON' : 'Bonus OFF'}</Text>
+            <Pressable onPress={toggleBonus} style={[s.toggle, bonusEnabled && s.toggleActive]}>
+              <View style={[s.toggleKnob, bonusEnabled && s.toggleKnobActive]} />
+            </Pressable>
+          </View>
           <View style={s.bonusTabs}>
             <Pressable onPress={() => selectBonusType('perLitre')} style={[s.bonusTab, bonusType === 'perLitre' && s.bonusTabActive]}>
               <Text style={[s.bonusTabText, bonusType === 'perLitre' && s.bonusTabTextActive]}>Fix qty bonus (₹/L)</Text>
@@ -358,7 +378,6 @@ export default function MilkRateSettingsScreen() {
               </View>
             </View>
           </View>
-          <Text style={s.helper}>Added on top of calculated rate.</Text>
         </CollapsibleCard>
 
         <View style={s.footerNote}>
@@ -426,6 +445,8 @@ function makeStyles(colors: any, isDark: boolean) {
     banner: { backgroundColor: '#FFF7D1', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 2 },
     bannerText: { fontSize: 12, fontWeight: '600', color: '#92400E' },
 
+    bonusToggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 2 },
+    bonusToggleLabel: { fontSize: 13, fontWeight: '700', color: '#111827' },
     bonusTabs: { flexDirection: 'row', borderWidth: 1, borderColor: '#0E7A2B', borderRadius: 12, overflow: 'hidden' },
     bonusTab: { flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fff' },
     bonusTabActive: { backgroundColor: '#0E7A2B' },

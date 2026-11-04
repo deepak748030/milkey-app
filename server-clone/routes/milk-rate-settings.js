@@ -53,6 +53,7 @@ router.put('/', auth, async (req, res) => {
       if (b.advanceRate.max !== undefined) update['advanceRate.max'] = clampNum(b.advanceRate.max, 0);
     }
     if (b.bonus) {
+      if (typeof b.bonus.enabled === 'boolean') update['bonus.enabled'] = b.bonus.enabled;
       if (b.bonus.type) update['bonus.type'] = b.bonus.type === 'percent' ? 'percent' : 'perLitre';
       if (b.bonus.perLitre !== undefined) update['bonus.perLitre'] = clampNum(b.bonus.perLitre, 0);
       if (b.bonus.percent !== undefined) update['bonus.percent'] = clampNum(b.bonus.percent, 0);
