@@ -287,7 +287,6 @@ export default function MilkRateSettingsScreen() {
         {/* 1. Fat SNF — Rate Chart */}
         <CollapsibleCard
           title="Fat SNF — Rate Chart"
-          subtitle={expanded === 'fatSnf' ? '₹/litre' : undefined}
           icon={<TableIcon size={15} color={colors.primary} />}
           expanded={expanded === 'fatSnf'}
           onToggle={() => toggle('fatSnf')}
