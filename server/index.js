@@ -44,6 +44,7 @@ const withdrawalRoutes = require('./routes/withdrawals');
 const zapupiRoutes = require('./routes/zapupi');
 const razorpayRoutes = require('./routes/razorpay');
 const printSettingsRoutes = require('./routes/print-settings');
+const milkRateSettingsRoutes = require('./routes/milk-rate-settings');
 
 const cache = require('./lib/cache');
 
@@ -141,6 +142,7 @@ app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/zapupi', zapupiRoutes);
 app.use('/api/razorpay', razorpayRoutes);
 app.use('/api/print-settings', printSettingsRoutes);
+app.use('/api/milk-rate-settings', milkRateSettingsRoutes);
 
 // 404 handler
 app.use((req, res) => {
