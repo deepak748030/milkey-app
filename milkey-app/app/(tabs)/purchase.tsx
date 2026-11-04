@@ -33,7 +33,6 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
-import RateSettingModal from '@/components/RateSettingModal';
 import { PurchaseCollectionTab } from '@/components/purchase/tabs/PurchaseCollectionTab';
 import { PurchaseSaleEntriesTable } from '@/components/purchase/tabs/PurchaseSaleEntriesTable';
 import { PurchaseReportTab } from '@/components/purchase/tabs/PurchaseReportTab';
@@ -90,10 +89,8 @@ export default function PurchaseScreen() {
     const [isZero, setIsZero] = useState(false);
     const [noPrint, setNoPrint] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [showRateSetting, setShowRateSetting] = useState(false);
     const [todayRate, setTodayRate] = useState<number>(0);
     const [milkRateSettings, setMilkRateSettings] = useState<MilkRateSettingsDoc | null>(null);
-    const [purchaseModeOverride, setPurchaseModeOverride] = useState<'rate' | 'fat' | 'fat_snf' | null>(null);
 
     // Fetch today's rate + global MilkRateSettings (Fixed/Fat/FatSNF) — single source for purchase entry logic.
     // Also refetched when the screen regains focus (e.g. after returning from the
@@ -116,7 +113,7 @@ export default function PurchaseScreen() {
 
     React.useEffect(() => {
         void loadRateSettings();
-    }, [loadRateSettings, showRateSetting]);
+    }, [loadRateSettings]);
 
     // RateSetting now directly opens Milk Rate Settings page via bottom sheet handler.
     // If somehow activeTab becomes RateSetting (deep link), redirect to the page.
@@ -395,8 +392,6 @@ export default function PurchaseScreen() {
     // Never let a late response land after leaving the screen.
     useEffect(() => () => { inlineSearchReqId.current++; }, []);
 
-    useEffect(() => { setPurchaseModeOverride(null); }, [selectedCustomer?._id]);
-
     useEffect(() => {
         if (selectedCustomer) {
             const cowEnabled = selectedCustomer.cowEnabled !== false;
@@ -416,19 +411,10 @@ export default function PurchaseScreen() {
         if (selectedCustomer) autoFillRate(selectedCustomer, milkType);
     }, [milkType]);
 
-    // When the operator picks a method from the inline chooser (e.g. Fixed Rate
-    // for a member whose default is Rate Chart), immediately refill the rate for
-    // that method instead of leaving the previous method's value behind.
-    useEffect(() => {
-        if (selectedCustomer && purchaseModeOverride) {
-            autoFillRate(selectedCustomer, milkType);
-        }
-    }, [purchaseModeOverride]);
-
     const autoFillRate = (customer: PurchaseFarmer, type: 'cow' | 'buffalo') => {
         // An edit restores the saved FAT / SNF / rate — the auto fill must not wipe them.
         if (suppressAutoFillRef.current) return;
-        const effectiveBasis = (purchaseModeOverride || customer.priceBasis) as any;
+        const effectiveBasis = customer.priceBasis as any;
         // If global Fixed Rate is defined, prefer it for Fixed method
         const globalFixed = type === 'cow' ? (milkRateSettings?.fixedRate?.cow || 0) : (milkRateSettings?.fixedRate?.buffalo || 0);
         if (effectiveBasis === 'rate') {
@@ -454,7 +440,7 @@ export default function PurchaseScreen() {
 
     // For fat-based pricing: rate = fat × farmer's fatRate (cowFat/buffaloFat) OR global fatRate
     useEffect(() => {
-        const basis = (purchaseModeOverride || selectedCustomer?.priceBasis) as any;
+        const basis = selectedCustomer?.priceBasis as any;
         if (!selectedCustomer || basis !== 'fat') return;
         const fat = parseFloat(fatValue) || 0;
         if (fat <= 0) { setRateValue(''); return; }
@@ -463,14 +449,14 @@ export default function PurchaseScreen() {
         const fatRate = perFarmer > 0 ? perFarmer : globalFatRate;
         const rate = fat * fatRate;
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
-    }, [fatValue, selectedCustomer, milkType, purchaseModeOverride, milkRateSettings]);
+    }, [fatValue, selectedCustomer, milkType, milkRateSettings]);
 
     // For rate-chart customers: auto-compute rate from FAT + SNF using the
     // saved rate setting's "today rate" (FatRate = rate*0.08, SnfRate = rate*0.053333).
-    // rate = fat * fatRate + snf * snfRate — respects purchaseModeOverride when Fixed not defined
+    // rate = fat * fatRate + snf * snfRate
     useEffect(() => {
         if (!selectedCustomer) return;
-        const effectiveBasis = (purchaseModeOverride || selectedCustomer.priceBasis) as any;
+        const effectiveBasis = selectedCustomer.priceBasis as any;
         const isRateSetting = effectiveBasis === 'fat_snf';
         if (!isRateSetting) return;
         const fat = parseFloat(fatValue) || 0;
@@ -478,13 +464,38 @@ export default function PurchaseScreen() {
         if (fat <= 0 || snf <= 0 || todayRate <= 0) { setRateValue(''); return; }
         const rate = fat * (todayRate * FAT_RATIO) + snf * (todayRate * SNF_RATIO);
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
-    }, [fatValue, snfValue, selectedCustomer, todayRate, purchaseModeOverride]);
+    }, [fatValue, snfValue, selectedCustomer, todayRate]);
 
-    const computeAmount = (): number => {
+    // Bonus (Rate Setting > Bonus). Only active when the owner turned it ON there.
+    const bonusSettings = (milkRateSettings as any)?.bonus || null;
+    const bonusEnabled = !!bonusSettings?.enabled;
+    const bonusType: 'perLitre' | 'percent' = bonusSettings?.type === 'percent' ? 'percent' : 'perLitre';
+    const bonusRate = bonusEnabled
+        ? (bonusType === 'percent' ? (bonusSettings?.percent || 0) : (bonusSettings?.perLitre || 0))
+        : 0;
+    // [bonusEnabled, setter] so the entry form can opt out for one farmer
+    const [bonusApplied, setBonusApplied] = useState(true);
+
+    const computeBaseAmount = (): number => {
         if (isZero) return 0;
         const qty = parseFloat(milkQty) || 0;
         const rate = parseFloat(rateValue) || 0;
         return parseFloat((qty * rate).toFixed(2));
+    };
+
+    const computeBonusAmount = (): number => {
+        if (!bonusEnabled || !bonusApplied || isZero || bonusRate <= 0) return 0;
+        const qty = parseFloat(milkQty) || 0;
+        if (qty <= 0) return 0;
+        const base = computeBaseAmount();
+        if (bonusType === 'perLitre') return parseFloat((qty * bonusRate).toFixed(2));
+        if (base <= 0) return 0;
+        return parseFloat(((base * bonusRate) / 100).toFixed(2));
+    };
+
+    const computeAmount = (): number => {
+        if (isZero) return 0;
+        return parseFloat((computeBaseAmount() + computeBonusAmount()).toFixed(2));
     };
 
     // Open SMS or WhatsApp with collection info
@@ -562,21 +573,6 @@ export default function PurchaseScreen() {
         const rate = parseFloat(rateValue) || 0;
         if (!isZero && (qty <= 0 || rate <= 0)) { showAlert('Error', 'Enter valid quantity and rate'); return; }
 
-        // Validate the method the operator actually selected, not the member's
-        // default — otherwise choosing Fixed Rate for a Rate Chart member would
-        // still demand Fat/SNF and block the save.
-        const effectiveBasis = (purchaseModeOverride || selectedCustomer.priceBasis) as any;
-        if (effectiveBasis === 'fat' && !isZero) {
-            const fat = parseFloat(fatValue) || 0;
-            if (fat <= 0) { showAlert('Error', 'Enter fat value'); return; }
-        }
-        if (effectiveBasis === 'fat_snf' && !isZero) {
-            const fat = parseFloat(fatValue) || 0;
-            const snf = parseFloat(snfValue) || 0;
-            if (fat <= 0) { showAlert('Error', 'Enter fat value'); return; }
-            if (snf <= 0) { showAlert('Error', 'Enter SNF value'); return; }
-        }
-
         setSaving(true);
         try {
             const dateStr = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`;
@@ -584,6 +580,7 @@ export default function PurchaseScreen() {
             const snf = parseFloat(snfValue) || 0;
             const amount = computeAmount();
 
+            const bonusAmount = computeBonusAmount();
             const res = await milkCollectionsApi.create({
                 farmerCode: selectedCustomer.code,
                 purchaseFarmerId: selectedCustomer._id,
@@ -594,6 +591,8 @@ export default function PurchaseScreen() {
                 fat,
                 snf,
                 milkType,
+                bonusType: bonusAmount > 0 ? bonusType : undefined,
+                bonusRate: bonusAmount > 0 ? bonusRate : undefined,
             });
             if (res.success) {
                 // The corrected entry is in — only now drop the row that was edited.
@@ -626,6 +625,7 @@ export default function PurchaseScreen() {
 
                 setMilkQty(''); setFatValue(''); setSnfValue(''); setRateValue('');
                 setIsZero(false);
+                setBonusApplied(true);
                 setNoPrint(false);
                 // Auto-deselect the farmer/code after save so user must re-select for next entry.
                 // This prevents accidental double entries on the same code.
@@ -636,7 +636,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry, purchaseModeOverride]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry, computeBonusAmount, bonusType, bonusRate]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -660,9 +660,11 @@ export default function PurchaseScreen() {
         setShowCustomerModal(false);
         setShowInlineSearch(false);
         setInlineSearchCode('');
-        // Auto-fill rate for rate-based pricing on selection
+        // Auto-fill rate for rate-based pricing on selection. Fat / Fat+SNF
+        // farmers get their rate from the Fat input, so the field starts blank.
         if (c.priceBasis === 'rate') autoFillRate(c, milkType);
-    }, [milkType]);
+        else setRateValue('');
+    }, [milkType, autoFillRate]);
 
     const handleSelectCustomer = useCallback((c: PurchaseFarmer) => {
         // Detect double-entry: existing collection for same code in current shift+date
@@ -1086,7 +1088,7 @@ export default function PurchaseScreen() {
 
 
     // Ponytail ctx — single source for all tabs (no prop drilling duplication)
-    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, milkRateSettings, purchaseModeOverride, setPurchaseModeOverride, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, milkRateSettings, showCow, showBuffalo, bonusEnabled, bonusType, bonusRate, bonusApplied, setBonusApplied, computeBaseAmount, computeBonusAmount, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>
@@ -1115,10 +1117,6 @@ export default function PurchaseScreen() {
                         <Pressable onPress={() => { setSuppressCollection(true); router.push('/milk-rate-settings' as any); }} style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <TableIcon size={16} color="#fff" />
                             <Text style={{ color: '#fff', fontWeight: '700' }}>Open Milk Rate Settings</Text>
-                        </Pressable>
-                        <Pressable onPress={() => setShowRateSetting(true)} style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <TableIcon size={14} color={colors.foreground} />
-                            <Text style={{ color: colors.foreground, fontWeight: '600', fontSize: 12 }}>Open old Rate Table (advanced)</Text>
                         </Pressable>
                         <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 }}>
                             <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Today Rate:</Text>
@@ -1356,14 +1354,6 @@ export default function PurchaseScreen() {
 
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />
             <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
-
-            <RateSettingModal
-                visible={showRateSetting}
-                onClose={() => setShowRateSetting(false)}
-                initialRate={rateValue}
-                highlightFat={parseFloat(fatValue) || undefined}
-                highlightSnf={parseFloat(snfValue) || undefined}
-            />
 
             {/* Batch print progress */}
             <Modal visible={!!batchProgress} transparent animationType="fade">

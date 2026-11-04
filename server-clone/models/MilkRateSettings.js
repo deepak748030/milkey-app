@@ -36,6 +36,8 @@ const milkRateSettingsSchema = new mongoose.Schema({
   },
   // Bonus
   bonus: {
+    // Master on/off — bonus is only applied/shown in purchase when this is true
+    enabled: { type: Boolean, default: false },
     type: { type: String, enum: ['perLitre', 'percent'], default: 'perLitre' },
     perLitre: { type: Number, default: 0 },
     percent: { type: Number, default: 0 },

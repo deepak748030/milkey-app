@@ -58,6 +58,25 @@ const milkCollectionSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    // Bonus snapshot at entry time (only when Rate Setting > Bonus is ON).
+    // baseAmount = quantity * rate (milk value), bonusAmount = extra given.
+    baseAmount: {
+        type: Number,
+        default: 0
+    },
+    bonusAmount: {
+        type: Number,
+        default: 0
+    },
+    bonusType: {
+        type: String,
+        enum: ['perLitre', 'percent', ''],
+        default: ''
+    },
+    bonusRate: {
+        type: Number,
+        default: 0
+    },
     isPaid: {
         type: Boolean,
         default: false

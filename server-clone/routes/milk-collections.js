@@ -250,6 +250,10 @@ router.post('/', auth, async (req, res) => {
     try {
         const { farmerCode, purchaseFarmerId, date, shift, quantity, fat, snf, rate, notes, milkType } = req.body;
 
+        // Bonus is optional and only used when Rate Setting > Bonus is ON.
+        const bonusType = req.body.bonusType === 'percent' ? 'percent' : (req.body.bonusType === 'perLitre' ? 'perLitre' : '');
+        const bonusRate = Number.isFinite(Number(req.body.bonusRate)) && Number(req.body.bonusRate) > 0 ? Number(req.body.bonusRate) : 0;
+
         const qty = Number(quantity);
         const r = Number(rate);
 
@@ -280,6 +284,13 @@ router.post('/', auth, async (req, res) => {
             if (pFarmer) purchaseFarmerRef = pFarmer._id;
         }
 
+        // Milk value, then bonus on top: per litre => qty x bonus; percent => % of milk value
+        const baseAmount = parseFloat((parseFloat(quantity) * parseFloat(rate)).toFixed(2));
+        let bonusAmount = 0;
+        if (bonusRate > 0 && bonusType === 'perLitre') bonusAmount = parseFloat((parseFloat(quantity) * bonusRate).toFixed(2));
+        else if (bonusRate > 0 && bonusType === 'percent') bonusAmount = parseFloat(((baseAmount * bonusRate) / 100).toFixed(2));
+        const totalAmount = parseFloat((baseAmount + bonusAmount).toFixed(2));
+
         const collection = await MilkCollection.create({
             purchaseFarmer: purchaseFarmerRef,
             farmerCode: farmerCode ? normalizeCode(farmerCode) : '',
@@ -291,7 +302,11 @@ router.post('/', auth, async (req, res) => {
             fat: parseFloat(fat) || 0,
             snf: parseFloat(snf) || 0,
             rate: parseFloat(rate),
-            amount: parseFloat(quantity) * parseFloat(rate),
+            baseAmount,
+            bonusAmount,
+            bonusType: bonusAmount > 0 ? bonusType : '',
+            bonusRate: bonusAmount > 0 ? bonusRate : 0,
+            amount: totalAmount,
             notes: notes?.trim() || ''
         });
 
@@ -328,6 +343,9 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id', auth, async (req, res) => {
     try {
         const { quantity, fat, snf, rate, notes } = req.body;
+        const hasBonus = req.body.bonusType !== undefined;
+        const bonusType = req.body.bonusType === 'percent' ? 'percent' : (req.body.bonusType === 'perLitre' ? 'perLitre' : '');
+        const bonusRate = Number.isFinite(Number(req.body.bonusRate)) && Number(req.body.bonusRate) > 0 ? Number(req.body.bonusRate) : 0;
 
         const collection = await MilkCollection.findOne({
             _id: req.params.id,
@@ -350,7 +368,18 @@ router.put('/:id', auth, async (req, res) => {
         if (rate !== undefined) collection.rate = parseFloat(rate);
         if (notes !== undefined) collection.notes = notes.trim();
 
-        collection.amount = collection.quantity * collection.rate;
+        if (hasBonus) {
+            collection.baseAmount = parseFloat((collection.quantity * collection.rate).toFixed(2));
+            let bonusAmount = 0;
+            if (bonusRate > 0 && bonusType === 'perLitre') bonusAmount = parseFloat((collection.quantity * bonusRate).toFixed(2));
+            else if (bonusRate > 0 && bonusType === 'percent') bonusAmount = parseFloat(((collection.baseAmount * bonusRate) / 100).toFixed(2));
+            collection.bonusAmount = bonusAmount;
+            collection.bonusType = bonusAmount > 0 ? bonusType : '';
+            collection.bonusRate = bonusAmount > 0 ? bonusRate : 0;
+            collection.amount = parseFloat((collection.baseAmount + bonusAmount).toFixed(2));
+        } else {
+            collection.amount = collection.quantity * collection.rate;
+        }
         await collection.save();
 
         // Update purchase farmer totals

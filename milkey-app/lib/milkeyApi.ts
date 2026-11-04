@@ -143,6 +143,12 @@ export interface MilkCollection {
     snf: number;
     rate: number;
     amount: number;
+    /** Milk value before bonus (qty x rate) */
+    baseAmount?: number;
+    /** Bonus added on top, when Rate Setting > Bonus is ON */
+    bonusAmount?: number;
+    bonusType?: 'perLitre' | 'percent' | '';
+    bonusRate?: number;
     isPaid: boolean;
     notes: string;
 }
@@ -719,6 +725,9 @@ export const milkCollectionsApi = {
         snf?: number;
         notes?: string;
         milkType?: 'cow' | 'buffalo';
+        /** Bonus snapshot — only sent when Rate Setting > Bonus is ON */
+        bonusType?: 'perLitre' | 'percent';
+        bonusRate?: number;
     }) => {
         return apiRequest<MilkCollection>('/milk-collections', {
             method: 'POST',
@@ -2096,7 +2105,7 @@ export interface MilkRateSettingsDoc {
   fatRate: { buffalo: number; cow: number };
   clrProRata: { clrToSnf: number; proRataEnabled: boolean; proRata: { col1: number; col2: number; col3: number } };
   advanceRate?: { min: number; max: number };
-  bonus: { type: 'perLitre' | 'percent'; perLitre: number; percent: number };
+  bonus: { enabled?: boolean; type: 'perLitre' | 'percent'; perLitre: number; percent: number };
   createdAt?: string;
   updatedAt?: string;
 }

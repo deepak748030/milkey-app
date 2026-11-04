@@ -18,9 +18,9 @@ interface AddCustomerSheetProps {
 }
 
 const PRICE_BASIS_OPTIONS = [
-    { value: 'rate', label: 'Fixed Rate' },
-    { value: 'fat', label: 'Rate by Quantity/Quality' },
     { value: 'fat_snf', label: 'Rate Chart' },
+    { value: 'rate', label: 'Fix Rate' },
+    { value: 'fat', label: 'Fat Rate' },
 ];
 
 const ALERT_METHOD_OPTIONS = [

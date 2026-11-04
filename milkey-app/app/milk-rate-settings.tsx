@@ -2,28 +2,28 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { TextInput } from '@/components/ui/HapticTextInput';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useNavigation } from 'expo-router';
 // Expo Router 57 keeps this hook in its navigation core but no longer re-exports it.
 import { usePreventRemove } from 'expo-router/build/react-navigation/core/usePreventRemove';
-import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, ChevronUp, Table as TableIcon, Milk, Percent, Gift, IndianRupee } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { milkRateSettingsApi, MilkRateSettingsDoc, purchaseFarmersApi } from '@/lib/milkeyApi';
+import RateSettingModal from '@/components/RateSettingModal';
 
-type Expanded = 'fatSnf' | 'fixed' | 'fat' | 'advanceRate' | 'bonus' | null;
+type Expanded = 'fatSnf' | 'fixed' | 'fat' | 'bonus' | null;
 type RateSettingsForm = {
   fatSnfRate: string;
   fixedBuffalo: string;
   fixedCow: string;
   fatRateBuffalo: string;
   fatRateCow: string;
-  advanceMin: string;
-  advanceMax: string;
+  bonusEnabled: boolean;
   bonusType: 'perLitre' | 'percent';
   bonusPerLitre: string;
   bonusPercent: string;
 };
-type RateSettingsTextField = Exclude<keyof RateSettingsForm, 'bonusType'>;
+type RateSettingsTextField = Exclude<keyof RateSettingsForm, 'bonusType' | 'bonusEnabled'>;
 
 const EMPTY_FORM: RateSettingsForm = {
   fatSnfRate: '',
@@ -31,8 +31,7 @@ const EMPTY_FORM: RateSettingsForm = {
   fixedCow: '',
   fatRateBuffalo: '',
   fatRateCow: '',
-  advanceMin: '',
-  advanceMax: '',
+  bonusEnabled: false,
   bonusType: 'perLitre',
   bonusPerLitre: '',
   bonusPercent: '',
@@ -43,30 +42,29 @@ const toUpdatePayload = (values: RateSettingsForm) => ({
   fatSnfRate: { buffalo: toRateNumber(values.fatSnfRate), cow: toRateNumber(values.fatSnfRate), baseLabel: '65/90' },
   fixedRate: { buffalo: toRateNumber(values.fixedBuffalo), cow: toRateNumber(values.fixedCow) },
   fatRate: { buffalo: toRateNumber(values.fatRateBuffalo), cow: toRateNumber(values.fatRateCow) },
-  advanceRate: { min: toRateNumber(values.advanceMin), max: toRateNumber(values.advanceMax) },
-  bonus: { type: values.bonusType, perLitre: toRateNumber(values.bonusPerLitre), percent: toRateNumber(values.bonusPercent) },
+  bonus: { enabled: values.bonusEnabled, type: values.bonusType, perLitre: toRateNumber(values.bonusPerLitre), percent: toRateNumber(values.bonusPercent) },
 });
 
 export default function MilkRateSettingsScreen() {
   const { colors, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
   const s = makeStyles(colors, isDark);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<Expanded>('fatSnf');
 
-  // form state — Advance Rate added, Rate Chart screen untouched
+  // form state
   const [fatSnfRate, setFatSnfRate] = useState('');
   const [fixedBuffalo, setFixedBuffalo] = useState('');
   const [fixedCow, setFixedCow] = useState('');
   const [fatRateBuffalo, setFatRateBuffalo] = useState('');
   const [fatRateCow, setFatRateCow] = useState('');
-  const [advanceMin, setAdvanceMin] = useState('');
-  const [advanceMax, setAdvanceMax] = useState('');
+  const [bonusEnabled, setBonusEnabled] = useState(false);
   const [bonusType, setBonusType] = useState<'perLitre' | 'percent'>('perLitre');
   const [bonusPerLitre, setBonusPerLitre] = useState('');
   const [bonusPercent, setBonusPercent] = useState('');
+  // Rate Chart (FAT x SNF grid) — same table the purchase screen used to show.
+  const [showRateChart, setShowRateChart] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [leaving, setLeaving] = useState(false);
@@ -156,6 +154,15 @@ export default function MilkRateSettingsScreen() {
     scheduleSave();
   };
 
+  const toggleBonus = () => {
+    if (leavingRef.current) return;
+    const next = !formRef.current.bonusEnabled;
+    formRef.current = { ...formRef.current, bonusEnabled: next };
+    setBonusEnabled(next);
+    markDirty();
+    scheduleSave();
+  };
+
   const selectBonusType = (type: 'perLitre' | 'percent') => {
     if (leavingRef.current || formRef.current.bonusType === type) return;
     formRef.current = { ...formRef.current, bonusType: type };
@@ -182,8 +189,7 @@ export default function MilkRateSettingsScreen() {
             fixedCow: d.fixedRate?.cow ? String(d.fixedRate.cow) : '',
             fatRateBuffalo: d.fatRate?.buffalo ? String(d.fatRate.buffalo) : '',
             fatRateCow: d.fatRate?.cow ? String(d.fatRate.cow) : '',
-            advanceMin: d.advanceRate?.min ? String(d.advanceRate.min) : '',
-            advanceMax: d.advanceRate?.max ? String(d.advanceRate.max) : '',
+            bonusEnabled: !!(d.bonus as any)?.enabled,
             bonusType: d.bonus?.type || 'perLitre',
             bonusPerLitre: d.bonus?.perLitre ? String(d.bonus.perLitre) : '',
             bonusPercent: d.bonus?.percent ? String(d.bonus.percent) : '',
@@ -194,8 +200,7 @@ export default function MilkRateSettingsScreen() {
           setFixedCow(values.fixedCow);
           setFatRateBuffalo(values.fatRateBuffalo);
           setFatRateCow(values.fatRateCow);
-          setAdvanceMin(values.advanceMin);
-          setAdvanceMax(values.advanceMax);
+          setBonusEnabled(values.bonusEnabled);
           setBonusType(values.bonusType);
           setBonusPerLitre(values.bonusPerLitre);
           setBonusPercent(values.bonusPercent);
@@ -248,163 +253,189 @@ export default function MilkRateSettingsScreen() {
     return (
       <View style={[s.root, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator color={colors.primary} />
-        <Text style={{ color: colors.mutedForeground, marginTop: 8 }}>Loading rate settings…</Text>
+        <Text style={{ color: colors.mutedForeground, marginTop: 8, fontSize: 12 }}>Loading…</Text>
       </View>
     );
   }
 
   return (
-    <View style={[s.root, { backgroundColor: '#F2F2F2' }]}>
-      <View style={[s.header, { paddingTop: insets.top + 6, backgroundColor: '#0E7A2B' }]}>
+    <SafeAreaView style={[s.root, { backgroundColor: colors.background }]} edges={['top']}>
+      <View style={s.header}>
         <Pressable onPress={() => router.back()} style={s.backBtn} hitSlop={8} disabled={leaving}>
-          <ArrowLeft size={22} color="#fff" />
+          <ArrowLeft size={22} color={colors.foreground} />
         </Pressable>
-        <Text style={s.headerTitle}>Milk rate settings</Text>
-        <View style={{ width: 36 }} />
+        <Text style={s.headerTitle}>Rate Setting</Text>
+        {saving ? (
+          <View style={s.headerRight}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        ) : (
+          <View style={s.headerRight} />
+        )}
       </View>
 
-      <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        {saving && (
-          <View style={[s.savingPill, { backgroundColor: '#fff', borderColor: colors.border }]}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>Saving…</Text>
-          </View>
-        )}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={s.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {saveError ? (
-          <Text style={{ color: '#B91C1C', fontSize: 12, textAlign: 'center' }}>
-            Save failed: {saveError}. Tap Back to retry.
-          </Text>
+          <Text style={s.errorText}>Save failed: {saveError}. Tap Back to retry.</Text>
         ) : null}
 
-        {/* 1. FAT + SNF Rate Chart — single value, NO Cow/Buffalo */}
+        {/* 1. Fat SNF — Rate Chart */}
         <CollapsibleCard
           title="Fat SNF — Rate Chart"
-          subtitle={expanded === 'fatSnf' ? '(₹/litre)' : undefined}
+          subtitle={expanded === 'fatSnf' ? '₹/litre' : undefined}
+          icon={<TableIcon size={15} color={colors.primary} />}
           expanded={expanded === 'fatSnf'}
           onToggle={() => toggle('fatSnf')}
           colors={colors}
-          isDark={isDark}
         >
-          <View style={s.greenTable}>
-            <View style={s.tableRow}>
-              <View style={[s.tableCell, s.rowLabelCell]}><Text style={s.rowLabelText}>65/90</Text></View>
-              <View style={[s.tableCell, s.inputCell, { flex: 1 }]}>
-                <TextInput value={fatSnfRate} onChangeText={onChange('fatSnfRate', setFatSnfRate)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
-              </View>
-            </View>
+          <View style={s.rowBetween}>
+            <Text style={s.rowLabel}>65/90</Text>
+            <TextInput
+              value={fatSnfRate}
+              onChangeText={onChange('fatSnfRate', setFatSnfRate)}
+              keyboardType="decimal-pad"
+              placeholder="₹"
+              placeholderTextColor={colors.mutedForeground}
+              style={s.valueInput}
+            />
           </View>
-          <Text style={s.helper}>Single chart rate for Fat + SNF. No Cow/Buffalo split.</Text>
-          {counts && counts.fatSnf > 0 && (
-            <View style={s.banner}><Text style={s.bannerText}>{counts.fatSnf} members will change</Text></View>
-          )}
+          {counts && counts.fatSnf > 0 ? (
+            <Text style={s.note}>{counts.fatSnf} members use this basis</Text>
+          ) : null}
+          <Pressable onPress={() => setShowRateChart(true)} style={s.ghostBtn}>
+            <TableIcon size={15} color={colors.primary} />
+            <Text style={s.ghostBtnText}>View Rate Chart</Text>
+          </Pressable>
         </CollapsibleCard>
 
-        {/* 2. Fixed Rate — Cow, Buffalo */}
-        <CollapsibleCard title="Fix Rate" subtitle={expanded === 'fixed' ? '(₹/litre)' : undefined} expanded={expanded === 'fixed'} onToggle={() => toggle('fixed')} colors={colors} isDark={isDark}>
-          <View style={s.greenTable}>
-            <View style={s.tableHeaderRow}>
-              <View style={[s.tableCell, s.tableHeaderCell]}><Text style={s.headerCellText}>🐃 Buffalo</Text></View>
-              <View style={[s.tableCell, s.tableHeaderCell]}><Text style={s.headerCellText}>🐄 Cow</Text></View>
-            </View>
-            <View style={s.tableRow}>
-              <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={fixedBuffalo} onChangeText={onChange('fixedBuffalo', setFixedBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
-              </View>
-              <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={fixedCow} onChangeText={onChange('fixedCow', setFixedCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
-              </View>
-            </View>
+        {/* 2. Fix Rate */}
+        <CollapsibleCard
+          title="Fix Rate"
+          subtitle={expanded === 'fixed' ? '₹/litre' : undefined}
+          icon={<IndianRupee size={15} color={colors.primary} />}
+          expanded={expanded === 'fixed'}
+          onToggle={() => toggle('fixed')}
+          colors={colors}
+        >
+          <View style={s.rowBetween}>
+            <Text style={s.rowLabel}>Buffalo</Text>
+            <TextInput value={fixedBuffalo} onChangeText={onChange('fixedBuffalo', setFixedBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor={colors.mutedForeground} style={s.valueInput} />
           </View>
-          <View style={s.banner}><Text style={s.bannerText}>{counts ? `${counts.rate} members will change` : '— members will change'}</Text></View>
-          <Text style={s.helper}>Khaali chhode to purchase me rate blank rahega. Member ka apna rate ho to wahi pehle use hoga.</Text>
+          <View style={s.rowDivider} />
+          <View style={s.rowBetween}>
+            <Text style={s.rowLabel}>Cow</Text>
+            <TextInput value={fixedCow} onChangeText={onChange('fixedCow', setFixedCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor={colors.mutedForeground} style={s.valueInput} />
+          </View>
+          {counts ? <Text style={s.note}>{counts.rate} members use this basis</Text> : null}
         </CollapsibleCard>
 
-        {/* 3. FAT Rate — Cow, Buffalo */}
-        <CollapsibleCard title="Fat Rate" subtitle={expanded === 'fat' ? 'per point' : undefined} expanded={expanded === 'fat'} onToggle={() => toggle('fat')} colors={colors} isDark={isDark}>
-          <View style={s.greenTable}>
-            <View style={s.tableHeaderRow}>
-              <View style={[s.tableCell, s.tableHeaderCell]}><Text style={s.headerCellText}>🐃 Buffalo</Text></View>
-              <View style={[s.tableCell, s.tableHeaderCell]}><Text style={s.headerCellText}>🐄 Cow</Text></View>
-            </View>
-            <View style={s.tableRow}>
-              <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={fatRateBuffalo} onChangeText={onChange('fatRateBuffalo', setFatRateBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
-              </View>
-              <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={fatRateCow} onChangeText={onChange('fatRateCow', setFatRateCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
-              </View>
-            </View>
+        {/* 3. Fat Rate */}
+        <CollapsibleCard
+          title="Fat Rate"
+          subtitle={expanded === 'fat' ? 'per point' : undefined}
+          icon={<Milk size={15} color={colors.primary} />}
+          expanded={expanded === 'fat'}
+          onToggle={() => toggle('fat')}
+          colors={colors}
+        >
+          <View style={s.rowBetween}>
+            <Text style={s.rowLabel}>Buffalo</Text>
+            <TextInput value={fatRateBuffalo} onChangeText={onChange('fatRateBuffalo', setFatRateBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor={colors.mutedForeground} style={s.valueInput} />
           </View>
-          <View style={s.banner}><Text style={s.bannerText}>{counts ? `${counts.fat} members will change` : '— members will change'}</Text></View>
+          <View style={s.rowDivider} />
+          <View style={s.rowBetween}>
+            <Text style={s.rowLabel}>Cow</Text>
+            <TextInput value={fatRateCow} onChangeText={onChange('fatRateCow', setFatRateCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor={colors.mutedForeground} style={s.valueInput} />
+          </View>
+          {counts ? <Text style={s.note}>{counts.fat} members use this basis</Text> : null}
         </CollapsibleCard>
 
-        {/* 4. Advance Rate — Minimum & Maximum (like 55 rate) */}
-        <CollapsibleCard title="Advance Rate" subtitle={expanded === 'advanceRate' ? '(₹)' : undefined} expanded={expanded === 'advanceRate'} onToggle={() => toggle('advanceRate')} colors={colors} isDark={isDark}>
-          <View style={s.greenTable}>
-            <View style={s.tableHeaderRow}>
-              <View style={[s.tableCell, s.tableHeaderCell]}><Text style={s.headerCellText}>Minimum</Text></View>
-              <View style={[s.tableCell, s.tableHeaderCell]}><Text style={s.headerCellText}>Maximum</Text></View>
-            </View>
-            <View style={s.tableRow}>
-              <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={advanceMin} onChangeText={onChange('advanceMin', setAdvanceMin)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
-              </View>
-              <View style={[s.tableCell, s.inputCell]}>
-                <TextInput value={advanceMax} onChangeText={onChange('advanceMax', setAdvanceMax)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor="#9AA0A6" style={s.input} />
-              </View>
-            </View>
-          </View>
-          <Text style={s.helper}>Advance Min/Max — 0 means no limit. Existing functionality same.</Text>
-        </CollapsibleCard>
-
-        {/* 5. Bonus — Fix qty bonus, Amount percent bonus */}
-        <CollapsibleCard title="Bonus" expanded={expanded === 'bonus'} onToggle={() => toggle('bonus')} colors={colors} isDark={isDark}>
-          <View style={s.bonusTabs}>
-            <Pressable onPress={() => selectBonusType('perLitre')} style={[s.bonusTab, bonusType === 'perLitre' && s.bonusTabActive]}>
-              <Text style={[s.bonusTabText, bonusType === 'perLitre' && s.bonusTabTextActive]}>Fix qty bonus (₹/L)</Text>
-            </Pressable>
-            <Pressable onPress={() => selectBonusType('percent')} style={[s.bonusTab, bonusType === 'percent' && s.bonusTabActive]}>
-              <Text style={[s.bonusTabText, bonusType === 'percent' && s.bonusTabTextActive]}>Amount percent bonus (%)</Text>
+        {/* 4. Bonus */}
+        <CollapsibleCard
+          title="Bonus"
+          subtitle={expanded === 'bonus' ? (bonusEnabled ? 'ON' : 'OFF') : undefined}
+          icon={<Gift size={15} color={colors.primary} />}
+          expanded={expanded === 'bonus'}
+          onToggle={() => toggle('bonus')}
+          colors={colors}
+        >
+          <View style={s.rowBetween}>
+            <Text style={s.rowLabel}>Bonus</Text>
+            <Pressable onPress={toggleBonus} style={[s.toggle, bonusEnabled && s.toggleActive]}>
+              <View style={[s.toggleKnob, bonusEnabled && s.toggleKnobActive]} />
             </Pressable>
           </View>
-          <View style={s.greenTable}>
-            <View style={s.tableRow}>
-              <View style={[s.tableCell, s.inputCell, { flex: 1 }]}>
+          {bonusEnabled && (
+            <>
+              <View style={s.rowDivider} />
+              <View style={s.segment}>
+                <Pressable onPress={() => selectBonusType('perLitre')} style={[s.segmentItem, bonusType === 'perLitre' && s.segmentItemActive]}>
+                  <Text style={[s.segmentText, bonusType === 'perLitre' && s.segmentTextActive]}>Per litre</Text>
+                </Pressable>
+                <Pressable onPress={() => selectBonusType('percent')} style={[s.segmentItem, bonusType === 'percent' && s.segmentItemActive]}>
+                  <Percent size={13} color={bonusType === 'percent' ? '#fff' : colors.mutedForeground} />
+                  <Text style={[s.segmentText, bonusType === 'percent' && s.segmentTextActive]}>Percent</Text>
+                </Pressable>
+              </View>
+              <View style={s.rowBetween}>
+                <Text style={s.rowLabel}>{bonusType === 'perLitre' ? '₹ per litre' : '% of amount'}</Text>
                 <TextInput
                   value={bonusType === 'perLitre' ? bonusPerLitre : bonusPercent}
                   onChangeText={bonusType === 'perLitre' ? onChange('bonusPerLitre', setBonusPerLitre) : onChange('bonusPercent', setBonusPercent)}
                   keyboardType="decimal-pad"
-                  placeholder="₹"
-                  placeholderTextColor="#9AA0A6"
-                  style={s.input}
+                  placeholder={bonusType === 'perLitre' ? '₹' : '%'}
+                  placeholderTextColor={colors.mutedForeground}
+                  style={s.valueInput}
                 />
               </View>
-            </View>
-          </View>
-          <Text style={s.helper}>Added on top of calculated rate.</Text>
+            </>
+          )}
         </CollapsibleCard>
 
-        <View style={s.footerNote}>
-          <Text style={s.footerNoteText}>Tip: Rates auto-save. Fix Rate = priceBasis “rate”, Fat Rate = “fat”, Fat SNF Rate = “fat_snf”. Change a farmer’s basis in Farmer tab.</Text>
-        </View>
-        <View style={{ height: 24 }} />
       </ScrollView>
-    </View>
+
+      <RateSettingModal
+        visible={showRateChart}
+        onClose={() => setShowRateChart(false)}
+      />
+    </SafeAreaView>
   );
 }
 
-function CollapsibleCard({ title, subtitle, expanded, onToggle, children, colors, isDark }: { title: string; subtitle?: string; expanded: boolean; onToggle: () => void; children: React.ReactNode; colors: any; isDark: boolean }) {
-  const s = makeStyles(colors, isDark);
+function CollapsibleCard({
+  title, subtitle, icon, expanded, onToggle, children, colors,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  expanded: boolean;
+  onToggle: () => void;
+  children?: React.ReactNode;
+  colors: any;
+}) {
+  const s = makeStyles(colors, false);
   return (
-    <View style={[s.card, expanded && s.cardExpanded]}>
-      <Pressable onPress={onToggle} style={[s.cardHeader, expanded && s.cardHeaderExpanded]}>
-        <Text style={s.cardTitle}>{title}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          {subtitle ? <Text style={s.cardSub}>{subtitle}</Text> : null}
-          {expanded ? <ChevronUp size={18} color="#0E7A2B" /> : <ChevronDown size={18} color="#6B7280" />}
+    <View style={[s.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Pressable onPress={onToggle} style={s.cardHeader} hitSlop={4}>
+        <View style={s.cardHeaderLeft}>
+          {icon ? <View style={[s.cardIcon, { backgroundColor: colors.secondary }]}>{icon}</View> : null}
+          <Text style={[s.cardTitle, { color: colors.foreground }]}>{title}</Text>
+        </View>
+        <View style={s.cardHeaderRight}>
+          {subtitle ? <Text style={[s.cardSub, { color: colors.mutedForeground }]}>{subtitle}</Text> : null}
+          {expanded
+            ? <ChevronUp size={17} color={colors.mutedForeground} />
+            : <ChevronDown size={17} color={colors.mutedForeground} />}
         </View>
       </Pressable>
-      {expanded && <View style={s.cardBody}>{children}</View>}
+      {expanded && (
+        <View style={[s.cardBody, { borderTopColor: colors.border }]}>{children}</View>
+      )}
     </View>
   );
 }
@@ -412,51 +443,61 @@ function CollapsibleCard({ title, subtitle, expanded, onToggle, children, colors
 function makeStyles(colors: any, isDark: boolean) {
   return StyleSheet.create({
     root: { flex: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
-    backBtn: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-    headerTitle: { flex: 1, textAlign: 'center', color: '#fff', fontSize: 18, fontWeight: '800' },
-    scrollContent: { padding: 12, gap: 12 },
-    savingPill: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, shadowColor: '#000', shadowOpacity: 0.06, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
 
-    card: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' },
-    cardExpanded: { borderColor: '#E5E7EB' },
-    cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 14, backgroundColor: '#fff' },
-    cardHeaderExpanded: { backgroundColor: '#F8F9FA', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-    cardTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
-    cardSub: { fontSize: 12, color: '#6B7280', marginRight: 2 },
-    cardBody: { padding: 12, gap: 10, backgroundColor: '#fff' },
+    header: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 6, paddingVertical: 12,
+      backgroundColor: colors.card,
+      borderBottomWidth: 1, borderBottomColor: colors.border,
+    },
+    backBtn: { padding: 6 },
+    headerTitle: { fontSize: 17, fontWeight: '700', color: colors.foreground },
+    headerRight: { width: 32, alignItems: 'flex-end', paddingRight: 6 },
 
-    greenTable: { borderWidth: 1.5, borderColor: '#0E7A2B', borderRadius: 12, overflow: 'hidden' },
-    tableHeaderRow: { flexDirection: 'row', backgroundColor: '#E8F5E9' },
-    tableRow: { flexDirection: 'row', borderTopWidth: 1.5, borderTopColor: '#0E7A2B', backgroundColor: '#fff' },
-    tableCell: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 8, borderRightWidth: 1, borderRightColor: '#0E7A2B' },
-    tableCellLabel: { flex: 0.7, backgroundColor: '#F3F4F6' },
-    tableHeaderCell: { backgroundColor: '#E8F5E9' },
-    headerCellText: { fontSize: 13, fontWeight: '700', color: '#0E7A2B' },
-    rowLabelCell: { backgroundColor: '#E8F5E9', flex: 0.7 },
-    rowLabelText: { fontSize: 13, fontWeight: '700', color: '#0E7A2B' },
-    inputCell: { backgroundColor: '#fff' },
-    input: { width: '100%', textAlign: 'center', fontSize: 15, fontWeight: '600', color: '#111827', paddingVertical: 2 },
+    scrollContent: { paddingHorizontal: 6, paddingTop: 6, paddingBottom: 28, gap: 0 },
+    errorText: { color: colors.destructive, fontSize: 12, textAlign: 'center', marginBottom: 2 },
 
-    moreOptions: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 2 },
-    moreOptionsText: { fontSize: 13, fontWeight: '600', color: '#0E7A2B' },
+    card: { borderRadius: 10, borderWidth: 1, overflow: 'hidden', marginBottom: 6 },
+    cardHeader: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 10, paddingVertical: 12,
+    },
+    cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+    cardHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    cardIcon: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    cardTitle: { fontSize: 14, fontWeight: '700' },
+    cardSub: { fontSize: 11, fontWeight: '600' },
+    cardBody: { paddingHorizontal: 10, paddingBottom: 10, borderTopWidth: 1, gap: 6 },
 
-    banner: { backgroundColor: '#FFF7D1', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 2 },
-    bannerText: { fontSize: 12, fontWeight: '600', color: '#92400E' },
+    rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 },
+    rowLabel: { fontSize: 13, fontWeight: '600', color: colors.foreground },
+    rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+    valueInput: {
+      minWidth: 96, textAlign: 'right', fontSize: 15, fontWeight: '700',
+      color: colors.foreground, backgroundColor: colors.muted,
+      borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+    },
+    note: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
 
-    bonusTabs: { flexDirection: 'row', borderWidth: 1, borderColor: '#0E7A2B', borderRadius: 12, overflow: 'hidden' },
-    bonusTab: { flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fff' },
-    bonusTabActive: { backgroundColor: '#0E7A2B' },
-    bonusTabText: { fontSize: 13, fontWeight: '700', color: '#6B7280' },
-    bonusTabTextActive: { color: '#fff' },
+    ghostBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+      borderWidth: 1, borderColor: colors.border, backgroundColor: colors.secondary,
+      borderRadius: 9, paddingVertical: 9, marginTop: 4,
+    },
+    ghostBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
 
-    toggle: { width: 44, height: 26, borderRadius: 13, backgroundColor: '#E5E7EB', padding: 2, justifyContent: 'center' },
-    toggleActive: { backgroundColor: '#0E7A2B' },
-    toggleKnob: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', alignSelf: 'flex-start', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+    segment: {
+      flexDirection: 'row', backgroundColor: colors.muted,
+      borderRadius: 9, padding: 3, gap: 3, marginTop: 2,
+    },
+    segmentItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 7, borderRadius: 7 },
+    segmentItemActive: { backgroundColor: colors.primary },
+    segmentText: { fontSize: 12, fontWeight: '700', color: colors.mutedForeground },
+    segmentTextActive: { color: '#fff' },
+
+    toggle: { width: 42, height: 24, borderRadius: 12, backgroundColor: colors.border, padding: 2, justifyContent: 'center' },
+    toggleActive: { backgroundColor: colors.primary },
+    toggleKnob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', alignSelf: 'flex-start' },
     toggleKnobActive: { alignSelf: 'flex-end' },
-
-    helper: { fontSize: 11, color: '#6B7280', marginTop: 2 },
-    footerNote: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 12 },
-    footerNoteText: { fontSize: 11, lineHeight: 15, color: '#6B7280' },
   });
 }
