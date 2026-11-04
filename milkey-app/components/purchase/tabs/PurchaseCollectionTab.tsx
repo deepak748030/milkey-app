@@ -248,11 +248,6 @@ export function PurchaseCollectionTab(props:any){
                             <Text style={s.fieldLabel}>3. Rate (auto)</Text>
                             <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                             {rateValue ? <Text style={{ fontSize: 10, color: colors.primary, marginTop: 2, textAlign: 'center' }}>Auto — edit kar sakte ho</Text> : null}
-                            {!rateValue && !isZero && effectiveBasis === 'rate' ? (
-                                <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2, textAlign: 'center' }}>
-                                    Default rate set nahi hai — Rate Setting se daalein
-                                </Text>
-                            ) : null}
                         </View>
                     </View>
 
