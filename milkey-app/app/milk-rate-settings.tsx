@@ -6,9 +6,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useNavigation } from 'expo-router';
 // Expo Router 57 keeps this hook in its navigation core but no longer re-exports it.
 import { usePreventRemove } from 'expo-router/build/react-navigation/core/usePreventRemove';
-import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, ChevronUp, Table as TableIcon } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { milkRateSettingsApi, MilkRateSettingsDoc, purchaseFarmersApi } from '@/lib/milkeyApi';
+import RateSettingModal from '@/components/RateSettingModal';
 
 type Expanded = 'fatSnf' | 'fixed' | 'fat' | 'bonus' | null;
 type RateSettingsForm = {
@@ -60,6 +61,8 @@ export default function MilkRateSettingsScreen() {
   const [bonusType, setBonusType] = useState<'perLitre' | 'percent'>('perLitre');
   const [bonusPerLitre, setBonusPerLitre] = useState('');
   const [bonusPercent, setBonusPercent] = useState('');
+  // Rate Chart (FAT x SNF grid) — same table the purchase screen used to show.
+  const [showRateChart, setShowRateChart] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [leaving, setLeaving] = useState(false);
@@ -286,6 +289,10 @@ export default function MilkRateSettingsScreen() {
           {counts && counts.fatSnf > 0 && (
             <View style={s.banner}><Text style={s.bannerText}>{counts.fatSnf} members will change</Text></View>
           )}
+          <Pressable onPress={() => setShowRateChart(true)} style={s.chartBtn}>
+            <TableIcon size={16} color="#0E7A2B" />
+            <Text style={s.chartBtnText}>View Rate Chart</Text>
+          </Pressable>
         </CollapsibleCard>
 
         {/* 2. Fixed Rate — Cow, Buffalo */}
@@ -359,6 +366,11 @@ export default function MilkRateSettingsScreen() {
         </View>
         <View style={{ height: 24 }} />
       </ScrollView>
+
+      <RateSettingModal
+        visible={showRateChart}
+        onClose={() => setShowRateChart(false)}
+      />
     </View>
   );
 }
@@ -426,6 +438,8 @@ function makeStyles(colors: any, isDark: boolean) {
     toggleKnobActive: { alignSelf: 'flex-end' },
 
     helper: { fontSize: 11, color: '#6B7280', marginTop: 2 },
+    chartBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: '#0E7A2B', borderRadius: 10, paddingVertical: 10, marginTop: 4, backgroundColor: '#F0FBF2' },
+    chartBtnText: { fontSize: 13, fontWeight: '700', color: '#0E7A2B' },
     footerNote: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, padding: 12 },
     footerNoteText: { fontSize: 11, lineHeight: 15, color: '#6B7280' },
   });

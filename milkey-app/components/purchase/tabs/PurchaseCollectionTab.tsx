@@ -9,7 +9,6 @@ export function PurchaseCollectionTab(props:any){
   const ctx = (props as any).ctx || props;
   const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
   const setSelectedCustomer = _setSelCust ?? (() => {});
-  const setShowRateSetting = ctx.setShowRateSetting || ctx.setShowRateChart;
   const effectiveBasis: any = (selectedCustomer as any)?.priceBasis || 'rate';
   return (
         <View style={{ flex: 1 }}>
@@ -44,13 +43,6 @@ export function PurchaseCollectionTab(props:any){
                         <Edit2 size={16} color="#fff" />
                     </Pressable>
                 )}
-                <Pressable
-                    style={[s.addCustTopBtn, { backgroundColor: colors.secondary, marginLeft: selectedCustomer ? 6 : 0 }]}
-                    onPress={() => setShowRateSetting(true)}
-                    accessibilityLabel="Rate Setting"
-                >
-                    <TableIcon size={16} color={colors.primary} />
-                </Pressable>
             </View>
 
             {/* Summary Bar */}

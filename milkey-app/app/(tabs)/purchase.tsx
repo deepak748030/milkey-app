@@ -33,7 +33,6 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
-import RateSettingModal from '@/components/RateSettingModal';
 import { PurchaseCollectionTab } from '@/components/purchase/tabs/PurchaseCollectionTab';
 import { PurchaseSaleEntriesTable } from '@/components/purchase/tabs/PurchaseSaleEntriesTable';
 import { PurchaseReportTab } from '@/components/purchase/tabs/PurchaseReportTab';
@@ -90,7 +89,6 @@ export default function PurchaseScreen() {
     const [isZero, setIsZero] = useState(false);
     const [noPrint, setNoPrint] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [showRateSetting, setShowRateSetting] = useState(false);
     const [todayRate, setTodayRate] = useState<number>(0);
     const [milkRateSettings, setMilkRateSettings] = useState<MilkRateSettingsDoc | null>(null);
 
@@ -115,7 +113,7 @@ export default function PurchaseScreen() {
 
     React.useEffect(() => {
         void loadRateSettings();
-    }, [loadRateSettings, showRateSetting]);
+    }, [loadRateSettings]);
 
     // RateSetting now directly opens Milk Rate Settings page via bottom sheet handler.
     // If somehow activeTab becomes RateSetting (deep link), redirect to the page.
@@ -1333,14 +1331,6 @@ export default function PurchaseScreen() {
 
             <SuccessModal isVisible={alertVisible} title={alertTitle} message={alertMessage} onClose={() => setAlertVisible(false)} autoClose={alertTitle === 'Success'} />
             <ConfirmationModal visible={confirmVisible} title={confirmData.title} message={confirmData.message} onConfirm={confirmData.onConfirm} onClose={() => setConfirmVisible(false)} />
-
-            <RateSettingModal
-                visible={showRateSetting}
-                onClose={() => setShowRateSetting(false)}
-                initialRate={rateValue}
-                highlightFat={parseFloat(fatValue) || undefined}
-                highlightSnf={parseFloat(snfValue) || undefined}
-            />
 
             {/* Batch print progress */}
             <Modal visible={!!batchProgress} transparent animationType="fade">
