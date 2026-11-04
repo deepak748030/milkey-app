@@ -635,9 +635,11 @@ export default function PurchaseScreen() {
         setShowCustomerModal(false);
         setShowInlineSearch(false);
         setInlineSearchCode('');
-        // Auto-fill rate for rate-based pricing on selection
+        // Auto-fill rate for rate-based pricing on selection. Fat / Fat+SNF
+        // farmers get their rate from the Fat input, so the field starts blank.
         if (c.priceBasis === 'rate') autoFillRate(c, milkType);
-    }, [milkType]);
+        else setRateValue('');
+    }, [milkType, autoFillRate]);
 
     const handleSelectCustomer = useCallback((c: PurchaseFarmer) => {
         // Detect double-entry: existing collection for same code in current shift+date

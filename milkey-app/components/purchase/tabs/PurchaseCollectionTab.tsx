@@ -7,9 +7,10 @@ import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Milk, Droplets
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseCollectionTab(props:any){
   const ctx = (props as any).ctx || props;
-  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
+  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
   const setSelectedCustomer = _setSelCust ?? (() => {});
   const setShowRateSetting = ctx.setShowRateSetting || ctx.setShowRateChart;
+  const effectiveBasis: any = (selectedCustomer as any)?.priceBasis || 'rate';
   return (
         <View style={{ flex: 1 }}>
             {/* Top Controls: Date + Shift + Add */}
@@ -192,6 +193,18 @@ export function PurchaseCollectionTab(props:any){
                             <Text style={[s.fieldLabel, { textAlign: 'left' }]}>Quantity (Litre)</Text>
                             <TextInput style={[s.fieldInput, { fontSize: 20 }]} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                         </View>
+                        {effectiveBasis !== 'rate' && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>Fat</Text>
+                                <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                            </View>
+                        )}
+                        {effectiveBasis === 'fat_snf' && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>SNF</Text>
+                                <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                            </View>
+                        )}
                         <View style={s.fieldBox}>
                             <Text style={s.fieldLabel}>Rate</Text>
                             <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
