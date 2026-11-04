@@ -93,7 +93,6 @@ export default function PurchaseScreen() {
     const [showRateSetting, setShowRateSetting] = useState(false);
     const [todayRate, setTodayRate] = useState<number>(0);
     const [milkRateSettings, setMilkRateSettings] = useState<MilkRateSettingsDoc | null>(null);
-    const [purchaseModeOverride, setPurchaseModeOverride] = useState<'rate' | 'fat' | 'fat_snf' | null>(null);
 
     // Fetch today's rate + global MilkRateSettings (Fixed/Fat/FatSNF) — single source for purchase entry logic.
     // Also refetched when the screen regains focus (e.g. after returning from the
@@ -416,19 +415,10 @@ export default function PurchaseScreen() {
         if (selectedCustomer) autoFillRate(selectedCustomer, milkType);
     }, [milkType]);
 
-    // When the operator picks a method from the inline chooser (e.g. Fixed Rate
-    // for a member whose default is Rate Chart), immediately refill the rate for
-    // that method instead of leaving the previous method's value behind.
-    useEffect(() => {
-        if (selectedCustomer && purchaseModeOverride) {
-            autoFillRate(selectedCustomer, milkType);
-        }
-    }, [purchaseModeOverride]);
-
     const autoFillRate = (customer: PurchaseFarmer, type: 'cow' | 'buffalo') => {
         // An edit restores the saved FAT / SNF / rate — the auto fill must not wipe them.
         if (suppressAutoFillRef.current) return;
-        const effectiveBasis = (purchaseModeOverride || customer.priceBasis) as any;
+        const effectiveBasis = customer.priceBasis as any;
         // If global Fixed Rate is defined, prefer it for Fixed method
         const globalFixed = type === 'cow' ? (milkRateSettings?.fixedRate?.cow || 0) : (milkRateSettings?.fixedRate?.buffalo || 0);
         if (effectiveBasis === 'rate') {
@@ -454,7 +444,7 @@ export default function PurchaseScreen() {
 
     // For fat-based pricing: rate = fat × farmer's fatRate (cowFat/buffaloFat) OR global fatRate
     useEffect(() => {
-        const basis = (purchaseModeOverride || selectedCustomer?.priceBasis) as any;
+        const basis = selectedCustomer?.priceBasis as any;
         if (!selectedCustomer || basis !== 'fat') return;
         const fat = parseFloat(fatValue) || 0;
         if (fat <= 0) { setRateValue(''); return; }
@@ -463,14 +453,14 @@ export default function PurchaseScreen() {
         const fatRate = perFarmer > 0 ? perFarmer : globalFatRate;
         const rate = fat * fatRate;
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
-    }, [fatValue, selectedCustomer, milkType, purchaseModeOverride, milkRateSettings]);
+    }, [fatValue, selectedCustomer, milkType, milkRateSettings]);
 
     // For rate-chart customers: auto-compute rate from FAT + SNF using the
     // saved rate setting's "today rate" (FatRate = rate*0.08, SnfRate = rate*0.053333).
-    // rate = fat * fatRate + snf * snfRate — respects purchaseModeOverride when Fixed not defined
+    // rate = fat * fatRate + snf * snfRate
     useEffect(() => {
         if (!selectedCustomer) return;
-        const effectiveBasis = (purchaseModeOverride || selectedCustomer.priceBasis) as any;
+        const effectiveBasis = selectedCustomer.priceBasis as any;
         const isRateSetting = effectiveBasis === 'fat_snf';
         if (!isRateSetting) return;
         const fat = parseFloat(fatValue) || 0;
@@ -478,7 +468,7 @@ export default function PurchaseScreen() {
         if (fat <= 0 || snf <= 0 || todayRate <= 0) { setRateValue(''); return; }
         const rate = fat * (todayRate * FAT_RATIO) + snf * (todayRate * SNF_RATIO);
         setRateValue(rate > 0 ? rate.toFixed(2) : '');
-    }, [fatValue, snfValue, selectedCustomer, todayRate, purchaseModeOverride]);
+    }, [fatValue, snfValue, selectedCustomer, todayRate]);
 
     const computeAmount = (): number => {
         if (isZero) return 0;
@@ -562,21 +552,6 @@ export default function PurchaseScreen() {
         const rate = parseFloat(rateValue) || 0;
         if (!isZero && (qty <= 0 || rate <= 0)) { showAlert('Error', 'Enter valid quantity and rate'); return; }
 
-        // Validate the method the operator actually selected, not the member's
-        // default — otherwise choosing Fixed Rate for a Rate Chart member would
-        // still demand Fat/SNF and block the save.
-        const effectiveBasis = (purchaseModeOverride || selectedCustomer.priceBasis) as any;
-        if (effectiveBasis === 'fat' && !isZero) {
-            const fat = parseFloat(fatValue) || 0;
-            if (fat <= 0) { showAlert('Error', 'Enter fat value'); return; }
-        }
-        if (effectiveBasis === 'fat_snf' && !isZero) {
-            const fat = parseFloat(fatValue) || 0;
-            const snf = parseFloat(snfValue) || 0;
-            if (fat <= 0) { showAlert('Error', 'Enter fat value'); return; }
-            if (snf <= 0) { showAlert('Error', 'Enter SNF value'); return; }
-        }
-
         setSaving(true);
         try {
             const dateStr = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`;
@@ -636,7 +611,7 @@ export default function PurchaseScreen() {
             }
         } catch { showAlert('Error', 'Failed to save entry'); }
         setSaving(false);
-    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry, purchaseModeOverride]);
+    }, [saving, selectedCustomer, milkQty, rateValue, fatValue, snfValue, entryDate, entryShift, milkType, isZero, noPrint, isPrinterConnected, openAlertApp, printText, buildMilkSlipPayload, editingEntry]);
 
     const handleDeleteCollection = useCallback((id: string) => {
         showConfirm('Delete Entry', 'Delete this milk entry?', async () => {
@@ -1086,7 +1061,7 @@ export default function PurchaseScreen() {
 
 
     // Ponytail ctx — single source for all tabs (no prop drilling duplication)
-    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, milkRateSettings, purchaseModeOverride, setPurchaseModeOverride, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, setShowRateSetting, historyTotals, todayRate, milkRateSettings, showCow, showBuffalo, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>

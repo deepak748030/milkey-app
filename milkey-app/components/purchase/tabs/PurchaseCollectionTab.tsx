@@ -7,17 +7,9 @@ import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Milk, Droplets
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseCollectionTab(props:any){
   const ctx = (props as any).ctx || props;
-  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
-  const milkRateSettings = (ctx as any).milkRateSettings || null;
-  const purchaseModeOverride = (ctx as any).purchaseModeOverride || null;
-  const setPurchaseModeOverride = (ctx as any).setPurchaseModeOverride || (() => {});
+  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
   const setSelectedCustomer = _setSelCust ?? (() => {});
   const setShowRateSetting = ctx.setShowRateSetting || ctx.setShowRateChart;
-  const setShowRateChart = setShowRateSetting;
-  // Effective basis: if user picked via chooser (when Fixed not defined), use override, else farmer's basis
-  const effectiveBasis: any = purchaseModeOverride || (selectedCustomer as any)?.priceBasis || 'rate';
-  const globalFixedDefined = milkRateSettings ? ((milkRateSettings as any).fixedRate?.buffalo > 0 || (milkRateSettings as any).fixedRate?.cow > 0) : false;
-  const showMethodChooser = !!selectedCustomer && !globalFixedDefined;
   return (
         <View style={{ flex: 1 }}>
             {/* Top Controls: Date + Shift + Add */}
@@ -192,78 +184,23 @@ export function PurchaseCollectionTab(props:any){
                 </View>
             )}
 
-            {/* Entry Fields — Ordered: Quantity → Quality → Rate auto → Amount */}
+            {/* Entry Fields — quantity → rate → amount, no helper text */}
             {selectedCustomer && (
                 <View style={s.entryCard}>
-                    {/* Method chooser when Fixed not defined */}
-                    {showMethodChooser && (
-                        <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-                            {[
-                                { value: 'rate', label: 'Fixed Rate' },
-                                { value: 'fat', label: 'Qty/Quality' },
-                                { value: 'fat_snf', label: 'Rate Chart' },
-                            ].map(opt => (
-                                <Pressable key={opt.value} onPress={() => setPurchaseModeOverride(opt.value as any)} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: effectiveBasis === opt.value ? colors.primary : colors.background }}>
-                                    {effectiveBasis === opt.value && <Check size={12} color="#fff" style={{ marginRight: 4 }} />}
-                                    <Text style={{ fontSize: 12, fontWeight: '600', color: effectiveBasis === opt.value ? '#fff' : colors.foreground }}>{opt.label}</Text>
-                                </Pressable>
-                            ))}
+                    <View style={s.fieldsRow}>
+                        <View style={s.fieldBox}>
+                            <Text style={[s.fieldLabel, { textAlign: 'left' }]}>Quantity (Litre)</Text>
+                            <TextInput style={[s.fieldInput, { fontSize: 20 }]} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                         </View>
-                    )}
-
-                    {effectiveBasis === 'rate' ? (
-                        /* Fixed Rate: Quantity + Rate side by side, no Quality box */
-                        <View style={s.fieldsRow}>
-                            <View style={s.fieldBox}>
-                                <Text style={[s.fieldLabel, { textAlign: 'left' }]}>1. Quantity (Litre)</Text>
-                                <TextInput style={[s.fieldInput, { fontSize: 20 }]} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                                {!milkQty && !isZero && <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>Quantity bharo — amount auto ₹0 rahega</Text>}
-                            </View>
-                            <View style={s.fieldBox}>
-                                <Text style={s.fieldLabel}>2. Rate (auto)</Text>
-                                <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                                {rateValue ? <Text style={{ fontSize: 10, color: colors.primary, marginTop: 2, textAlign: 'center' }}>Auto — edit kar sakte ho</Text> : null}
-                                {!rateValue && !isZero ? (
-                                    <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2, textAlign: 'center' }}>
-                                        Default rate set nahi hai — Rate Setting se daalein
-                                    </Text>
-                                ) : null}
-                            </View>
+                        <View style={s.fieldBox}>
+                            <Text style={s.fieldLabel}>Rate</Text>
+                            <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                         </View>
-                    ) : (
-                        <>
-                            {/* 1. Quantity */}
-                            <View style={s.fieldBox}>
-                                <Text style={[s.fieldLabel, { textAlign: 'left' }]}>1. Quantity (Litre)</Text>
-                                <TextInput style={[s.fieldInput, { fontSize: 20 }]} value={milkQty} onChangeText={setMilkQty} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                                {!milkQty && !isZero && <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>Quantity bharo — amount auto ₹0 rahega</Text>}
-                            </View>
+                    </View>
 
-                            {/* 2. Quality — Fat / SNF + 3. Rate */}
-                            <View style={[s.fieldsRow, { marginTop: 8 }]}>
-                                <View style={s.fieldBox}>
-                                    <Text style={s.fieldLabel}>2. Quality — Fat</Text>
-                                    <TextInput style={s.fieldInput} value={fatValue} onChangeText={setFatValue} keyboardType="decimal-pad" placeholder={effectiveBasis === 'fat_snf' ? '6.5' : '4.0'} placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                                </View>
-                                {effectiveBasis === 'fat_snf' && (
-                                    <View style={s.fieldBox}>
-                                        <Text style={s.fieldLabel}>SNF</Text>
-                                        <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="9.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                                    </View>
-                                )}
-                                <View style={s.fieldBox}>
-                                    <Text style={s.fieldLabel}>3. Rate (auto)</Text>
-                                    <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                                    {rateValue ? <Text style={{ fontSize: 10, color: colors.primary, marginTop: 2, textAlign: 'center' }}>Auto — edit kar sakte ho</Text> : null}
-                                </View>
-                            </View>
-                        </>
-                    )}
-
-                    {/* 4. Amount — Rate × Quantity, qty khali → 0 */}
+                    {/* Amount — Rate × Quantity */}
                     <View style={[s.computedRow, { marginTop: 10, backgroundColor: colors.primary + '08', borderRadius: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary + '15' }]}>
                         <Text style={s.computedText}>Amount: <Text style={[s.computedValue, { color: computeAmount() === 0 ? colors.mutedForeground : colors.primary }]}>₹{computeAmount().toFixed(2)}</Text></Text>
-                        {computeAmount() === 0 && <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2, textAlign: 'center' }}>Quantity ya Rate khali hai → Amount ₹0</Text>}
                     </View>
 
                     {/* Actions */}
