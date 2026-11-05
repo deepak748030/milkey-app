@@ -7,7 +7,7 @@ import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Milk, Droplets
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseCollectionTab(props:any){
   const ctx = (props as any).ctx || props;
-  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, computeBaseAmount, computeBonusAmount, bonusEnabled, bonusType, bonusApplied, setBonusApplied, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
+  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, computeBaseAmount, computeBonusAmount, fatRateLocked, fixRateLocked, bonusEnabled, bonusType, bonusApplied, setBonusApplied, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
   const setSelectedCustomer = _setSelCust ?? (() => {});
   const effectiveBasis: any = (selectedCustomer as any)?.priceBasis || 'rate';
   return (
@@ -197,8 +197,9 @@ export function PurchaseCollectionTab(props:any){
                                 <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                             </View>
                         )}
-                        {/* Rate Chart: rate is chart-driven and lives in the Amount row below */}
-                        {effectiveBasis !== 'fat_snf' && (
+                        {/* Rate Chart: rate is chart-driven and lives in the Amount row below.
+                            Fat Rate: read-only while a default Fat Rate is set (auto = Fat × Fat Rate). */}
+                        {effectiveBasis !== 'fat_snf' && !(effectiveBasis === 'fat' && !!fatRateLocked) && !(effectiveBasis === 'rate' && !!fixRateLocked) && (
                             <View style={s.fieldBox}>
                                 <Text style={s.fieldLabel}>Rate</Text>
                                 <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
@@ -208,7 +209,9 @@ export function PurchaseCollectionTab(props:any){
 
                     {/* Amount — Rate × Quantity (+ bonus when enabled) */}
                     <View style={[s.computedRow, { marginTop: 10, backgroundColor: colors.primary + '08', borderRadius: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary + '15' }]}>
-                        {effectiveBasis === 'fat_snf' && (
+                        {(effectiveBasis === 'fat_snf'
+                            || (effectiveBasis === 'fat' && !!fatRateLocked)
+                            || (effectiveBasis === 'rate' && !!fixRateLocked)) && (
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                 <Text style={[s.computedText, { fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '700' }]}>Rate</Text>
                                 <Text style={[s.computedValue, { fontSize: 16, fontWeight: '800', color: rateValue ? colors.foreground : colors.mutedForeground }]}>
