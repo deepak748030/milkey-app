@@ -92,7 +92,12 @@ const milkCollectionSchema = new mongoose.Schema({
 
 // Pre-save to calculate amount
 milkCollectionSchema.pre('save', function (next) {
-    this.amount = this.quantity * this.rate;
+    // Milk value. Bonus (Rate Setting > Bonus ON) is added on top when present,
+    // otherwise amount stays exactly quantity * rate as before.
+    const base = parseFloat((this.quantity * this.rate).toFixed(2));
+    this.baseAmount = base;
+    const bonus = Number.isFinite(this.bonusAmount) && this.bonusAmount > 0 ? this.bonusAmount : 0;
+    this.amount = parseFloat((base + bonus).toFixed(2));
     next();
 });
 

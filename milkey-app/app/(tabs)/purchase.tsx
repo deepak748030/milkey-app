@@ -448,6 +448,16 @@ export default function PurchaseScreen() {
         && (selectedCustomer.priceBasis as any) === 'fat'
         && (fatDefaultRate > 0 || fatGlobalRate > 0));
 
+    // Fix Rate has the same rule: read-only while a default exists (farmer's own
+    // cowRate/buffaloRate first, else Rate Setting Fix Rate for that milk type).
+    const fixDefaultRate = selectedCustomer
+        ? (milkType === 'cow' ? (selectedCustomer.cowRate || 0) : (selectedCustomer.buffaloRate || 0))
+        : 0;
+    const fixGlobalRate = milkType === 'cow' ? (milkRateSettings?.fixedRate?.cow || 0) : (milkRateSettings?.fixedRate?.buffalo || 0);
+    const fixRateLocked = !!(selectedCustomer
+        && (selectedCustomer.priceBasis as any) === 'rate'
+        && (fixDefaultRate > 0 || fixGlobalRate > 0));
+
     // For fat-based pricing: rate = fat × farmer's fatRate (cowFat/buffaloFat) OR global fatRate
     useEffect(() => {
         const basis = selectedCustomer?.priceBasis as any;
@@ -1098,7 +1108,7 @@ export default function PurchaseScreen() {
 
 
     // Ponytail ctx — single source for all tabs (no prop drilling duplication)
-    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, milkRateSettings, showCow, showBuffalo, bonusEnabled, bonusType, bonusRate, bonusApplied, setBonusApplied, computeBaseAmount, computeBonusAmount, fatRateLocked, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, milkRateSettings, showCow, showBuffalo, bonusEnabled, bonusType, bonusRate, bonusApplied, setBonusApplied, computeBaseAmount, computeBonusAmount, fatRateLocked, fixRateLocked, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>
