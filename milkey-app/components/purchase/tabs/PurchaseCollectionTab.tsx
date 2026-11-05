@@ -197,14 +197,25 @@ export function PurchaseCollectionTab(props:any){
                                 <TextInput style={s.fieldInput} value={snfValue} onChangeText={setSnfValue} keyboardType="decimal-pad" placeholder="0.0" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
                             </View>
                         )}
-                        <View style={s.fieldBox}>
-                            <Text style={s.fieldLabel}>Rate</Text>
-                            <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
-                        </View>
+                        {/* Rate Chart: rate is chart-driven and lives in the Amount row below */}
+                        {effectiveBasis !== 'fat_snf' && (
+                            <View style={s.fieldBox}>
+                                <Text style={s.fieldLabel}>Rate</Text>
+                                <TextInput style={[s.fieldInput, { backgroundColor: rateValue ? colors.card : colors.background }]} value={isZero ? '0' : rateValue} onChangeText={setRateValue} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} editable={!isZero} />
+                            </View>
+                        )}
                     </View>
 
                     {/* Amount — Rate × Quantity (+ bonus when enabled) */}
                     <View style={[s.computedRow, { marginTop: 10, backgroundColor: colors.primary + '08', borderRadius: 10, paddingVertical: 8, borderWidth: 1, borderColor: colors.primary + '15' }]}>
+                        {effectiveBasis === 'fat_snf' && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <Text style={[s.computedText, { fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '700' }]}>Rate</Text>
+                                <Text style={[s.computedValue, { fontSize: 16, fontWeight: '800', color: rateValue ? colors.foreground : colors.mutedForeground }]}>
+                                    {isZero ? '0' : (rateValue ? `₹${rateValue}` : '₹0')}
+                                </Text>
+                            </View>
+                        )}
                         <Text style={s.computedText}>Amount: <Text style={[s.computedValue, { color: computeAmount() === 0 ? colors.mutedForeground : colors.primary }]}>₹{computeAmount().toFixed(2)}</Text></Text>
                     </View>
 

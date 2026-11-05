@@ -65,6 +65,7 @@ export default function MilkRateSettingsScreen() {
   const [bonusPercent, setBonusPercent] = useState('');
   // Rate Chart (FAT x SNF grid) — same table the purchase screen used to show.
   const [showRateChart, setShowRateChart] = useState(false);
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [leaving, setLeaving] = useState(false);
@@ -153,6 +154,9 @@ export default function MilkRateSettingsScreen() {
     markDirty();
     scheduleSave();
   };
+
+  const onFieldFocus = (key: string) => setFocusedKey(key);
+  const onFieldBlur = () => setFocusedKey(null);
 
   const toggleBonus = () => {
     if (leavingRef.current) return;
@@ -293,7 +297,7 @@ export default function MilkRateSettingsScreen() {
           colors={colors}
         >
           {counts && counts.fatSnf > 0 ? (
-            <Text style={s.note}>{counts.fatSnf} members use this basis</Text>
+            <Text style={s.note}>{counts.fatSnf} members · Rate Chart</Text>
           ) : null}
           <Pressable onPress={() => setShowRateChart(true)} style={s.ghostBtn}>
             <TableIcon size={15} color={colors.primary} />
@@ -310,16 +314,39 @@ export default function MilkRateSettingsScreen() {
           onToggle={() => toggle('fixed')}
           colors={colors}
         >
-          <View style={s.rowBetween}>
-            <Text style={s.rowLabel}>Buffalo</Text>
-            <TextInput value={fixedBuffalo} onChangeText={onChange('fixedBuffalo', setFixedBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor={colors.mutedForeground} style={s.valueInput} />
+          <View style={[s.inputBox, focusedKey === 'fixedBuffalo' && s.inputBoxFocused]}>
+            <Text style={[s.inputBoxLabel, focusedKey === 'fixedBuffalo' && s.inputBoxLabelFocused]}>Buffalo</Text>
+            <View style={s.inputDivider} />
+            <TextInput
+              value={fixedBuffalo}
+              onChangeText={onChange('fixedBuffalo', setFixedBuffalo)}
+              onFocus={() => onFieldFocus('fixedBuffalo')}
+              onBlur={onFieldBlur}
+              keyboardType="decimal-pad"
+              placeholder="₹"
+              placeholderTextColor={colors.mutedForeground}
+              style={s.inputBoxField}
+              underlineColorAndroid="transparent"
+              selectionColor={colors.primary}
+            />
           </View>
-          <View style={s.rowDivider} />
-          <View style={s.rowBetween}>
-            <Text style={s.rowLabel}>Cow</Text>
-            <TextInput value={fixedCow} onChangeText={onChange('fixedCow', setFixedCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor={colors.mutedForeground} style={s.valueInput} />
+          <View style={[s.inputBox, focusedKey === 'fixedCow' && s.inputBoxFocused]}>
+            <Text style={[s.inputBoxLabel, focusedKey === 'fixedCow' && s.inputBoxLabelFocused]}>Cow</Text>
+            <View style={s.inputDivider} />
+            <TextInput
+              value={fixedCow}
+              onChangeText={onChange('fixedCow', setFixedCow)}
+              onFocus={() => onFieldFocus('fixedCow')}
+              onBlur={onFieldBlur}
+              keyboardType="decimal-pad"
+              placeholder="₹"
+              placeholderTextColor={colors.mutedForeground}
+              style={s.inputBoxField}
+              underlineColorAndroid="transparent"
+              selectionColor={colors.primary}
+            />
           </View>
-          {counts ? <Text style={s.note}>{counts.rate} members use this basis</Text> : null}
+          {counts ? <Text style={s.note}>{counts.rate} members · Fix Rate</Text> : null}
         </CollapsibleCard>
 
         {/* 3. Fat Rate */}
@@ -331,16 +358,39 @@ export default function MilkRateSettingsScreen() {
           onToggle={() => toggle('fat')}
           colors={colors}
         >
-          <View style={s.rowBetween}>
-            <Text style={s.rowLabel}>Buffalo</Text>
-            <TextInput value={fatRateBuffalo} onChangeText={onChange('fatRateBuffalo', setFatRateBuffalo)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor={colors.mutedForeground} style={s.valueInput} />
+          <View style={[s.inputBox, focusedKey === 'fatBuffalo' && s.inputBoxFocused]}>
+            <Text style={[s.inputBoxLabel, focusedKey === 'fatBuffalo' && s.inputBoxLabelFocused]}>Buffalo</Text>
+            <View style={s.inputDivider} />
+            <TextInput
+              value={fatRateBuffalo}
+              onChangeText={onChange('fatRateBuffalo', setFatRateBuffalo)}
+              onFocus={() => onFieldFocus('fatBuffalo')}
+              onBlur={onFieldBlur}
+              keyboardType="decimal-pad"
+              placeholder="₹"
+              placeholderTextColor={colors.mutedForeground}
+              style={s.inputBoxField}
+              underlineColorAndroid="transparent"
+              selectionColor={colors.primary}
+            />
           </View>
-          <View style={s.rowDivider} />
-          <View style={s.rowBetween}>
-            <Text style={s.rowLabel}>Cow</Text>
-            <TextInput value={fatRateCow} onChangeText={onChange('fatRateCow', setFatRateCow)} keyboardType="decimal-pad" placeholder="₹" placeholderTextColor={colors.mutedForeground} style={s.valueInput} />
+          <View style={[s.inputBox, focusedKey === 'fatCow' && s.inputBoxFocused]}>
+            <Text style={[s.inputBoxLabel, focusedKey === 'fatCow' && s.inputBoxLabelFocused]}>Cow</Text>
+            <View style={s.inputDivider} />
+            <TextInput
+              value={fatRateCow}
+              onChangeText={onChange('fatRateCow', setFatRateCow)}
+              onFocus={() => onFieldFocus('fatCow')}
+              onBlur={onFieldBlur}
+              keyboardType="decimal-pad"
+              placeholder="₹"
+              placeholderTextColor={colors.mutedForeground}
+              style={s.inputBoxField}
+              underlineColorAndroid="transparent"
+              selectionColor={colors.primary}
+            />
           </View>
-          {counts ? <Text style={s.note}>{counts.fat} members use this basis</Text> : null}
+          {counts ? <Text style={s.note}>{counts.fat} members · Fat Rate</Text> : null}
         </CollapsibleCard>
 
         {/* 4. Bonus */}
@@ -370,15 +420,22 @@ export default function MilkRateSettingsScreen() {
                   <Text style={[s.segmentText, bonusType === 'percent' && s.segmentTextActive]}>Percent</Text>
                 </Pressable>
               </View>
-              <View style={s.rowBetween}>
-                <Text style={s.rowLabel}>{bonusType === 'perLitre' ? '₹ per litre' : '% of amount'}</Text>
+              <View style={[s.inputBox, focusedKey === 'bonus' && s.inputBoxFocused]}>
+                <Text style={[s.inputBoxLabel, focusedKey === 'bonus' && s.inputBoxLabelFocused]}>
+                  {bonusType === 'perLitre' ? '₹ / litre' : '% of amount'}
+                </Text>
+                <View style={s.inputDivider} />
                 <TextInput
                   value={bonusType === 'perLitre' ? bonusPerLitre : bonusPercent}
                   onChangeText={bonusType === 'perLitre' ? onChange('bonusPerLitre', setBonusPerLitre) : onChange('bonusPercent', setBonusPercent)}
+                  onFocus={() => onFieldFocus('bonus')}
+                  onBlur={onFieldBlur}
                   keyboardType="decimal-pad"
                   placeholder={bonusType === 'perLitre' ? '₹' : '%'}
                   placeholderTextColor={colors.mutedForeground}
-                  style={s.valueInput}
+                  style={s.inputBoxField}
+                  underlineColorAndroid="transparent"
+                  selectionColor={colors.primary}
                 />
               </View>
             </>
@@ -455,16 +512,24 @@ function makeStyles(colors: any, isDark: boolean) {
     cardIcon: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
     cardTitle: { fontSize: 14, fontWeight: '700' },
     cardSub: { fontSize: 11, fontWeight: '600' },
-    cardBody: { paddingHorizontal: 10, paddingBottom: 10, borderTopWidth: 1, gap: 6 },
+    cardBody: { paddingHorizontal: 10, paddingTop: 4, paddingBottom: 10, borderTopWidth: 1, gap: 4 },
 
-    rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 48 },
+    rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 50 },
     rowLabel: { fontSize: 13, fontWeight: '600', color: colors.foreground },
-    rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-    valueInput: {
-      minWidth: 96, height: 42, textAlign: 'right', fontSize: 15, fontWeight: '700',
-      color: colors.foreground, backgroundColor: colors.input,
-      borderRadius: 8, borderWidth: 1.5, borderColor: colors.border,
-      paddingHorizontal: 12, paddingVertical: 0,
+    rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 4 },
+    // Calculator-style field: bordered box with label chip + left aligned value
+    inputBox: {
+      flexDirection: 'row', alignItems: 'center', height: 50,
+      borderRadius: 12, borderWidth: 1.5, borderColor: colors.border,
+      backgroundColor: colors.card, paddingHorizontal: 12, marginTop: 4,
+    },
+    inputBoxFocused: { borderColor: colors.primary, backgroundColor: colors.secondary },
+    inputBoxLabel: { minWidth: 62, fontSize: 12, fontWeight: '800', color: colors.mutedForeground },
+    inputBoxLabelFocused: { color: colors.primary },
+    inputDivider: { width: 1, height: 22, backgroundColor: colors.border, marginRight: 10 },
+    inputBoxField: {
+      flex: 1, textAlign: 'left', fontSize: 15, fontWeight: '700',
+      color: colors.foreground, paddingVertical: 0, paddingLeft: 2,
     },
     note: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
 
