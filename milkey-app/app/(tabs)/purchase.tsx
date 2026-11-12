@@ -34,6 +34,8 @@ import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { AddCustomerSheet } from '@/components/purchase/AddCustomerSheet';
 import { PurchaseCollectionTab } from '@/components/purchase/tabs/PurchaseCollectionTab';
+import { getCurrentUser } from '@/lib/authStore';
+import { readBonusLocal } from '@/lib/rateSettingsConfig';
 import { PurchaseSaleEntriesTable } from '@/components/purchase/tabs/PurchaseSaleEntriesTable';
 import { PurchaseReportTab } from '@/components/purchase/tabs/PurchaseReportTab';
 import { PurchaseFarmerTab } from '@/components/purchase/tabs/PurchaseFarmerTab';
@@ -98,15 +100,20 @@ export default function PurchaseScreen() {
     // immediately instead of waiting for an app restart.
     const loadRateSettings = useCallback(async () => {
         try {
-            const [quickRes, mrRes] = await Promise.all([
+            const [quickRes, mrRes, bonusLocal] = await Promise.all([
                 rateChartsApi.getQuickSettings().catch(() => null),
                 milkRateSettingsApi.get().catch(() => null),
+                readBonusLocal(getCurrentUser()?.id),
             ]);
             if (quickRes?.success && quickRes.response && (quickRes.response as any).rate != null) {
                 setTodayRate(Number((quickRes.response as any).rate) || 0);
             }
             if (mrRes?.success && mrRes.response) {
-                setMilkRateSettings(mrRes.response as MilkRateSettingsDoc);
+                const doc = mrRes.response as MilkRateSettingsDoc;
+                // Bonus ON/OFF is mirrored locally (the deployed API may not persist
+                // bonus.enabled), so the toggle stays as the owner set it.
+                const serverEnabled = typeof (doc as any)?.bonus?.enabled === 'boolean';
+                setMilkRateSettings(serverEnabled || !bonusLocal ? doc : ({ ...doc, bonus: { ...(doc as any)?.bonus, ...bonusLocal } } as any));
             }
         } catch { /* offline-safe */ }
     }, []);

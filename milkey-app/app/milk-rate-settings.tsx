@@ -10,6 +10,8 @@ import { ArrowLeft, ChevronDown, ChevronUp, Table as TableIcon, Milk, Percent, G
 import { useTheme } from '@/hooks/useTheme';
 import { milkRateSettingsApi, MilkRateSettingsDoc, purchaseFarmersApi } from '@/lib/milkeyApi';
 import RateSettingModal from '@/components/RateSettingModal';
+import { getCurrentUser } from '@/lib/authStore';
+import { readBonusLocal, writeBonusLocal, type BonusConfig } from '@/lib/rateSettingsConfig';
 
 type Expanded = 'fatSnf' | 'fixed' | 'fat' | 'bonus' | null;
 type RateSettingsForm = {
@@ -158,11 +160,24 @@ export default function MilkRateSettingsScreen() {
   const onFieldFocus = (key: string) => setFocusedKey(key);
   const onFieldBlur = () => setFocusedKey(null);
 
+  // Local mirror of the bonus config: keeps the toggle ON/OFF even when the
+  // deployed API does not persist bonus.enabled yet.
+  const persistBonusLocal = (values: RateSettingsForm) => {
+    const cfg: BonusConfig = {
+      enabled: !!values.bonusEnabled,
+      type: values.bonusType,
+      perLitre: toRateNumber(values.bonusPerLitre),
+      percent: toRateNumber(values.bonusPercent),
+    };
+    void writeBonusLocal(getCurrentUser()?.id, cfg);
+  };
+
   const toggleBonus = () => {
     if (leavingRef.current) return;
     const next = !formRef.current.bonusEnabled;
     formRef.current = { ...formRef.current, bonusEnabled: next };
     setBonusEnabled(next);
+    persistBonusLocal(formRef.current);
     markDirty();
     scheduleSave();
   };
@@ -171,6 +186,7 @@ export default function MilkRateSettingsScreen() {
     if (leavingRef.current || formRef.current.bonusType === type) return;
     formRef.current = { ...formRef.current, bonusType: type };
     setBonusType(type);
+    persistBonusLocal(formRef.current);
     markDirty();
     scheduleSave();
   };
@@ -179,12 +195,25 @@ export default function MilkRateSettingsScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const [settingsRes, farmersRes] = await Promise.all([
+        const userKey = getCurrentUser()?.id;
+        const [settingsRes, farmersRes, bonusLocal] = await Promise.all([
           milkRateSettingsApi.get(),
           purchaseFarmersApi.getAll({ limit: 200 }),
+          readBonusLocal(userKey),
         ]);
         if (!cancelled && settingsRes.success && settingsRes.response) {
-          const d = settingsRes.response as MilkRateSettingsDoc;
+          const raw = settingsRes.response as MilkRateSettingsDoc;
+          // Server value wins when it already carries bonus.enabled; otherwise the
+          // local copy is the truth (older deployed API without the field).
+          const d: any = (raw as any)?.bonus && typeof (raw as any).bonus.enabled === 'boolean'
+            ? raw
+            : {
+                ...raw,
+                bonus: {
+                  ...(raw as any)?.bonus,
+                  ...(bonusLocal || {}),
+                },
+              };
           // Fat SNF: single value — use buffalo if present, else cow, or 65/90 label's value
           const fatSnfVal = (d as any).fatSnfRate?.buffalo || (d as any).fatSnfRate?.cow || (d as any).fatSnfRate?.value || 0;
           const values: RateSettingsForm = {
@@ -205,6 +234,7 @@ export default function MilkRateSettingsScreen() {
           setFatRateBuffalo(values.fatRateBuffalo);
           setFatRateCow(values.fatRateCow);
           setBonusEnabled(values.bonusEnabled);
+          if (!bonusLocal) persistBonusLocal(values);
           setBonusType(values.bonusType);
           setBonusPerLitre(values.bonusPerLitre);
           setBonusPercent(values.bonusPercent);
