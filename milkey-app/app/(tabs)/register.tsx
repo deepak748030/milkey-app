@@ -154,6 +154,10 @@ export default function RegisterScreen() {
     // Guards the auto-refresh effect from re-fetching the same farmer+period twice
     // (search already fetched it once).
     const periodKeyRef = useRef('');
+    // Once the user picks a Calculation Period themselves, the auto rules
+    // (blocked-period auto-adjust + next-cycle suggestion) must never overwrite it.
+    // Reset only when a different farmer is searched.
+    const periodUserEditedRef = useRef(false);
 
     // Advances state
     const [advCode, setAdvCode] = useState('');
@@ -259,6 +263,8 @@ export default function RegisterScreen() {
     // Effect to auto-adjust dates when blockedPeriods change (farmer selected)
     useEffect(() => {
         if (blockedPeriods.length === 0 || !paymentFarmer) return;
+        // User already chose a period for this farmer — leave it alone.
+        if (periodUserEditedRef.current) return;
 
         // Check if current date range overlaps with any blocked period
         const checkOverlap = (startStr: string, endStr: string): boolean => {
@@ -399,6 +405,8 @@ export default function RegisterScreen() {
 
     useEffect(() => {
         if (!paymentFarmer) return;
+        // Manual pick wins over the auto "next cycle" range.
+        if (periodUserEditedRef.current) return;
         const next = computeNextPeriodForFarmer(paymentFarmer.farmer.code);
         if (!next) return;
         setDateStart(next.start);
@@ -731,6 +739,8 @@ export default function RegisterScreen() {
         const code = paymentCode.trim();
         setPaymentLoading(true);
         setPeriodMilk(null);
+        // Fresh search = fresh farmer: allow the auto period rules again.
+        periodUserEditedRef.current = false;
         try {
             // 1) Resolve farmer + pending advances/current balance first.
             const first = await paymentsApi.getFarmerSummary(code, dateStart, dateEnd, TZ_OFFSET_MINUTES);
@@ -1459,8 +1469,12 @@ export default function RegisterScreen() {
                     <DateRangePicker
                         startDate={dateStart}
                         endDate={dateEnd}
-                        onStartDateChange={(date) => setDateStart(date)}
+                        onStartDateChange={(date) => {
+                            periodUserEditedRef.current = true;
+                            setDateStart(date);
+                        }}
                         onEndDateChange={(date) => {
+                            periodUserEditedRef.current = true;
                             setDateEnd(date);
                         }}
                         blockedPeriods={blockedPeriods}
