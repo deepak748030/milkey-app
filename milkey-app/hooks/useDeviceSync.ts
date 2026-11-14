@@ -17,8 +17,8 @@ export function useDeviceSync() {
       if (lastUserId.current === userId) return; // already registered this session
       registering.current = true;
       try {
-        await registerCurrentDevice();
-        lastUserId.current = userId;
+        const result = await registerCurrentDevice();
+        if (result.success) lastUserId.current = userId;
       } finally { registering.current = false; }
     };
 

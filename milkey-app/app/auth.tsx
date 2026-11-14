@@ -407,7 +407,7 @@ export default function AuthScreen() {
             }
         } catch (err: any) {
             console.error('[auth][google] backend error:', err?.message, err);
-            showModal('Error', 'Google sign in failed. Please try again.');
+            showModal('Error', err?.message || 'Google sign in failed. Please try again.');
         } finally {
             setGoogleLoading(false);
             googleModeRef.current = 'login';
@@ -458,7 +458,7 @@ export default function AuthScreen() {
             }
         } catch (err: any) {
             console.error('[auth] verifyOtp → error:', err?.message, err);
-            showModal('Error', 'Verification failed. Please try again.');
+            showModal('Error', err?.message || 'Verification failed. Please try again.');
         } finally { setLoading(false); }
     }, [phone, otp, expoPushToken, showModal]);
 

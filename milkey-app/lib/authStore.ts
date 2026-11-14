@@ -66,7 +66,16 @@ export const setAuthUser = async (token: string, user: AuthUser): Promise<void> 
             AsyncStorage.setItem(TOKEN_KEY, token),
             AsyncStorage.setItem(USER_KEY, JSON.stringify(user))
         ]);
+        // Register the freshly authenticated device before screens issue data requests.
+        // A logged-out device is otherwise rejected by the server until reactivated.
+        const { registerCurrentDevice } = await import('./device');
+        const device = await registerCurrentDevice();
+        if (!device.success && device.status !== 404) {
+            await Promise.all([AsyncStorage.removeItem(TOKEN_KEY), AsyncStorage.removeItem(USER_KEY)]);
+            throw new Error(device.message || 'Device registration failed. Please try again.');
+        }
         currentUser = user;
+        isLoading = false;
         notifyListeners();
     } catch (error) {
         console.error('Error setting auth user:', error);
