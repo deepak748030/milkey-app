@@ -250,6 +250,8 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
                     _id: null,
                     totalQuantity: { $sum: '$quantity' },
                     totalAmount: { $sum: '$amount' },
+                    totalBonus: { $sum: { $ifNull: ['$bonusAmount', 0] } },
+                    totalBase: { $sum: { $ifNull: ['$baseAmount', 0] } },
                     count: { $sum: 1 },
                     minDate: { $min: '$date' },
                     maxDate: { $max: '$date' }
@@ -266,7 +268,7 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
 
         const advanceTotal = pendingAdvances.reduce((sum, a) => sum + (a.amount - a.settledAmount), 0);
 
-        const milkData = unpaidCollections[0] || { totalQuantity: 0, totalAmount: 0, count: 0, minDate: null, maxDate: null };
+        const milkData = unpaidCollections[0] || { totalQuantity: 0, totalAmount: 0, totalBonus: 0, totalBase: 0, count: 0, minDate: null, maxDate: null };
 
         const netPayable = milkData.totalAmount - advanceTotal;
 
@@ -283,6 +285,9 @@ router.get('/farmer-summary/:farmerCode', auth, async (req, res) => {
                 milk: {
                     totalQuantity: milkData.totalQuantity,
                     totalAmount: milkData.totalAmount,
+                    // Bonus split for this Calculation Period (0 when no bonus entries)
+                    totalBonus: milkData.totalBonus || 0,
+                    totalBase: milkData.totalBase || 0,
                     collections: milkData.count,
                     periodStart: milkData.minDate,
                     periodEnd: milkData.maxDate

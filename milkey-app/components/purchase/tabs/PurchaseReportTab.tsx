@@ -123,6 +123,7 @@ export function PurchaseReportTab(props:any){
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.fat}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.purchase.snf}</Text>
                         <Text style={[s.tHeadText, s.entryCell2]}>{t.common.rate}</Text>
+                        <Text style={[s.tHeadText, s.entryCell2]}>Bonus</Text>
                         <Text style={[s.tHeadText, s.entryCell3]}>{t.purchase.amt}</Text>
                     </View>
                     {filteredReportCollections.map((item, index) => {
@@ -141,6 +142,9 @@ export function PurchaseReportTab(props:any){
                                 <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.fat || '-'}</Text>
                                 <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text>
                                 <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center' }]}>{item.rate}</Text>
+                                <Text style={[s.entryCellText, s.entryCell2, { textAlign: 'center', color: Number((item as any).bonusAmount) > 0 ? colors.primary : colors.mutedForeground }]}>
+                                    {Number((item as any).bonusAmount) > 0 ? `₹${Number((item as any).bonusAmount).toFixed(0)}` : '-'}
+                                </Text>
                                 <Text style={[s.entryCellText, s.entryCell3, { color: colors.primary, fontWeight: '700', textAlign: 'center' }]}>₹{item.amount.toFixed(0)}</Text>
                             </View>
                         );
@@ -152,6 +156,11 @@ export function PurchaseReportTab(props:any){
                         <Text style={[s.tFootText, s.entryCell2]}></Text>
                         <Text style={[s.tFootText, s.entryCell2]}></Text>
                         <Text style={[s.tFootText, s.entryCell2]}></Text>
+                        <Text style={[s.tFootText, s.entryCell2, { color: colors.primary }]}>
+                            {(filteredReportCollections.reduce((sum, c: any) => sum + (Number(c.bonusAmount) || 0), 0)) > 0
+                                ? `₹${filteredReportCollections.reduce((sum, c: any) => sum + (Number(c.bonusAmount) || 0), 0).toFixed(0)}`
+                                : ''}
+                        </Text>
                         <Text style={[s.tFootText, s.entryCell3, { color: colors.primary }]}>₹{filteredReportTotals.amount.toFixed(0)}</Text>
                     </View>
                 </View>

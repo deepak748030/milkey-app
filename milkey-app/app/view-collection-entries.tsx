@@ -88,7 +88,9 @@ export default function ViewCollectionEntriesScreen() {
     const totals = useMemo(() => {
         const qty = entries.reduce((s, e) => s + (e.quantity || 0), 0);
         const amt = entries.reduce((s, e) => s + (e.amount || 0), 0);
-        return { qty, amt };
+        // Bonus is already inside amt — show the split so it is visible here too
+        const bonus = entries.reduce((s, e) => s + (Number((e as any).bonusAmount) || 0), 0);
+        return { qty, amt, bonus };
     }, [entries]);
 
     const filtered = useMemo(() => {
@@ -116,7 +118,15 @@ export default function ViewCollectionEntriesScreen() {
 
             <View style={s.summaryBar}>
                 <View style={s.summaryItem}><Text style={s.summaryLabel}>Total Qty</Text><Text style={s.summaryValue}>{totals.qty.toFixed(2)} L</Text></View>
-                <View style={s.summaryItem}><Text style={s.summaryLabel}>Total Amount</Text><Text style={[s.summaryValue, { color: colors.primary }]}>₹{totals.amt.toFixed(2)}</Text></View>
+                <View style={s.summaryItem}>
+                    <Text style={s.summaryLabel}>Total Amount</Text>
+                    <Text style={[s.summaryValue, { color: colors.primary }]}>₹{totals.amt.toFixed(2)}</Text>
+                    {totals.bonus > 0 && (
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: colors.primary, marginTop: 2 }}>
+                            incl. bonus ₹{totals.bonus.toFixed(2)}
+                        </Text>
+                    )}
+                </View>
             </View>
 
             <View style={s.searchRow}>
@@ -146,6 +156,7 @@ export default function ViewCollectionEntriesScreen() {
                             <Text style={[s.th, { flex: 0.7 }]}>Qty</Text>
                             <Text style={[s.th, { flex: 0.7 }]}>Fat</Text>
                             <Text style={[s.th, { flex: 0.7 }]}>Rate</Text>
+                            <Text style={[s.th, { flex: 0.7 }]}>Bonus</Text>
                             <Text style={[s.th, { flex: 0.9 }]}>Amt</Text>
                         </View>
                         {filtered.map((e) => (
@@ -155,6 +166,9 @@ export default function ViewCollectionEntriesScreen() {
                                 <Text style={[s.td, { flex: 0.7 }]}>{(e.quantity || 0).toFixed(2)}</Text>
                                 <Text style={[s.td, { flex: 0.7 }]}>{e.fat != null ? e.fat.toFixed(1) : '-'}</Text>
                                 <Text style={[s.td, { flex: 0.7 }]}>₹{(e.rate || 0).toFixed(2)}</Text>
+                                <Text style={[s.td, { flex: 0.7, color: Number((e as any).bonusAmount) > 0 ? colors.primary : colors.mutedForeground }]}>
+                                    {Number((e as any).bonusAmount) > 0 ? `₹${Number((e as any).bonusAmount).toFixed(2)}` : '-'}
+                                </Text>
                                 <Text style={[s.td, { flex: 0.9, fontWeight: '700', color: colors.primary }]}>₹{(e.amount || 0).toFixed(2)}</Text>
                             </View>
                         ))}

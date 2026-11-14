@@ -100,7 +100,17 @@ export function PurchaseSaleEntriesTable(props:any){
                                     <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.quantity}</Text></View>
                                     <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.fat || '-'}</Text></View>
                                     <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{(item as any).snf || '-'}</Text></View>
-                                    <View style={s.entryCellFlex}><Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.rate}</Text></View>
+                                    <View style={s.entryCellFlex}>
+                                        <Text style={[s.entryCellText, { textAlign: 'center' }]}>{item.rate}</Text>
+                                        {/* Bonus rate on top of milk rate (only when this entry had a bonus) */}
+                                        {Number((item as any).bonusAmount) > 0 && (
+                                            <Text style={[s.entrySubText, { textAlign: 'center', color: colors.primary }]} numberOfLines={1}>
+                                                +{(item as any).bonusType === 'percent'
+                                                    ? `${(item as any).bonusRate}%`
+                                                    : `${(item as any).bonusRate}/L`}
+                                            </Text>
+                                        )}
+                                    </View>
                                     <View style={s.entryCellAmt}><Text style={[s.entryCellText, { textAlign: 'center', color: colors.primary, fontWeight: '700' }]}>₹{item.amount.toFixed(0)}</Text></View>
                                     <Pressable
                                         style={s.deleteBtn}
