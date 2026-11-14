@@ -5,7 +5,7 @@ const cache = require('../lib/cache');
 const USER_CACHE_TTL = 30; // seconds
 const userKey = (id) => `user:${id}`;
 
-const auth = async (req, res, next) => {
+const makeAuth = (allowDeviceRegistration = false) => async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
 
@@ -52,6 +52,7 @@ const auth = async (req, res, next) => {
 
             req.user = user;
             req.userId = user._id;
+            req.authIssuedAtMs = decoded.authIssuedAtMs;
 
             // Real session enforcement: if client sends X-Device-Id and that
             // device was logged out remotely, force re-login (401).
@@ -60,7 +61,7 @@ const auth = async (req, res, next) => {
                 try {
                     const Device = require('../models/Device');
                     const dev = await Device.findOne({ user: decoded.userId, deviceId: deviceIdHeader }).select('isActive').lean();
-                    if (dev && dev.isActive === false) {
+                    if (dev && dev.isActive === false && !allowDeviceRegistration) {
                         return res.status(401).json({ success: false, message: 'This device has been logged out. Please login again.', code: 'DEVICE_LOGGED_OUT' });
                     }
                 } catch {/* non-fatal — don't block if Device lookup fails */}
@@ -88,4 +89,6 @@ const auth = async (req, res, next) => {
     }
 };
 
+const auth = makeAuth();
+auth.forDeviceRegistration = makeAuth(true);
 module.exports = auth;

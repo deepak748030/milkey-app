@@ -55,7 +55,7 @@ export async function getDeviceMeta(): Promise<{
   };
 }
 
-export async function registerCurrentDevice(): Promise<{ success: boolean; message?: string }> {
+export async function registerCurrentDevice(): Promise<{ success: boolean; message?: string; code?: string; status?: number }> {
   try {
     const token = await getAuthToken();
     if (!token) return { success: false, message: 'No token' };
@@ -70,7 +70,7 @@ export async function registerCurrentDevice(): Promise<{ success: boolean; messa
     });
     const j = await res.json().catch(() => null);
     if (j?.success) return { success: true };
-    return { success: false, message: j?.message || 'Register failed' };
+    return { success: false, message: j?.message || 'Register failed', code: j?.code, status: res.status };
   } catch (e: any) {
     return { success: false, message: e?.message || 'Network error' };
   }

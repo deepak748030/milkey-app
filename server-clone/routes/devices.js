@@ -11,10 +11,18 @@ function getClientIp(req){
 }
 
 // Register / heartbeat current device — called on app launch & login
-router.post('/register', auth, async (req, res) => {
+router.post('/register', auth.forDeviceRegistration, async (req, res) => {
   try {
     const { deviceId, deviceName, platform, pushToken, modelName, osName, osVersion, appVersion, userAgent } = req.body;
     if (!deviceId) return res.status(400).json({ success: false, message: 'deviceId required' });
+    const headerDeviceId = String(req.headers['x-device-id'] || '').trim();
+    if (!headerDeviceId || headerDeviceId !== String(deviceId)) {
+      return res.status(400).json({ success: false, message: 'Device ID mismatch' });
+    }
+    const existing = await Device.findOne({ user: req.userId, deviceId: String(deviceId).slice(0, 120) }).select('isActive lastActive').lean();
+    if (existing && !existing.isActive && (!Number.isFinite(req.authIssuedAtMs) || req.authIssuedAtMs <= new Date(existing.lastActive).getTime())) {
+      return res.status(401).json({ success: false, code: 'DEVICE_LOGGED_OUT', message: 'This device has been logged out. Please login again.' });
+    }
 
     const ip = getClientIp(req);
     const ua = userAgent || req.headers['user-agent'] || '';
@@ -34,17 +42,26 @@ router.post('/register', auth, async (req, res) => {
     };
     if (typeof pushToken === 'string' && pushToken) update.pushToken = pushToken;
 
+    const deviceQuery = { user: req.userId, deviceId: String(deviceId).slice(0, 120) };
+    // Recheck atomically: a remote logout may have happened after the read above.
+    if (existing) {
+      deviceQuery.$or = [{ isActive: true }];
+      if (Number.isFinite(req.authIssuedAtMs)) {
+        deviceQuery.$or.push({ isActive: false, lastActive: { $lt: new Date(req.authIssuedAtMs) } });
+      }
+    }
     const dev = await Device.findOneAndUpdate(
-      { user: req.userId, deviceId: String(deviceId).slice(0, 120) },
+      deviceQuery,
       { $set: update, $setOnInsert: { firstSeenAt: new Date() } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: !existing, new: true, setDefaultsOnInsert: true }
     );
+    if (!dev) return res.status(401).json({ success: false, code: 'DEVICE_LOGGED_OUT', message: 'This device has been logged out. Please login again.' });
 
     // Enforce max 3 active devices — oldest deactivates (keep most-recent 3)
     const active = await Device.find({ user: req.userId, isActive: true }).sort({ lastActive: -1 }).select('_id');
     if (active.length > 3) {
       const toDeactivate = active.slice(3).map(d => d._id);
-      await Device.updateMany({ _id: { $in: toDeactivate } }, { isActive: false });
+      await Device.updateMany({ _id: { $in: toDeactivate } }, { isActive: false, lastActive: new Date() });
     }
 
     res.json({ success: true, response: dev });
@@ -101,10 +118,10 @@ router.post('/logout-others', auth, async (req, res) => {
       const active = await Device.find({ user: req.userId, isActive: true }).sort({ lastActive: -1 });
       if (active.length <= 1) return res.json({ success: true, message: 'No other devices' });
       const keepId = active[0]._id;
-      await Device.updateMany({ user: req.userId, _id: { $ne: keepId }, isActive: true }, { isActive: false });
+      await Device.updateMany({ user: req.userId, _id: { $ne: keepId }, isActive: true }, { isActive: false, lastActive: new Date() });
       return res.json({ success: true, message: 'Other devices logged out' });
     }
-    await Device.updateMany({ user: req.userId, deviceId: { $ne: currentDeviceId } }, { isActive: false });
+    await Device.updateMany({ user: req.userId, deviceId: { $ne: currentDeviceId } }, { isActive: false, lastActive: new Date() });
     res.json({ success: true, message: 'Other devices logged out' });
   } catch (e) { res.status(500).json({ success: false, message: 'Failed' }); }
 });
