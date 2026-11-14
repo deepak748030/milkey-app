@@ -729,6 +729,12 @@ export const milkCollectionsApi = {
         bonusType?: 'perLitre' | 'percent';
         bonusRate?: number;
     }) => {
+        if (data.bonusType && Number(data.bonusRate) > 0) {
+            const capability = await apiRequest<{ bonusPersistence: boolean }>('/milk-collections/bonus-capability');
+            if (!capability.success || capability.response?.bonusPersistence !== true) {
+                return { success: false, message: 'Bonus save nahi ho sakta. Server update karke dobara try karein.' } as ApiResponse<MilkCollection>;
+            }
+        }
         return apiRequest<MilkCollection>('/milk-collections', {
             method: 'POST',
             body: JSON.stringify(data),

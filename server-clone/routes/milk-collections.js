@@ -250,6 +250,11 @@ router.get('/today', auth, async (req, res) => {
     }
 });
 
+// The app checks this before saving a bonus to avoid silent loss on older APIs.
+router.get('/bonus-capability', auth, (req, res) => {
+    res.json({ success: true, response: { bonusPersistence: true } });
+});
+
 // POST /api/milk-collections - Add new collection (subscription check optional to fix Home vs Purchase mismatch - image shows Purchase error but Home 20L)
 router.post('/', auth, async (req, res) => {
     try {
@@ -402,7 +407,14 @@ router.put('/:id', auth, async (req, res) => {
             collection.bonusRate = bonusAmount > 0 ? bonusRate : 0;
             collection.amount = parseFloat((collection.baseAmount + bonusAmount).toFixed(2));
         } else {
-            collection.amount = collection.quantity * collection.rate;
+            // Keep the entry's bonus when only quantity or rate changes.
+            const base = parseFloat((collection.quantity * collection.rate).toFixed(2));
+            if (collection.bonusType === 'percent' && collection.bonusRate > 0) {
+                collection.bonusAmount = parseFloat((base * collection.bonusRate / 100).toFixed(2));
+            } else if (collection.bonusType === 'perLitre' && collection.bonusRate > 0) {
+                collection.bonusAmount = parseFloat((collection.quantity * collection.bonusRate).toFixed(2));
+            }
+            collection.amount = parseFloat((base + (Number(collection.bonusAmount) || 0)).toFixed(2));
         }
         await collection.save();
 
