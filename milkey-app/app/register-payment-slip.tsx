@@ -279,11 +279,12 @@ export default function RegisterPaymentSlipScreen() {
         <div class="info-row"><span class="lab">Date :</span><span class="val">${dateRange}</span></div>
         <div class="info-row"><span class="lab">Address :</span><span class="val">${address ? address : 'Aligarh , Utter Predesh , India'}</span></div>
         <div class="dotted">${dots}</div>
+        ${collections.length > 0 ? `
         <div class="sec-title">: Collection Entries :</div>
         <table class="tbl">
           <thead><tr><th>Date/S</th><th>Qty</th><th>FAT</th><th>SNF</th><th>Rate</th><th>Amount</th></tr></thead>
           <tbody>
-            ${collections.length === 0 ? `<tr><td colspan="6" style="color:#999;font-weight:400;">- No entries -</td></tr>` : collections.map(c => `
+            ${collections.map(c => `
               <tr>
                 <td>${formatDateShift(c.date, (c as any).shift)}</td>
                 <td>${(c.quantity || 0).toFixed(1)}</td>
@@ -301,6 +302,7 @@ export default function RegisterPaymentSlipScreen() {
         ${slipBonus > 0 ? `<div class="tot-row"><span class="lab">Bonus Amt :</span><span class="val">${slipBonus.toFixed(2)}</span></div>` : ''}
         <div class="tot-row"><span class="lab">Total Amount :</span><span class="val">${totalAmt.toFixed(2)}</span></div>
         <div class="dotted">${dots}</div>
+        ` : ''}
         <div class="sec-title">Payment Slip :</div>
         <div class="amt-row"><span class="lab">Last Payment :</span><span class="val">${(p.previousBalance || 0).toFixed(0)}</span></div>
         <div class="amt-row"><span class="lab">Milk Amount :</span><span class="val-red">${slipPurchaseAmount.toFixed(0)} + ${slipInputAmount.toFixed(0)} = ${slipMilkAmount.toFixed(0)}</span></div>
@@ -436,38 +438,38 @@ export default function RegisterPaymentSlipScreen() {
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Date :</Text><Text style={styles.valRed}>{formatDateYY(p.periodStart || p.date)} -{formatDateYY(p.periodEnd || p.date)}</Text></View>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Address :</Text><Text style={styles.valRed}>{printSettings?.address || 'Aligarh , Utter Predesh , India'}</Text></View>
                         <View style={styles.dottedLine} />
-                        <Text style={styles.secTitle}>: Collection Entries :</Text>
-                        {/* Table header */}
-                        <View style={styles.tblHeader}>
-                            <Text style={[styles.tblTh, { flex: 1.4 }]}>Date/S</Text>
-                            <Text style={[styles.tblTh, { flex: 0.7 }]}>Qty</Text>
-                            <Text style={[styles.tblTh, { flex: 0.7 }]}>FAT</Text>
-                            <Text style={[styles.tblTh, { flex: 0.7 }]}>SNF</Text>
-                            <Text style={[styles.tblTh, { flex: 0.8 }]}>Rate</Text>
-                            <Text style={[styles.tblTh, { flex: 0.9 }]}>Amount</Text>
-                        </View>
-                        {collections.length === 0 ? (
-                            <Text style={{ textAlign: 'center', color: '#999', fontSize: 11, paddingVertical: 6 }}>- No entries -</Text>
-                        ) : collections.map((c: any) => (
-                            <View key={c._id} style={styles.tblRow}>
-                                <Text style={[styles.tblTd, { flex: 1.4 }]}>{formatDateShift(c.date, c.shift)}</Text>
-                                <Text style={[styles.tblTd, { flex: 0.7 }]}>{(c.quantity || 0).toFixed(1)}</Text>
-                                <Text style={[styles.tblTd, { flex: 0.7 }]}>{(c.fat ?? 0).toFixed(1)}</Text>
-                                <Text style={[styles.tblTd, { flex: 0.7 }]}>{(c.snf ?? 0).toFixed(1)}</Text>
-                                <Text style={[styles.tblTd, { flex: 0.8 }]}>{(c.rate || 0).toFixed(1)}</Text>
-                                <Text style={[styles.tblTd, { flex: 0.9 }]}>{(c.amount || 0).toFixed(1)}</Text>
+                        {collections.length > 0 && <>
+                            <Text style={styles.secTitle}>: Collection Entries :</Text>
+                            {/* Table header */}
+                            <View style={styles.tblHeader}>
+                                <Text style={[styles.tblTh, { flex: 1.4 }]}>Date/S</Text>
+                                <Text style={[styles.tblTh, { flex: 0.7 }]}>Qty</Text>
+                                <Text style={[styles.tblTh, { flex: 0.7 }]}>FAT</Text>
+                                <Text style={[styles.tblTh, { flex: 0.7 }]}>SNF</Text>
+                                <Text style={[styles.tblTh, { flex: 0.8 }]}>Rate</Text>
+                                <Text style={[styles.tblTh, { flex: 0.9 }]}>Amount</Text>
                             </View>
-                        ))}
-                        <View style={styles.dottedLine} />
-                        <>
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Qty :</Text><Text style={styles.valRed}>{slipQty.toFixed(2)}</Text></View>
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Average Rate :</Text><Text style={styles.valRed}>{slipAvgRate.toFixed(2)}</Text></View>
-                            {slipBonus > 0 && (
-                                <View style={styles.slipRow}><Text style={styles.labBlack}>Bonus Amt :</Text><Text style={styles.valRed}>{slipBonus.toFixed(2)}</Text></View>
-                            )}
-                            <View style={styles.slipRow}><Text style={styles.labBlack}>Total Amount :</Text><Text style={styles.valRed}>{slipAmount.toFixed(2)}</Text></View>
-                        </>
-                        <View style={styles.dottedLine} />
+                            {collections.map((c: any) => (
+                                <View key={c._id} style={styles.tblRow}>
+                                    <Text style={[styles.tblTd, { flex: 1.4 }]}>{formatDateShift(c.date, c.shift)}</Text>
+                                    <Text style={[styles.tblTd, { flex: 0.7 }]}>{(c.quantity || 0).toFixed(1)}</Text>
+                                    <Text style={[styles.tblTd, { flex: 0.7 }]}>{(c.fat ?? 0).toFixed(1)}</Text>
+                                    <Text style={[styles.tblTd, { flex: 0.7 }]}>{(c.snf ?? 0).toFixed(1)}</Text>
+                                    <Text style={[styles.tblTd, { flex: 0.8 }]}>{(c.rate || 0).toFixed(1)}</Text>
+                                    <Text style={[styles.tblTd, { flex: 0.9 }]}>{(c.amount || 0).toFixed(1)}</Text>
+                                </View>
+                            ))}
+                            <View style={styles.dottedLine} />
+                            <>
+                                <View style={styles.slipRow}><Text style={styles.labBlack}>Total Qty :</Text><Text style={styles.valRed}>{slipQty.toFixed(2)}</Text></View>
+                                <View style={styles.slipRow}><Text style={styles.labBlack}>Average Rate :</Text><Text style={styles.valRed}>{slipAvgRate.toFixed(2)}</Text></View>
+                                {slipBonus > 0 && (
+                                    <View style={styles.slipRow}><Text style={styles.labBlack}>Bonus Amt :</Text><Text style={styles.valRed}>{slipBonus.toFixed(2)}</Text></View>
+                                )}
+                                <View style={styles.slipRow}><Text style={styles.labBlack}>Total Amount :</Text><Text style={styles.valRed}>{slipAmount.toFixed(2)}</Text></View>
+                            </>
+                            <View style={styles.dottedLine} />
+                        </>}
                         <Text style={styles.secTitle}>Payment Slip :</Text>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Last Payment :</Text><Text style={styles.valBlack}>{(p.previousBalance || 0).toFixed(0)}</Text></View>
                         <View style={styles.slipRow}><Text style={[styles.labBlack, { color: '#d32f2f' }]}>Milk Amount :</Text><Text style={styles.valRed}>{slipPurchaseAmount.toFixed(0)} + {slipInputAmount.toFixed(0)} = {slipMilkAmount.toFixed(0)}</Text></View>
