@@ -68,8 +68,14 @@ export const setAuthUser = async (token: string, user: AuthUser): Promise<void> 
         ]);
         // Register the freshly authenticated device before screens issue data requests.
         // A logged-out device is otherwise rejected by the server until reactivated.
-        const { registerCurrentDevice } = await import('./device');
-        const device = await registerCurrentDevice();
+        const { registerCurrentDevice, renewDeviceIdAfterLogin } = await import('./device');
+        let device = await registerCurrentDevice();
+        // Older servers cannot reactivate an inactive device, even after a valid
+        // OTP/Google login. Start a new device session only in that case.
+        if (!device.success && device.code === 'DEVICE_LOGGED_OUT') {
+            await renewDeviceIdAfterLogin();
+            device = await registerCurrentDevice();
+        }
         if (!device.success && device.status !== 404) {
             await Promise.all([AsyncStorage.removeItem(TOKEN_KEY), AsyncStorage.removeItem(USER_KEY)]);
             throw new Error(device.message || 'Device registration failed. Please try again.');
