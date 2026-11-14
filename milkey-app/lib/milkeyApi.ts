@@ -324,13 +324,10 @@ export interface ReferralData {
     }>;
 }
 
-// Cached device id to avoid hitting AsyncStorage on every API call
-let cachedDeviceId: string | null = null;
+// Read the current session id, including one renewed after a fresh login.
 async function getCachedDeviceId(): Promise<string | null> {
-    if (cachedDeviceId) return cachedDeviceId;
     try {
-        const v = await AsyncStorage.getItem('milkey_device_id');
-        if (v) { cachedDeviceId = v; return v; }
+        return await AsyncStorage.getItem('milkey_device_id');
     } catch {}
     return null;
 }

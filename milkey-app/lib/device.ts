@@ -11,14 +11,26 @@ function sanitize(s: string): string {
   return String(s || '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
 }
 
+function newDeviceId(): string {
+  const nativePart = sanitize(`${Platform.OS}-${Device.modelName || 'unknown'}-${Device.osVersion || '0'}`);
+  const rand = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+  return `${nativePart}-${rand}`.slice(0, 96);
+}
+
+// Only used immediately after a successful fresh login if the server cannot
+// reactivate the old logged-out device. Never rotate on ordinary 401 responses.
+export async function renewDeviceIdAfterLogin(): Promise<void> {
+  const previous = await AsyncStorage.getItem(STORAGE_KEY);
+  let next = newDeviceId();
+  if (next === previous) next = `${next.slice(0, 94)}-1`;
+  await AsyncStorage.setItem(STORAGE_KEY, next);
+}
+
 export async function getStableDeviceId(): Promise<string> {
   try {
     const existing = await AsyncStorage.getItem(STORAGE_KEY);
     if (existing) return existing;
-    // Generate deterministic + random fallback
-    const nativePart = sanitize(`${Platform.OS}-${Device.modelName || 'unknown'}-${Device.osVersion || '0'}`);
-    const rand = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
-    const id = `${nativePart}-${rand}`.slice(0, 96);
+    const id = newDeviceId();
     await AsyncStorage.setItem(STORAGE_KEY, id);
     return id;
   } catch {
