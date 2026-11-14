@@ -587,6 +587,14 @@ export default function PurchaseScreen() {
         payload += `[L]${t.date} : ${dStr}[R]${t.shift} : ${entry.shift === 'morning' ? t.morningShort : t.eveningShort}\n`;
         payload += `[L]${t.fat} : ${(entry.fat || 0).toFixed(1)}[R]${t.snf} : ${((entry as any).snf || 0).toFixed(1)}\n`;
         payload += `[L]${t.qty} : ${Number(entry.quantity).toFixed(2)}[R]${t.rate} : ${Number(entry.rate).toFixed(1)}\n`;
+        // Bonus lines only when this entry actually carries a bonus
+        const entryBonus = Number((entry as any).bonusAmount) || 0;
+        if (entryBonus > 0) {
+            const eType = (entry as any).bonusType;
+            const eRate = Number((entry as any).bonusRate) || 0;
+            const rateLabel = eType === 'percent' ? `${eRate}%` : `${eRate}`;
+            payload += `[L]Bonus : ${rateLabel}[R]+${entryBonus.toFixed(2)}\n`;
+        }
         payload += `[L]${t.amount} : ${Number(entry.amount).toFixed(2)}\n`;
         payload += receiptFooter(resetLineSpacing());
         return payload;
@@ -643,6 +651,9 @@ export default function PurchaseScreen() {
                         snf,
                         rate,
                         amount,
+                        bonusAmount,
+                        bonusType: bonusAmount > 0 ? bonusType : '',
+                        bonusRate: bonusAmount > 0 ? bonusRate : 0,
                     } as any);
                     printText(slipPayload).catch(() => { });
                 }
@@ -859,6 +870,13 @@ export default function PurchaseScreen() {
             }
             return t.padEnd(w, ' ');
         };
+        // Bonus-aware row: when the entry has a bonus, a compact line is printed
+        // right after the row so the bonus is visible on the thermal slip.
+        const bonusLine = (bonusAmount: number, bonusTypeStr: string, bonusRateNum: number) => {
+            if (!(bonusAmount > 0)) return '';
+            const lbl = bonusTypeStr === 'percent' ? `${bonusRateNum}%` : `${bonusRateNum}/L`;
+            return `[L]<b>Bonus ${lbl} : +${bonusAmount.toFixed(2)}</b>\n`;
+        };
         const tableRowReport = (c1: string, qty: string, fat: string, snf: string, rate: string, amt: string, bold = false) => {
             const row = `${fit(c1, 7, 'C')} ${fit(qty, 4, 'R')} ${fit(fat, 3, 'R')} ${fit(snf, 3, 'R')} ${fit(rate, 4, 'R')} ${fit(amt, 4, 'R')}`;
             return `[L]${bold ? `<b>${row}</b>` : row}\n`;
@@ -912,6 +930,7 @@ export default function PurchaseScreen() {
             } else {
                 payload += tableRowPurchase(code, time, qty, fat, snf, rate, amt);
             }
+            payload += bonusLine(Number((c as any).bonusAmount) || 0, String((c as any).bonusType || ''), Number((c as any).bonusRate) || 0);
         }
 
         payload += fmtLine();
@@ -926,6 +945,8 @@ export default function PurchaseScreen() {
         // 'Farmers' line intentionally removed per user request.
         payload += twoCol(`${tFull.totalQty} :`, `${totals.quantity.toFixed(2)} L`);
         payload += twoCol(`${tFull.avgRate} :`, avgRate);
+        const totalBonusFull = data.reduce((s, c) => s + (Number((c as any).bonusAmount) || 0), 0);
+        if (totalBonusFull > 0) payload += twoCol(`Bonus :`, `Rs ${totalBonusFull.toFixed(2)}`);
         payload += twoCol(`${tFull.totalAmount} :`, `Rs ${totals.amount.toFixed(2)}`);
         payload += receiptFooter();
 
@@ -981,6 +1002,8 @@ export default function PurchaseScreen() {
         payload += twoCol(`${tShort.averageFatSnf} :`, `${avgFat} / ${avgSnf}`);
         payload += twoCol(`${tShort.averageRate} :`, avgRate);
         payload += twoCol(`${tShort.totalQty} :`, `${totals.quantity.toFixed(2)} L`);
+        const totalBonusShort = data.reduce((s, c) => s + (Number((c as any).bonusAmount) || 0), 0);
+        if (totalBonusShort > 0) payload += twoCol(`Bonus :`, totalBonusShort.toFixed(2));
         payload += twoCol(`${tShort.totalAmount} :`, isReport ? totals.amount.toFixed(2) : `Rs ${totals.amount.toFixed(2)}`);
         if (!isReport) payload += twoCol(`${tShort.farmers} :`, String(uniqueFarmers));
         payload += receiptFooter();
