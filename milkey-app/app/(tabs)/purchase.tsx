@@ -6,7 +6,7 @@ import { TextInput } from '@/components/ui/HapticTextInput';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useFocusEffect, router } from 'expo-router';
+import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
 import {
     Plus, Edit2, Trash2, Calendar as CalendarIcon, Search, X,
     ChevronDown, FileText, User, Sun, Moon,
@@ -186,6 +186,50 @@ export default function PurchaseScreen() {
     const [editingEntry, setEditingEntry] = useState<MilkCollection | null>(null);
     // Suppresses the auto rate/fat/snf fill while an edit is restoring saved values.
     const suppressAutoFillRef = useRef(false);
+
+    // Deep-link from View Entries → 3-dot → Edit. Loads the entry, its farmer and
+    // restores the saved values into the normal entry form (same flow as row Edit).
+    const routeParams = useLocalSearchParams<{ editEntryId?: string }>();
+    const handledEditParamRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        const editId = routeParams?.editEntryId ? String(routeParams.editEntryId) : '';
+        if (!editId || handledEditParamRef.current === editId) return;
+        handledEditParamRef.current = editId;
+        (async () => {
+            try {
+                const res = await milkCollectionsApi.getById(editId);
+                if (!res.success || !res.response) { showAlert('Error', 'Entry not found'); return; }
+                const e = res.response;
+                let farmer: PurchaseFarmer | undefined =
+                    customers.find(c => c.code === (e.farmerCode || e.purchaseFarmer?.code))
+                    || customers.find(c => c._id === (e.purchaseFarmer as any)?._id);
+                if (!farmer && (e.farmerCode || e.purchaseFarmer?.code)) {
+                    try {
+                        const byCode = await purchaseFarmersApi.getByCode(e.farmerCode || (e.purchaseFarmer as any)?.code);
+                        if (byCode.success && byCode.response) farmer = byCode.response as PurchaseFarmer;
+                    } catch { }
+                }
+                if (!farmer) { showAlert('Error', `Farmer ${e.farmerCode || ''} not found — entry not changed`); return; }
+                suppressAutoFillRef.current = true;
+                setTimeout(() => { suppressAutoFillRef.current = false; }, 400);
+                setSelectedCustomer(farmer);
+                setShowInlineSearch(false);
+                setEditingEntry(e);
+                setEntryDate(new Date(e.date));
+                setEntryShift(e.shift);
+                setMilkType(((e as any).milkType as any) || 'buffalo');
+                setMilkQty(e.quantity != null ? String(e.quantity) : '');
+                setFatValue((e as any).fat ? String((e as any).fat) : '');
+                setSnfValue((e as any).snf ? String((e as any).snf) : '');
+                setRateValue(e.rate != null ? String(e.rate) : '');
+                setIsZero(false);
+                setActiveTab('Purchase' as any);
+            } catch {
+                showAlert('Error', 'Could not load entry');
+            }
+        })();
+    }, [routeParams?.editEntryId]);
 
     const showAlert = useCallback((t: string, m: string) => { setAlertTitle(t); setAlertMessage(m); setAlertVisible(true); }, []);
     const showConfirm = useCallback((t: string, m: string, onConfirm: () => void) => { setConfirmData({ title: t, message: m, onConfirm }); setConfirmVisible(true); }, []);

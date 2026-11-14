@@ -742,6 +742,10 @@ export const milkCollectionsApi = {
         });
     },
 
+    getById: async (id: string) => {
+        return apiRequest<MilkCollection>(`/milk-collections/${id}`);
+    },
+
     delete: async (id: string) => {
         return apiRequest<void>(`/milk-collections/${id}`, {
             method: 'DELETE',

@@ -344,6 +344,25 @@ router.post('/', auth, async (req, res) => {
     }
 });
 
+// GET /api/milk-collections/:id - single entry (used by the Edit action)
+// NOTE: declared after '/today' so that path keeps matching first.
+router.get('/:id', auth, async (req, res) => {
+    try {
+        if (!/^[a-f\d]{24}$/i.test(String(req.params.id))) {
+            return res.status(400).json({ success: false, message: 'Invalid entry id' });
+        }
+        const collection = await MilkCollection.findOne({ _id: req.params.id, owner: req.userId })
+            .populate('purchaseFarmer', 'code name mobile')
+            .lean();
+        if (!collection) {
+            return res.status(404).json({ success: false, message: 'Collection not found' });
+        }
+        res.json({ success: true, response: collection });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to fetch collection' });
+    }
+});
+
 // PUT /api/milk-collections/:id (requires purchase subscription)
 router.put('/:id', auth, async (req, res) => {
     try {
