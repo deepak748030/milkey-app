@@ -77,7 +77,7 @@ export function PurchaseCollectionTab(props:any){
                         <Text style={[s.summaryVal, { color: colors.primary }]}>
                             ₹{Number(todayRate || 0).toFixed(2)}
                         </Text>
-                        <Text style={s.summaryLbl}>Today Rate</Text>
+                        <Text style={s.summaryLbl}>Rate Chart</Text>
                     </View>
                 </View>
             </View>

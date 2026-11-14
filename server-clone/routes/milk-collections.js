@@ -145,14 +145,16 @@ router.get('/', auth, async (req, res) => {
             .skip((parsedPage - 1) * parsedLimit)
             .lean();
 
-        // Calculate totals
+        // Calculate totals (single source for every report/screen, incl. bonus split)
         const totals = await MilkCollection.aggregate([
             { $match: query },
             {
                 $group: {
                     _id: null,
                     totalQuantity: { $sum: '$quantity' },
-                    totalAmount: { $sum: '$amount' }
+                    totalAmount: { $sum: '$amount' },
+                    totalBonus: { $sum: { $ifNull: ['$bonusAmount', 0] } },
+                    totalBase: { $sum: { $ifNull: ['$baseAmount', 0] } }
                 }
             }
         ]);
@@ -166,7 +168,10 @@ router.get('/', auth, async (req, res) => {
                 count: total,
                 totals: {
                     quantity: totals[0]?.totalQuantity || 0,
-                    amount: totals[0]?.totalAmount || 0
+                    amount: totals[0]?.totalAmount || 0,
+                    // Bonus split (0 when the entry had no bonus)
+                    bonusAmount: totals[0]?.totalBonus || 0,
+                    baseAmount: totals[0]?.totalBase || 0
                 },
                 pagination: {
                     page: parsedPage,
@@ -336,6 +341,25 @@ router.post('/', auth, async (req, res) => {
             success: false,
             message: 'Failed to record milk collection'
         });
+    }
+});
+
+// GET /api/milk-collections/:id - single entry (used by the Edit action)
+// NOTE: declared after '/today' so that path keeps matching first.
+router.get('/:id', auth, async (req, res) => {
+    try {
+        if (!/^[a-f\d]{24}$/i.test(String(req.params.id))) {
+            return res.status(400).json({ success: false, message: 'Invalid entry id' });
+        }
+        const collection = await MilkCollection.findOne({ _id: req.params.id, owner: req.userId })
+            .populate('purchaseFarmer', 'code name mobile')
+            .lean();
+        if (!collection) {
+            return res.status(404).json({ success: false, message: 'Collection not found' });
+        }
+        res.json({ success: true, response: collection });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to fetch collection' });
     }
 });
 

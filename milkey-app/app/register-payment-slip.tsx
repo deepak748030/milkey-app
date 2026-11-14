@@ -191,6 +191,8 @@ export default function RegisterPaymentSlipScreen() {
     const slipQty = periodTotals ? periodTotals.quantity : rowsQty;
     const slipAmount = periodTotals ? periodTotals.amount : rowsAmount;
     const slipAvgRate = slipQty > 0 ? slipAmount / slipQty : 0;
+    // Bonus already included in the entry amounts — kept visible as a split line
+    const slipBonus = collections.reduce((s, c) => s + (Number((c as any).bonusAmount) || 0), 0);
 
     // Milk Amount is the same equation the Payment screen shows:
     //    <collection amount of the dates>  +  <amount typed by the user>  =  <total>
@@ -297,6 +299,7 @@ export default function RegisterPaymentSlipScreen() {
         <div class="tot-row"><span class="lab">Total Qty :</span><span class="val">${totalQty.toFixed(2)}</span></div>
         <div class="tot-row"><span class="lab">Average Rate :</span><span class="val">${avgRate.toFixed(2)}</span></div>
         <div class="tot-row"><span class="lab">Total Amount :</span><span class="val">${totalAmt.toFixed(2)}</span></div>
+        ${slipBonus > 0 ? `<div class="tot-row"><span class="lab">Incl. Bonus :</span><span class="val">${slipBonus.toFixed(2)}</span></div>` : ''}
         <div class="dotted">${dots}</div>
         <div class="sec-title">Payment Slip :</div>
         <div class="amt-row"><span class="lab">Last Payment :</span><span class="val">${(p.previousBalance || 0).toFixed(0)}</span></div>
@@ -460,6 +463,9 @@ export default function RegisterPaymentSlipScreen() {
                             <View style={styles.slipRow}><Text style={styles.labBlack}>Total Qty :</Text><Text style={styles.valRed}>{slipQty.toFixed(2)}</Text></View>
                             <View style={styles.slipRow}><Text style={styles.labBlack}>Average Rate :</Text><Text style={styles.valRed}>{slipAvgRate.toFixed(2)}</Text></View>
                             <View style={styles.slipRow}><Text style={styles.labBlack}>Total Amount :</Text><Text style={styles.valRed}>{slipAmount.toFixed(2)}</Text></View>
+                            {slipBonus > 0 && (
+                                <View style={styles.slipRow}><Text style={styles.labBlack}>Incl. Bonus :</Text><Text style={styles.valRed}>{slipBonus.toFixed(2)}</Text></View>
+                            )}
                         </>
                         <View style={styles.dottedLine} />
                         <Text style={styles.secTitle}>Payment Slip :</Text>

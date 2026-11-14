@@ -150,7 +150,7 @@ export default function RegisterScreen() {
     // Strict totals for the CURRENT Calculation Period only (timezone-aware, unpaid rows).
     // Server summary totals are UTC-day based, which leaked rows from the day after the
     // period end into the milk amount — these totals are the source of truth for display.
-    const [periodMilk, setPeriodMilk] = useState<{ quantity: number; amount: number; count: number } | null>(null);
+    const [periodMilk, setPeriodMilk] = useState<{ quantity: number; amount: number; count: number; bonus?: number } | null>(null);
     // Guards the auto-refresh effect from re-fetching the same farmer+period twice
     // (search already fetched it once).
     const periodKeyRef = useRef('');
@@ -685,6 +685,7 @@ export default function RegisterScreen() {
                     quantity: Number(res.response.totals.quantity) || 0,
                     amount: Number(res.response.totals.amount) || 0,
                     count: Number(res.response.count) || 0,
+                    bonus: Number((res.response.totals as any).bonusAmount) || 0,
                 };
                 setPeriodMilk(totals);
                 return totals;
@@ -1388,6 +1389,12 @@ export default function RegisterScreen() {
     // Calculate milk amount equation: purchase amount (hardcoded) + input = total
     // Amounts below are strictly for the selected Calculation Period (periodMilk wins).
     const purchaseAmount = paymentFarmer ? (periodMilk ? periodMilk.amount : paymentFarmer.milk.totalAmount) : 0;
+    // Bonus already included inside purchaseAmount (Rate Setting > Bonus ON entries)
+    const periodBonus = paymentFarmer
+        ? (periodMilk && typeof periodMilk.bonus === 'number'
+            ? periodMilk.bonus
+            : ((paymentFarmer.milk as any)?.totalBonus || 0))
+        : 0;
     const periodQuantity = paymentFarmer ? (periodMilk ? periodMilk.quantity : paymentFarmer.milk.totalQuantity) : 0;
     const milkExtra = parseFloat(milkAmount) || 0;
     const currentMilkAmount = purchaseAmount + milkExtra;
@@ -1486,6 +1493,11 @@ export default function RegisterScreen() {
                             <Text style={styles.summaryLabel}>Milk Amount:</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                                 <Text style={[styles.summaryValue, { fontWeight: '700', color: colors.foreground }]}>{purchaseAmount.toFixed(0)}</Text>
+                                {periodBonus > 0 && (
+                                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
+                                        (incl. bonus ₹{periodBonus.toFixed(0)})
+                                    </Text>
+                                )}
                                 <Text style={{ fontSize: 14, fontWeight: '600', color: colors.mutedForeground }}>+</Text>
                                 <TextInput
                                     style={[styles.milkAmountInput, { minWidth: 55, width: 72, textAlign: 'center', paddingVertical: 6 }]}

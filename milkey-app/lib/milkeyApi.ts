@@ -171,7 +171,7 @@ export interface AdvanceItem {
 
 export interface FarmerPaymentSummary {
     farmer: { id: string; code: string; name: string; mobile: string; currentBalance?: number };
-    milk: { totalQuantity: number; totalAmount: number; collections: number; periodStart: string; periodEnd: string };
+    milk: { totalQuantity: number; totalAmount: number; totalBonus?: number; totalBase?: number; collections: number; periodStart: string; periodEnd: string };
     advances: { totalPending: number; count: number; items?: AdvanceItem[] };
     netPayable: number;
     closingBalance: number;
@@ -705,7 +705,7 @@ export const milkCollectionsApi = {
         if (params?.tzOffsetMinutes !== undefined) queryParams.append('tzOffsetMinutes', String(params.tzOffsetMinutes));
         const query = queryParams.toString();
 
-        return apiRequest<{ data: MilkCollection[]; count: number; totals: { quantity: number; amount: number } }>(
+        return apiRequest<{ data: MilkCollection[]; count: number; totals: { quantity: number; amount: number; baseAmount?: number; bonusAmount?: number } }>(
             `/milk-collections${query ? `?${query}` : ''}`
         );
     },
@@ -740,6 +740,10 @@ export const milkCollectionsApi = {
             method: 'PUT',
             body: JSON.stringify(data),
         });
+    },
+
+    getById: async (id: string) => {
+        return apiRequest<MilkCollection>(`/milk-collections/${id}`);
     },
 
     delete: async (id: string) => {
