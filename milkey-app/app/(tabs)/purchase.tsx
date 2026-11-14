@@ -1213,7 +1213,7 @@ export default function PurchaseScreen() {
                             <Text style={{ color: '#fff', fontWeight: '700' }}>Open Milk Rate Settings</Text>
                         </Pressable>
                         <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12 }}>
-                            <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Today Rate:</Text>
+                            <Text style={{ fontSize: 11, color: colors.mutedForeground }}>Rate Chart:</Text>
                             <Text style={{ fontSize: 11, fontWeight: '800', color: colors.primary }}>₹{Number(todayRate || 0).toFixed(2)}</Text>
                         </View>
                     </View>
