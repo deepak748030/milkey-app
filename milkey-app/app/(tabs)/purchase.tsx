@@ -1358,14 +1358,32 @@ export default function PurchaseScreen() {
                         <Text style={[s.modalTitle, { textAlign: 'center', marginVertical: 10 }]}>Actions</Text>
                         {[
                             {
-                                icon: <Printer size={18} color={colors.primary} />, label: 'Print', onPress: () => {
+                                icon: <Printer size={18} color={colors.primary} />, label: 'Print', onPress: async () => {
                                     if (!actionMenuEntry) return;
                                     const e = actionMenuEntry;
                                     setActionMenuEntry(null);
-                                    const payload = buildMilkSlipPayload(e);
-                                    printText(payload)
-                                        .then(ok => { if (!ok) showAlert('Print failed', 'Could not print. Open the printer scanner from the top bar and reconnect.'); })
-                                        .catch(() => showAlert('Error', 'Print failed'));
+                                    try {
+                                        let entry = e;
+                                        if (!e.purchaseFarmer?.name && e.farmerCode) {
+                                            // Older collection rows may have only a farmer code, without a
+                                            // populated purchaseFarmer. Resolve the name before printing.
+                                            const code = String(e.farmerCode).trim().toUpperCase();
+                                            let farmer = customers.find(c => String(c.code).trim().toUpperCase() === code && c.name);
+                                            if (!farmer) {
+                                                const result = await purchaseFarmersApi.getByCode(e.farmerCode);
+                                                if (result.success && result.response?.name) farmer = result.response;
+                                            }
+                                            if (!farmer) {
+                                                const result = await purchaseFarmersApi.getAll({ search: e.farmerCode, includeInactive: true, limit: 100 });
+                                                if (result.success) farmer = result.response?.data?.find(c => String(c.code).trim().toUpperCase() === code && c.name);
+                                            }
+                                            if (farmer) entry = { ...e, purchaseFarmer: farmer };
+                                        }
+                                        const ok = await printText(buildMilkSlipPayload(entry));
+                                        if (!ok) showAlert('Print failed', 'Could not print. Open the printer scanner from the top bar and reconnect.');
+                                    } catch {
+                                        showAlert('Error', 'Print failed');
+                                    }
                                 }
                             },
                             {

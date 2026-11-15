@@ -386,6 +386,22 @@ export default function RegisterPaymentSlipScreen() {
         showToast(printerError || 'Print failed');
     };
 
+    // Manual print remains available without a connected Bluetooth printer via
+    // the platform print dialog (including its Save as PDF option).
+    const handleManualPrint = async () => {
+        if (!payment) return;
+        if (isPrinterConnected) {
+            await handlePrint();
+            return;
+        }
+        try {
+            await Print.printAsync({ html: generateHtml() });
+        } catch (error) {
+            console.error('Payment slip print error:', error);
+            showToast('Unable to open print dialog');
+        }
+    };
+
     useEffect(() => {
         if (loading || !payment || !printSettings || autoPrint !== '1' || autoPrintDoneRef.current) return;
         autoPrintDoneRef.current = true;
@@ -408,7 +424,7 @@ export default function RegisterPaymentSlipScreen() {
                     <Pressable onPress={handleDownloadPdf} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
                         {downloading ? <ActivityIndicator size="small" color={colors.primary} /> : <Download size={18} color={colors.primary} />}
                     </Pressable>
-                    <Pressable onPress={handlePrint} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
+                    <Pressable onPress={handleManualPrint} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
                         <Printer size={18} color={colors.primary} />
                     </Pressable>
                     <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).farmer?.code||'',name:(p as any).farmer?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, slipMilkAmount, slipAdvance, slipTotalPayable, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).farmer?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
@@ -491,7 +507,7 @@ export default function RegisterPaymentSlipScreen() {
                                 </>
                             )}
                         </Pressable>
-                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.foreground }]} onPress={handlePrint}>
+                        <Pressable style={[styles.actionBtn, { backgroundColor: colors.foreground }]} onPress={handleManualPrint}>
                             <Printer size={18} color={colors.background} />
                             <Text style={[styles.actionBtnText, { color: colors.background }]}>Print</Text>
                         </Pressable>

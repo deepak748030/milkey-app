@@ -248,34 +248,38 @@ export default function ViewCollectionEntriesScreen() {
                     contentContainerStyle={{ padding: 12, paddingBottom: 24 }}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 >
-                    <View style={s.table}>
-                        <View style={s.tableHeader}>
-                            <Text style={[s.th, { flex: 1 }]}>Date</Text>
-                            <Text style={[s.th, { flex: 0.6 }]}>Shift</Text>
-                            <Text style={[s.th, { flex: 0.7 }]}>Qty</Text>
-                            <Text style={[s.th, { flex: 0.7 }]}>Fat</Text>
-                            <Text style={[s.th, { flex: 0.7 }]}>Rate</Text>
-                            <Text style={[s.th, { flex: 0.7 }]}>Bonus</Text>
-                            <Text style={[s.th, { flex: 0.9 }]}>Amt</Text>
-                            <View style={{ width: 24 }} />
-                        </View>
-                        {filtered.map((e) => (
-                            <View key={e._id} style={s.tr}>
-                                <Text style={[s.td, { flex: 1 }]}>{formatDate(e.date)}</Text>
-                                <Text style={[s.td, { flex: 0.6, textTransform: 'capitalize' }]}>{e.shift || '-'}</Text>
-                                <Text style={[s.td, { flex: 0.7 }]}>{(e.quantity || 0).toFixed(2)}</Text>
-                                <Text style={[s.td, { flex: 0.7 }]}>{e.fat != null ? e.fat.toFixed(1) : '-'}</Text>
-                                <Text style={[s.td, { flex: 0.7 }]}>₹{(e.rate || 0).toFixed(2)}</Text>
-                                <Text style={[s.td, { flex: 0.7, color: Number((e as any).bonusAmount) > 0 ? colors.primary : colors.mutedForeground }]}>
-                                    {Number((e as any).bonusAmount) > 0 ? `₹${Number((e as any).bonusAmount).toFixed(2)}` : '-'}
-                                </Text>
-                                <Text style={[s.td, { flex: 0.9, fontWeight: '700', color: colors.primary }]}>₹{(e.amount || 0).toFixed(2)}</Text>
-                                <Pressable style={{ width: 24, alignItems: 'center', justifyContent: 'center' }} hitSlop={8} onPress={() => setActionEntry(e)}>
-                                    <MoreVertical size={14} color={colors.mutedForeground} />
-                                </Pressable>
+                    <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ flexGrow: 1 }}>
+                        <View style={s.table}>
+                            <View style={s.tableHeader}>
+                                <Text style={[s.th, { flex: 1 }]}>Date</Text>
+                                <Text style={[s.th, { flex: 0.6 }]}>Shift</Text>
+                                <Text style={[s.th, { flex: 0.7 }]}>Qty</Text>
+                                <Text style={[s.th, { flex: 0.7 }]}>Fat</Text>
+                                <Text style={[s.th, { flex: 0.7 }]}>SNF</Text>
+                                <Text style={[s.th, { flex: 0.7 }]}>Rate</Text>
+                                <Text style={[s.th, { flex: 0.7 }]}>Bonus</Text>
+                                <Text style={[s.th, { flex: 0.9 }]}>Amt</Text>
+                                <View style={{ width: 24 }} />
                             </View>
-                        ))}
-                    </View>
+                            {filtered.map((e) => (
+                                <View key={e._id} style={s.tr}>
+                                    <Text style={[s.td, { flex: 1 }]}>{formatDate(e.date)}</Text>
+                                    <Text style={[s.td, { flex: 0.6, textTransform: 'capitalize' }]}>{e.shift || '-'}</Text>
+                                    <Text style={[s.td, { flex: 0.7 }]}>{(e.quantity || 0).toFixed(2)}</Text>
+                                    <Text style={[s.td, { flex: 0.7 }]}>{e.fat != null ? e.fat.toFixed(1) : '-'}</Text>
+                                    <Text style={[s.td, { flex: 0.7 }]}>{e.snf != null ? e.snf.toFixed(1) : '-'}</Text>
+                                    <Text style={[s.td, { flex: 0.7 }]}>₹{(e.rate || 0).toFixed(2)}</Text>
+                                    <Text style={[s.td, { flex: 0.7, color: Number((e as any).bonusAmount) > 0 ? colors.primary : colors.mutedForeground }]}>
+                                        {Number((e as any).bonusAmount) > 0 ? `₹${Number((e as any).bonusAmount).toFixed(2)}` : '-'}
+                                    </Text>
+                                    <Text style={[s.td, { flex: 0.9, fontWeight: '700', color: colors.primary }]}>₹{(e.amount || 0).toFixed(2)}</Text>
+                                    <Pressable style={{ width: 24, alignItems: 'center', justifyContent: 'center' }} hitSlop={8} onPress={() => setActionEntry(e)}>
+                                        <MoreVertical size={14} color={colors.mutedForeground} />
+                                    </Pressable>
+                                </View>
+                            ))}
+                        </View>
+                    </ScrollView>
                 </ScrollView>
             )}
             {/* Row actions — same options as the Collection screen's 3-dot menu */}
@@ -388,7 +392,7 @@ const styles = (colors: any) => StyleSheet.create({
     searchInput: { flex: 1, fontSize: 13, color: colors.foreground, padding: 0 },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 },
     muted: { fontSize: 13, color: colors.mutedForeground },
-    table: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, overflow: 'hidden' },
+    table: { flexGrow: 1, minWidth: 550, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, overflow: 'hidden' },
     tableHeader: { flexDirection: 'row', backgroundColor: colors.primary, paddingVertical: 8, paddingHorizontal: 6 },
     th: { fontSize: 11, fontWeight: '700', color: '#fff', textAlign: 'center' },
     tr: { flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 6, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },

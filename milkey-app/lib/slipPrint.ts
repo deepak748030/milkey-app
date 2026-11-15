@@ -90,14 +90,14 @@ export function buildJointCollectionPaymentSlipPayload(
     if (addr) payload += fmtLeft(`Address :  ${addr}`);
     payload += fmtLine();
     // Collection Entries header
-    payload += center(`: ${t.milkEntries || 'Collection Entries'} :`, { bold: true });
+    payload += fmtCenter(`: ${t.milkEntries || 'Collection Entries'} :`, { bold: true });
     payload += fmtLine();
     // Table header
-    payload += left(`Date/S   Qty  FAT  SNF  Rate Amount`);
+    payload += fmtLeft(`Date/S   Qty  FAT  SNF  Rate Amount`);
     payload += fmtLine();
     // Rows
     if (collections.length === 0) {
-        payload += center('- No entries -');
+        payload += fmtCenter('- No entries -');
     } else {
         for (const c of collections) {
             const dateS = formatDateShortDMShift(c.date, c.shift);
@@ -108,7 +108,7 @@ export function buildJointCollectionPaymentSlipPayload(
             const amt = (c.amount ?? 0).toFixed(1);
             // compact columns to fit 32 chars: DateS(7) Qty(4) FAT(4) SNF(4) Rate(5) Amt(5)
             const lineTxt = `${dateS.padEnd(7)} ${qty.padStart(3)} ${fat.padStart(3)} ${snf.padStart(3)} ${rate.padStart(4)} ${amt.padStart(4)}`;
-            payload += left(lineTxt);
+            payload += fmtLeft(lineTxt);
         }
     }
     payload += fmtLine();
@@ -125,7 +125,7 @@ export function buildJointCollectionPaymentSlipPayload(
     payload += twoCol(`${t.totalAmount} :`, displayAmt.toFixed(2));
     payload += fmtLine();
     // Payment Slip section
-    payload += center(`${t.paymentSlip} :`, { bold: true });
+    payload += fmtCenter(`${t.paymentSlip} :`, { bold: true });
     payload += twoCol(`${t.lastPayment} :`, (p.previousBalance || 0).toFixed(0));
     // Milk Amount = the same equation the Payment screen shows:
     //   <collection amount of the dates> + <amount typed by the user> = <total>
