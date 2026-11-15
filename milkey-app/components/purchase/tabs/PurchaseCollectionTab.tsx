@@ -2,12 +2,12 @@ import React from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { TextInput } from '@/components/ui/HapticTextInput';
-import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Droplets, Sun, Moon, TableIcon, Ban, Printer, Check } from 'lucide-react-native';
+import { Calendar as CalendarIcon, ChevronDown, Edit2, Search, X, Milk, Droplets, Sun, Moon, TableIcon, Ban, Printer, Check } from 'lucide-react-native';
 
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseCollectionTab(props:any){
   const ctx = (props as any).ctx || props;
-  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, computeBaseAmount, computeBonusAmount, fatRateLocked, fixRateLocked, bonusEnabled, bonusType, bonusApplied, setBonusApplied, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, isDark } = ctx;
+  const { s, colors, t, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer: _setSelCust, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, computeBaseAmount, computeBonusAmount, fatRateLocked, fixRateLocked, bonusEnabled, bonusType, bonusApplied, setBonusApplied, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, showCow, showBuffalo, isDark } = ctx;
   const setSelectedCustomer = _setSelCust ?? (() => {});
   const effectiveBasis: any = (selectedCustomer as any)?.priceBasis || 'rate';
   return (
@@ -131,6 +131,18 @@ export function PurchaseCollectionTab(props:any){
                     </Pressable>
                 )}
 
+                {selectedCustomer && effectiveBasis !== 'fat_snf' && showCow && (
+                    <Pressable onPress={() => setMilkType('cow')} style={[s.milkToggleBtn, milkType === 'cow' && s.milkToggleBtnActive]}>
+                        <Milk size={14} color={milkType === 'cow' ? '#fff' : colors.foreground} />
+                        <Text style={[s.milkToggleBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
+                    </Pressable>
+                )}
+                {selectedCustomer && effectiveBasis !== 'fat_snf' && showBuffalo && (
+                    <Pressable onPress={() => setMilkType('buffalo')} style={[s.milkToggleBtn, milkType === 'buffalo' && s.milkToggleBtnActive]}>
+                        <Milk size={14} color={milkType === 'buffalo' ? '#fff' : colors.foreground} />
+                        <Text style={[s.milkToggleBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
+                    </Pressable>
+                )}
             </View>
 
             {/* Inline search results dropdown */}
