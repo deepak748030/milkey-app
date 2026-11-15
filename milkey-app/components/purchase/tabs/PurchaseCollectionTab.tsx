@@ -131,13 +131,13 @@ export function PurchaseCollectionTab(props:any){
                     </Pressable>
                 )}
 
-                {selectedCustomer && showCow && (
+                {selectedCustomer && effectiveBasis !== 'fat_snf' && showCow && (
                     <Pressable onPress={() => setMilkType('cow')} style={[s.milkToggleBtn, milkType === 'cow' && s.milkToggleBtnActive]}>
                         <Milk size={14} color={milkType === 'cow' ? '#fff' : colors.foreground} />
                         <Text style={[s.milkToggleBtnText, milkType === 'cow' && { color: '#fff' }]}>{t.purchase.cow}</Text>
                     </Pressable>
                 )}
-                {selectedCustomer && showBuffalo && (
+                {selectedCustomer && effectiveBasis !== 'fat_snf' && showBuffalo && (
                     <Pressable onPress={() => setMilkType('buffalo')} style={[s.milkToggleBtn, milkType === 'buffalo' && s.milkToggleBtnActive]}>
                         <Milk size={14} color={milkType === 'buffalo' ? '#fff' : colors.foreground} />
                         <Text style={[s.milkToggleBtnText, milkType === 'buffalo' && { color: '#fff' }]}>{t.purchase.buffalo}</Text>
