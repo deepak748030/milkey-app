@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
+    Modal,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -481,7 +481,7 @@ function FilterPanel({
     setFilter,
     clearFilters,
     filtersOpen,
-    setFiltersOpen,
+    onToggleFilters,
     activeCount,
     dairyOptions,
     modeOptions,
@@ -492,7 +492,7 @@ function FilterPanel({
     setFilter: (key: keyof Filters, value: any) => void;
     clearFilters: () => void;
     filtersOpen: boolean;
-    setFiltersOpen: (value: boolean) => void;
+    onToggleFilters: () => void;
     activeCount: number;
     dairyOptions: string[];
     modeOptions: string[];
@@ -502,7 +502,7 @@ function FilterPanel({
     return (
         <Box style={s.filterCard}>
             <View style={s.filterHeader}>
-                <Pressable onPress={() => setFiltersOpen(!filtersOpen)} style={s.filterHeaderLeft}>
+                <Pressable onPress={onToggleFilters} hitSlop={6} style={s.filterHeaderLeft}>
                     <Filter size={15} color={colors.primary} />
                     <Text style={s.filterTitle}>Filters</Text>
                     {activeCount > 0 && (
@@ -510,7 +510,7 @@ function FilterPanel({
                             <Text style={s.filterCountText}>{activeCount}</Text>
                         </View>
                     )}
-                    <Text style={s.filterHint}>{filtersOpen ? 'Hide' : 'Show'}</Text>
+                    <Text style={s.filterHint}>{filtersOpen ? 'Hide filters' : 'Show filters'}</Text>
                     {filtersOpen
                         ? <ChevronUp size={14} color={colors.mutedForeground} />
                         : <ChevronDown size={14} color={colors.mutedForeground} />}
@@ -640,13 +640,17 @@ export default function PortalScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
-    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(true);
     const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
     const [expanded, setExpanded] = useState<Record<SectionKey, boolean>>({
         entries: false,
         payments: false,
         advances: false,
     });
+    const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
+    const scrollRef = useRef<ScrollView | null>(null);
+    const filterCardY = useRef(0);
 
     const setFilter = useCallback((key: keyof Filters, value: any) => {
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -658,23 +662,47 @@ export default function PortalScreen() {
         setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
     }, []);
 
-    const logout = useCallback(async () => {
-        await portalApi.logout().catch(() => undefined);
-        await clearPortalSession().catch(() => undefined);
-        await clearAuth().catch(() => undefined);
-        router.replace('/auth');
+    const onFilterLayout = useCallback((event: any) => {
+        filterCardY.current = event.nativeEvent.layout.y;
     }, []);
 
+    const openFilters = useCallback(() => {
+        setFiltersOpen(true);
+        // Bring the expanded filter card into view when the header funnel is tapped.
+        setTimeout(() => {
+            scrollRef.current?.scrollTo({
+                y: Math.max(0, filterCardY.current - 8),
+                animated: true,
+            });
+        }, 0);
+    }, []);
+
+    const toggleFilters = useCallback(() => {
+        if (filtersOpen) {
+            setFiltersOpen(false);
+            return;
+        }
+        openFilters();
+    }, [filtersOpen, openFilters]);
+
+    const logout = useCallback(async () => {
+        if (loggingOut) return;
+        setLoggingOut(true);
+        setLogoutModalVisible(false);
+        // Do not block navigation on the network call; local session is cleared below.
+        void portalApi.logout().catch(() => undefined);
+        try {
+            await clearPortalSession().catch(() => undefined);
+            await clearAuth().catch(() => undefined);
+        } finally {
+            setLoggingOut(false);
+            router.replace('/auth');
+        }
+    }, [loggingOut]);
+
     const confirmLogout = useCallback(() => {
-        Alert.alert(
-            'Logout?',
-            'You will need to verify your mobile number again to view your dairy records.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Logout', style: 'destructive', onPress: () => { void logout(); } },
-            ],
-        );
-    }, [logout]);
+        setLogoutModalVisible(true);
+    }, []);
 
     useEffect(() => {
         let alive = true;
@@ -1053,13 +1081,25 @@ export default function PortalScreen() {
                         </Text>
                         <Text numberOfLines={1} style={s.headerSub}>Farmer / Customer view</Text>
                     </View>
-                    <Pressable onPress={confirmLogout} hitSlop={10} style={s.headerBtn}>
-                        <LogOut size={18} color={colors.white} />
-                    </Pressable>
+                    <View style={s.headerActions}>
+                        <Pressable onPress={openFilters} hitSlop={6} style={s.headerFilterBtn}>
+                            <Filter size={17} color={colors.white} />
+                            {!compact && <Text style={s.headerFilterText}>Filters</Text>}
+                            {activeCount > 0 && (
+                                <View style={s.headerBadge}>
+                                    <Text style={s.headerBadgeText}>{activeCount}</Text>
+                                </View>
+                            )}
+                        </Pressable>
+                        <Pressable onPress={confirmLogout} hitSlop={10} style={s.headerBtn}>
+                            <LogOut size={18} color={colors.white} />
+                        </Pressable>
+                    </View>
                 </View>
             </View>
 
             <ScrollView
+                ref={scrollRef}
                 style={s.scroll}
                 contentContainerStyle={[s.scrollContent, { paddingBottom: Math.max(insets.bottom + 24, 34) }]}
                 showsVerticalScrollIndicator={false}
@@ -1165,18 +1205,20 @@ export default function PortalScreen() {
                     />
                 </View>
 
-                <FilterPanel
-                    filters={filters}
-                    setFilter={setFilter}
-                    clearFilters={clearFilters}
-                    filtersOpen={filtersOpen}
-                    setFiltersOpen={setFiltersOpen}
-                    activeCount={activeCount}
-                    dairyOptions={dairyOptions}
-                    modeOptions={modeOptions}
-                    colors={colors}
-                    s={s}
-                />
+                <View onLayout={onFilterLayout} collapsable={false}>
+                    <FilterPanel
+                        filters={filters}
+                        setFilter={setFilter}
+                        clearFilters={clearFilters}
+                        filtersOpen={filtersOpen}
+                        onToggleFilters={toggleFilters}
+                        activeCount={activeCount}
+                        dairyOptions={dairyOptions}
+                        modeOptions={modeOptions}
+                        colors={colors}
+                        s={s}
+                    />
+                </View>
 
                 {(loading && !dashboard) ? (
                     <Box style={s.loadingCard}>
@@ -1228,6 +1270,52 @@ export default function PortalScreen() {
                     </>
                 )}
             </ScrollView>
+
+            {/* In-app logout confirmation. React Native Web's Alert.alert is a no-op,
+                so the header logout icon needs a real modal on every platform. */}
+            <Modal
+                visible={logoutModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => { if (!loggingOut) setLogoutModalVisible(false); }}
+            >
+                <View style={s.modalOverlay}>
+                    <Pressable
+                        disabled={loggingOut}
+                        onPress={() => setLogoutModalVisible(false)}
+                        style={s.modalScrim}
+                    />
+                    <Box style={s.logoutModalCard}>
+                        <View style={s.logoutModalIcon}>
+                            <LogOut size={20} color={colors.destructive} />
+                        </View>
+                        <Text style={s.logoutModalTitle}>Logout?</Text>
+                        <Text style={s.logoutModalBody}>
+                            You will need to verify your mobile number again to view your dairy records.
+                        </Text>
+                        <View style={s.logoutModalActions}>
+                            <Pressable
+                                disabled={loggingOut}
+                                onPress={() => setLogoutModalVisible(false)}
+                                style={[s.modalBtn, s.modalBtnCancel]}
+                            >
+                                <Text style={s.modalCancelText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable
+                                disabled={loggingOut}
+                                onPress={() => { void logout(); }}
+                                style={[s.modalBtn, s.modalBtnLogout]}
+                            >
+                                {loggingOut ? (
+                                    <ActivityIndicator size="small" color={colors.white} />
+                                ) : (
+                                    <Text style={s.modalLogoutText}>Logout</Text>
+                                )}
+                            </Pressable>
+                        </View>
+                    </Box>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -1264,6 +1352,37 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             borderWidth: 1,
             borderColor: 'rgba(255,255,255,0.14)',
         },
+        headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        headerFilterBtn: {
+            height: 38,
+            minWidth: 38,
+            paddingHorizontal: 10,
+            borderRadius: 11,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            backgroundColor: 'rgba(255,255,255,0.13)',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.14)',
+            position: 'relative',
+        },
+        headerFilterText: { fontSize: 11, fontWeight: '800', color: colors.white },
+        headerBadge: {
+            position: 'absolute',
+            top: -5,
+            right: -5,
+            minWidth: 17,
+            height: 17,
+            borderRadius: 9,
+            paddingHorizontal: 3,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.white,
+            borderWidth: 1,
+            borderColor: colors.primary,
+        },
+        headerBadgeText: { fontSize: 9, fontWeight: '900', color: colors.primary },
         headerTitle: { flex: 1, alignItems: 'center', minWidth: 0 },
         headerTitleText: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
         headerSub: { fontSize: 10, color: 'rgba(255,255,255,0.72)', marginTop: 1 },
@@ -1345,8 +1464,20 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
 
         filterCard: { padding: 10, gap: 8 },
         filterHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-        filterHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
-        filterTitle: { fontSize: 13, fontWeight: '800', color: colors.foreground },
+        filterHeaderLeft: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            flex: 1,
+            minWidth: 0,
+            paddingHorizontal: 8,
+            paddingVertical: 6,
+            borderRadius: 8,
+            backgroundColor: colors.primary + '12',
+            borderWidth: 1,
+            borderColor: colors.primary + '30',
+        },
+        filterTitle: { fontSize: 13, fontWeight: '800', color: colors.primary },
         filterCountBadge: {
             backgroundColor: colors.primary + '18',
             borderRadius: 999,
@@ -1366,7 +1497,7 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             backgroundColor: colors.muted,
         },
         clearText: { fontSize: 10.5, fontWeight: '700', color: colors.foreground },
-        filterHint: { fontSize: 10, color: colors.mutedForeground },
+        filterHint: { fontSize: 10, color: colors.mutedForeground, marginLeft: 'auto' },
         filterBody: { gap: 10 },
         filterGroup: { gap: 6 },
         filterGroupLabel: {
@@ -1519,5 +1650,72 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             textAlign: 'center',
             paddingHorizontal: 12,
         },
+
+        modalOverlay: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 16,
+            backgroundColor: 'rgba(0,0,0,0.45)',
+        },
+        modalScrim: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+        },
+        logoutModalCard: {
+            width: '100%',
+            maxWidth: 340,
+            alignSelf: 'center',
+            padding: 16,
+        },
+        logoutModalIcon: {
+            width: 44,
+            height: 44,
+            borderRadius: 12,
+            alignSelf: 'center',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.destructive + '18',
+            marginBottom: 10,
+        },
+        logoutModalTitle: {
+            fontSize: 16,
+            fontWeight: '800',
+            color: colors.foreground,
+            textAlign: 'center',
+        },
+        logoutModalBody: {
+            fontSize: 12,
+            lineHeight: 17,
+            color: colors.mutedForeground,
+            textAlign: 'center',
+            marginTop: 6,
+        },
+        logoutModalActions: {
+            flexDirection: 'row',
+            gap: 8,
+            marginTop: 16,
+        },
+        modalBtn: {
+            flex: 1,
+            minHeight: 40,
+            borderRadius: 10,
+            borderWidth: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        modalBtnCancel: {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+        },
+        modalBtnLogout: {
+            backgroundColor: colors.destructive,
+            borderColor: colors.destructive,
+        },
+        modalCancelText: { fontSize: 12, fontWeight: '800', color: colors.foreground },
+        modalLogoutText: { fontSize: 12, fontWeight: '800', color: colors.white },
     });
 };
