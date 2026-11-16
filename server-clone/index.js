@@ -51,6 +51,9 @@ const zapupiRoutes = require('./routes/zapupi');
 const razorpayRoutes = require('./routes/razorpay');
 const printSettingsRoutes = require('./routes/print-settings');
 const milkRateSettingsRoutes = require('./routes/milk-rate-settings');
+const portalAuthRoutes = require('./routes/portal-auth');
+const portalRoutes = require('./routes/portal');
+const sellingAdvanceRoutes = require('./routes/selling-advances');
 
 const cache = require('./lib/cache');
 
@@ -172,6 +175,11 @@ app.use('/api/zapupi', zapupiRoutes);
 app.use('/api/razorpay', razorpayRoutes);
 app.use('/api/print-settings', printSettingsRoutes);
 app.use('/api/milk-rate-settings', milkRateSettingsRoutes);
+// Farmer/Customer portal + isolated selling advances. These routes never
+// mutate the existing selling/collection ledger documents.
+app.use('/api/portal/auth', portalAuthRoutes);
+app.use('/api/portal', portalRoutes);
+app.use('/api/selling-advances', sellingAdvanceRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/api/faqs', faqRoutes);
 app.use('/api/videos', videoRoutes);
