@@ -4,12 +4,14 @@ import {
     Alert,
     RefreshControl,
     ScrollView,
+    StyleSheet,
     Text,
     View,
     useWindowDimensions,
 } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SearchInput } from '@/components/common/SearchInput';
+import { DateRangePicker } from '@/components/DateRangePicker';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -17,12 +19,13 @@ import {
     ArrowDownLeft,
     ArrowLeft,
     ArrowUpRight,
-    CalendarDays,
     CheckCircle2,
     ChevronDown,
     ChevronRight,
+    ChevronUp,
     Clock3,
     Droplets,
+    Filter,
     History,
     IndianRupee,
     Lock,
@@ -32,6 +35,7 @@ import {
     ShoppingCart,
     UserRound,
     Wallet,
+    X,
 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { clearAuth } from '@/lib/authStore';
@@ -49,10 +53,103 @@ import {
     PortalUser,
 } from '@/lib/portalAuth';
 
-const GREEN_DARK = '#087A3D';
-const PALE_GREEN = '#EDF9F1';
-const PALE_ORANGE = '#FFF6DF';
-const ORANGE = '#C77700';
+/**
+ * Farmer / Customer portal.
+ *
+ * Design is intentionally copied from the dairy-owner tabs:
+ * - flat green TopBar-like header (no gradient)
+ * - colors.card + colors.border cards with 12px radius
+ * - 8–10px gaps, #eef2f7 table headers on light theme
+ * - no shadow / elevation anywhere
+ * - tables fit the screen width; there is NO horizontal ScrollView
+ */
+
+type Align = 'left' | 'center' | 'right';
+type SectionKey = 'entries' | 'payments' | 'advances';
+type DatePreset = 'all' | 'today' | 'week' | 'month' | 'custom';
+type EntryStatusFilter = 'all' | 'paid' | 'pending';
+type AdvanceTypeFilter = 'all' | 'given' | 'adjusted';
+type SectionFilter = 'all' | SectionKey;
+
+interface Filters {
+    search: string;
+    datePreset: DatePreset;
+    startDate: string;
+    endDate: string;
+    status: EntryStatusFilter;
+    mode: string;
+    advanceType: AdvanceTypeFilter;
+    dairy: string;
+    section: SectionFilter;
+}
+
+interface PortalColumn<T> {
+    key: string;
+    title: string;
+    flex: number;
+    align?: Align;
+    hideOnCompact?: boolean;
+    render: (row: T) => React.ReactNode;
+}
+
+const DEFAULT_FILTERS: Filters = {
+    search: '',
+    datePreset: 'all',
+    startDate: '',
+    endDate: '',
+    status: 'all',
+    mode: 'all',
+    advanceType: 'all',
+    dairy: 'all',
+    section: 'all',
+};
+
+const DATE_PRESETS: Array<{ key: DatePreset; label: string }> = [
+    { key: 'all', label: 'All' },
+    { key: 'today', label: 'Today' },
+    { key: 'week', label: '7 Days' },
+    { key: 'month', label: 'This Month' },
+    { key: 'custom', label: 'Custom' },
+];
+
+const STATUS_OPTIONS: Array<{ key: EntryStatusFilter; label: string }> = [
+    { key: 'all', label: 'All' },
+    { key: 'paid', label: 'Paid' },
+    { key: 'pending', label: 'Pending' },
+];
+
+const ADVANCE_OPTIONS: Array<{ key: AdvanceTypeFilter; label: string }> = [
+    { key: 'all', label: 'All' },
+    { key: 'given', label: 'Given' },
+    { key: 'adjusted', label: 'Adjusted' },
+];
+
+const SECTION_OPTIONS: Array<{ key: SectionFilter; label: string }> = [
+    { key: 'all', label: 'All' },
+    { key: 'entries', label: 'Entries' },
+    { key: 'payments', label: 'Payments' },
+    { key: 'advances', label: 'Advances' },
+];
+
+const STANDARD_MODES = ['cash', 'upi', 'bank', 'cheque'];
+
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+const dateKeyFromDate = (date: Date) =>
+    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+
+const localDateKey = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return dateKeyFromDate(date);
+};
+
+const yearOf = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : String(date.getFullYear());
+};
 
 const money = (value: number | string | undefined) => {
     const n = Number(value || 0);
@@ -77,206 +174,274 @@ const shortDate = (value?: string) => {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 };
 
-const todayLabel = () => new Date().toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-});
+const modeLabel = (value: string) => {
+    const key = String(value || '').toLowerCase();
+    if (!key || key === 'all') return 'All';
+    return key.charAt(0).toUpperCase() + key.slice(1);
+};
 
-type Align = 'left' | 'center' | 'right';
-type Column = { label: string; flex: number; align?: Align };
+const getDateRange = (filters: Filters): { start?: string; end?: string } | null => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayKey = dateKeyFromDate(today);
+    const dayMs = 24 * 60 * 60 * 1000;
 
-type RowWithId = { id: string };
+    if (filters.datePreset === 'today') return { start: todayKey, end: todayKey };
+    if (filters.datePreset === 'week') {
+        return { start: dateKeyFromDate(new Date(today.getTime() - 6 * dayMs)), end: todayKey };
+    }
+    if (filters.datePreset === 'month') {
+        return { start: `${today.getFullYear()}-${pad2(today.getMonth() + 1)}-01`, end: todayKey };
+    }
+    if (filters.datePreset === 'custom') {
+        const rawStart = filters.startDate.trim();
+        const rawEnd = filters.endDate.trim();
+        if (!rawStart && !rawEnd) return null;
+        let start = rawStart || '0000-01-01';
+        let end = rawEnd || todayKey;
+        if (start > end) [start, end] = [end, start];
+        return { start, end };
+    }
+    return null;
+};
 
-function DataTable<T extends RowWithId>({
-    colors,
-    columns,
-    rows,
-    tableWidth,
-    renderRow,
-    emptyText,
-}: {
-    colors: any;
-    columns: Column[];
-    rows: T[];
-    tableWidth: number;
-    renderRow: (row: T, index: number) => React.ReactNode;
-    emptyText: string;
-}) {
+const rowSearchText = (row: any, profile?: PortalUser | null) => [
+    row?.customerName,
+    row?.farmerName,
+    row?.remark,
+    row?.mode,
+    row?.type,
+    row?.status,
+    row?.dairyName,
+    profile?.name,
+    profile?.code,
+    profile?.phone,
+    profile?.address,
+    profile?.dairyName,
+    shortDate(row?.date),
+    longDate(row?.date),
+    money(row?.amount),
+    quantity(row?.quantity),
+].filter(Boolean).join(' ').toLowerCase();
+
+// Plain themed box. Avoids components/ui/Card, which has an unrelated runtime bug.
+function Box({ style, children, ...rest }: any) {
+    const { colors } = useTheme();
     return (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 4 }}>
-            <View style={{ minWidth: tableWidth }}>
-                <View style={{
-                    flexDirection: 'row',
-                    backgroundColor: '#EEF3F7',
-                    borderRadius: 8,
-                    paddingVertical: 9,
-                    paddingHorizontal: 8,
-                    marginBottom: 2,
-                }}>
-                    {columns.map((col) => (
-                        <Text
-                            key={col.label}
-                            numberOfLines={1}
-                            style={{
-                                flex: col.flex,
-                                fontSize: 10.5,
-                                fontWeight: '700',
-                                color: '#52616B',
-                                textAlign: col.align || 'center',
-                            }}
-                        >
-                            {col.label}
-                        </Text>
-                    ))}
-                </View>
-                {rows.length === 0 ? (
-                    <View style={{ paddingVertical: 18, alignItems: 'center' }}>
-                        <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{emptyText}</Text>
-                    </View>
-                ) : rows.map((row, index) => (
-                    <View
-                        key={row.id || String(index)}
-                        style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            paddingVertical: 10,
-                            paddingHorizontal: 8,
-                            minHeight: 42,
-                            borderBottomWidth: index === rows.length - 1 ? 0 : 1,
-                            borderBottomColor: colors.border,
-                            backgroundColor: index % 2 === 0 ? colors.card : colors.background,
-                        }}
-                    >
-                        {renderRow(row, index)}
-                    </View>
-                ))}
-            </View>
-        </ScrollView>
-    );
-}
-
-function Cell({
-    children,
-    flex,
-    align = 'center',
-    colors,
-    bold,
-}: {
-    children: React.ReactNode;
-    flex: number;
-    align?: Align;
-    colors: any;
-    bold?: boolean;
-}) {
-    return (
-        <View style={{ flex, alignItems: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center' }}>
-            {typeof children === 'string' || typeof children === 'number' ? (
-                <Text
-                    numberOfLines={1}
-                    style={{
-                        fontSize: 11,
-                        color: colors.foreground,
-                        fontWeight: bold ? '800' : '600',
-                        textAlign: align,
-                    }}
-                >
-                    {children}
-                </Text>
-            ) : children}
+        <View
+            style={[
+                {
+                    backgroundColor: colors.card,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: 12,
+                    padding: 12,
+                },
+                style,
+            ]}
+            {...rest}
+        >
+            {children}
         </View>
     );
 }
 
-function StatusPill({ status, colors }: { status?: string; colors: any }) {
-    const isPaid = String(status || '').toLowerCase() === 'paid';
+function Chip({ label, active, onPress, s }: { label: string; active: boolean; onPress: () => void; s: any }) {
     return (
-        <View style={{
-            paddingHorizontal: 7,
-            paddingVertical: 4,
-            borderRadius: 999,
-            backgroundColor: isPaid ? '#DFF6E6' : PALE_ORANGE,
-            alignSelf: 'center',
-        }}>
-            <Text style={{ fontSize: 9.5, fontWeight: '800', color: isPaid ? GREEN_DARK : ORANGE }}>
+        <Pressable onPress={onPress} style={[s.chip, active && s.chipActive]}>
+            <Text numberOfLines={1} style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
+        </Pressable>
+    );
+}
+
+function FilterGroup({ label, children, s }: { label: string; children: React.ReactNode; s: any }) {
+    return (
+        <View style={s.filterGroup}>
+            <Text style={s.filterGroupLabel}>{label}</Text>
+            <View style={s.chipRow}>{children}</View>
+        </View>
+    );
+}
+
+function StatusPill({ status, colors, s }: { status?: string; colors: any; s: any }) {
+    const key = String(status || '').toLowerCase();
+    const positive = key === 'paid' || key === 'active' || key === 'settled' || key === 'adjusted';
+    return (
+        <View style={[s.statusPill, { backgroundColor: positive ? colors.success + '18' : colors.warning + '18' }]}>
+            <Text style={[s.statusPillText, { color: positive ? colors.success : colors.warning }]}>
                 {status || 'Pending'}
             </Text>
         </View>
     );
 }
 
+function CellText({
+    children,
+    s,
+    align = 'center',
+    bold,
+    muted,
+    numberOfLines = 1,
+}: {
+    children: React.ReactNode;
+    s: any;
+    align?: Align;
+    bold?: boolean;
+    muted?: boolean;
+    numberOfLines?: number;
+}) {
+    const alignStyle = align === 'left' ? s.alignLeft : align === 'right' ? s.alignRight : s.alignCenter;
+    return (
+        <Text
+            numberOfLines={numberOfLines}
+            ellipsizeMode="tail"
+            style={[s.cellText, alignStyle, bold && s.bold, muted && s.muted]}
+        >
+            {children}
+        </Text>
+    );
+}
+
+function TwoLineCell({
+    primary,
+    secondary,
+    s,
+    align = 'center',
+    bold,
+}: {
+    primary: string;
+    secondary?: string;
+    s: any;
+    align?: Align;
+    bold?: boolean;
+}) {
+    const alignStyle = align === 'left' ? s.alignLeft : align === 'right' ? s.alignRight : s.alignCenter;
+    return (
+        <View style={{ minWidth: 0, flexShrink: 1 }}>
+            <Text numberOfLines={1} ellipsizeMode="tail" style={[s.cellText, alignStyle, bold && s.bold]}>
+                {primary}
+            </Text>
+            {!!secondary && (
+                <Text numberOfLines={1} ellipsizeMode="tail" style={[s.cellSub, alignStyle]}>
+                    {secondary}
+                </Text>
+            )}
+        </View>
+    );
+}
+
+function PortalTable<T extends { id: string }>({
+    columns,
+    rows,
+    emptyText,
+    compact,
+    s,
+}: {
+    columns: PortalColumn<T>[];
+    rows: T[];
+    emptyText: string;
+    compact: boolean;
+    s: any;
+}) {
+    const visibleColumns = columns.filter((col) => !(compact && col.hideOnCompact));
+
+    if (!rows.length) {
+        return (
+            <View style={s.empty}>
+                <Text style={s.emptyText}>{emptyText}</Text>
+            </View>
+        );
+    }
+
+    return (
+        <View style={s.tableWrap}>
+            <View style={s.tHead}>
+                {visibleColumns.map((col) => (
+                    <Text
+                        key={col.key}
+                        numberOfLines={1}
+                        style={[
+                            s.tHeadText,
+                            {
+                                flex: col.flex,
+                                minWidth: 0,
+                                flexShrink: 1,
+                                textAlign: col.align || 'center',
+                            },
+                        ]}
+                    >
+                        {col.title}
+                    </Text>
+                ))}
+            </View>
+            {rows.map((row, index) => (
+                <View key={row.id || String(index)} style={[s.row, index % 2 === 1 && s.rowAlt]}>
+                    {visibleColumns.map((col) => (
+                        <View
+                            key={col.key}
+                            style={[
+                                s.cell,
+                                {
+                                    flex: col.flex,
+                                    alignItems: col.align === 'left'
+                                        ? 'flex-start'
+                                        : col.align === 'right'
+                                            ? 'flex-end'
+                                            : 'center',
+                                },
+                            ]}
+                        >
+                            {col.render(row)}
+                        </View>
+                    ))}
+                </View>
+            ))}
+        </View>
+    );
+}
+
 function SectionCard({
     title,
+    subtitle,
     icon: Icon,
     colors,
-    count,
+    s,
+    showViewAll,
     expanded,
     onToggle,
     children,
 }: {
     title: string;
+    subtitle: string;
     icon: any;
     colors: any;
-    count: number;
+    s: any;
+    showViewAll: boolean;
     expanded: boolean;
     onToggle: () => void;
     children: React.ReactNode;
 }) {
     return (
-        <View style={{
-            backgroundColor: colors.card,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: colors.primary + '35',
-            marginTop: 12,
-            overflow: 'hidden',
-            shadowColor: GREEN_DARK,
-            shadowOpacity: 0.06,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 3 },
-            elevation: 2,
-        }}>
-            <LinearGradient
-                colors={[colors.primary + '12', colors.card]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    paddingHorizontal: 12,
-                    paddingVertical: 11,
-                    borderBottomWidth: 1,
-                    borderBottomColor: colors.border,
-                }}
-            >
-                <View style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor: colors.primary,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 8,
-                }}>
-                    <Icon size={15} color="#fff" />
+        <Box style={s.sectionCard}>
+            <View style={s.sectionHeader}>
+                <View style={s.sectionIcon}>
+                    <Icon size={15} color={colors.white} />
                 </View>
-                <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: colors.foreground }}>{title}</Text>
-                    <Text style={{ fontSize: 9.5, color: colors.mutedForeground, marginTop: 1 }}>
-                        {count} record{count === 1 ? '' : 's'}
-                    </Text>
+                <View style={s.sectionTitleWrap}>
+                    <Text numberOfLines={1} style={s.sectionTitle}>{title}</Text>
+                    <Text numberOfLines={1} style={s.sectionSub}>{subtitle}</Text>
                 </View>
-                {count > 4 && (
-                    <Pressable onPress={onToggle} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                        <Text style={{ fontSize: 10.5, fontWeight: '800', color: colors.primary }}>
-                            {expanded ? 'Show Less' : 'View All'}
-                        </Text>
-                        <ChevronRight size={14} color={colors.primary} />
+                {showViewAll && (
+                    <Pressable onPress={onToggle} style={s.viewAllBtn}>
+                        <Text style={s.viewAllText}>{expanded ? 'Show Less' : 'View All'}</Text>
+                        {expanded
+                            ? <ChevronUp size={13} color={colors.primary} />
+                            : <ChevronRight size={13} color={colors.primary} />}
                     </Pressable>
                 )}
-            </LinearGradient>
-            <View style={{ paddingHorizontal: 8, paddingBottom: 8 }}>{children}</View>
-        </View>
+            </View>
+            <View style={s.sectionBody}>{children}</View>
+        </Box>
     );
 }
 
@@ -287,6 +452,7 @@ function SummaryCard({
     icon: Icon,
     tone,
     colors,
+    s,
 }: {
     label: string;
     value: string;
@@ -294,47 +460,179 @@ function SummaryCard({
     icon: any;
     tone: 'green' | 'orange' | 'wallet';
     colors: any;
+    s: any;
 }) {
-    const bg = tone === 'orange' ? PALE_ORANGE : tone === 'wallet' ? '#EAF7F1' : PALE_GREEN;
-    const iconColor = tone === 'orange' ? ORANGE : GREEN_DARK;
+    const iconBg = tone === 'orange' ? colors.warning + '18' : colors.primary + '12';
+    const iconColor = tone === 'orange' ? colors.warning : colors.primary;
     return (
-        <View style={{
-            flex: 1,
-            minWidth: 100,
-            backgroundColor: colors.card,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: colors.border,
-            padding: 9,
-            marginHorizontal: 3,
-            shadowColor: GREEN_DARK,
-            shadowOpacity: 0.04,
-            shadowRadius: 6,
-            elevation: 1,
-        }}>
-            <View style={{
-                width: 26,
-                height: 26,
-                borderRadius: 13,
-                backgroundColor: bg,
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 7,
-            }}>
+        <Box style={s.summaryCard}>
+            <View style={[s.summaryIcon, { backgroundColor: iconBg }]}>
                 <Icon size={14} color={iconColor} />
             </View>
-            <Text numberOfLines={1} style={{ fontSize: 9.5, fontWeight: '700', color: colors.mutedForeground }}>{label}</Text>
-            <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: '900', color: colors.foreground, marginTop: 2 }}>{value}</Text>
-            {!!sub && <Text numberOfLines={1} style={{ fontSize: 9, color: colors.mutedForeground, marginTop: 2 }}>{sub}</Text>}
-        </View>
+            <Text numberOfLines={1} style={s.summaryLabel}>{label}</Text>
+            <Text numberOfLines={1} style={s.summaryValue}>{value}</Text>
+            {!!sub && <Text numberOfLines={1} style={s.summarySub}>{sub}</Text>}
+        </Box>
+    );
+}
+
+function FilterPanel({
+    filters,
+    setFilter,
+    clearFilters,
+    filtersOpen,
+    setFiltersOpen,
+    activeCount,
+    dairyOptions,
+    modeOptions,
+    colors,
+    s,
+}: {
+    filters: Filters;
+    setFilter: (key: keyof Filters, value: any) => void;
+    clearFilters: () => void;
+    filtersOpen: boolean;
+    setFiltersOpen: (value: boolean) => void;
+    activeCount: number;
+    dairyOptions: string[];
+    modeOptions: string[];
+    colors: any;
+    s: any;
+}) {
+    return (
+        <Box style={s.filterCard}>
+            <View style={s.filterHeader}>
+                <Pressable onPress={() => setFiltersOpen(!filtersOpen)} style={s.filterHeaderLeft}>
+                    <Filter size={15} color={colors.primary} />
+                    <Text style={s.filterTitle}>Filters</Text>
+                    {activeCount > 0 && (
+                        <View style={s.filterCountBadge}>
+                            <Text style={s.filterCountText}>{activeCount}</Text>
+                        </View>
+                    )}
+                    <Text style={s.filterHint}>{filtersOpen ? 'Hide' : 'Show'}</Text>
+                    {filtersOpen
+                        ? <ChevronUp size={14} color={colors.mutedForeground} />
+                        : <ChevronDown size={14} color={colors.mutedForeground} />}
+                </Pressable>
+                {activeCount > 0 && (
+                    <Pressable onPress={clearFilters} style={s.clearBtn}>
+                        <X size={12} color={colors.foreground} />
+                        <Text style={s.clearText}>Clear</Text>
+                    </Pressable>
+                )}
+            </View>
+
+            <SearchInput
+                value={filters.search}
+                onChange={(value) => setFilter('search', value)}
+                placeholder="Search date, name, remark, amount..."
+            />
+
+            {filtersOpen ? (
+                <View style={s.filterBody}>
+                    <FilterGroup label="Date" s={s}>
+                        {DATE_PRESETS.map((preset) => (
+                            <Chip
+                                key={preset.key}
+                                label={preset.label}
+                                active={filters.datePreset === preset.key}
+                                onPress={() => setFilter('datePreset', preset.key)}
+                                s={s}
+                            />
+                        ))}
+                    </FilterGroup>
+
+                    {filters.datePreset === 'custom' && (
+                        <DateRangePicker
+                            startDate={filters.startDate || null}
+                            endDate={filters.endDate || null}
+                            onStartDateChange={(date) => setFilter('startDate', date)}
+                            onEndDateChange={(date) => setFilter('endDate', date)}
+                            startPlaceholder="Start date"
+                            endPlaceholder="End date"
+                        />
+                    )}
+
+                    <FilterGroup label="Entry status" s={s}>
+                        {STATUS_OPTIONS.map((option) => (
+                            <Chip
+                                key={option.key}
+                                label={option.label}
+                                active={filters.status === option.key}
+                                onPress={() => setFilter('status', option.key)}
+                                s={s}
+                            />
+                        ))}
+                    </FilterGroup>
+
+                    <FilterGroup label="Payment mode" s={s}>
+                        {['all', ...modeOptions].map((mode) => (
+                            <Chip
+                                key={mode}
+                                label={modeLabel(mode)}
+                                active={filters.mode === mode}
+                                onPress={() => setFilter('mode', mode)}
+                                s={s}
+                            />
+                        ))}
+                    </FilterGroup>
+
+                    <FilterGroup label="Advance type" s={s}>
+                        {ADVANCE_OPTIONS.map((option) => (
+                            <Chip
+                                key={option.key}
+                                label={option.label}
+                                active={filters.advanceType === option.key}
+                                onPress={() => setFilter('advanceType', option.key)}
+                                s={s}
+                            />
+                        ))}
+                    </FilterGroup>
+
+                    {dairyOptions.length > 1 && (
+                        <FilterGroup label="Dairy" s={s}>
+                            {['all', ...dairyOptions].map((dairy) => (
+                                <Chip
+                                    key={dairy}
+                                    label={dairy === 'all' ? 'All' : dairy}
+                                    active={filters.dairy === dairy}
+                                    onPress={() => setFilter('dairy', dairy)}
+                                    s={s}
+                                />
+                            ))}
+                        </FilterGroup>
+                    )}
+
+                    <FilterGroup label="Show section" s={s}>
+                        {SECTION_OPTIONS.map((option) => (
+                            <Chip
+                                key={option.key}
+                                label={option.label}
+                                active={filters.section === option.key}
+                                onPress={() => setFilter('section', option.key)}
+                                s={s}
+                            />
+                        ))}
+                    </FilterGroup>
+                </View>
+            ) : (
+                activeCount > 0 && (
+                    <Text style={s.activeFiltersText}>
+                        {activeCount} filter{activeCount === 1 ? '' : 's'} active · tap to change
+                    </Text>
+                )
+            )}
+        </Box>
     );
 }
 
 export default function PortalScreen() {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const insets = useSafeAreaInsets();
     const { width } = useWindowDimensions();
-    const tableWidth = Math.max(width - 36, 520);
+    const compact = width < 400;
+    const s = createStyles(colors, isDark, width);
 
     const [session, setSession] = useState<PortalUser | null>(null);
     const [module, setModule] = useState<PortalModule>('collection');
@@ -342,13 +640,21 @@ export default function PortalScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
-    const [expanded, setExpanded] = useState<Record<'entries' | 'payments' | 'advances', boolean>>({
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+    const [expanded, setExpanded] = useState<Record<SectionKey, boolean>>({
         entries: false,
         payments: false,
         advances: false,
     });
 
-    const toggleSection = useCallback((key: 'entries' | 'payments' | 'advances') => {
+    const setFilter = useCallback((key: keyof Filters, value: any) => {
+        setFilters((prev) => ({ ...prev, [key]: value }));
+    }, []);
+
+    const clearFilters = useCallback(() => setFilters(DEFAULT_FILTERS), []);
+
+    const toggleSection = useCallback((key: SectionKey) => {
         setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
     }, []);
 
@@ -422,9 +728,22 @@ export default function PortalScreen() {
     const sessionKey = session?.availableModules?.join(',') || '';
     useEffect(() => {
         if (!session || !session.availableModules.includes(module)) return;
-        setExpanded({ entries: false, payments: false, advances: false });
         void loadDashboard(false);
     }, [session?.phone, sessionKey, module, loadDashboard]);
+
+    useEffect(() => {
+        setExpanded({ entries: false, payments: false, advances: false });
+    }, [
+        filters.search,
+        filters.datePreset,
+        filters.startDate,
+        filters.endDate,
+        filters.status,
+        filters.mode,
+        filters.advanceType,
+        filters.dairy,
+        filters.section,
+    ]);
 
     const onRefresh = useCallback(() => {
         setRefreshing(true);
@@ -435,6 +754,9 @@ export default function PortalScreen() {
         if (!session?.availableModules.includes(next)) return;
         setDashboard(null);
         setError('');
+        setFilters(DEFAULT_FILTERS);
+        setFiltersOpen(false);
+        setExpanded({ entries: false, payments: false, advances: false });
         setModule(next);
     }, [session]);
 
@@ -446,162 +768,346 @@ export default function PortalScreen() {
     const available = session?.availableModules || [];
     const isSelling = module === 'selling';
 
-    const visible = useMemo(() => ({
-        entries: expanded.entries ? entries : entries.slice(0, 4),
-        payments: expanded.payments ? payments : payments.slice(0, 4),
-        advances: expanded.advances ? advances : advances.slice(0, 4),
-    }), [entries, payments, advances, expanded]);
+    const dateRange = useMemo(
+        () => getDateRange(filters),
+        [filters.datePreset, filters.startDate, filters.endDate],
+    );
+
+    const matchesDate = useCallback((date?: string) => {
+        if (!dateRange?.start && !dateRange?.end) return true;
+        const key = localDateKey(date);
+        if (!key) return false;
+        if (dateRange.start && key < dateRange.start) return false;
+        if (dateRange.end && key > dateRange.end) return false;
+        return true;
+    }, [dateRange]);
+
+    const searchTerm = filters.search.trim().toLowerCase();
+    const matchesCommon = useCallback((row: any) => {
+        const dairy = row?.dairyName || profile?.dairyName || '';
+        if (filters.dairy !== 'all' && dairy !== filters.dairy) return false;
+        if (!searchTerm) return true;
+        return rowSearchText(row, profile).includes(searchTerm);
+    }, [filters.dairy, searchTerm, profile]);
+
+    const filteredEntries = useMemo(() => entries.filter((row) => {
+        if (!matchesDate(row.date) || !matchesCommon(row)) return false;
+        const paid = String(row.status || '').toLowerCase() === 'paid';
+        if (filters.status === 'paid' && !paid) return false;
+        if (filters.status === 'pending' && paid) return false;
+        return true;
+    }), [entries, matchesDate, matchesCommon, filters.status]);
+
+    const filteredPayments = useMemo(() => payments.filter((row) => {
+        if (!matchesDate(row.date) || !matchesCommon(row)) return false;
+        if (filters.mode !== 'all' && String(row.mode || '').toLowerCase() !== filters.mode) return false;
+        return true;
+    }), [payments, matchesDate, matchesCommon, filters.mode]);
+
+    const filteredAdvances = useMemo(() => advances.filter((row) => {
+        if (!matchesDate(row.date) || !matchesCommon(row)) return false;
+        const type = String(row.type || '').toLowerCase();
+        const adjusted = type === 'adjusted' || row.direction === 'up' || String(row.status || '').toLowerCase() === 'settled';
+        if (filters.advanceType === 'adjusted' && !adjusted) return false;
+        if (filters.advanceType === 'given' && adjusted) return false;
+        return true;
+    }), [advances, matchesDate, matchesCommon, filters.advanceType]);
+
+    const activeCount = useMemo(() => {
+        let count = 0;
+        if (filters.search.trim()) count += 1;
+        if (filters.datePreset !== 'all') count += 1;
+        if (filters.status !== 'all') count += 1;
+        if (filters.mode !== 'all') count += 1;
+        if (filters.advanceType !== 'all') count += 1;
+        if (filters.dairy !== 'all') count += 1;
+        if (filters.section !== 'all') count += 1;
+        return count;
+    }, [filters]);
+
+    const dairyOptions = useMemo(() => {
+        const set = new Set<string>();
+        (profile?.dairyNames || []).forEach((name) => { if (name) set.add(name); });
+        [...entries, ...payments, ...advances].forEach((row) => {
+            if (row.dairyName) set.add(row.dairyName);
+        });
+        return Array.from(set).sort();
+    }, [profile?.dairyNames, entries, payments, advances]);
+
+    const modeOptions = useMemo(() => {
+        const set = new Set<string>(STANDARD_MODES);
+        payments.forEach((row) => {
+            const mode = String(row.mode || '').toLowerCase();
+            if (mode) set.add(mode);
+        });
+        return Array.from(set);
+    }, [payments]);
+
+    const emptyText = activeCount > 0
+        ? 'No records match the selected filters.'
+        : 'No records found for this mobile number.';
+
+    const displayRows = (rows: any[], key: SectionKey) => {
+        const cap = filters.section === 'all' && !expanded[key] ? 5 : 100;
+        return rows.slice(0, cap);
+    };
+
+    const entryColumns: PortalColumn<PortalEntryRow>[] = [
+        {
+            key: 'date',
+            title: 'Date',
+            flex: 1.05,
+            align: 'left',
+            render: (row) => (
+                <TwoLineCell
+                    primary={shortDate(row.date)}
+                    secondary={compact
+                        ? (isSelling ? (row.customerName || profile?.name || '') : (row.farmerName || profile?.name || ''))
+                        : yearOf(row.date)}
+                    align="left"
+                    s={s}
+                />
+            ),
+        },
+        {
+            key: 'name',
+            title: isSelling ? 'Customer' : 'Farmer',
+            flex: 1.25,
+            align: 'left',
+            hideOnCompact: true,
+            render: (row) => (
+                <CellText align="left" s={s} numberOfLines={1}>
+                    {isSelling ? (row.customerName || profile?.name || '--') : (row.farmerName || profile?.name || '--')}
+                </CellText>
+            ),
+        },
+        {
+            key: 'qtyRate',
+            title: 'Qty / Rate',
+            flex: 1,
+            render: (row) => (
+                <TwoLineCell primary={quantity(row.quantity)} secondary={`${money(row.rate)}/L`} s={s} />
+            ),
+        },
+        {
+            key: 'amount',
+            title: 'Amount',
+            flex: 1,
+            render: (row) => <CellText bold s={s}>{money(row.amount)}</CellText>,
+        },
+        {
+            key: 'status',
+            title: 'Status',
+            flex: 0.9,
+            render: (row) => <StatusPill status={row.status} colors={colors} s={s} />,
+        },
+    ];
+
+    const paymentColumns: PortalColumn<PortalPaymentRow>[] = [
+        {
+            key: 'date',
+            title: 'Date',
+            flex: 1,
+            align: 'left',
+            render: (row) => (
+                <TwoLineCell primary={shortDate(row.date)} secondary={yearOf(row.date)} align="left" s={s} />
+            ),
+        },
+        {
+            key: 'amount',
+            title: 'Amount',
+            flex: 0.95,
+            render: (row) => <CellText bold s={s}>{money(row.amount)}</CellText>,
+        },
+        {
+            key: 'mode',
+            title: 'Mode',
+            flex: 0.8,
+            render: (row) => <CellText s={s}>{row.mode || '--'}</CellText>,
+        },
+        {
+            key: 'remark',
+            title: 'Remark',
+            flex: 1.7,
+            align: 'left',
+            render: (row) => (
+                <CellText align="left" s={s} numberOfLines={2}>{row.remark || '--'}</CellText>
+            ),
+        },
+        {
+            key: 'dairy',
+            title: 'Dairy',
+            flex: 1.1,
+            align: 'left',
+            hideOnCompact: true,
+            render: (row) => (
+                <CellText align="left" s={s} numberOfLines={1}>
+                    {row.dairyName || profile?.dairyName || '--'}
+                </CellText>
+            ),
+        },
+    ];
+
+    const advanceColumns: PortalColumn<PortalAdvanceRow>[] = [
+        {
+            key: 'date',
+            title: 'Date',
+            flex: 1,
+            align: 'left',
+            render: (row) => (
+                <TwoLineCell primary={shortDate(row.date)} secondary={yearOf(row.date)} align="left" s={s} />
+            ),
+        },
+        {
+            key: 'type',
+            title: 'Type',
+            flex: 1.05,
+            render: (row) => {
+                const up = row.direction === 'up' || row.type === 'Adjusted' || row.status === 'settled';
+                const Arrow = up ? ArrowUpRight : ArrowDownLeft;
+                const color = up ? colors.success : colors.warning;
+                return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, minWidth: 0, flexShrink: 1, maxWidth: '100%' }}>
+                        <Arrow size={11} color={color} />
+                        <CellText s={s} numberOfLines={1}>{row.type || '--'}</CellText>
+                    </View>
+                );
+            },
+        },
+        {
+            key: 'amount',
+            title: 'Amount',
+            flex: 0.95,
+            render: (row) => <CellText bold s={s}>{money(row.amount)}</CellText>,
+        },
+        {
+            key: 'remark',
+            title: 'Remark',
+            flex: 1.7,
+            align: 'left',
+            render: (row) => (
+                <CellText align="left" s={s} numberOfLines={2}>{row.remark || '--'}</CellText>
+            ),
+        },
+        {
+            key: 'dairy',
+            title: 'Dairy',
+            flex: 1.1,
+            align: 'left',
+            hideOnCompact: true,
+            render: (row) => (
+                <CellText align="left" s={s} numberOfLines={1}>
+                    {row.dairyName || profile?.dairyName || '--'}
+                </CellText>
+            ),
+        },
+    ];
+
+    const sectionConfigs: Array<{
+        key: SectionKey;
+        title: string;
+        icon: any;
+        rows: any[];
+        columns: PortalColumn<any>[];
+    }> = [
+        {
+            key: 'entries',
+            title: isSelling ? 'Recent Selling Entries' : 'Purchase Entry (Milk)',
+            icon: isSelling ? ShoppingCart : Droplets,
+            rows: filteredEntries,
+            columns: entryColumns,
+        },
+        {
+            key: 'payments',
+            title: isSelling ? 'Selling Payment History' : 'Settlement Payment History',
+            icon: IndianRupee,
+            rows: filteredPayments,
+            columns: paymentColumns,
+        },
+        {
+            key: 'advances',
+            title: 'Advance History',
+            icon: History,
+            rows: filteredAdvances,
+            columns: advanceColumns,
+        },
+    ];
 
     const unavailableNote = available.length === 1
         ? `Only ${available[0] === 'collection' ? 'Collection' : 'Selling'} data is linked to this mobile number. The other switch is unavailable.`
         : '';
 
     return (
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={s.container}>
             <StatusBar style="light" />
-            <LinearGradient
-                colors={[colors.primary, GREEN_DARK]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                    paddingTop: insets.top + 12,
-                    paddingBottom: 44,
-                    paddingHorizontal: 14,
-                    borderBottomLeftRadius: 22,
-                    borderBottomRightRadius: 22,
-                }}
-            >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Pressable onPress={confirmLogout} hitSlop={10} style={{ width: 42, alignItems: 'flex-start' }}>
-                        <ArrowLeft size={22} color="#fff" />
+
+            {/* Flat TopBar-like header, copied from the dairy-owner screens. */}
+            <View style={[s.header, { paddingTop: insets.top + 6 }]}>
+                <View style={s.headerRow}>
+                    <Pressable onPress={confirmLogout} hitSlop={10} style={s.headerBtn}>
+                        <ArrowLeft size={20} color={colors.white} />
                     </Pressable>
-                    <View style={{ flex: 1, alignItems: 'center' }}>
-                        <Text style={{ fontSize: 19, fontWeight: '900', color: '#fff', letterSpacing: 0.2 }}>
+                    <View style={s.headerTitle}>
+                        <Text numberOfLines={1} style={s.headerTitleText}>
                             {isSelling ? 'Selling' : 'Customer Details'}
                         </Text>
-                        <Text style={{ fontSize: 10, color: '#D8F7E4', marginTop: 2 }}>
-                            Farmer / Customer view
-                        </Text>
+                        <Text numberOfLines={1} style={s.headerSub}>Farmer / Customer view</Text>
                     </View>
-                    <Pressable onPress={confirmLogout} hitSlop={10} style={{ width: 42, alignItems: 'flex-end' }}>
-                        <LogOut size={19} color="#fff" />
+                    <Pressable onPress={confirmLogout} hitSlop={10} style={s.headerBtn}>
+                        <LogOut size={18} color={colors.white} />
                     </Pressable>
                 </View>
-                <View style={{
-                    alignSelf: 'flex-end',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: '#ffffff22',
-                    borderRadius: 999,
-                    paddingHorizontal: 11,
-                    paddingVertical: 7,
-                    marginTop: 10,
-                }}>
-                    <CalendarDays size={14} color="#fff" />
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff', marginHorizontal: 6 }}>{todayLabel()}</Text>
-                    <ChevronDown size={13} color="#fff" />
-                </View>
-            </LinearGradient>
+            </View>
 
             <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: Math.max(insets.bottom + 24, 34) }}
+                style={s.scroll}
+                contentContainerStyle={[s.scrollContent, { paddingBottom: Math.max(insets.bottom + 24, 34) }]}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="interactive"
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
             >
-                <View style={{
-                    marginTop: -30,
-                    backgroundColor: colors.card,
-                    borderRadius: 20,
-                    borderWidth: 1,
-                    borderColor: colors.primary + '35',
-                    padding: 14,
-                    overflow: 'hidden',
-                    shadowColor: GREEN_DARK,
-                    shadowOpacity: 0.1,
-                    shadowRadius: 12,
-                    shadowOffset: { width: 0, height: 5 },
-                    elevation: 4,
-                }}>
-                    <View style={{
-                        position: 'absolute',
-                        width: 170,
-                        height: 170,
-                        borderRadius: 85,
-                        backgroundColor: colors.primary + '0D',
-                        right: -60,
-                        top: -55,
-                    }} />
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: 32,
-                            backgroundColor: '#DCEEFB',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            borderWidth: 2,
-                            borderColor: '#fff',
-                            marginRight: 12,
-                        }}>
-                            <UserRound size={32} color={GREEN_DARK} />
+                {/* Profile card — same card/border language, no shadow. */}
+                <Box style={s.profileCard}>
+                    <View style={s.decorCircle} />
+                    <View style={s.profileTopRow}>
+                        <View style={s.avatar}>
+                            <UserRound size={30} color={colors.primary} />
                         </View>
-                        <View style={{ flex: 1 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '900', color: colors.foreground, flexShrink: 1 }}>
+                        <View style={s.profileInfo}>
+                            <View style={s.profileNameRow}>
+                                <Text numberOfLines={1} style={s.profileName}>
                                     {profile?.name || 'Farmer / Customer'}
                                 </Text>
-                                <View style={{ backgroundColor: '#DFF6E6', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 }}>
-                                    <Text style={{ fontSize: 9, fontWeight: '800', color: GREEN_DARK }}>
-                                        {profile?.status || 'Active'}
-                                    </Text>
-                                </View>
+                                <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
                             </View>
-                            <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
+                            <Text numberOfLines={1} style={s.profileMeta}>
                                 {isSelling ? 'Customer Code' : 'Farmer Code'} : {profile?.code || '--'}
                             </Text>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                            <View style={s.profileLine}>
                                 <Phone size={12} color={colors.primary} />
-                                <Text style={{ fontSize: 11.5, fontWeight: '700', color: colors.foreground, marginLeft: 5 }}>
-                                    {profile?.phone || '--'}
-                                </Text>
+                                <Text numberOfLines={1} style={s.profileLineText}>{profile?.phone || '--'}</Text>
                             </View>
+                            {!!profile?.address && (
+                                <View style={s.profileLine}>
+                                    <MapPin size={12} color={colors.primary} />
+                                    <Text numberOfLines={1} style={[s.profileLineText, { color: colors.mutedForeground, fontWeight: '500' }]}>
+                                        {profile.address}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
                     </View>
-                    {!!profile?.address && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 9 }}>
-                            <MapPin size={12} color={colors.primary} />
-                            <Text numberOfLines={1} style={{ fontSize: 11, color: colors.mutedForeground, marginLeft: 5, flex: 1 }}>
-                                {profile.address}
-                            </Text>
-                        </View>
-                    )}
-                    <View style={{
-                        marginTop: 10,
-                        backgroundColor: colors.primary + '0D',
-                        borderRadius: 9,
-                        paddingHorizontal: 10,
-                        paddingVertical: 7,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                    }}>
+                    <View style={s.dairyNote}>
                         <CheckCircle2 size={13} color={colors.primary} />
-                        <Text numberOfLines={2} style={{ fontSize: 10, color: colors.foreground, marginLeft: 6, flex: 1 }}>
+                        <Text numberOfLines={2} style={s.dairyNoteText}>
                             Linked dairy: {profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}
                         </Text>
                     </View>
-                </View>
+                </Box>
 
-                <View style={{
-                    flexDirection: 'row',
-                    backgroundColor: colors.card,
-                    borderRadius: 999,
-                    borderWidth: 2,
-                    borderColor: colors.primary,
-                    padding: 4,
-                    marginTop: 16,
-                    overflow: 'hidden',
-                }}>
+                {/* Collection / Selling switch, styled like the owner SubTabBar. */}
+                <View style={s.moduleSwitch}>
                     {(['collection', 'selling'] as PortalModule[]).map((item) => {
                         const enabled = available.includes(item);
                         const active = module === item && enabled;
@@ -611,47 +1117,33 @@ export default function PortalScreen() {
                                 key={item}
                                 onPress={() => switchTo(item)}
                                 disabled={!enabled}
-                                style={{
-                                    flex: 1,
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    borderRadius: 999,
-                                    paddingVertical: 11,
-                                    backgroundColor: active ? colors.card : 'transparent',
-                                    opacity: enabled ? 1 : 0.45,
-                                    borderWidth: active ? 2 : 0,
-                                    borderColor: active ? colors.primary : 'transparent',
-                                }}
+                                style={[
+                                    s.switchBtn,
+                                    active && s.switchBtnActive,
+                                    !enabled && { opacity: 0.45 },
+                                ]}
                             >
-                                <Icon size={16} color={active ? GREEN_DARK : enabled ? colors.mutedForeground : '#9CA3AF'} />
-                                <Text style={{
-                                    fontSize: 15,
-                                    fontWeight: '900',
-                                    color: active ? colors.foreground : enabled ? colors.mutedForeground : '#9CA3AF',
-                                    marginLeft: 6,
-                                }}>
+                                <Icon size={15} color={active ? colors.white : enabled ? colors.mutedForeground : colors.mutedForeground} />
+                                <Text style={[s.switchText, active && s.switchTextActive]}>
                                     {item === 'collection' ? 'Collection' : 'Selling'}
                                 </Text>
-                                {!enabled && <Lock size={12} color="#9CA3AF" style={{ marginLeft: 5 }} />}
+                                {!enabled && <Lock size={12} color={colors.mutedForeground} />}
                             </Pressable>
                         );
                     })}
                 </View>
-                {!!unavailableNote && (
-                    <Text style={{ fontSize: 10.5, color: colors.mutedForeground, textAlign: 'center', marginTop: 7 }}>
-                        {unavailableNote}
-                    </Text>
-                )}
+                {!!unavailableNote && <Text style={s.unavailableNote}>{unavailableNote}</Text>}
 
-                <View style={{ flexDirection: 'row', marginHorizontal: -3, marginTop: 14 }}>
+                {/* Summary cards — same gaps/radius as owner screens. */}
+                <View style={s.summaryRow}>
                     <SummaryCard
-                        label={isSelling ? 'Today Milk' : 'Today Milk'}
+                        label="Today Milk"
                         value={money(summary?.todayMilkAmount)}
                         sub={`${quantity(summary?.todayMilkQuantity)} L today`}
                         icon={isSelling ? ShoppingCart : Droplets}
                         tone="green"
                         colors={colors}
+                        s={s}
                     />
                     <SummaryCard
                         label="Advance Pending"
@@ -660,6 +1152,7 @@ export default function PortalScreen() {
                         icon={Clock3}
                         tone="orange"
                         colors={colors}
+                        s={s}
                     />
                     <SummaryCard
                         label="Current Balance"
@@ -668,167 +1161,68 @@ export default function PortalScreen() {
                         icon={Wallet}
                         tone="wallet"
                         colors={colors}
+                        s={s}
                     />
                 </View>
 
+                <FilterPanel
+                    filters={filters}
+                    setFilter={setFilter}
+                    clearFilters={clearFilters}
+                    filtersOpen={filtersOpen}
+                    setFiltersOpen={setFiltersOpen}
+                    activeCount={activeCount}
+                    dairyOptions={dairyOptions}
+                    modeOptions={modeOptions}
+                    colors={colors}
+                    s={s}
+                />
+
                 {(loading && !dashboard) ? (
-                    <View style={{
-                        marginTop: 14,
-                        padding: 24,
-                        borderRadius: 16,
-                        backgroundColor: colors.card,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        alignItems: 'center',
-                    }}>
+                    <Box style={s.loadingCard}>
                         <ActivityIndicator color={colors.primary} />
-                        <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 10 }}>
-                            Loading your linked dairy records...
-                        </Text>
-                    </View>
+                        <Text style={s.loadingText}>Loading your linked dairy records...</Text>
+                    </Box>
                 ) : !!error ? (
-                    <View style={{
-                        marginTop: 14,
-                        padding: 18,
-                        borderRadius: 16,
-                        backgroundColor: colors.card,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                        alignItems: 'center',
-                    }}>
-                        <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: 'center' }}>{error}</Text>
-                        <Pressable onPress={() => void loadDashboard(false)} style={{
-                            marginTop: 12,
-                            backgroundColor: colors.primary,
-                            borderRadius: 9,
-                            paddingHorizontal: 16,
-                            paddingVertical: 9,
-                        }}>
-                            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Retry</Text>
+                    <Box style={s.errorCard}>
+                        <Text style={s.errorText}>{error}</Text>
+                        <Pressable onPress={() => void loadDashboard(false)} style={s.retryBtn}>
+                            <Text style={s.retryBtnText}>Retry</Text>
                         </Pressable>
-                    </View>
+                    </Box>
                 ) : (
                     <>
-                        <SectionCard
-                            title={isSelling ? 'Recent Selling Entries' : 'Purchase Entry (Milk)'}
-                            icon={isSelling ? ShoppingCart : Droplets}
-                            colors={colors}
-                            count={entries.length}
-                            expanded={expanded.entries}
-                            onToggle={() => toggleSection('entries')}
-                        >
-                            <DataTable
-                                colors={colors}
-                                tableWidth={tableWidth}
-                                emptyText="No milk entries found for this mobile number."
-                                columns={[
-                                    { label: 'Date', flex: 1.05 },
-                                    { label: isSelling ? 'Customer' : 'Farmer', flex: 1.35, align: 'left' },
-                                    { label: 'Qty (L)', flex: 0.8 },
-                                    { label: 'Rate (₹)', flex: 0.8 },
-                                    { label: 'Amount (₹)', flex: 1 },
-                                    { label: 'Status', flex: 0.9 },
-                                ]}
-                                rows={visible.entries}
-                                renderRow={(row) => (
-                                    <>
-                                        <Cell flex={1.05} colors={colors}>{shortDate(row.date)}</Cell>
-                                        <Cell flex={1.35} align="left" colors={colors}>
-                                            {isSelling ? (row.customerName || profile?.name || '--') : (row.farmerName || profile?.name || '--')}
-                                        </Cell>
-                                        <Cell flex={0.8} colors={colors}>{quantity(row.quantity)}</Cell>
-                                        <Cell flex={0.8} colors={colors}>{money(row.rate)}</Cell>
-                                        <Cell flex={1} colors={colors} bold>{money(row.amount)}</Cell>
-                                        <Cell flex={0.9} colors={colors}>
-                                            <StatusPill status={row.status} colors={colors} />
-                                        </Cell>
-                                    </>
-                                )}
-                            />
-                        </SectionCard>
+                        {sectionConfigs
+                            .filter((config) => filters.section === 'all' || filters.section === config.key)
+                            .map((config) => {
+                                const rows = config.rows;
+                                const visible = displayRows(rows, config.key);
+                                const showViewAll = filters.section === 'all' && rows.length > 5;
+                                const subtitle = `${rows.length} record${rows.length === 1 ? '' : 's'}${rows.length > 100 ? ' • showing 100' : ''}`;
+                                return (
+                                    <SectionCard
+                                        key={config.key}
+                                        title={config.title}
+                                        subtitle={subtitle}
+                                        icon={config.icon}
+                                        colors={colors}
+                                        s={s}
+                                        showViewAll={showViewAll}
+                                        expanded={expanded[config.key]}
+                                        onToggle={() => toggleSection(config.key)}
+                                    >
+                                        <PortalTable
+                                            columns={config.columns}
+                                            rows={visible}
+                                            emptyText={emptyText}
+                                            compact={compact}
+                                            s={s}
+                                        />
+                                    </SectionCard>
+                                );
+                            })}
 
-                        <SectionCard
-                            title={isSelling ? 'Selling Payment History' : 'Settlement Payment History'}
-                            icon={IndianRupee}
-                            colors={colors}
-                            count={payments.length}
-                            expanded={expanded.payments}
-                            onToggle={() => toggleSection('payments')}
-                        >
-                            <DataTable
-                                colors={colors}
-                                tableWidth={tableWidth}
-                                emptyText="No payment history found."
-                                columns={[
-                                    { label: 'Date', flex: 1.05 },
-                                    { label: 'Amount', flex: 1 },
-                                    { label: 'Mode', flex: 0.9 },
-                                    { label: 'Remark', flex: 1.8, align: 'left' },
-                                    { label: 'Dairy', flex: 1.25, align: 'left' },
-                                ]}
-                                rows={visible.payments}
-                                renderRow={(row) => (
-                                    <>
-                                        <Cell flex={1.05} colors={colors}>{longDate(row.date)}</Cell>
-                                        <Cell flex={1} colors={colors} bold>{money(row.amount)}</Cell>
-                                        <Cell flex={0.9} colors={colors}>{row.mode}</Cell>
-                                        <Cell flex={1.8} align="left" colors={colors}>{row.remark || '--'}</Cell>
-                                        <Cell flex={1.25} align="left" colors={colors}>{row.dairyName || profile?.dairyName || '--'}</Cell>
-                                    </>
-                                )}
-                            />
-                        </SectionCard>
-
-                        <SectionCard
-                            title="Advance History"
-                            icon={History}
-                            colors={colors}
-                            count={advances.length}
-                            expanded={expanded.advances}
-                            onToggle={() => toggleSection('advances')}
-                        >
-                            <DataTable
-                                colors={colors}
-                                tableWidth={tableWidth}
-                                emptyText="No advance history found."
-                                columns={[
-                                    { label: 'Date', flex: 1.05 },
-                                    { label: 'Type', flex: 1.15 },
-                                    { label: 'Amount', flex: 1 },
-                                    { label: 'Remark', flex: 1.8, align: 'left' },
-                                    { label: 'Dairy', flex: 1.25, align: 'left' },
-                                ]}
-                                rows={visible.advances}
-                                renderRow={(row) => {
-                                    const up = row.direction === 'up';
-                                    const Arrow = up ? ArrowUpRight : ArrowDownLeft;
-                                    return (
-                                        <>
-                                            <Cell flex={1.05} colors={colors}>{longDate(row.date)}</Cell>
-                                            <Cell flex={1.15} colors={colors}>
-                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                                    <Arrow size={12} color={up ? GREEN_DARK : ORANGE} />
-                                                    <Text style={{ fontSize: 10.5, fontWeight: '800', color: up ? GREEN_DARK : ORANGE, marginLeft: 3 }}>
-                                                        {row.type}
-                                                    </Text>
-                                                </View>
-                                            </Cell>
-                                            <Cell flex={1} colors={colors} bold>{money(row.amount)}</Cell>
-                                            <Cell flex={1.8} align="left" colors={colors}>{row.remark || '--'}</Cell>
-                                            <Cell flex={1.25} align="left" colors={colors}>{row.dairyName || profile?.dairyName || '--'}</Cell>
-                                        </>
-                                    );
-                                }}
-                            />
-                        </SectionCard>
-
-                        <Text style={{
-                            fontSize: 9.5,
-                            color: colors.mutedForeground,
-                            textAlign: 'center',
-                            marginTop: 16,
-                            paddingHorizontal: 12,
-                        }}>
+                        <Text style={s.footerNote}>
                             This is a read-only view. Please contact your dairy owner to add or correct any entry.
                         </Text>
                     </>
@@ -837,3 +1231,293 @@ export default function PortalScreen() {
         </View>
     );
 }
+
+const createStyles = (colors: any, isDark: boolean, width: number) => {
+    const compactFont = width < 380 ? 9.5 : 10.5;
+    const compactSub = width < 380 ? 8 : 8.5;
+    const tableHeaderBg = isDark ? colors.muted : '#eef2f7';
+    const rowAltBg = isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)';
+
+    return StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.background },
+        scroll: { flex: 1 },
+        scrollContent: { paddingHorizontal: 10, paddingTop: 10, gap: 10 },
+
+        header: {
+            backgroundColor: colors.primary,
+            paddingHorizontal: 10,
+            paddingBottom: 10,
+        },
+        headerRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            minHeight: 40,
+        },
+        headerBtn: {
+            width: 38,
+            height: 38,
+            borderRadius: 11,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(255,255,255,0.13)',
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.14)',
+        },
+        headerTitle: { flex: 1, alignItems: 'center', minWidth: 0 },
+        headerTitleText: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
+        headerSub: { fontSize: 10, color: 'rgba(255,255,255,0.72)', marginTop: 1 },
+
+        profileCard: { padding: 12, overflow: 'hidden' },
+        decorCircle: {
+            position: 'absolute',
+            width: 120,
+            height: 120,
+            borderRadius: 60,
+            backgroundColor: colors.primary + '08',
+            right: -40,
+            top: -45,
+        },
+        profileTopRow: { flexDirection: 'row', gap: 10 },
+        avatar: {
+            width: 58,
+            height: 58,
+            borderRadius: 29,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: colors.primary + '15',
+            borderWidth: 1,
+            borderColor: colors.primary + '30',
+        },
+        profileInfo: { flex: 1, minWidth: 0 },
+        profileNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        profileName: { fontSize: 16, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
+        profileMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
+        profileLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+        profileLineText: { flex: 1, fontSize: 11.5, fontWeight: '600', color: colors.foreground },
+        dairyNote: {
+            marginTop: 10,
+            padding: 8,
+            borderRadius: 8,
+            backgroundColor: colors.secondary,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        dairyNoteText: { flex: 1, fontSize: 10, color: colors.foreground },
+
+        moduleSwitch: {
+            flexDirection: 'row',
+            gap: 6,
+            padding: 4,
+            backgroundColor: colors.card,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 10,
+        },
+        switchBtn: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            paddingVertical: 6,
+            borderRadius: 7,
+        },
+        switchBtnActive: { backgroundColor: colors.primary },
+        switchText: { fontSize: 12, fontWeight: '700', color: colors.foreground },
+        switchTextActive: { color: colors.white },
+        unavailableNote: { fontSize: 10.5, color: colors.mutedForeground, textAlign: 'center' },
+
+        summaryRow: { flexDirection: 'row', gap: 8 },
+        summaryCard: { flex: 1, minWidth: 0, padding: 10 },
+        summaryIcon: {
+            width: 26,
+            height: 26,
+            borderRadius: 8,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 6,
+        },
+        summaryLabel: { fontSize: 9.5, fontWeight: '700', color: colors.mutedForeground },
+        summaryValue: { fontSize: 13.5, fontWeight: '900', color: colors.foreground, marginTop: 2 },
+        summarySub: { fontSize: 8.5, color: colors.mutedForeground, marginTop: 2 },
+
+        filterCard: { padding: 10, gap: 8 },
+        filterHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+        filterHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+        filterTitle: { fontSize: 13, fontWeight: '800', color: colors.foreground },
+        filterCountBadge: {
+            backgroundColor: colors.primary + '18',
+            borderRadius: 999,
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+        },
+        filterCountText: { fontSize: 9, fontWeight: '800', color: colors.primary },
+        clearBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 5,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.muted,
+        },
+        clearText: { fontSize: 10.5, fontWeight: '700', color: colors.foreground },
+        filterHint: { fontSize: 10, color: colors.mutedForeground },
+        filterBody: { gap: 10 },
+        filterGroup: { gap: 6 },
+        filterGroupLabel: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: colors.mutedForeground,
+            textTransform: 'uppercase',
+            letterSpacing: 0.4,
+        },
+        chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
+        chip: {
+            paddingHorizontal: 10,
+            paddingVertical: 7,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+            maxWidth: '100%',
+            flexShrink: 1,
+        },
+        chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+        chipText: { fontSize: 11, fontWeight: '700', color: colors.foreground, flexShrink: 1 },
+        chipTextActive: { color: colors.white },
+        activeFiltersText: { fontSize: 10, color: colors.mutedForeground, marginTop: 2 },
+
+        sectionCard: { padding: 0, overflow: 'hidden' },
+        sectionHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 9,
+            backgroundColor: colors.secondary,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border,
+        },
+        sectionIcon: {
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            backgroundColor: colors.primary,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        sectionTitleWrap: { flex: 1, minWidth: 0 },
+        sectionTitle: { fontSize: 13, fontWeight: '800', color: colors.foreground },
+        sectionSub: { fontSize: 9.5, color: colors.mutedForeground, marginTop: 1 },
+        viewAllBtn: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 2,
+            paddingHorizontal: 8,
+            paddingVertical: 5,
+            borderRadius: 8,
+            backgroundColor: colors.primary + '12',
+        },
+        viewAllText: { fontSize: 10.5, fontWeight: '800', color: colors.primary },
+        sectionBody: { padding: 8 },
+
+        tableWrap: {
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 12,
+            overflow: 'hidden',
+            backgroundColor: colors.card,
+        },
+        tHead: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingVertical: 7,
+            paddingHorizontal: 8,
+            backgroundColor: tableHeaderBg,
+        },
+        tHeadText: {
+            fontSize: 9,
+            fontWeight: '700',
+            color: colors.mutedForeground,
+            textTransform: 'uppercase',
+            letterSpacing: 0.3,
+        },
+        row: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingVertical: 8,
+            paddingHorizontal: 8,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+        },
+        rowAlt: { backgroundColor: rowAltBg },
+        cell: { minWidth: 0, justifyContent: 'center', paddingHorizontal: 1 },
+        cellText: {
+            fontSize: compactFont,
+            fontWeight: '600',
+            color: colors.foreground,
+            textAlign: 'center',
+            flexShrink: 1,
+        },
+        cellSub: {
+            fontSize: compactSub,
+            fontWeight: '500',
+            color: colors.mutedForeground,
+            marginTop: 1,
+            textAlign: 'center',
+            flexShrink: 1,
+        },
+        alignLeft: { textAlign: 'left' },
+        alignCenter: { textAlign: 'center' },
+        alignRight: { textAlign: 'right' },
+        bold: { fontWeight: '800' },
+        muted: { color: colors.mutedForeground },
+
+        statusPill: {
+            paddingHorizontal: 6,
+            paddingVertical: 3,
+            borderRadius: 6,
+            alignSelf: 'center',
+            minWidth: 44,
+            alignItems: 'center',
+        },
+        statusPillText: { fontSize: 9, fontWeight: '800' },
+
+        empty: {
+            borderWidth: 1,
+            borderStyle: 'dashed',
+            borderColor: colors.border,
+            borderRadius: 10,
+            padding: 16,
+            alignItems: 'center',
+            backgroundColor: colors.background,
+        },
+        emptyText: { fontSize: 11, color: colors.mutedForeground, textAlign: 'center' },
+
+        loadingCard: { padding: 20, alignItems: 'center' },
+        loadingText: { fontSize: 12, color: colors.mutedForeground, marginTop: 10 },
+        errorCard: { padding: 18, alignItems: 'center' },
+        errorText: { fontSize: 12, color: colors.mutedForeground, textAlign: 'center' },
+        retryBtn: {
+            marginTop: 12,
+            paddingHorizontal: 16,
+            paddingVertical: 9,
+            borderRadius: 9,
+            backgroundColor: colors.primary,
+        },
+        retryBtnText: { color: colors.white, fontSize: 12, fontWeight: '800' },
+        footerNote: {
+            fontSize: 9.5,
+            color: colors.mutedForeground,
+            textAlign: 'center',
+            paddingHorizontal: 12,
+        },
+    });
+};
