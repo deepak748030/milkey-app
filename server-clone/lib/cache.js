@@ -172,6 +172,10 @@ const SKIP_BASES = new Set([
     '/api/member-payments',
     '/api/user-subscriptions',
     '/api/subscriptions',
+    // Farmer/customer portal is personal and read-only; never serve a cached copy.
+    '/api/portal',
+    // New isolated selling-advance ledger must reflect writes immediately.
+    '/api/selling-advances',
 ]);
 
 /**

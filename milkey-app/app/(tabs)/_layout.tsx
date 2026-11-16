@@ -14,7 +14,8 @@ import { checkAppVersion } from '@/lib/milkeyApi';
 import { useSubTabStore } from '@/lib/subTabStore';
 import { useLayoutStore } from '@/lib/layoutStore';
 import { useTabSound } from '@/hooks/useTabSound';
-import { consumeSuppressCollection, consumeSuppressSelling, setSuppressCollection } from '@/lib/sheetSuppress';
+import { consumeSuppressCollection, consumeSuppressSelling, setSuppressCollection, setSuppressSelling } from '@/lib/sheetSuppress';
+import { getPortalSession } from '@/lib/portalAuth';
 import Constants from 'expo-constants';
 
 const APP_VERSION = Constants.expoConfig?.version || '1.0.0';
@@ -52,6 +53,14 @@ export default function TabLayout() {
   const { purchaseTab, sellingTab, collectionTab, setPurchaseTab, setSellingTab, setCollectionTab, suppressCollectionSheet, suppressSellingSheet, setSuppressCollectionSheet, setSuppressSellingSheet } = useSubTabStore();
   const playTabSound = useTabSound();
   const activeTabName = segments[segments.length - 1] as string || '';
+  // Hard boundary: a farmer/customer portal session can never browse owner tabs.
+  useEffect(() => {
+    let alive = true;
+    getPortalSession().then((portal) => {
+      if (alive && portal?.token) router.replace('/portal');
+    }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [router]);
   const measuredHeader = useLayoutStore((st) => st.headerHeight);
   // Mirror the sheet visibility into the shared store: the purchase / selling screens
   // read it to paint their dark backdrop INSIDE the screen (the only place that is
@@ -121,7 +130,17 @@ export default function TabLayout() {
     setPurchaseTab(tab);
   }, [setPurchaseTab, setCollectionTab, setShowCollectionSheet, router]);
 
-  const handleSellingSelect = useCallback((tab: any) => { setSellingTab(tab); }, [setSellingTab]);
+  const handleSellingSelect = useCallback((tab: any) => {
+    // "Advance" is a separate isolated screen, not a SellingTab state, so the
+    // existing selling tabs and their data stay completely unchanged.
+    if (tab === 'Advance') {
+      setShowSellingSheet(false);
+      setSuppressSelling(true);
+      router.push('/selling-advance' as any);
+      return;
+    }
+    setSellingTab(tab);
+  }, [setSellingTab, router]);
 
   // Custom circle-style tab bar — active tab gets green circle like requested (Register removed)
   const renderTabBar = useCallback((props: any) => {

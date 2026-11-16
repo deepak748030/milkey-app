@@ -5,11 +5,12 @@ import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import { router } from 'expo-router';
-import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin, ArrowLeft, CheckCircle, Camera, ChevronDown, X, Search } from 'lucide-react-native';
+import { Eye, EyeOff, Mail, Lock, User, Phone, Gift, MapPin, ArrowLeft, CheckCircle, Camera, ChevronDown, X, Search, Store, UserRound } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApiNew } from '@/lib/milkeyApi';
-import { setAuthUser } from '@/lib/authStore';
+import { setAuthUser, clearAuth } from '@/lib/authStore';
+import { portalApi, setPortalSession, clearPortalSession } from '@/lib/portalAuth';
 import { SuccessModal } from '@/components/SuccessModal';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
@@ -278,6 +279,9 @@ export default function AuthScreen() {
 
     // Screens: 'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'
     const [screen, setScreen] = useState<'login' | 'login-otp' | 'register-details' | 'forgot' | 'forgot-otp' | 'reset-password'>('login');
+    // Existing phone/Google flow stays the Dairy Owner flow. The new mode uses a
+    // separate portal session and never creates or edits a User account.
+    const [loginMode, setLoginMode] = useState<'owner' | 'farmer_customer'>('owner');
     const [loading, setLoading] = useState(false);
     const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -369,6 +373,7 @@ export default function AuthScreen() {
                     hasToken: !!authResult.response?.token,
                 });
                 if (authResult.success && authResult.response) {
+                    await clearPortalSession();
                     await setAuthUser(authResult.response.token, authResult.response.user);
                     if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                     router.replace('/(tabs)');
@@ -399,6 +404,7 @@ export default function AuthScreen() {
                 hasToken: !!authResult.response?.token,
             });
             if (authResult.success && authResult.response) {
+                await clearPortalSession();
                 await setAuthUser(authResult.response.token, authResult.response.user);
                 if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                 router.replace('/(tabs)');
@@ -419,9 +425,26 @@ export default function AuthScreen() {
     const handleSendLoginOtp = useCallback(async () => {
         if (!phone || phone.length !== 10) { showModal('Error', 'Please enter a valid 10-digit phone number'); return; }
 
-        console.log('[auth] sendOtp → requesting OTP from server for +91', phone);
         setLoading(true);
         try {
+            if (loginMode === 'farmer_customer') {
+                const result = await portalApi.sendOtp(phone);
+                if (result.success) {
+                    setScreen('login-otp');
+                    const devOtp = result.response?.devOtp;
+                    showModal(
+                        'OTP Sent',
+                        devOtp
+                            ? `OTP ready for +91 ${phone}.\n\nDevelopment OTP: ${devOtp}`
+                            : `OTP sent to +91 ${phone}.`,
+                    );
+                } else {
+                    showModal('Error', result.message || 'Failed to send OTP. Please try again.');
+                }
+                return;
+            }
+
+            console.log('[auth] sendOtp → requesting OTP from server for +91', phone);
             const result = await authApiNew.sendPhoneOtp(phone);
             console.log('[auth] sendOtp → server response:', { success: result.success, message: result.message });
 
@@ -435,13 +458,25 @@ export default function AuthScreen() {
             console.error('[auth] sendOtp → network error:', err?.message, err);
             showModal('Error', 'Network error. Please check your internet and try again.');
         } finally { setLoading(false); }
-    }, [phone, showModal]);
+    }, [phone, loginMode, showModal]);
 
     const handleOtpLogin = useCallback(async () => {
         if (!otp || otp.length !== 6) { showModal('Error', 'Please enter a valid 6-digit OTP'); return; }
 
         setLoading(true);
         try {
+            if (loginMode === 'farmer_customer') {
+                const result = await portalApi.verifyOtp(phone, otp);
+                if (result.success && result.response) {
+                    await clearAuth();
+                    await setPortalSession(result.response.token, result.response.user);
+                    router.replace('/portal');
+                } else {
+                    showModal('Error', result.message || 'Invalid OTP');
+                }
+                return;
+            }
+
             console.log('[auth] verifyOtp → calling /auth/phone-login for +91', phone);
             const result = await authApiNew.phoneLogin(phone, otp);
             console.log('[auth] verifyOtp → server response:', { success: result.success, code: (result as any).code });
@@ -450,6 +485,7 @@ export default function AuthScreen() {
                 if ((result.response as any).needsRegistration || (result as any).code === 'USER_NOT_FOUND') {
                     setOtp(''); setScreen('register-details'); return;
                 }
+                await clearPortalSession();
                 await setAuthUser(result.response.token, result.response.user);
                 if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                 router.replace('/(tabs)');
@@ -460,7 +496,7 @@ export default function AuthScreen() {
             console.error('[auth] verifyOtp → error:', err?.message, err);
             showModal('Error', err?.message || 'Verification failed. Please try again.');
         } finally { setLoading(false); }
-    }, [phone, otp, expoPushToken, showModal]);
+    }, [phone, otp, loginMode, expoPushToken, showModal]);
 
     const handleCompleteRegistration = useCallback(async () => {
         if (!name) { showModal('Error', 'Please enter your name'); return; }
@@ -489,6 +525,7 @@ export default function AuthScreen() {
                 referralCode: referralCode || undefined,
             });
             if (result.success && result.response) {
+                await clearPortalSession();
                 await setAuthUser(result.response.token, result.response.user);
                 if (expoPushToken) authApiNew.updatePushToken(expoPushToken).catch(console.error);
                 router.replace('/(tabs)');
@@ -784,10 +821,19 @@ export default function AuthScreen() {
         return (
             <ScreenWrapper>
                 <BackButton onPress={() => { setScreen('login'); setOtp(''); }} />
-                <LogoHeader title="Verify OTP" subtitle={`OTP sent to +91 ${phone}`} colors={colors} compact />
+                <LogoHeader
+                    title="Verify OTP"
+                    subtitle={loginMode === 'farmer_customer' ? `Farmer / Customer OTP for +91 ${phone}` : `OTP sent to +91 ${phone}`}
+                    colors={colors}
+                    compact
+                />
                 <FormCard>
                     <Text style={{ fontSize: 14, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 2 }}>Enter OTP</Text>
-                    <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>Enter the OTP sent to your phone</Text>
+                    <Text style={{ fontSize: 11, textAlign: 'center', color: colors.mutedForeground, marginBottom: 10 }}>
+                        {loginMode === 'farmer_customer'
+                            ? 'Enter the OTP for your registered farmer / customer number'
+                            : 'Enter the OTP sent to your phone'}
+                    </Text>
                     <OtpBoxes value={otp} onChange={setOtp} colors={colors} autoFocus={!modalVisible} />
                     <View style={{ height: 8 }} />
                     <PrimaryButton onPress={handleOtpLogin} label="Verify & Continue" loading={loading} colors={colors} />
@@ -891,10 +937,80 @@ export default function AuthScreen() {
     // ═══════════════════════════════════════
     return (
         <ScreenWrapper>
-            <LogoHeader title="Milkey" subtitle="Welcome! Sign in or create your account" colors={colors} />
+            <LogoHeader
+                title="Milkey"
+                subtitle={loginMode === 'owner' ? 'Welcome! Sign in or create your account' : 'Access your linked dairy records'}
+                colors={colors}
+            />
 
             <FormCard>
-                <Text style={{ fontSize: 16, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 10 }}>Login / Register</Text>
+                <Text style={{ fontSize: 16, fontWeight: '700', textAlign: 'center', color: colors.foreground, marginBottom: 10 }}>
+                    {loginMode === 'owner' ? 'Login / Register' : 'Farmer / Customer Login'}
+                </Text>
+
+                {/* Additive role selector. Dairy Owner keeps the exact existing OTP / Google flow. */}
+                <View style={{
+                    flexDirection: 'row',
+                    backgroundColor: colors.muted,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    padding: 3,
+                    marginBottom: 10,
+                }}>
+                    <Pressable
+                        onPress={() => { setLoginMode('owner'); setOtp(''); }}
+                        style={{
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingVertical: 9,
+                            borderRadius: 8,
+                            backgroundColor: loginMode === 'owner' ? colors.card : 'transparent',
+                            borderWidth: loginMode === 'owner' ? 1 : 0,
+                            borderColor: loginMode === 'owner' ? colors.primary + '55' : 'transparent',
+                        }}
+                    >
+                        <Store size={14} color={loginMode === 'owner' ? colors.primary : colors.mutedForeground} />
+                        <Text style={{ fontSize: 11.5, fontWeight: '800', marginLeft: 5, color: loginMode === 'owner' ? colors.foreground : colors.mutedForeground }}>
+                            Dairy Owner
+                        </Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={() => { setLoginMode('farmer_customer'); setOtp(''); }}
+                        style={{
+                            flex: 1,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            paddingVertical: 9,
+                            borderRadius: 8,
+                            backgroundColor: loginMode === 'farmer_customer' ? colors.card : 'transparent',
+                            borderWidth: loginMode === 'farmer_customer' ? 1 : 0,
+                            borderColor: loginMode === 'farmer_customer' ? colors.primary + '55' : 'transparent',
+                        }}
+                    >
+                        <UserRound size={14} color={loginMode === 'farmer_customer' ? colors.primary : colors.mutedForeground} />
+                        <Text style={{ fontSize: 11.5, fontWeight: '800', marginLeft: 5, color: loginMode === 'farmer_customer' ? colors.foreground : colors.mutedForeground }}>
+                            Farmer / Customer
+                        </Text>
+                    </Pressable>
+                </View>
+                {loginMode === 'farmer_customer' && (
+                    <Text style={{
+                        fontSize: 10.5,
+                        lineHeight: 15,
+                        color: colors.mutedForeground,
+                        backgroundColor: colors.primary + '0D',
+                        borderRadius: 8,
+                        paddingHorizontal: 9,
+                        paddingVertical: 8,
+                        marginBottom: 9,
+                    }}>
+                        Use the mobile number registered by your dairy owner. Only the linked Collection and Selling pages will open after OTP verification.
+                    </Text>
+                )}
 
                 <Text style={{ fontSize: 10, fontWeight: '600', color: colors.mutedForeground, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 }}>Enter your Mobile Number</Text>
                 <View style={{
@@ -925,9 +1041,12 @@ export default function AuthScreen() {
                 <View style={{ height: 6 }} />
                 <PrimaryButton onPress={handleSendLoginOtp} label="Send OTP" loading={loading && !googleLoading} colors={colors} />
 
-                <Divider />
-
-                <GoogleButton label="Sign in with Google" onPress={() => { googleModeRef.current = 'login'; handleGoogleAuth(); }} />
+                {loginMode === 'owner' && (
+                    <>
+                        <Divider />
+                        <GoogleButton label="Sign in with Google" onPress={() => { googleModeRef.current = 'login'; handleGoogleAuth(); }} />
+                    </>
+                )}
             </FormCard>
 
             <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 12, color: colors.mutedForeground, paddingHorizontal: 16 }}>

@@ -47,6 +47,10 @@ function RootLayoutContent() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="auth" />
         <Stack.Screen name="(tabs)" />
+        {/* Farmer/Customer portal: intentionally outside the owner tab navigator. */}
+        <Stack.Screen name="portal" />
+        {/* Isolated dairy-owner selling advance ledger. */}
+        <Stack.Screen name="selling-advance" />
         <Stack.Screen name="calculator" />
         <Stack.Screen name="notifications" />
         <Stack.Screen name="help-support" />
@@ -67,7 +71,7 @@ function RootLayoutContent() {
       <SheetScrimOverlay visible={scrimCount > 0} bottomOffset={scrimBottom} dim={scrimDim} />
       {/* Status bar matches app theme (light #FFFFFF white / dark #000000 black) */}
       <RNStatusBar backgroundColor={bg} barStyle={isDark ? 'light-content' : 'dark-content'} translucent={false} />
-      <ExpoStatusBar style={isDark ? 'light' : 'dark'} backgroundColor={bg} />
+      <ExpoStatusBar style={isDark ? 'light' : 'dark'} />
     </View>
   );
 }

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Animated, Easing, Dimensions, Image } from 'rea
 import { router } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { initializeAuth, isAuthenticated } from '@/lib/authStore';
+import { getPortalSession } from '@/lib/portalAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
@@ -123,7 +124,11 @@ export default function SplashScreen() {
             router.replace('/onboarding' as any);
             return;
           }
-          if (isAuthenticated()) {
+          // A portal session must never land on the dairy-owner tab navigator.
+          const portal = await getPortalSession();
+          if (portal?.token && portal.user) {
+            router.replace('/portal');
+          } else if (isAuthenticated()) {
             router.replace('/(tabs)');
           } else {
             router.replace('/auth');
