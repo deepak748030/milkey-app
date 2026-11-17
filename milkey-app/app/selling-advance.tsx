@@ -10,14 +10,11 @@ import {
 } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { TextInput } from '@/components/ui/HapticTextInput';
-import { LinearGradient } from 'expo-linear-gradient';
+import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import {
-    ArrowLeft,
     CheckCircle2,
     Search,
     Trash2,
@@ -39,9 +36,6 @@ import {
     SellingAdvance,
     SellingAdvanceType,
 } from '@/lib/sellingAdvancesApi';
-
-const GREEN_DARK = '#087A3D';
-const ORANGE = '#C77700';
 
 const money = (value: number | string | undefined) => {
     const n = Number(value || 0);
@@ -281,30 +275,7 @@ export default function SellingAdvanceScreen() {
 
     return (
         <View style={{ flex: 1, backgroundColor: colors.background }}>
-            <StatusBar style="light" />
-            <LinearGradient
-                colors={[colors.primary, GREEN_DARK]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                    paddingTop: insets.top + 12,
-                    paddingBottom: 18,
-                    paddingHorizontal: 14,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    borderBottomLeftRadius: 20,
-                    borderBottomRightRadius: 20,
-                }}
-            >
-                <Pressable onPress={() => router.back()} hitSlop={10} style={{ width: 42 }}>
-                    <ArrowLeft size={22} color="#fff" />
-                </Pressable>
-                <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 19, fontWeight: '900', color: '#fff' }}>Selling Advance</Text>
-                    <Text style={{ fontSize: 10, color: '#D8F7E4', marginTop: 2 }}>Customer Advance</Text>
-                </View>
-
-            </LinearGradient>
+            <TopBar />
 
             <ScrollView
                 style={{ flex: 1 }}
@@ -336,7 +307,7 @@ export default function SellingAdvanceScreen() {
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Date</Text>
                             <Pressable onPress={() => setShowDatePicker(true)} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <Text style={{ color: colors.foreground, fontSize: 12 }}>{new Date(`${form.date}T00:00:00`).toLocaleDateString('en-IN')}</Text>
+                                <Text style={{ color: colors.foreground, fontSize: 12 }}>{new Date(`${form.date}T00:00:00`).toLocaleDateString('en-GB')}</Text>
                                 <CalendarDays size={15} color={colors.mutedForeground} />
                             </Pressable>
                         </View>
@@ -356,13 +327,13 @@ export default function SellingAdvanceScreen() {
                 </View>
 
                 <View style={{
-                    marginTop: 12,
+                    marginTop: 8,
                     flexDirection: 'row',
                     alignItems: 'center',
                     backgroundColor: colors.card,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    borderRadius: 10,
+                    borderWidth: 1.2,
+                    borderColor: '#9CA3AF',
+                    borderRadius: 6,
                     paddingHorizontal: 10,
                     height: 42,
                 }}>
@@ -387,7 +358,7 @@ export default function SellingAdvanceScreen() {
                 </View>
 
 
-                <View style={{ marginTop: 2, marginBottom: 10, padding: 11, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ marginTop: 2, marginBottom: 10, padding: 11, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.card, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View>
                         <Text style={{ fontSize: 11, fontWeight: '700', color: colors.mutedForeground }}>Total Records</Text>
                         <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>{totalCount} records • {advances.length} shown</Text>

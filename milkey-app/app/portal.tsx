@@ -850,7 +850,7 @@ export default function PortalScreen() {
         setModule(next);
     }, [session]);
 
-    const profile = dashboard?.profile || session;
+    const profile = dashboard?.profile || session?.moduleProfiles?.[module] || session;
     const summary = dashboard?.summary;
     const entries: PortalEntryRow[] = dashboard?.entries || [];
     const payments: PortalPaymentRow[] = dashboard?.payments || [];
