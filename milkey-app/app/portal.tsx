@@ -17,8 +17,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import {
-    ArrowDownLeft,
-    ArrowUpRight,
     CheckCircle2,
     ChevronDown,
     ChevronRight,
@@ -1047,61 +1045,8 @@ export default function PortalScreen() {
         },
     ];
 
-    const advanceColumns: PortalColumn<PortalAdvanceRow>[] = isSelling ? [
-        {
-            key: 'date',
-            title: 'Date',
-            flex: 1,
-            align: 'left',
-            render: (row) => (
-                <CellText align="left" s={s}>{shortDate(row.date)}</CellText>
-            ),
-        },
-        {
-            key: 'type',
-            title: 'Type',
-            flex: 1.05,
-            render: (row) => {
-                const up = row.direction === 'up' || row.type === 'Adjusted' || row.status === 'settled';
-                const Arrow = up ? ArrowUpRight : ArrowDownLeft;
-                const color = up ? colors.success : colors.warning;
-                return (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, minWidth: 0, flexShrink: 1, maxWidth: '100%' }}>
-                        <Arrow size={11} color={color} />
-                        <CellText s={s} numberOfLines={1}>{row.type || '--'}</CellText>
-                    </View>
-                );
-            },
-        },
-        {
-            key: 'amount',
-            title: 'Amount',
-            flex: 0.95,
-            render: (row) => <CellText bold s={s}>{money(row.amount)}</CellText>,
-        },
-        {
-            key: 'remark',
-            title: 'Remark',
-            flex: 1.7,
-            align: 'left',
-            render: (row) => (
-                <CellText align="left" s={s} numberOfLines={2}>{row.remark || '--'}</CellText>
-            ),
-        },
-        {
-            key: 'dairy',
-            title: 'Dairy',
-            flex: 1.1,
-            align: 'left',
-            hideOnCompact: true,
-            render: (row) => (
-                <CellText align="left" s={s} numberOfLines={1}>
-                    {row.dairyName || profile?.dairyName || '--'}
-                </CellText>
-            ),
-        },
+    const advanceColumns: PortalColumn<PortalAdvanceRow>[] = [
 
-    ] : [
         {
             key: 'name',
             title: 'Name',
