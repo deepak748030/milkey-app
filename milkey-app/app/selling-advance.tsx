@@ -23,6 +23,7 @@ import {
     User,
     Search,
     Trash2,
+    CheckCircle2,
     Users,
     CalendarDays,
     FileText,
@@ -264,24 +265,27 @@ export default function SellingAdvanceScreen() {
 
             <ScrollView
                 style={{ flex: 1 }}
-                contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 14, paddingBottom: Math.max(insets.bottom + 28, 36) }}
+                contentContainerStyle={{ paddingHorizontal: 6, paddingTop: 8, paddingBottom: Math.max(insets.bottom + 28, 36) }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
                 showsVerticalScrollIndicator={false}
             >
-                <View style={{ marginBottom: 10 }}>
+                <View style={{ marginBottom: 6 }}>
                     <Text style={{ fontSize: 12, fontWeight: '800', color: colors.foreground, marginBottom: 6 }}>Customer</Text>
                     <View style={{ position: 'relative', zIndex: 10, marginBottom: 8 }}>
-                        <TextInput
-                            value={customerQuery}
-                            onChangeText={(value) => {
-                                setCustomerQuery(value);
-                                setForm((prev) => ({ ...prev, memberId: '' }));
-                            }}
-                            placeholder={members.length ? 'Name or mobile number' : 'Add a selling customer first'}
-                            placeholderTextColor={colors.mutedForeground}
-                            autoCapitalize="none"
-                            style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 11, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }}
-                        />
+                        <View style={{ position: 'relative' }}>
+                            <TextInput
+                                value={customerQuery}
+                                onChangeText={(value) => {
+                                    setCustomerQuery(value);
+                                    setForm((prev) => ({ ...prev, memberId: '' }));
+                                }}
+                                placeholder={members.length ? 'Name or mobile number' : 'Add a selling customer first'}
+                                placeholderTextColor={colors.mutedForeground}
+                                autoCapitalize="none"
+                                style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingLeft: 8, paddingRight: form.memberId ? 38 : 8, paddingVertical: 9, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }}
+                            />
+                            {form.memberId && <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}><CheckCircle2 size={19} color={colors.primary} /></View>}
+                        </View>
                         {customerSuggestions.length > 0 && (
                             <View style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, marginTop: 3, overflow: 'hidden', elevation: 8, zIndex: 20 }}>
                                 {customerSuggestions.map((member, index) => (
@@ -296,14 +300,14 @@ export default function SellingAdvanceScreen() {
                             </View>
                         )}
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Amount</Text>
-                            <TextInput value={form.amount} onChangeText={(value) => setForm((prev) => ({ ...prev, amount: value.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" placeholder="Amount" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
+                            <TextInput value={form.amount} onChangeText={(value) => setForm((prev) => ({ ...prev, amount: value.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" placeholder="Amount" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 8, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Date</Text>
-                            <Pressable onPress={() => setShowDatePicker(true)} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card }}>
+                            <Pressable onPress={() => setShowDatePicker(true)} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card }}>
                                 <Text style={{ color: colors.foreground, fontSize: 12 }}>{new Date(`${form.date}T00:00:00`).toLocaleDateString('en-GB')}</Text>
                                 <CalendarDays size={15} color={colors.mutedForeground} />
                             </Pressable>
@@ -311,9 +315,9 @@ export default function SellingAdvanceScreen() {
                     </View>
                     <View style={{ marginTop: 8 }}>
                         <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Note</Text>
-                        <TextInput value={form.note} onChangeText={(value) => setForm((prev) => ({ ...prev, note: value }))} placeholder="Note (e.g. Feed, medicine)" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
+                        <TextInput value={form.note} onChangeText={(value) => setForm((prev) => ({ ...prev, note: value }))} placeholder="Note (e.g. Feed, medicine)" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 8, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                    <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
                         <Pressable onPress={() => void submit()} disabled={saving || !form.memberId} style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10, alignItems: 'center', opacity: saving || !form.memberId ? 0.6 : 1 }}>
                             {saving ? <ActivityIndicator color={colors.white} /> : <Text style={{ color: colors.white, fontSize: 12, fontWeight: '800' }}>Save Advance</Text>}
                         </Pressable>
@@ -323,7 +327,7 @@ export default function SellingAdvanceScreen() {
                     </View>
                 </View>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8, marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 8 }}>
                     <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 6, paddingHorizontal: 9, height: 42 }}>
                         <Search size={15} color={colors.mutedForeground} />
                         <TextInput
@@ -378,14 +382,14 @@ export default function SellingAdvanceScreen() {
                         </Text>
                     </View>
                 ) : (
-                    <View style={{ borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#DDF3E7', backgroundColor: colors.card, marginTop: 10 }}>
-                        <View style={{ flexDirection: 'row', backgroundColor: '#F7FCF9', paddingVertical: 10, paddingHorizontal: 7 }}>
+                    <View style={{ borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#DDF3E7', backgroundColor: colors.card, marginTop: 6 }}>
+                        <View style={{ flexDirection: 'row', backgroundColor: '#F7FCF9', paddingVertical: 7, paddingHorizontal: 4 }}>
                             {[['Customer', 1.25], ['Note', 1], ['Amt', 0.8], ['Date', 0.9], ['Del', 0.55]].map(([label, flex]: any) => (
                                 <Text key={label} style={{ flex, fontSize: 12, fontWeight: '600', color: colors.foreground, textAlign: 'center' }}>{label}</Text>
                             ))}
                         </View>
                         {filtered.map((advance) => (
-                            <View key={advance._id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 7, borderTopWidth: 1, borderTopColor: '#E5F3EA' }}>
+                            <View key={advance._id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, borderTopWidth: 1, borderTopColor: '#E5F3EA' }}>
                                 <Text numberOfLines={1} style={{ flex: 1.25, fontSize: 12, fontWeight: '600', color: colors.foreground, textAlign: 'center' }}>{memberName(advance)}</Text>
                                 <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: colors.foreground, textAlign: 'center' }}>{advance.note || '-'}</Text>
                                 <Text numberOfLines={1} style={{ flex: 0.8, fontSize: 12, fontWeight: '700', color: '#D5A700', textAlign: 'center' }}>{money(advance.amount)}</Text>
