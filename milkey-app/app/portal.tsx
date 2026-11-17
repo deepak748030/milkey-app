@@ -938,6 +938,7 @@ export default function PortalScreen() {
         : 'No records found for this mobile number.';
 
     const displayRows = (rows: any[], key: SectionKey) => {
+        if (key === 'advances' && isSelling && !expanded[key]) return rows.slice(0, 3);
         if (key === 'payments' && !isSelling && !expanded[key]) return rows.slice(0, 1);
         const cap = filters.section === 'all' && !expanded[key] ? 5 : 100;
         return rows.slice(0, cap);
@@ -1310,7 +1311,9 @@ export default function PortalScreen() {
                                 const visible = displayRows(rows, config.key);
                                 const showViewAll = config.key === 'payments' && !isSelling
                                     ? rows.length > 1
-                                    : filters.section === 'all' && rows.length > 5;
+                                    : config.key === 'advances' && isSelling
+                                        ? rows.length > 3
+                                        : filters.section === 'all' && rows.length > 5;
                                 const subtitle = `${rows.length} record${rows.length === 1 ? '' : 's'}${rows.length > 100 ? ' • showing 100' : ''}`;
                                 return (
                                     <SectionCard
@@ -1320,7 +1323,7 @@ export default function PortalScreen() {
                                         icon={config.icon}
                                         colors={colors}
                                         s={s}
-                                        dense={config.key === 'entries' || (config.key === 'advances' && !isSelling)}
+                                        dense={config.key === 'entries' || config.key === 'advances'}
                                         showViewAll={showViewAll}
                                         expanded={expanded[config.key]}
                                         onToggle={() => toggleSection(config.key)}
@@ -1333,7 +1336,7 @@ export default function PortalScreen() {
                                                 rows={visible}
                                                 emptyText={emptyText}
                                                 compact={compact}
-                                                dense={config.key === 'entries' || (config.key === 'advances' && !isSelling)}
+                                                dense={config.key === 'entries' || config.key === 'advances'}
                                                 s={s}
                                             />
                                         )}
