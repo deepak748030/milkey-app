@@ -11,6 +11,7 @@ import {
 import { Pressable } from '@/components/ui/HapticPressable';
 import { TextInput } from '@/components/ui/HapticTextInput';
 import TopBar from '@/components/TopBar';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -419,25 +420,22 @@ export default function SellingAdvanceScreen() {
                 </View>
             </Modal>
 
-            <Modal visible={!!deletingAdvance} transparent animationType="fade" onRequestClose={() => { if (!busyId) setDeletingAdvance(null); }}>
-                <View style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 24 }}>
-                    <View style={{ backgroundColor: colors.card, borderRadius: 14, padding: 20, borderWidth: 1, borderColor: colors.border }}>
-                        <Text style={{ fontSize: 17, fontWeight: '800', color: colors.foreground }}>Delete advance?</Text>
-                        <Text style={{ fontSize: 13, lineHeight: 19, color: colors.mutedForeground, marginTop: 8 }}>
-                            Delete this selling advance for {deletingAdvance ? memberName(deletingAdvance) : 'this customer'}? This will only remove this isolated selling advance record.
-                        </Text>
-                        {!!deleteError && <Text style={{ fontSize: 12, color: colors.destructive, marginTop: 10 }}>{deleteError}</Text>}
-                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
-                            <Pressable onPress={() => setDeletingAdvance(null)} disabled={!!busyId} style={{ minWidth: 88, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
-                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground }}>Cancel</Text>
-                            </Pressable>
-                            <Pressable onPress={() => void confirmDelete()} disabled={!!busyId} style={{ minWidth: 88, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: colors.destructive, opacity: busyId ? 0.7 : 1 }}>
-                                {busyId ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={{ fontSize: 13, fontWeight: '800', color: colors.white }}>Delete</Text>}
-                            </Pressable>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
+            <ConfirmationModal
+                visible={!!deletingAdvance}
+                onClose={() => {
+                    if (!busyId) {
+                        setDeletingAdvance(null);
+                        setDeleteError('');
+                    }
+                }}
+                onConfirm={() => void confirmDelete()}
+                title="Delete Advance"
+                message={deleteError || `Are you sure you want to delete this advance for ${deletingAdvance ? memberName(deletingAdvance) : 'this customer'}?`}
+                confirmText="Delete"
+                cancelText="Cancel"
+                confirmDestructive
+                isLoading={!!busyId}
+            />
 
             <View style={{ flexDirection: 'row', backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, paddingBottom: insets.bottom + 6, height: 65 + insets.bottom }}>
                 {[
