@@ -41,13 +41,25 @@ export interface PortalRowBase {
 
 export interface PortalEntryRow extends PortalRowBase {
     quantity: number;
+    fat?: number | null;
+    snf?: number | null;
     rate: number;
+    bonusAmount?: number;
+    bonusType?: 'perLitre' | 'percent' | '';
+    bonusRate?: number;
     customerName?: string;
     farmerName?: string;
 }
 
 export interface PortalPaymentRow extends PortalRowBase {
     mode: string;
+    periodStart?: string;
+    periodEnd?: string;
+    totalMilkAmount?: number;
+    totalAdvanceDeduction?: number;
+    netPayable?: number;
+    closingBalance?: number;
+    createdAt?: string;
 }
 
 export interface PortalAdvanceRow extends PortalRowBase {
