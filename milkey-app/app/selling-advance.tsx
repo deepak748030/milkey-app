@@ -2,9 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    KeyboardAvoidingView,
     Modal,
-    Platform,
     RefreshControl,
     ScrollView,
     Text,
@@ -13,33 +11,32 @@ import {
 import { Pressable } from '@/components/ui/HapticPressable';
 import { TextInput } from '@/components/ui/HapticTextInput';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import {
-    ArrowDownLeft,
     ArrowLeft,
-    ArrowUpRight,
     CheckCircle2,
-    Clock3,
-    History,
-    Lock,
-    Plus,
     Search,
     Trash2,
     Users,
-    Wallet,
+    CalendarDays,
+    FileText,
+    Printer,
     X,
 } from 'lucide-react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
 import { membersApi, Member } from '@/lib/milkeyApi';
+import { Calendar } from '@/components/Calendar';
+import AmountFilterIcon from '@/components/AmountFilterIcon';
 import {
     remainingSellingAdvance,
     sellingAdvancesApi,
     SellingAdvance,
-    SellingAdvanceSummary,
     SellingAdvanceType,
 } from '@/lib/sellingAdvancesApi';
 
@@ -60,19 +57,11 @@ const dateLabel = (value?: string) => {
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
-const EMPTY_SUMMARY: SellingAdvanceSummary = {
-    totalGiven: 0,
-    adjusted: 0,
-    pendingGiven: 0,
-    advancePending: 0,
-};
-
 export default function SellingAdvanceScreen() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const {
         hasAccess,
-        loading: subscriptionLoading,
         showSubscriptionModal,
         setShowSubscriptionModal,
         handleModalClose,
@@ -81,15 +70,18 @@ export default function SellingAdvanceScreen() {
 
     const [members, setMembers] = useState<Member[]>([]);
     const [advances, setAdvances] = useState<SellingAdvance[]>([]);
-    const [summary, setSummary] = useState<SellingAdvanceSummary>(EMPTY_SUMMARY);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPending, setTotalPending] = useState(0);
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState('');
-    const [filter, setFilter] = useState<'all' | SellingAdvanceType>('all');
     const [search, setSearch] = useState('');
-    const [modalVisible, setModalVisible] = useState(false);
+    const [amountSort, setAmountSort] = useState<'asc' | 'desc' | null>(null);
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const [form, setForm] = useState<{
         memberId: string;
         amount: string;
@@ -98,38 +90,47 @@ export default function SellingAdvanceScreen() {
         note: string;
     }>({ memberId: '', amount: '', type: 'given', date: todayIso(), note: '' });
 
-    const load = useCallback(async (isRefresh = false) => {
-        if (!isRefresh) setLoading(true);
+    const load = useCallback(async (isRefresh = false, page = 1, append = false) => {
+        if (append) setLoadingMore(true);
+        else if (!isRefresh) setLoading(true);
         setError('');
         try {
             const [membersRes, advancesRes] = await Promise.all([
                 membersApi.getAll({ limit: 100, includeInactive: false }),
-                sellingAdvancesApi.getAll({ limit: 200, status: 'all' }),
+                sellingAdvancesApi.getAll({ limit: 10, page, status: 'all', search: search.trim() || undefined, sortBy: amountSort ? 'amount' : undefined, order: amountSort || undefined }),
             ]);
             if (membersRes.success && membersRes.response?.data) {
                 setMembers(membersRes.response.data);
+                setForm((prev) => ({ ...prev, memberId: prev.memberId || membersRes.response!.data[0]?._id || '' }));
             } else {
                 setMembers([]);
             }
             if (advancesRes.success && advancesRes.response) {
-                setAdvances(advancesRes.response.data || []);
-                setSummary(advancesRes.response.summary || EMPTY_SUMMARY);
+                const data = advancesRes.response.data || [];
+                setAdvances((current) => append ? [...current, ...data] : data);
+                setTotalCount(advancesRes.response.total || 0);
+                setTotalPending(advancesRes.response.summary?.advancePending || 0);
+                setHasMore(page < (advancesRes.response.pagination?.pages || 1));
             } else {
                 setError(advancesRes.message || 'Could not load selling advances.');
                 setAdvances([]);
-                setSummary(EMPTY_SUMMARY);
+                setTotalCount(0);
+                setTotalPending(0);
+                setHasMore(false);
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Network error. Please try again.');
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
         }
-    }, []);
+    }, [amountSort, search]);
 
     useEffect(() => {
-        void load(false);
-    }, [load]);
+        const timer = setTimeout(() => void load(false), search ? 300 : 0);
+        return () => clearTimeout(timer);
+    }, [load, search, amountSort]);
 
     const memberName = useCallback((advance: SellingAdvance) => {
         if (advance.member && typeof advance.member === 'object') return advance.member.name || 'Customer';
@@ -139,28 +140,19 @@ export default function SellingAdvanceScreen() {
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
-        return advances.filter((advance) => {
-            if (filter !== 'all' && advance.type !== filter) return false;
+        const rows = advances.filter((advance) => {
             if (!q) return true;
             const name = memberName(advance).toLowerCase();
             return name.includes(q) || String(advance.note || '').toLowerCase().includes(q);
         });
-    }, [advances, filter, search, memberName]);
+        if (amountSort) rows.sort((a, b) => amountSort === 'asc' ? Number(a.amount) - Number(b.amount) : Number(b.amount) - Number(a.amount));
+        return rows;
+    }, [advances, search, memberName, amountSort]);
 
-    const openAddModal = useCallback(() => {
-        if (!hasAccess) {
-            setShowSubscriptionModal(true);
-            return;
-        }
-        setForm({
-            memberId: members[0]?._id || '',
-            amount: '',
-            type: 'given',
-            date: todayIso(),
-            note: '',
-        });
-        setModalVisible(true);
-    }, [hasAccess, members, setShowSubscriptionModal]);
+    const clearForm = useCallback(() => {
+        setForm({ memberId: members[0]?._id || '', amount: '', type: 'given', date: todayIso(), note: '' });
+    }, [members]);
+
 
     const submit = useCallback(async () => {
         if (!form.memberId) {
@@ -186,8 +178,7 @@ export default function SellingAdvanceScreen() {
         });
         setSaving(false);
         if (result.success) {
-            setModalVisible(false);
-            setForm({ memberId: '', amount: '', type: 'given', date: todayIso(), note: '' });
+            clearForm();
             await load(false);
             Alert.alert('Saved', form.type === 'adjusted' ? 'Advance adjustment saved.' : 'Selling advance added.');
         } else if (result.code === 'SUBSCRIPTION_REQUIRED') {
@@ -195,7 +186,7 @@ export default function SellingAdvanceScreen() {
         } else {
             Alert.alert('Could not save', result.message || 'Please try again.');
         }
-    }, [form, hasAccess, load, setShowSubscriptionModal]);
+    }, [form, hasAccess, load, setShowSubscriptionModal, clearForm]);
 
     const settle = useCallback((advance: SellingAdvance) => {
         const remaining = remainingSellingAdvance(advance);
@@ -263,6 +254,26 @@ export default function SellingAdvanceScreen() {
         );
     }, [hasAccess, load, setShowSubscriptionModal]);
 
+    const reportHtml = useCallback(() => {
+        const rows = filtered.map((advance) => `<tr><td>${memberName(advance)}</td><td>${advance.note || '-'}</td><td>₹${Number(advance.amount || 0).toLocaleString('en-IN')}</td><td>${dateLabel(advance.date)}</td><td>${remainingSellingAdvance(advance) > 0 ? 'Pending' : 'Settled'}</td></tr>`).join('');
+        return `<html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:Arial,sans-serif;padding:20px}h2{text-align:center;color:#168548}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:center}th{background:#168548;color:white}tr:nth-child(even){background:#f5f5f5}</style></head><body><h2>Selling Advances Report</h2><p>Total records: ${filtered.length}</p><table><thead><tr><th>Customer</th><th>Note</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+    }, [filtered, memberName]);
+
+    const exportPdf = useCallback(async () => {
+        try {
+            const { uri } = await Print.printToFileAsync({ html: reportHtml() });
+            if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
+            else Alert.alert('PDF generated', uri);
+        } catch {
+            Alert.alert('Error', 'Failed to generate advances PDF.');
+        }
+    }, [reportHtml]);
+
+    const printReport = useCallback(async () => {
+        try { await Print.printAsync({ html: reportHtml() }); }
+        catch { Alert.alert('Error', 'Failed to print advances.'); }
+    }, [reportHtml]);
+
     const onRefresh = useCallback(() => {
         setRefreshing(true);
         void load(true);
@@ -290,23 +301,9 @@ export default function SellingAdvanceScreen() {
                 </Pressable>
                 <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 19, fontWeight: '900', color: '#fff' }}>Selling Advance</Text>
-                    <Text style={{ fontSize: 10, color: '#D8F7E4', marginTop: 2 }}>Isolated customer advance ledger</Text>
+                    <Text style={{ fontSize: 10, color: '#D8F7E4', marginTop: 2 }}>Customer Advance</Text>
                 </View>
-                <Pressable
-                    onPress={openAddModal}
-                    hitSlop={10}
-                    style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        backgroundColor: '#ffffff25',
-                        borderRadius: 999,
-                        paddingHorizontal: 11,
-                        paddingVertical: 8,
-                    }}
-                >
-                    {!hasAccess && !subscriptionLoading ? <Lock size={13} color="#fff" style={{ marginRight: 5 }} /> : <Plus size={15} color="#fff" />}
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: '#fff', marginLeft: 4 }}>Add</Text>
-                </Pressable>
+
             </LinearGradient>
 
             <ScrollView
@@ -315,65 +312,48 @@ export default function SellingAdvanceScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
                 showsVerticalScrollIndicator={false}
             >
-                <View style={{ flexDirection: 'row', marginHorizontal: -3 }}>
-                    {[
-                        { label: 'Advance Pending', value: money(summary.advancePending), icon: Clock3, tone: 'orange' as const },
-                        { label: 'Total Given', value: money(summary.totalGiven), icon: Wallet, tone: 'green' as const },
-                        { label: 'Adjusted', value: money(summary.adjusted), icon: History, tone: 'wallet' as const },
-                    ].map((card) => {
-                        const Icon = card.icon;
-                        const bg = card.tone === 'orange' ? '#FFF6DF' : card.tone === 'wallet' ? '#EAF7F1' : '#EDF9F1';
-                        return (
-                            <View key={card.label} style={{
-                                flex: 1,
-                                backgroundColor: colors.card,
-                                borderRadius: 14,
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                                padding: 10,
-                                marginHorizontal: 3,
-                            }}>
-                                <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', marginBottom: 7 }}>
-                                    <Icon size={14} color={card.tone === 'orange' ? ORANGE : GREEN_DARK} />
-                                </View>
-                                <Text numberOfLines={1} style={{ fontSize: 9.5, color: colors.mutedForeground, fontWeight: '700' }}>{card.label}</Text>
-                                <Text numberOfLines={1} style={{ fontSize: 14, color: colors.foreground, fontWeight: '900', marginTop: 2 }}>{card.value}</Text>
-                            </View>
-                        );
-                    })}
+                <View style={{ marginBottom: 10 }}>
+                    <Text style={{ fontSize: 12, fontWeight: '800', color: colors.foreground, marginBottom: 6 }}>Customer</Text>
+                    {members.length === 0 ? (
+                        <Text style={{ fontSize: 11, color: colors.mutedForeground, marginBottom: 8 }}>Add a selling customer first.</Text>
+                    ) : (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                            {members.map((member) => {
+                                const active = form.memberId === member._id;
+                                return (
+                                    <Pressable key={member._id} onPress={() => setForm((prev) => ({ ...prev, memberId: member._id }))} style={{ paddingHorizontal: 11, paddingVertical: 8, borderRadius: 8, marginRight: 6, backgroundColor: active ? colors.primary : colors.card, borderWidth: 1, borderColor: active ? colors.primary : colors.border }}>
+                                        <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: active ? colors.white : colors.foreground }}>{member.name}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </ScrollView>
+                    )}
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Amount</Text>
+                            <TextInput value={form.amount} onChangeText={(value) => setForm((prev) => ({ ...prev, amount: value.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" placeholder="Amount" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, color: colors.foreground, fontSize: 12 }} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Date</Text>
+                            <Pressable onPress={() => setShowDatePicker(true)} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <Text style={{ color: colors.foreground, fontSize: 12 }}>{new Date(`${form.date}T00:00:00`).toLocaleDateString('en-IN')}</Text>
+                                <CalendarDays size={15} color={colors.mutedForeground} />
+                            </Pressable>
+                        </View>
+                    </View>
+                    <View style={{ marginTop: 8 }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Note</Text>
+                        <TextInput value={form.note} onChangeText={(value) => setForm((prev) => ({ ...prev, note: value }))} placeholder="Note (e.g. Feed, medicine)" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, color: colors.foreground, fontSize: 12 }} />
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                        <Pressable onPress={() => void submit()} disabled={saving || members.length === 0} style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10, alignItems: 'center', opacity: saving || members.length === 0 ? 0.6 : 1 }}>
+                            {saving ? <ActivityIndicator color={colors.white} /> : <Text style={{ color: colors.white, fontSize: 12, fontWeight: '800' }}>Save Advance</Text>}
+                        </Pressable>
+                        <Pressable onPress={clearForm} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 10, alignItems: 'center' }}>
+                            <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: '800' }}>Clear</Text>
+                        </Pressable>
+                    </View>
                 </View>
-
-                <View style={{
-                    marginTop: 12,
-                    paddingHorizontal: 11,
-                    paddingVertical: 9,
-                    borderRadius: 10,
-                    backgroundColor: colors.primary + '0D',
-                    borderWidth: 1,
-                    borderColor: colors.primary + '22',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                }}>
-                    <CheckCircle2 size={14} color={colors.primary} />
-                    <Text style={{ flex: 1, marginLeft: 7, fontSize: 10.5, color: colors.mutedForeground }}>
-                        Old selling entries, payments and customer balances are never modified by this screen.
-                    </Text>
-                </View>
-
-                {!hasAccess && !subscriptionLoading && (
-                    <Pressable onPress={() => setShowSubscriptionModal(true)} style={{
-                        marginTop: 10,
-                        backgroundColor: '#FFF6DF',
-                        borderWidth: 1,
-                        borderColor: '#F2D48A',
-                        borderRadius: 10,
-                        padding: 11,
-                    }}>
-                        <Text style={{ fontSize: 11, color: ORANGE, fontWeight: '700' }}>
-                            Active Selling subscription is required to add, settle or delete advances. Tap to view plans.
-                        </Text>
-                    </Pressable>
-                )}
 
                 <View style={{
                     marginTop: 12,
@@ -394,31 +374,30 @@ export default function SellingAdvanceScreen() {
                         placeholderTextColor={colors.mutedForeground + '99'}
                         style={{ flex: 1, marginLeft: 8, color: colors.foreground, fontSize: 12 }}
                     />
+                    <Pressable onPress={() => setSearch('')} hitSlop={8}><X size={14} color={colors.mutedForeground} /></Pressable>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8 }}>
+                    <Pressable onPress={() => void exportPdf()} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 8 }}>
+                        <FileText size={14} color={colors.white} /><Text style={{ fontSize: 10, fontWeight: '800', color: colors.white }}>PDF</Text>
+                    </Pressable>
+                    <Pressable onPress={() => void printReport()} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 8 }}>
+                        <Printer size={14} color={colors.white} /><Text style={{ fontSize: 10, fontWeight: '800', color: colors.white }}>Print</Text>
+                    </Pressable>
+                    <AmountFilterIcon sort={amountSort} onToggle={() => setAmountSort((prev) => prev === 'asc' ? 'desc' : 'asc')} />
                 </View>
 
-                <View style={{ flexDirection: 'row', marginTop: 10, gap: 6 }}>
-                    {(['all', 'given', 'adjusted'] as const).map((item) => {
-                        const active = filter === item;
-                        return (
-                            <Pressable
-                                key={item}
-                                onPress={() => setFilter(item)}
-                                style={{
-                                    paddingHorizontal: 13,
-                                    paddingVertical: 8,
-                                    borderRadius: 999,
-                                    backgroundColor: active ? colors.primary : colors.card,
-                                    borderWidth: 1,
-                                    borderColor: active ? colors.primary : colors.border,
-                                }}
-                            >
-                                <Text style={{ fontSize: 11, fontWeight: '800', color: active ? '#fff' : colors.foreground }}>
-                                    {item === 'all' ? 'All' : item === 'given' ? 'Given' : 'Adjusted'}
-                                </Text>
-                            </Pressable>
-                        );
-                    })}
+
+                <View style={{ marginTop: 2, marginBottom: 10, padding: 11, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.mutedForeground }}>Total Records</Text>
+                        <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>{totalCount} records • {advances.length} shown</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.mutedForeground }}>Total Amount</Text>
+                        <Text style={{ fontSize: 16, fontWeight: '900', color: colors.foreground }}>{money(totalPending)}</Text>
+                    </View>
                 </View>
+
 
                 {loading ? (
                     <View style={{ padding: 28, alignItems: 'center' }}>
@@ -437,91 +416,58 @@ export default function SellingAdvanceScreen() {
                         <Users size={28} color={colors.mutedForeground} />
                         <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground, marginTop: 10 }}>No advances yet</Text>
                         <Text style={{ fontSize: 11, color: colors.mutedForeground, textAlign: 'center', marginTop: 4 }}>
-                            Use the Add button to create a selling customer advance or adjustment.
+                            Add a selling customer advance using the form above.
                         </Text>
                     </View>
-                ) : filtered.map((advance) => {
-                    const remaining = remainingSellingAdvance(advance);
-                    const adjusted = advance.type === 'adjusted';
-                    const Arrow = adjusted || advance.status === 'settled' ? ArrowUpRight : ArrowDownLeft;
-                    return (
-                        <View key={advance._id} style={{
-                            backgroundColor: colors.card,
-                            borderRadius: 14,
-                            borderWidth: 1,
-                            borderColor: colors.border,
-                            padding: 12,
-                            marginTop: 10,
-                        }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <View style={{
-                                    width: 30,
-                                    height: 30,
-                                    borderRadius: 15,
-                                    backgroundColor: adjusted ? '#EAF7F1' : '#FFF6DF',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    marginRight: 9,
-                                }}>
-                                    <Arrow size={16} color={adjusted ? GREEN_DARK : ORANGE} />
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text numberOfLines={1} style={{ fontSize: 13.5, fontWeight: '800', color: colors.foreground }}>
-                                        {memberName(advance)}
-                                    </Text>
-                                    <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>
-                                        {dateLabel(advance.date)} • {adjusted ? 'Adjusted' : advance.status === 'settled' ? 'Settled' : 'Given'}
-                                    </Text>
-                                </View>
-                                <Text style={{ fontSize: 15, fontWeight: '900', color: colors.foreground }}>{money(advance.amount)}</Text>
-                            </View>
-                            {!!advance.note && (
-                                <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 9 }}>{advance.note}</Text>
-                            )}
-                            <View style={{
-                                marginTop: 9,
-                                paddingTop: 9,
-                                borderTopWidth: 1,
-                                borderTopColor: colors.border,
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                            }}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ fontSize: 10, color: colors.mutedForeground }}>
-                                        Remaining: <Text style={{ fontWeight: '800', color: colors.foreground }}>{money(remaining)}</Text>
-                                    </Text>
-                                </View>
-                                {remaining > 0 && (
-                                    <Pressable
-                                        onPress={() => settle(advance)}
-                                        disabled={busyId === advance._id}
-                                        style={{
-                                            paddingHorizontal: 11,
-                                            paddingVertical: 7,
-                                            borderRadius: 8,
-                                            backgroundColor: colors.primary + '14',
-                                            marginRight: 6,
-                                        }}
-                                    >
-                                        <Text style={{ fontSize: 10.5, fontWeight: '800', color: colors.primary }}>Settle</Text>
-                                    </Pressable>
-                                )}
-                                <Pressable
-                                    onPress={() => remove(advance)}
-                                    disabled={busyId === advance._id}
-                                    style={{ padding: 7, borderRadius: 8, backgroundColor: '#FEECEC' }}
-                                >
-                                    {busyId === advance._id ? (
-                                        <ActivityIndicator size="small" color={colors.destructive} />
-                                    ) : (
-                                        <Trash2 size={14} color={colors.destructive} />
-                                    )}
-                                </Pressable>
-                            </View>
+                ) : (
+                    <View style={{ borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}>
+                        <View style={{ flexDirection: 'row', backgroundColor: colors.secondary, paddingVertical: 9, paddingHorizontal: 7 }}>
+                            {[['Customer', 1.25], ['Note', 1], ['Amt', 0.8], ['Date', 0.9], ['Del', 0.55]].map(([label, flex]: any) => (
+                                <Text key={label} style={{ flex, fontSize: 9, fontWeight: '800', color: colors.foreground, textAlign: 'center' }}>{label}</Text>
+                            ))}
                         </View>
-                    );
-                })}
+                        {filtered.map((advance) => {
+                            const remaining = remainingSellingAdvance(advance);
+                            return (
+                                <View key={advance._id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 7, borderTopWidth: 1, borderTopColor: colors.border }}>
+                                    <Text numberOfLines={1} style={{ flex: 1.25, fontSize: 10, fontWeight: '700', color: colors.foreground, textAlign: 'center' }}>{memberName(advance)}</Text>
+                                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 9, color: colors.mutedForeground, textAlign: 'center' }}>{advance.note || '-'}</Text>
+                                    <Text numberOfLines={1} style={{ flex: 0.8, fontSize: 10, fontWeight: '800', color: colors.foreground, textAlign: 'center' }}>{money(advance.amount)}</Text>
+                                    <Text numberOfLines={1} style={{ flex: 0.9, fontSize: 9, color: colors.foreground, textAlign: 'center' }}>{dateLabel(advance.date)}</Text>
+                                    <View style={{ flex: 0.55, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
+                                        {remaining > 0 && (
+                                            <Pressable onPress={() => settle(advance)} disabled={busyId === advance._id} style={{ padding: 4 }}>
+                                                <CheckCircle2 size={13} color={colors.primary} />
+                                            </Pressable>
+                                        )}
+                                        <Pressable onPress={() => remove(advance)} disabled={busyId === advance._id} style={{ padding: 5 }}>
+                                            {busyId === advance._id ? <ActivityIndicator size="small" color={colors.destructive} /> : <Trash2 size={13} color={colors.destructive} />}
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                )}
+                {hasMore && !loading && !error && (
+                    <Pressable onPress={() => void load(false, Math.ceil(advances.length / 10) + 1, true)} disabled={loadingMore} style={{ padding: 11, alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8, marginTop: 8, backgroundColor: colors.card }}>
+                        {loadingMore ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '800' }}>Load More ({totalCount - advances.length} remaining)</Text>}
+                    </Pressable>
+                )}
             </ScrollView>
+
+            <Modal visible={showDatePicker} transparent animationType="slide" onRequestClose={() => setShowDatePicker(false)}>
+                <View style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'flex-end' }}>
+                    <Pressable style={{ flex: 1 }} onPress={() => setShowDatePicker(false)} />
+                    <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16, paddingBottom: Math.max(insets.bottom + 16, 20) }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                            <Text style={{ flex: 1, fontSize: 15, fontWeight: '800', color: colors.foreground }}>Select Advance Date</Text>
+                            <Pressable onPress={() => setShowDatePicker(false)}><X size={20} color={colors.foreground} /></Pressable>
+                        </View>
+                        <Calendar onDateSelect={(date) => { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); setForm((prev) => ({ ...prev, date: `${year}-${month}-${day}` })); setShowDatePicker(false); }} selectedDate={new Date(`${form.date}T00:00:00`)} />
+                    </View>
+                </View>
+            </Modal>
 
             <SubscriptionModal
                 visible={showSubscriptionModal}
@@ -531,166 +477,7 @@ export default function SellingAdvanceScreen() {
                 title="Selling subscription required"
             />
 
-            <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'flex-end' }}
-                >
-                    <Pressable style={{ flex: 1 }} onPress={() => setModalVisible(false)} />
-                    <View style={{
-                        backgroundColor: colors.card,
-                        borderTopLeftRadius: 20,
-                        borderTopRightRadius: 20,
-                        padding: 16,
-                        paddingBottom: Math.max(insets.bottom + 16, 20),
-                        maxHeight: '88%',
-                    }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 17, fontWeight: '900', color: colors.foreground }}>Add Selling Advance</Text>
-                                <Text style={{ fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>
-                                    Creates a new isolated ledger record only.
-                                </Text>
-                            </View>
-                            <Pressable onPress={() => setModalVisible(false)} hitSlop={8}>
-                                <X size={20} color={colors.mutedForeground} />
-                            </Pressable>
-                        </View>
 
-                        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.foreground, marginBottom: 6 }}>Customer</Text>
-                        {members.length === 0 ? (
-                            <View style={{ padding: 12, backgroundColor: colors.muted, borderRadius: 9 }}>
-                                <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
-                                    No active selling customers found. Add a customer in the Selling tab first.
-                                </Text>
-                            </View>
-                        ) : (
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
-                                {members.map((member) => {
-                                    const active = form.memberId === member._id;
-                                    return (
-                                        <Pressable
-                                            key={member._id}
-                                            onPress={() => setForm((prev) => ({ ...prev, memberId: member._id }))}
-                                            style={{
-                                                paddingHorizontal: 11,
-                                                paddingVertical: 8,
-                                                borderRadius: 999,
-                                                marginRight: 6,
-                                                backgroundColor: active ? colors.primary : colors.card,
-                                                borderWidth: 1,
-                                                borderColor: active ? colors.primary : colors.border,
-                                            }}
-                                        >
-                                            <Text style={{ fontSize: 11, fontWeight: '700', color: active ? '#fff' : colors.foreground }}>
-                                                {member.name}
-                                            </Text>
-                                        </Pressable>
-                                    );
-                                })}
-                            </ScrollView>
-                        )}
-
-                        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.foreground, marginBottom: 6 }}>Type</Text>
-                        <View style={{ flexDirection: 'row', marginBottom: 10 }}>
-                            {(['given', 'adjusted'] as const).map((type) => {
-                                const active = form.type === type;
-                                return (
-                                    <Pressable
-                                        key={type}
-                                        onPress={() => setForm((prev) => ({ ...prev, type }))}
-                                        style={{
-                                            flex: 1,
-                                            paddingVertical: 10,
-                                            alignItems: 'center',
-                                            borderRadius: 9,
-                                            marginRight: type === 'given' ? 6 : 0,
-                                            backgroundColor: active ? colors.primary : colors.muted,
-                                            borderWidth: 1,
-                                            borderColor: active ? colors.primary : colors.border,
-                                        }}
-                                    >
-                                        <Text style={{ fontSize: 11.5, fontWeight: '800', color: active ? '#fff' : colors.foreground }}>
-                                            {type === 'given' ? 'Given ↓' : 'Adjusted ↑'}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-
-                        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.foreground, marginBottom: 6 }}>Amount (₹)</Text>
-                        <TextInput
-                            value={form.amount}
-                            onChangeText={(text) => setForm((prev) => ({ ...prev, amount: text.replace(/[^0-9.]/g, '') }))}
-                            keyboardType="numeric"
-                            placeholder="e.g. 1200"
-                            placeholderTextColor={colors.mutedForeground + '99'}
-                            style={{
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                                borderRadius: 9,
-                                paddingHorizontal: 11,
-                                paddingVertical: Platform.OS === 'ios' ? 11 : 9,
-                                color: colors.foreground,
-                                fontSize: 13,
-                                marginBottom: 10,
-                            }}
-                        />
-
-                        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.foreground, marginBottom: 6 }}>Date (YYYY-MM-DD)</Text>
-                        <TextInput
-                            value={form.date}
-                            onChangeText={(text) => setForm((prev) => ({ ...prev, date: text }))}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor={colors.mutedForeground + '99'}
-                            style={{
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                                borderRadius: 9,
-                                paddingHorizontal: 11,
-                                paddingVertical: Platform.OS === 'ios' ? 11 : 9,
-                                color: colors.foreground,
-                                fontSize: 13,
-                                marginBottom: 10,
-                            }}
-                        />
-
-                        <Text style={{ fontSize: 11, fontWeight: '800', color: colors.foreground, marginBottom: 6 }}>Remark</Text>
-                        <TextInput
-                            value={form.note}
-                            onChangeText={(text) => setForm((prev) => ({ ...prev, note: text }))}
-                            placeholder="Medicine, milk adjustment, feed purchase..."
-                            placeholderTextColor={colors.mutedForeground + '99'}
-                            style={{
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                                borderRadius: 9,
-                                paddingHorizontal: 11,
-                                paddingVertical: Platform.OS === 'ios' ? 11 : 9,
-                                color: colors.foreground,
-                                fontSize: 13,
-                                marginBottom: 14,
-                            }}
-                        />
-
-                        <Pressable
-                            onPress={() => void submit()}
-                            disabled={saving || members.length === 0}
-                            style={{
-                                backgroundColor: colors.primary,
-                                borderRadius: 10,
-                                paddingVertical: 12,
-                                alignItems: 'center',
-                                opacity: saving || members.length === 0 ? 0.6 : 1,
-                            }}
-                        >
-                            {saving ? <ActivityIndicator color="#fff" /> : (
-                                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '900' }}>Save Advance</Text>
-                            )}
-                        </Pressable>
-                    </View>
-                </KeyboardAvoidingView>
-            </Modal>
         </View>
     );
 }

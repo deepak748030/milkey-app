@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Image,
     Modal,
     RefreshControl,
     ScrollView,
@@ -17,7 +18,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import {
     ArrowDownLeft,
-    ArrowLeft,
     ArrowUpRight,
     CheckCircle2,
     ChevronDown,
@@ -145,34 +145,36 @@ const localDateKey = (value?: string) => {
     return dateKeyFromDate(date);
 };
 
-const yearOf = (value?: string) => {
-    if (!value) return '';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? '' : String(date.getFullYear());
-};
-
 const money = (value: number | string | undefined) => {
     const n = Number(value || 0);
     return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+};
+
+const settlementMoney = (value: number | string | undefined) => {
+    const n = Number(value || 0);
+    const formatted = Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return n < 0 ? `-₹${formatted}` : `₹${formatted}`;
+};
+
+const settlementDate = (value?: string) => {
+    if (!value) return '--';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '--' : date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
 const quantity = (value: number | string | undefined) => (
     Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 1 })
 );
 
-const longDate = (value?: string) => {
+const portalDate = (value?: string) => {
     if (!value) return '--';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '--';
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
-const shortDate = (value?: string) => {
-    if (!value) return '--';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return '--';
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-};
+const longDate = portalDate;
+const shortDate = portalDate;
 
 const modeLabel = (value: string) => {
     const key = String(value || '').toLowerCase();
@@ -281,6 +283,7 @@ function CellText({
     align = 'center',
     bold,
     muted,
+    dense = false,
     numberOfLines = 1,
 }: {
     children: React.ReactNode;
@@ -288,6 +291,7 @@ function CellText({
     align?: Align;
     bold?: boolean;
     muted?: boolean;
+    dense?: boolean;
     numberOfLines?: number;
 }) {
     const alignStyle = align === 'left' ? s.alignLeft : align === 'right' ? s.alignRight : s.alignCenter;
@@ -295,7 +299,7 @@ function CellText({
         <Text
             numberOfLines={numberOfLines}
             ellipsizeMode="tail"
-            style={[s.cellText, alignStyle, bold && s.bold, muted && s.muted]}
+            style={[s.cellText, dense && s.entryDenseText, alignStyle, bold && s.bold, muted && s.muted]}
         >
             {children}
         </Text>
@@ -335,12 +339,14 @@ function PortalTable<T extends { id: string }>({
     rows,
     emptyText,
     compact,
+    dense = false,
     s,
 }: {
     columns: PortalColumn<T>[];
     rows: T[];
     emptyText: string;
     compact: boolean;
+    dense?: boolean;
     s: any;
 }) {
     const visibleColumns = columns.filter((col) => !(compact && col.hideOnCompact));
@@ -355,13 +361,14 @@ function PortalTable<T extends { id: string }>({
 
     return (
         <View style={s.tableWrap}>
-            <View style={s.tHead}>
+            <View style={[s.tHead, dense && s.entryDenseHead]}>
                 {visibleColumns.map((col) => (
                     <Text
                         key={col.key}
                         numberOfLines={1}
                         style={[
                             s.tHeadText,
+                            dense && s.entryDenseHeadText,
                             {
                                 flex: col.flex,
                                 minWidth: 0,
@@ -375,7 +382,7 @@ function PortalTable<T extends { id: string }>({
                 ))}
             </View>
             {rows.map((row, index) => (
-                <View key={row.id || String(index)} style={[s.row, index % 2 === 1 && s.rowAlt]}>
+                <View key={row.id || String(index)} style={[s.row, dense && s.entryDenseRow, index % 2 === 1 && s.rowAlt]}>
                     {visibleColumns.map((col) => (
                         <View
                             key={col.key}
@@ -400,6 +407,59 @@ function PortalTable<T extends { id: string }>({
     );
 }
 
+function CollectionSettlementHistory({
+    rows,
+    colors,
+    s,
+}: {
+    rows: PortalPaymentRow[];
+    colors: any;
+    s: any;
+}) {
+    if (!rows.length) {
+        return <View style={s.empty}><Text style={s.emptyText}>No settlement payments found.</Text></View>;
+    }
+
+    const line = (label: string, amount: number | undefined, color?: string) => (
+        <View style={s.settlementLine} key={label}>
+            <Text style={s.settlementLabel}>{label}</Text>
+            <Text style={[s.settlementValue, color ? { color } : null]}>{settlementMoney(amount || 0)}</Text>
+        </View>
+    );
+
+    return (
+        <View>
+            {rows.map((row, index) => {
+                const range = row.periodStart && row.periodEnd
+                    ? `${settlementDate(row.periodStart)} - ${settlementDate(row.periodEnd)}`
+                    : settlementDate(row.date);
+                const closing = Number(row.closingBalance || 0);
+                return (
+                    <View key={row.id} style={s.settlementCard}>
+                        <View style={s.settlementCardHeader}>
+                            <Text style={s.settlementNumber}>{index + 1}</Text>
+                            <Text numberOfLines={1} style={s.settlementMode}>{row.mode || 'Settlement'}</Text>
+                            <Text numberOfLines={1} style={s.settlementPeriod}>{range}</Text>
+                        </View>
+                        <View style={s.settlementDivider} />
+                        {line('Milk Amount:', row.totalMilkAmount)}
+                        {line('Advance:', -(Number(row.totalAdvanceDeduction) || 0), colors.warning)}
+                        {line('Total Payable:', row.netPayable)}
+                        {line('Paid Amount:', row.amount, colors.success)}
+                        <View style={s.settlementClosing}>
+                            <View style={s.settlementBalanceGroup}>
+                                <Text style={s.settlementClosingLabel}>Closing Balance:</Text>
+                                <Text style={[s.settlementClosingValue, { color: closing < 0 ? colors.destructive : colors.success }]}>{settlementMoney(closing)}</Text>
+                            </View>
+                            <Text style={s.settlementCreated}>Created: {settlementDate(row.createdAt || row.date)}</Text>
+                        </View>
+                    </View>
+                );
+            })}
+        </View>
+    );
+}
+
 function SectionCard({
     title,
     subtitle,
@@ -409,6 +469,7 @@ function SectionCard({
     showViewAll,
     expanded,
     onToggle,
+    dense = false,
     children,
 }: {
     title: string;
@@ -416,6 +477,7 @@ function SectionCard({
     icon: any;
     colors: any;
     s: any;
+    dense?: boolean;
     showViewAll: boolean;
     expanded: boolean;
     onToggle: () => void;
@@ -423,13 +485,13 @@ function SectionCard({
 }) {
     return (
         <Box style={s.sectionCard}>
-            <View style={s.sectionHeader}>
-                <View style={s.sectionIcon}>
+            <View style={[s.sectionHeader, dense && s.entryDenseSectionHeader]}>
+                <View style={[s.sectionIcon, dense && s.entryDenseSectionIcon]}>
                     <Icon size={15} color={colors.white} />
                 </View>
                 <View style={s.sectionTitleWrap}>
-                    <Text numberOfLines={1} style={s.sectionTitle}>{title}</Text>
-                    <Text numberOfLines={1} style={s.sectionSub}>{subtitle}</Text>
+                    <Text numberOfLines={1} style={[s.sectionTitle, dense && s.entryDenseSectionTitle]}>{title}</Text>
+                    <Text numberOfLines={1} style={[s.sectionSub, dense && s.entryDenseSectionSub]}>{subtitle}</Text>
                 </View>
                 {showViewAll && (
                     <Pressable onPress={onToggle} style={s.viewAllBtn}>
@@ -440,7 +502,7 @@ function SectionCard({
                     </Pressable>
                 )}
             </View>
-            <View style={s.sectionBody}>{children}</View>
+            <View style={[s.sectionBody, dense && s.entryDenseSectionBody]}>{children}</View>
         </Box>
     );
 }
@@ -876,58 +938,66 @@ export default function PortalScreen() {
         : 'No records found for this mobile number.';
 
     const displayRows = (rows: any[], key: SectionKey) => {
+        if (key === 'payments' && !isSelling && !expanded[key]) return rows.slice(0, 1);
         const cap = filters.section === 'all' && !expanded[key] ? 5 : 100;
         return rows.slice(0, cap);
     };
 
-    const entryColumns: PortalColumn<PortalEntryRow>[] = [
+    const entryColumns: PortalColumn<PortalEntryRow>[] = isSelling ? [
+        { key: 'date', title: 'Date', flex: 1, render: (row) => <CellText s={s} dense>{shortDate(row.date)}</CellText> },
+        { key: 'quantity', title: 'Qty', flex: 0.9, render: (row) => <CellText s={s} dense>{quantity(row.quantity)}</CellText> },
+        { key: 'rate', title: 'Rate', flex: 0.9, render: (row) => <CellText s={s} dense>{money(row.rate)}</CellText> },
+        { key: 'amount', title: 'Amount', flex: 1, render: (row) => <CellText s={s} dense bold>{money(row.amount)}</CellText> },
+    ] : [
         {
             key: 'date',
             title: 'Date',
-            flex: 1.05,
-            align: 'left',
-            render: (row) => (
-                <TwoLineCell
-                    primary={shortDate(row.date)}
-                    secondary={compact
-                        ? (isSelling ? (row.customerName || profile?.name || '') : (row.farmerName || profile?.name || ''))
-                        : yearOf(row.date)}
-                    align="left"
-                    s={s}
-                />
-            ),
+            flex: 0.82,
+            render: (row) => <CellText s={s} dense numberOfLines={1}>{shortDate(row.date)}</CellText>,
         },
         {
-            key: 'name',
-            title: isSelling ? 'Customer' : 'Farmer',
-            flex: 1.25,
-            align: 'left',
-            hideOnCompact: true,
-            render: (row) => (
-                <CellText align="left" s={s} numberOfLines={1}>
-                    {isSelling ? (row.customerName || profile?.name || '--') : (row.farmerName || profile?.name || '--')}
-                </CellText>
-            ),
+            key: 'quantity',
+            title: 'Milk',
+            flex: 0.62,
+            render: (row) => <CellText s={s} dense numberOfLines={1}>{quantity(row.quantity)}</CellText>,
         },
         {
-            key: 'qtyRate',
-            title: 'Qty / Rate',
-            flex: 1,
-            render: (row) => (
-                <TwoLineCell primary={quantity(row.quantity)} secondary={`${money(row.rate)}/L`} s={s} />
-            ),
+            key: 'fat',
+            title: 'FAT',
+            flex: 0.52,
+            render: (row) => <CellText s={s} dense numberOfLines={1}>{row.fat == null ? '--' : quantity(row.fat)}</CellText>,
+        },
+        {
+            key: 'snf',
+            title: 'SNF',
+            flex: 0.52,
+            render: (row) => <CellText s={s} dense numberOfLines={1}>{row.snf == null ? '--' : quantity(row.snf)}</CellText>,
+        },
+        {
+            key: 'rate',
+            title: 'Rate',
+            flex: 0.67,
+            render: (row) => <CellText s={s} dense numberOfLines={1}>{quantity(row.rate)}</CellText>,
+        },
+        {
+            key: 'bonus',
+            title: 'Bonus',
+            flex: 0.72,
+            render: (row) => {
+                if (!(Number(row.bonusAmount) > 0)) return <CellText s={s} dense>--</CellText>;
+                const value = Number(row.bonusRate) > 0
+                    ? row.bonusType === 'percent'
+                        ? `+${quantity(row.bonusRate)}%`
+                        : `+${quantity(row.bonusRate)}/L`
+                    : `+${money(row.bonusAmount)}`;
+                return <CellText s={s} dense numberOfLines={1}>{value}</CellText>;
+            },
         },
         {
             key: 'amount',
-            title: 'Amount',
-            flex: 1,
-            render: (row) => <CellText bold s={s}>{money(row.amount)}</CellText>,
-        },
-        {
-            key: 'status',
-            title: 'Status',
-            flex: 0.9,
-            render: (row) => <StatusPill status={row.status} colors={colors} s={s} />,
+            title: 'Amt',
+            flex: 0.82,
+            render: (row) => <CellText bold s={s} dense>{money(row.amount)}</CellText>,
         },
     ];
 
@@ -938,7 +1008,7 @@ export default function PortalScreen() {
             flex: 1,
             align: 'left',
             render: (row) => (
-                <TwoLineCell primary={shortDate(row.date)} secondary={yearOf(row.date)} align="left" s={s} />
+                <CellText align="left" s={s}>{shortDate(row.date)}</CellText>
             ),
         },
         {
@@ -976,14 +1046,14 @@ export default function PortalScreen() {
         },
     ];
 
-    const advanceColumns: PortalColumn<PortalAdvanceRow>[] = [
+    const advanceColumns: PortalColumn<PortalAdvanceRow>[] = isSelling ? [
         {
             key: 'date',
             title: 'Date',
             flex: 1,
             align: 'left',
             render: (row) => (
-                <TwoLineCell primary={shortDate(row.date)} secondary={yearOf(row.date)} align="left" s={s} />
+                <CellText align="left" s={s}>{shortDate(row.date)}</CellText>
             ),
         },
         {
@@ -1029,6 +1099,32 @@ export default function PortalScreen() {
                 </CellText>
             ),
         },
+
+    ] : [
+        {
+            key: 'name',
+            title: 'Name',
+            flex: 1.3,
+            render: () => <CellText s={s} dense numberOfLines={1}>{profile?.name || '--'}</CellText>,
+        },
+        {
+            key: 'note',
+            title: 'Note',
+            flex: 1,
+            render: (row) => <CellText s={s} dense numberOfLines={1}>{row.remark || 'Advance'}</CellText>,
+        },
+        {
+            key: 'amount',
+            title: 'Amt',
+            flex: 0.75,
+            render: (row) => <CellText bold s={s} dense>{money(row.amount)}</CellText>,
+        },
+        {
+            key: 'date',
+            title: 'Date',
+            flex: 0.9,
+            render: (row) => <CellText s={s} dense numberOfLines={1}>{shortDate(row.date)}</CellText>,
+        },
     ];
 
     const sectionConfigs: Array<{
@@ -1040,7 +1136,7 @@ export default function PortalScreen() {
     }> = [
         {
             key: 'entries',
-            title: isSelling ? 'Recent Selling Entries' : 'Purchase Entry (Milk)',
+            title: isSelling ? 'Selling Entries' : 'Collection Entries',
             icon: isSelling ? ShoppingCart : Droplets,
             rows: filteredEntries,
             columns: entryColumns,
@@ -1072,9 +1168,6 @@ export default function PortalScreen() {
             {/* Flat TopBar-like header, copied from the dairy-owner screens. */}
             <View style={[s.header, { paddingTop: insets.top + 6 }]}>
                 <View style={s.headerRow}>
-                    <Pressable onPress={confirmLogout} hitSlop={10} style={s.headerBtn}>
-                        <ArrowLeft size={20} color={colors.white} />
-                    </Pressable>
                     <View style={s.headerTitle}>
                         <Text numberOfLines={1} style={s.headerTitleText}>
                             {isSelling ? 'Selling' : 'Customer Details'}
@@ -1082,15 +1175,6 @@ export default function PortalScreen() {
                         <Text numberOfLines={1} style={s.headerSub}>Farmer / Customer view</Text>
                     </View>
                     <View style={s.headerActions}>
-                        <Pressable onPress={openFilters} hitSlop={6} style={s.headerFilterBtn}>
-                            <Filter size={17} color={colors.white} />
-                            {!compact && <Text style={s.headerFilterText}>Filters</Text>}
-                            {activeCount > 0 && (
-                                <View style={s.headerBadge}>
-                                    <Text style={s.headerBadgeText}>{activeCount}</Text>
-                                </View>
-                            )}
-                        </Pressable>
                         <Pressable onPress={confirmLogout} hitSlop={10} style={s.headerBtn}>
                             <LogOut size={18} color={colors.white} />
                         </Pressable>
@@ -1111,15 +1195,19 @@ export default function PortalScreen() {
                 <Box style={s.profileCard}>
                     <View style={s.decorCircle} />
                     <View style={s.profileTopRow}>
-                        <View style={s.avatar}>
-                            <UserRound size={30} color={colors.primary} />
-                        </View>
+                        <Image source={require('@/assets/images/customer-avatar.jpg')} style={s.avatar} />
                         <View style={s.profileInfo}>
                             <View style={s.profileNameRow}>
                                 <Text numberOfLines={1} style={s.profileName}>
                                     {profile?.name || 'Farmer / Customer'}
                                 </Text>
                                 <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
+                                <View style={s.linkedBy}>
+                                    <Text style={s.linkedByLabel}>Linked by</Text>
+                                    <Text numberOfLines={1} style={s.linkedByText}>
+                                        {profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}
+                                    </Text>
+                                </View>
                             </View>
                             <Text numberOfLines={1} style={s.profileMeta}>
                                 {isSelling ? 'Customer Code' : 'Farmer Code'} : {profile?.code || '--'}
@@ -1137,12 +1225,6 @@ export default function PortalScreen() {
                                 </View>
                             )}
                         </View>
-                    </View>
-                    <View style={s.dairyNote}>
-                        <CheckCircle2 size={13} color={colors.primary} />
-                        <Text numberOfLines={2} style={s.dairyNoteText}>
-                            Linked dairy: {profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}
-                        </Text>
                     </View>
                 </Box>
 
@@ -1205,20 +1287,7 @@ export default function PortalScreen() {
                     />
                 </View>
 
-                <View onLayout={onFilterLayout} collapsable={false}>
-                    <FilterPanel
-                        filters={filters}
-                        setFilter={setFilter}
-                        clearFilters={clearFilters}
-                        filtersOpen={filtersOpen}
-                        onToggleFilters={toggleFilters}
-                        activeCount={activeCount}
-                        dairyOptions={dairyOptions}
-                        modeOptions={modeOptions}
-                        colors={colors}
-                        s={s}
-                    />
-                </View>
+
 
                 {(loading && !dashboard) ? (
                     <Box style={s.loadingCard}>
@@ -1239,7 +1308,9 @@ export default function PortalScreen() {
                             .map((config) => {
                                 const rows = config.rows;
                                 const visible = displayRows(rows, config.key);
-                                const showViewAll = filters.section === 'all' && rows.length > 5;
+                                const showViewAll = config.key === 'payments' && !isSelling
+                                    ? rows.length > 1
+                                    : filters.section === 'all' && rows.length > 5;
                                 const subtitle = `${rows.length} record${rows.length === 1 ? '' : 's'}${rows.length > 100 ? ' • showing 100' : ''}`;
                                 return (
                                     <SectionCard
@@ -1249,17 +1320,23 @@ export default function PortalScreen() {
                                         icon={config.icon}
                                         colors={colors}
                                         s={s}
+                                        dense={config.key === 'entries' || (config.key === 'advances' && !isSelling)}
                                         showViewAll={showViewAll}
                                         expanded={expanded[config.key]}
                                         onToggle={() => toggleSection(config.key)}
                                     >
-                                        <PortalTable
-                                            columns={config.columns}
-                                            rows={visible}
-                                            emptyText={emptyText}
-                                            compact={compact}
-                                            s={s}
-                                        />
+                                        {config.key === 'payments' && !isSelling ? (
+                                            <CollectionSettlementHistory rows={visible as PortalPaymentRow[]} colors={colors} s={s} />
+                                        ) : (
+                                            <PortalTable
+                                                columns={config.columns}
+                                                rows={visible}
+                                                emptyText={emptyText}
+                                                compact={compact}
+                                                dense={config.key === 'entries' || (config.key === 'advances' && !isSelling)}
+                                                s={s}
+                                            />
+                                        )}
                                     </SectionCard>
                                 );
                             })}
@@ -1402,28 +1479,17 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             width: 58,
             height: 58,
             borderRadius: 29,
-            alignItems: 'center',
-            justifyContent: 'center',
             backgroundColor: colors.primary + '15',
-            borderWidth: 1,
-            borderColor: colors.primary + '30',
         },
         profileInfo: { flex: 1, minWidth: 0 },
         profileNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        linkedBy: { marginLeft: 'auto', alignItems: 'flex-end', maxWidth: 100 },
+        linkedByLabel: { fontSize: 8, color: colors.mutedForeground, fontWeight: '600' },
+        linkedByText: { fontSize: 9, color: colors.primary, fontWeight: '700' },
         profileName: { fontSize: 16, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
         profileMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
         profileLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
         profileLineText: { flex: 1, fontSize: 11.5, fontWeight: '600', color: colors.foreground },
-        dairyNote: {
-            marginTop: 10,
-            padding: 8,
-            borderRadius: 8,
-            backgroundColor: colors.secondary,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-        },
-        dairyNoteText: { flex: 1, fontSize: 10, color: colors.foreground },
 
         moduleSwitch: {
             flexDirection: 'row',
@@ -1545,6 +1611,11 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         sectionTitleWrap: { flex: 1, minWidth: 0 },
         sectionTitle: { fontSize: 13, fontWeight: '800', color: colors.foreground },
         sectionSub: { fontSize: 9.5, color: colors.mutedForeground, marginTop: 1 },
+        entryDenseSectionHeader: { gap: 5, paddingHorizontal: 7, paddingVertical: 4 },
+        entryDenseSectionIcon: { width: 21, height: 21, borderRadius: 6 },
+        entryDenseSectionTitle: { fontSize: 11 },
+        entryDenseSectionSub: { fontSize: 8, marginTop: 0 },
+        entryDenseSectionBody: { padding: 4 },
         viewAllBtn: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -1589,6 +1660,24 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             borderTopColor: colors.border,
         },
         rowAlt: { backgroundColor: rowAltBg },
+        entryDenseHead: { gap: 1, paddingVertical: 3, paddingHorizontal: 4 },
+        entryDenseHeadText: { fontSize: 7.5, letterSpacing: 0 },
+        entryDenseRow: { gap: 1, paddingVertical: 4, paddingHorizontal: 4 },
+        entryDenseText: { fontSize: 8 },
+        settlementCard: { padding: 8, marginBottom: 7, borderWidth: 1, borderColor: colors.primary + '20', borderRadius: 9, backgroundColor: colors.card },
+        settlementCardHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 22, gap: 5 },
+        settlementNumber: { fontSize: 11, fontWeight: '900', color: colors.primary },
+        settlementMode: { flex: 1, fontSize: 10, fontWeight: '800', color: colors.foreground },
+        settlementPeriod: { maxWidth: '58%', fontSize: 9, color: colors.mutedForeground, textAlign: 'right' },
+        settlementDivider: { height: 1, backgroundColor: colors.primary + '55', marginVertical: 4 },
+        settlementLine: { minHeight: 19, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        settlementLabel: { fontSize: 9.5, color: colors.mutedForeground },
+        settlementValue: { fontSize: 10, fontWeight: '700', color: colors.foreground },
+        settlementClosing: { minHeight: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 5, marginTop: 3, paddingTop: 4, borderTopWidth: 1, borderTopColor: colors.border },
+        settlementBalanceGroup: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+        settlementClosingLabel: { fontSize: 9, fontWeight: '800', color: colors.mutedForeground },
+        settlementCreated: { flex: 1, fontSize: 7.5, color: colors.mutedForeground, textAlign: 'right' },
+        settlementClosingValue: { fontSize: 9.5, fontWeight: '900' },
         cell: { minWidth: 0, justifyContent: 'center', paddingHorizontal: 1 },
         cellText: {
             fontSize: compactFont,

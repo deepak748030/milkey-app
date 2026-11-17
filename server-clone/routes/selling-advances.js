@@ -43,20 +43,35 @@ router.use((req, res, next) => {
 // GET /api/selling-advances - isolated list for the logged-in dairy owner.
 router.get('/', auth, async (req, res) => {
     try {
-        const { memberId, type, status = 'all', includeDeleted, limit = 100, page = 1 } = req.query;
+        const { memberId, type, status = 'all', includeDeleted, limit = 10, page = 1, search, sortBy, order } = req.query;
         const query = { owner: req.userId };
         if (includeDeleted !== 'true') query.isDeleted = { $ne: true };
         if (memberId && mongoose.isValidObjectId(memberId)) query.member = memberId;
         if (type === 'given' || type === 'adjusted') query.type = type;
         if (status && status !== 'all') query.status = status;
+        if (search && String(search).trim()) {
+            const escaped = String(search).trim().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+            if (escaped) {
+                const matchingMembers = await Member.find({
+                    owner: req.userId,
+                    name: { $regex: escaped, $options: 'i' },
+                }).select('_id').lean();
+                query.$or = [
+                    { note: { $regex: escaped, $options: 'i' } },
+                    { member: { $in: matchingMembers.map((member) => member._id) } },
+                ];
+            }
+        }
 
         const parsedLimit = Math.min(200, Math.max(1, parseInt(limit, 10) || 100));
         const parsedPage = Math.max(1, parseInt(page, 10) || 1);
 
+        const sortDirection = order === 'asc' ? 1 : -1;
+        const sortSpec = sortBy === 'amount' ? { amount: sortDirection, _id: -1 } : { date: -1, _id: -1 };
         const [data, total, allForSummary] = await Promise.all([
             SellingAdvance.find(query)
                 .populate('member', 'name mobile address')
-                .sort({ date: -1, _id: -1 })
+                .sort(sortSpec)
                 .skip((parsedPage - 1) * parsedLimit)
                 .limit(parsedLimit)
                 .lean(),
@@ -67,6 +82,7 @@ router.get('/', auth, async (req, res) => {
                 owner: req.userId,
                 ...(memberId && mongoose.isValidObjectId(memberId) ? { member: memberId } : {}),
                 ...(type === 'given' || type === 'adjusted' ? { type } : {}),
+                ...(query.$or ? { $or: query.$or } : {}),
                 isDeleted: { $ne: true },
             }).lean(),
         ]);
