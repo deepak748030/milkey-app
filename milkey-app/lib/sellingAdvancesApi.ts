@@ -105,6 +105,9 @@ export const sellingAdvancesApi = {
         status?: 'all' | SellingAdvanceStatus;
         limit?: number;
         page?: number;
+        search?: string;
+        sortBy?: 'amount';
+        order?: 'asc' | 'desc';
     }) => {
         const query = new URLSearchParams();
         if (params?.memberId) query.append('memberId', params.memberId);
@@ -112,6 +115,9 @@ export const sellingAdvancesApi = {
         if (params?.status) query.append('status', params.status);
         if (params?.limit) query.append('limit', String(params.limit));
         if (params?.page) query.append('page', String(params.page));
+        if (params?.search) query.append('search', params.search);
+        if (params?.sortBy) query.append('sortBy', params.sortBy);
+        if (params?.order) query.append('order', params.order);
         const suffix = query.toString();
         return request<SellingAdvancesResult>(`/selling-advances${suffix ? `?${suffix}` : ''}`);
     },
