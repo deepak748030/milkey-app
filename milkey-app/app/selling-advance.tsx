@@ -16,7 +16,6 @@ import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import {
-    CheckCircle2,
     Home,
     Droplets,
     Store,
@@ -55,6 +54,13 @@ const dateLabel = (value?: string) => {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+const shortDateLabel = (value?: string) => {
+    if (!value) return '--';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '--';
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(-2)}`;
+};
+
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export default function SellingAdvanceScreen() {
@@ -80,6 +86,7 @@ export default function SellingAdvanceScreen() {
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState('');
     const [search, setSearch] = useState('');
+    const [customerQuery, setCustomerQuery] = useState('');
     const [amountSort, setAmountSort] = useState<'asc' | 'desc' | null>(null);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [form, setForm] = useState<{
@@ -101,7 +108,6 @@ export default function SellingAdvanceScreen() {
             ]);
             if (membersRes.success && membersRes.response?.data) {
                 setMembers(membersRes.response.data);
-                setForm((prev) => ({ ...prev, memberId: prev.memberId || membersRes.response!.data[0]?._id || '' }));
             } else {
                 setMembers([]);
             }
@@ -138,6 +144,12 @@ export default function SellingAdvanceScreen() {
         return found?.name || 'Customer';
     }, [members]);
 
+    const customerSuggestions = useMemo(() => {
+        const query = customerQuery.trim().toLowerCase();
+        if (!query || form.memberId) return [];
+        return members.filter((member) => member.name.toLowerCase().includes(query) || String(member.mobile || '').includes(query)).slice(0, 8);
+    }, [customerQuery, form.memberId, members]);
+
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         const rows = advances.filter((advance) => {
@@ -150,8 +162,9 @@ export default function SellingAdvanceScreen() {
     }, [advances, search, memberName, amountSort]);
 
     const clearForm = useCallback(() => {
-        setForm({ memberId: members[0]?._id || '', amount: '', type: 'given', date: todayIso(), note: '' });
-    }, [members]);
+        setForm({ memberId: '', amount: '', type: 'given', date: todayIso(), note: '' });
+        setCustomerQuery('');
+    }, []);
 
 
     const submit = useCallback(async () => {
@@ -187,40 +200,6 @@ export default function SellingAdvanceScreen() {
             Alert.alert('Could not save', result.message || 'Please try again.');
         }
     }, [form, hasAccess, load, setShowSubscriptionModal, clearForm]);
-
-    const settle = useCallback((advance: SellingAdvance) => {
-        const remaining = remainingSellingAdvance(advance);
-        if (remaining <= 0) return;
-        if (!hasAccess) {
-            setShowSubscriptionModal(true);
-            return;
-        }
-        Alert.alert(
-            'Settle advance?',
-            `Settle ${money(remaining)} for ${memberName(advance)}? This only updates the new selling advance ledger.`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Settle',
-                    style: 'default',
-                    onPress: () => {
-                        void (async () => {
-                            setBusyId(advance._id);
-                            const result = await sellingAdvancesApi.settle(advance._id, remaining);
-                            setBusyId(null);
-                            if (result.success) {
-                                await load(false);
-                            } else if (result.code === 'SUBSCRIPTION_REQUIRED') {
-                                setShowSubscriptionModal(true);
-                            } else {
-                                Alert.alert('Could not settle', result.message || 'Please try again.');
-                            }
-                        })();
-                    },
-                },
-            ],
-        );
-    }, [hasAccess, load, memberName, setShowSubscriptionModal]);
 
     const remove = useCallback((advance: SellingAdvance) => {
         if (!hasAccess) {
@@ -291,28 +270,40 @@ export default function SellingAdvanceScreen() {
             >
                 <View style={{ marginBottom: 10 }}>
                     <Text style={{ fontSize: 12, fontWeight: '800', color: colors.foreground, marginBottom: 6 }}>Customer</Text>
-                    {members.length === 0 ? (
-                        <Text style={{ fontSize: 11, color: colors.mutedForeground, marginBottom: 8 }}>Add a selling customer first.</Text>
-                    ) : (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                            {members.map((member) => {
-                                const active = form.memberId === member._id;
-                                return (
-                                    <Pressable key={member._id} onPress={() => setForm((prev) => ({ ...prev, memberId: member._id }))} style={{ paddingHorizontal: 11, paddingVertical: 8, borderRadius: 8, marginRight: 6, backgroundColor: active ? colors.primary : colors.card, borderWidth: 1, borderColor: active ? colors.primary : colors.border }}>
-                                        <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: '700', color: active ? colors.white : colors.foreground }}>{member.name}</Text>
+                    <View style={{ position: 'relative', zIndex: 10, marginBottom: 8 }}>
+                        <TextInput
+                            value={customerQuery}
+                            onChangeText={(value) => {
+                                setCustomerQuery(value);
+                                setForm((prev) => ({ ...prev, memberId: '' }));
+                            }}
+                            placeholder={members.length ? 'Name or mobile number' : 'Add a selling customer first'}
+                            placeholderTextColor={colors.mutedForeground}
+                            autoCapitalize="none"
+                            style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 11, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }}
+                        />
+                        {customerSuggestions.length > 0 && (
+                            <View style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: 8, marginTop: 3, overflow: 'hidden', elevation: 8, zIndex: 20 }}>
+                                {customerSuggestions.map((member, index) => (
+                                    <Pressable key={member._id} onPress={() => {
+                                        setForm((prev) => ({ ...prev, memberId: member._id }));
+                                        setCustomerQuery(member.name);
+                                    }} style={{ paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: index ? 1 : 0, borderTopColor: colors.border }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground }}>{member.name}</Text>
+                                        <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>{member.mobile || 'No mobile number'}</Text>
                                     </Pressable>
-                                );
-                            })}
-                        </ScrollView>
-                    )}
+                                ))}
+                            </View>
+                        )}
+                    </View>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Amount</Text>
-                            <TextInput value={form.amount} onChangeText={(value) => setForm((prev) => ({ ...prev, amount: value.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" placeholder="Amount" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, color: colors.foreground, fontSize: 12 }} />
+                            <TextInput value={form.amount} onChangeText={(value) => setForm((prev) => ({ ...prev, amount: value.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" placeholder="Amount" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Date</Text>
-                            <Pressable onPress={() => setShowDatePicker(true)} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Pressable onPress={() => setShowDatePicker(true)} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card }}>
                                 <Text style={{ color: colors.foreground, fontSize: 12 }}>{new Date(`${form.date}T00:00:00`).toLocaleDateString('en-GB')}</Text>
                                 <CalendarDays size={15} color={colors.mutedForeground} />
                             </Pressable>
@@ -320,13 +311,13 @@ export default function SellingAdvanceScreen() {
                     </View>
                     <View style={{ marginTop: 8 }}>
                         <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Note</Text>
-                        <TextInput value={form.note} onChangeText={(value) => setForm((prev) => ({ ...prev, note: value }))} placeholder="Note (e.g. Feed, medicine)" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, color: colors.foreground, fontSize: 12 }} />
+                        <TextInput value={form.note} onChangeText={(value) => setForm((prev) => ({ ...prev, note: value }))} placeholder="Note (e.g. Feed, medicine)" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
                     </View>
                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                        <Pressable onPress={() => void submit()} disabled={saving || members.length === 0} style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10, alignItems: 'center', opacity: saving || members.length === 0 ? 0.6 : 1 }}>
+                        <Pressable onPress={() => void submit()} disabled={saving || !form.memberId} style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10, alignItems: 'center', opacity: saving || !form.memberId ? 0.6 : 1 }}>
                             {saving ? <ActivityIndicator color={colors.white} /> : <Text style={{ color: colors.white, fontSize: 12, fontWeight: '800' }}>Save Advance</Text>}
                         </Pressable>
-                        <Pressable onPress={clearForm} style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 10, alignItems: 'center' }}>
+                        <Pressable onPress={clearForm} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 18, paddingVertical: 10, alignItems: 'center', backgroundColor: colors.card }}>
                             <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: '800' }}>Clear</Text>
                         </Pressable>
                     </View>
@@ -354,14 +345,14 @@ export default function SellingAdvanceScreen() {
                 </View>
 
 
-                <View style={{ marginTop: 2, marginBottom: 10, padding: 11, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.card, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ marginTop: 2, marginBottom: 10, padding: 11, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.primary + '15', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.mutedForeground }}>Total Records</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>Total Records</Text>
                         <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>{totalCount} records • {advances.length} shown</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.mutedForeground }}>Total Amount</Text>
-                        <Text style={{ fontSize: 16, fontWeight: '900', color: colors.foreground }}>{money(totalPending)}</Text>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>Total Amount</Text>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: colors.primary }}>{money(totalPending)}</Text>
                     </View>
                 </View>
 
@@ -387,33 +378,25 @@ export default function SellingAdvanceScreen() {
                         </Text>
                     </View>
                 ) : (
-                    <View style={{ borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card }}>
-                        <View style={{ flexDirection: 'row', backgroundColor: colors.secondary, paddingVertical: 9, paddingHorizontal: 7 }}>
+                    <View style={{ borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#DDF3E7', backgroundColor: colors.card, marginTop: 10 }}>
+                        <View style={{ flexDirection: 'row', backgroundColor: '#F7FCF9', paddingVertical: 10, paddingHorizontal: 7 }}>
                             {[['Customer', 1.25], ['Note', 1], ['Amt', 0.8], ['Date', 0.9], ['Del', 0.55]].map(([label, flex]: any) => (
-                                <Text key={label} style={{ flex, fontSize: 9, fontWeight: '800', color: colors.foreground, textAlign: 'center' }}>{label}</Text>
+                                <Text key={label} style={{ flex, fontSize: 12, fontWeight: '600', color: colors.foreground, textAlign: 'center' }}>{label}</Text>
                             ))}
                         </View>
-                        {filtered.map((advance) => {
-                            const remaining = remainingSellingAdvance(advance);
-                            return (
-                                <View key={advance._id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 7, borderTopWidth: 1, borderTopColor: colors.border }}>
-                                    <Text numberOfLines={1} style={{ flex: 1.25, fontSize: 10, fontWeight: '700', color: colors.foreground, textAlign: 'center' }}>{memberName(advance)}</Text>
-                                    <Text numberOfLines={1} style={{ flex: 1, fontSize: 9, color: colors.mutedForeground, textAlign: 'center' }}>{advance.note || '-'}</Text>
-                                    <Text numberOfLines={1} style={{ flex: 0.8, fontSize: 10, fontWeight: '800', color: colors.foreground, textAlign: 'center' }}>{money(advance.amount)}</Text>
-                                    <Text numberOfLines={1} style={{ flex: 0.9, fontSize: 9, color: colors.foreground, textAlign: 'center' }}>{dateLabel(advance.date)}</Text>
-                                    <View style={{ flex: 0.55, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}>
-                                        {remaining > 0 && (
-                                            <Pressable onPress={() => settle(advance)} disabled={busyId === advance._id} style={{ padding: 4 }}>
-                                                <CheckCircle2 size={13} color={colors.primary} />
-                                            </Pressable>
-                                        )}
-                                        <Pressable onPress={() => remove(advance)} disabled={busyId === advance._id} style={{ padding: 5 }}>
-                                            {busyId === advance._id ? <ActivityIndicator size="small" color={colors.destructive} /> : <Trash2 size={13} color={colors.destructive} />}
-                                        </Pressable>
-                                    </View>
+                        {filtered.map((advance) => (
+                            <View key={advance._id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 7, borderTopWidth: 1, borderTopColor: '#E5F3EA' }}>
+                                <Text numberOfLines={1} style={{ flex: 1.25, fontSize: 12, fontWeight: '600', color: colors.foreground, textAlign: 'center' }}>{memberName(advance)}</Text>
+                                <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: colors.foreground, textAlign: 'center' }}>{advance.note || '-'}</Text>
+                                <Text numberOfLines={1} style={{ flex: 0.8, fontSize: 12, fontWeight: '700', color: '#D5A700', textAlign: 'center' }}>{money(advance.amount)}</Text>
+                                <Text numberOfLines={1} style={{ flex: 0.9, fontSize: 12, color: colors.foreground, textAlign: 'center' }}>{shortDateLabel(advance.date)}</Text>
+                                <View style={{ flex: 0.55, alignItems: 'center', justifyContent: 'center' }}>
+                                    <Pressable onPress={() => remove(advance)} disabled={busyId === advance._id} style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#FEEAEC', alignItems: 'center', justifyContent: 'center' }}>
+                                        {busyId === advance._id ? <ActivityIndicator size="small" color={colors.destructive} /> : <Trash2 size={17} color={colors.destructive} />}
+                                    </Pressable>
                                 </View>
-                            );
-                        })}
+                            </View>
+                        ))}
                     </View>
                 )}
                 {hasMore && !loading && !error && (
