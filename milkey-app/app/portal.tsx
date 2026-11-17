@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Image,
     Modal,
     RefreshControl,
     ScrollView,
@@ -1082,15 +1083,6 @@ export default function PortalScreen() {
                         <Text numberOfLines={1} style={s.headerSub}>Farmer / Customer view</Text>
                     </View>
                     <View style={s.headerActions}>
-                        <Pressable onPress={openFilters} hitSlop={6} style={s.headerFilterBtn}>
-                            <Filter size={17} color={colors.white} />
-                            {!compact && <Text style={s.headerFilterText}>Filters</Text>}
-                            {activeCount > 0 && (
-                                <View style={s.headerBadge}>
-                                    <Text style={s.headerBadgeText}>{activeCount}</Text>
-                                </View>
-                            )}
-                        </Pressable>
                         <Pressable onPress={confirmLogout} hitSlop={10} style={s.headerBtn}>
                             <LogOut size={18} color={colors.white} />
                         </Pressable>
@@ -1111,15 +1103,19 @@ export default function PortalScreen() {
                 <Box style={s.profileCard}>
                     <View style={s.decorCircle} />
                     <View style={s.profileTopRow}>
-                        <View style={s.avatar}>
-                            <UserRound size={30} color={colors.primary} />
-                        </View>
+                        <Image source={require('@/assets/images/customer-avatar.jpg')} style={s.avatar} />
                         <View style={s.profileInfo}>
                             <View style={s.profileNameRow}>
                                 <Text numberOfLines={1} style={s.profileName}>
                                     {profile?.name || 'Farmer / Customer'}
                                 </Text>
                                 <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
+                                <View style={s.linkedBy}>
+                                    <Text style={s.linkedByLabel}>Linked by</Text>
+                                    <Text numberOfLines={1} style={s.linkedByText}>
+                                        {profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}
+                                    </Text>
+                                </View>
                             </View>
                             <Text numberOfLines={1} style={s.profileMeta}>
                                 {isSelling ? 'Customer Code' : 'Farmer Code'} : {profile?.code || '--'}
@@ -1137,12 +1133,6 @@ export default function PortalScreen() {
                                 </View>
                             )}
                         </View>
-                    </View>
-                    <View style={s.dairyNote}>
-                        <CheckCircle2 size={13} color={colors.primary} />
-                        <Text numberOfLines={2} style={s.dairyNoteText}>
-                            Linked dairy: {profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}
-                        </Text>
                     </View>
                 </Box>
 
@@ -1205,20 +1195,7 @@ export default function PortalScreen() {
                     />
                 </View>
 
-                <View onLayout={onFilterLayout} collapsable={false}>
-                    <FilterPanel
-                        filters={filters}
-                        setFilter={setFilter}
-                        clearFilters={clearFilters}
-                        filtersOpen={filtersOpen}
-                        onToggleFilters={toggleFilters}
-                        activeCount={activeCount}
-                        dairyOptions={dairyOptions}
-                        modeOptions={modeOptions}
-                        colors={colors}
-                        s={s}
-                    />
-                </View>
+
 
                 {(loading && !dashboard) ? (
                     <Box style={s.loadingCard}>
@@ -1402,28 +1379,17 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             width: 58,
             height: 58,
             borderRadius: 29,
-            alignItems: 'center',
-            justifyContent: 'center',
             backgroundColor: colors.primary + '15',
-            borderWidth: 1,
-            borderColor: colors.primary + '30',
         },
         profileInfo: { flex: 1, minWidth: 0 },
         profileNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        linkedBy: { marginLeft: 'auto', alignItems: 'flex-end', maxWidth: 100 },
+        linkedByLabel: { fontSize: 8, color: colors.mutedForeground, fontWeight: '600' },
+        linkedByText: { fontSize: 9, color: colors.primary, fontWeight: '700' },
         profileName: { fontSize: 16, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
         profileMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
         profileLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
         profileLineText: { flex: 1, fontSize: 11.5, fontWeight: '600', color: colors.foreground },
-        dairyNote: {
-            marginTop: 10,
-            padding: 8,
-            borderRadius: 8,
-            backgroundColor: colors.secondary,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-        },
-        dairyNoteText: { flex: 1, fontSize: 10, color: colors.foreground },
 
         moduleSwitch: {
             flexDirection: 'row',
