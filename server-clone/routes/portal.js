@@ -108,7 +108,7 @@ router.get('/dashboard', portalAuth, async (req, res) => {
         }
 
         const { start: todayStart, end: tomorrowStart } = localDayRange(req.query.tzOffsetMinutes);
-        const publicUser = publicPortalIdentity(identity);
+        const publicUser = publicPortalIdentity(identity, module);
         const availableModules = publicUser.availableModules;
         const ownerName = (doc) => identity.ownerNames[toId(doc?.owner)] || 'Dairy';
 

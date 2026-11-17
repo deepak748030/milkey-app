@@ -213,23 +213,42 @@ async function findPortalProfiles(rawPhone) {
     };
 }
 
-function publicPortalIdentity(identity) {
+function publicPortalIdentity(identity, module) {
     const availableModules = [];
     if (identity.availableModules.collection) availableModules.push('collection');
     if (identity.availableModules.selling) availableModules.push('selling');
 
-    const profile = identity.profile || {};
-    return {
-        id: `portal:${identity.phone}`,
+    const collectionProfile = identity.collectionLinks[0] || null;
+    const sellingProfile = identity.sellingLinks[0] || null;
+    const profileFor = (profile) => profile ? ({
         name: profile.name || 'Farmer / Customer',
-        phone: identity.phone,
-        role: 'farmer_customer',
+        phone: profile.mobile || identity.phone,
         code: profile.code || '',
         address: profile.address || '',
         dairyName: profile.dairyName || identity.dairyNames[0] || 'Dairy',
         dairyNames: identity.dairyNames || [],
         status: 'Active',
+    }) : null;
+    const moduleProfiles = {
+        collection: profileFor(collectionProfile),
+        selling: profileFor(sellingProfile),
+    };
+    const selectedProfile = module === 'selling'
+        ? (sellingProfile || collectionProfile)
+        : (collectionProfile || sellingProfile || identity.profile);
+
+    return {
+        id: `portal:${identity.phone}`,
+        name: selectedProfile?.name || 'Farmer / Customer',
+        phone: selectedProfile?.mobile || identity.phone,
+        role: 'farmer_customer',
+        code: selectedProfile?.code || '',
+        address: selectedProfile?.address || '',
+        dairyName: selectedProfile?.dairyName || identity.dairyNames[0] || 'Dairy',
+        dairyNames: identity.dairyNames || [],
+        status: 'Active',
         availableModules,
+        moduleProfiles,
         memberSince: null,
     };
 }

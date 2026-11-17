@@ -3,17 +3,21 @@ import { API_BASE_URL } from '@/lib/apiConfig';
 
 export type PortalModule = 'collection' | 'selling';
 
-export interface PortalUser {
-    id: string;
+export interface PortalModuleProfile {
     name: string;
     phone: string;
-    role: 'farmer_customer';
     code: string;
     address: string;
     dairyName: string;
     dairyNames: string[];
     status: string;
+}
+
+export interface PortalUser extends PortalModuleProfile {
+    id: string;
+    role: 'farmer_customer';
     availableModules: PortalModule[];
+    moduleProfiles?: Partial<Record<PortalModule, PortalModuleProfile | null>>;
     memberSince: string | null;
 }
 
