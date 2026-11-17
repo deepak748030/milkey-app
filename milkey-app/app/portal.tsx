@@ -1191,6 +1191,7 @@ export default function PortalScreen() {
                 keyboardDismissMode="interactive"
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
             >
+                <View style={s.topInfoStack}>
                 {/* Profile card — same card/border language, no shadow. */}
                 <Box style={s.profileCard}>
                     <View style={s.decorCircle} />
@@ -1286,8 +1287,7 @@ export default function PortalScreen() {
                         s={s}
                     />
                 </View>
-
-
+                </View>
 
                 {(loading && !dashboard) ? (
                     <Box style={s.loadingCard}>
@@ -1406,7 +1406,7 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
     return StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.background },
         scroll: { flex: 1 },
-        scrollContent: { paddingHorizontal: 10, paddingTop: 10, gap: 10 },
+        scrollContent: { paddingHorizontal: 10, paddingTop: 0, gap: 10 },
 
         header: {
             backgroundColor: colors.primary,
@@ -1464,6 +1464,7 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         headerTitleText: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
         headerSub: { fontSize: 10, color: 'rgba(255,255,255,0.72)', marginTop: 1 },
 
+        topInfoStack: { gap: 0 },
         profileCard: { padding: 12, overflow: 'hidden' },
         decorCircle: {
             position: 'absolute',
@@ -1611,11 +1612,11 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         sectionTitleWrap: { flex: 1, minWidth: 0 },
         sectionTitle: { fontSize: 13, fontWeight: '800', color: colors.foreground },
         sectionSub: { fontSize: 9.5, color: colors.mutedForeground, marginTop: 1 },
-        entryDenseSectionHeader: { gap: 5, paddingHorizontal: 7, paddingVertical: 4 },
-        entryDenseSectionIcon: { width: 21, height: 21, borderRadius: 6 },
-        entryDenseSectionTitle: { fontSize: 11 },
+        entryDenseSectionHeader: { gap: 5, paddingHorizontal: 7, paddingVertical: 5 },
+        entryDenseSectionIcon: { width: 23, height: 23, borderRadius: 6 },
+        entryDenseSectionTitle: { fontSize: 12 },
         entryDenseSectionSub: { fontSize: 8, marginTop: 0 },
-        entryDenseSectionBody: { padding: 4 },
+        entryDenseSectionBody: { padding: 5 },
         viewAllBtn: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -1660,10 +1661,10 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             borderTopColor: colors.border,
         },
         rowAlt: { backgroundColor: rowAltBg },
-        entryDenseHead: { gap: 1, paddingVertical: 3, paddingHorizontal: 4 },
-        entryDenseHeadText: { fontSize: 7.5, letterSpacing: 0 },
-        entryDenseRow: { gap: 1, paddingVertical: 4, paddingHorizontal: 4 },
-        entryDenseText: { fontSize: 8 },
+        entryDenseHead: { gap: 1, paddingVertical: 4, paddingHorizontal: 4 },
+        entryDenseHeadText: { fontSize: 8, letterSpacing: 0 },
+        entryDenseRow: { gap: 1, paddingVertical: 6, paddingHorizontal: 4 },
+        entryDenseText: { fontSize: 9 },
         settlementCard: { padding: 8, marginBottom: 7, borderWidth: 1, borderColor: colors.primary + '20', borderRadius: 9, backgroundColor: colors.card },
         settlementCardHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 22, gap: 5 },
         settlementNumber: { fontSize: 11, fontWeight: '900', color: colors.primary },
