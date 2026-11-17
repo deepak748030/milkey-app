@@ -85,6 +85,8 @@ export default function SellingAdvanceScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [busyId, setBusyId] = useState<string | null>(null);
+    const [deletingAdvance, setDeletingAdvance] = useState<SellingAdvance | null>(null);
+    const [deleteError, setDeleteError] = useState('');
     const [error, setError] = useState('');
     const [search, setSearch] = useState('');
     const [customerQuery, setCustomerQuery] = useState('');
@@ -207,32 +209,26 @@ export default function SellingAdvanceScreen() {
             setShowSubscriptionModal(true);
             return;
         }
-        Alert.alert(
-            'Delete advance?',
-            'This removes only the isolated selling advance record. Old selling data will not change.',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => {
-                        void (async () => {
-                            setBusyId(advance._id);
-                            const result = await sellingAdvancesApi.remove(advance._id);
-                            setBusyId(null);
-                            if (result.success) {
-                                await load(false);
-                            } else if (result.code === 'SUBSCRIPTION_REQUIRED') {
-                                setShowSubscriptionModal(true);
-                            } else {
-                                Alert.alert('Could not delete', result.message || 'Please try again.');
-                            }
-                        })();
-                    },
-                },
-            ],
-        );
-    }, [hasAccess, load, setShowSubscriptionModal]);
+        setDeleteError('');
+        setDeletingAdvance(advance);
+    }, [hasAccess, setShowSubscriptionModal]);
+
+    const confirmDelete = useCallback(async () => {
+        if (!deletingAdvance) return;
+        setBusyId(deletingAdvance._id);
+        setDeleteError('');
+        const result = await sellingAdvancesApi.remove(deletingAdvance._id);
+        setBusyId(null);
+        if (result.success) {
+            setDeletingAdvance(null);
+            await load(false);
+        } else if (result.code === 'SUBSCRIPTION_REQUIRED') {
+            setDeletingAdvance(null);
+            setShowSubscriptionModal(true);
+        } else {
+            setDeleteError(result.message || 'Could not delete this advance. Please try again.');
+        }
+    }, [deletingAdvance, load, setShowSubscriptionModal]);
 
     const reportHtml = useCallback(() => {
         const rows = filtered.map((advance) => `<tr><td>${memberName(advance)}</td><td>${advance.note || '-'}</td><td>₹${Number(advance.amount || 0).toLocaleString('en-IN')}</td><td>${dateLabel(advance.date)}</td><td>${remainingSellingAdvance(advance) > 0 ? 'Pending' : 'Settled'}</td></tr>`).join('');
@@ -282,7 +278,7 @@ export default function SellingAdvanceScreen() {
                                 placeholder={members.length ? 'Name or mobile number' : 'Add a selling customer first'}
                                 placeholderTextColor={colors.mutedForeground}
                                 autoCapitalize="none"
-                                style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingLeft: 8, paddingRight: form.memberId ? 38 : 8, paddingVertical: 9, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }}
+                                style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingLeft: 8, paddingRight: form.memberId ? 38 : 8, paddingVertical: 10, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }}
                             />
                             {form.memberId && <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}><CheckCircle2 size={19} color={colors.primary} /></View>}
                         </View>
@@ -303,11 +299,11 @@ export default function SellingAdvanceScreen() {
                     <View style={{ flexDirection: 'row', gap: 6 }}>
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Amount</Text>
-                            <TextInput value={form.amount} onChangeText={(value) => setForm((prev) => ({ ...prev, amount: value.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" placeholder="Amount" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 8, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
+                            <TextInput value={form.amount} onChangeText={(value) => setForm((prev) => ({ ...prev, amount: value.replace(/[^0-9.]/g, '') }))} keyboardType="numeric" placeholder="Amount" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 10, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
                         </View>
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Date</Text>
-                            <Pressable onPress={() => setShowDatePicker(true)} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card }}>
+                            <Pressable onPress={() => setShowDatePicker(true)} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card }}>
                                 <Text style={{ color: colors.foreground, fontSize: 12 }}>{new Date(`${form.date}T00:00:00`).toLocaleDateString('en-GB')}</Text>
                                 <CalendarDays size={15} color={colors.mutedForeground} />
                             </Pressable>
@@ -315,20 +311,20 @@ export default function SellingAdvanceScreen() {
                     </View>
                     <View style={{ marginTop: 8 }}>
                         <Text style={{ fontSize: 11, fontWeight: '700', color: colors.foreground, marginBottom: 5 }}>Note</Text>
-                        <TextInput value={form.note} onChangeText={(value) => setForm((prev) => ({ ...prev, note: value }))} placeholder="Note (e.g. Feed, medicine)" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 8, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
+                        <TextInput value={form.note} onChangeText={(value) => setForm((prev) => ({ ...prev, note: value }))} placeholder="Note (e.g. Feed, medicine)" placeholderTextColor={colors.mutedForeground} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 10, color: colors.foreground, fontSize: 14, backgroundColor: colors.card }} />
                     </View>
                     <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
                         <Pressable onPress={() => void submit()} disabled={saving || !form.memberId} style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10, alignItems: 'center', opacity: saving || !form.memberId ? 0.6 : 1 }}>
-                            {saving ? <ActivityIndicator color={colors.white} /> : <Text style={{ color: colors.white, fontSize: 12, fontWeight: '800' }}>Save Advance</Text>}
+                            {saving ? <ActivityIndicator color={colors.white} /> : <Text style={{ color: colors.white, fontSize: 14, fontWeight: '600' }}>Save Advance</Text>}
                         </Pressable>
                         <Pressable onPress={clearForm} style={{ borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 8, paddingHorizontal: 18, paddingVertical: 10, alignItems: 'center', backgroundColor: colors.card }}>
-                            <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: '800' }}>Clear</Text>
+                            <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: '600' }}>Clear</Text>
                         </Pressable>
                     </View>
                 </View>
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 8 }}>
-                    <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 6, paddingHorizontal: 9, height: 42 }}>
+                    <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 6, paddingHorizontal: 9, height: 36 }}>
                         <Search size={15} color={colors.mutedForeground} />
                         <TextInput
                             value={search}
@@ -339,17 +335,17 @@ export default function SellingAdvanceScreen() {
                         />
                         {!!search && <Pressable onPress={() => setSearch('')} hitSlop={8}><X size={14} color={colors.mutedForeground} /></Pressable>}
                     </View>
-                    <Pressable onPress={() => void exportPdf()} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#EAAA00', borderRadius: 6, paddingHorizontal: 10, height: 42 }}>
+                    <Pressable onPress={() => void exportPdf()} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#EAAA00', borderRadius: 6, paddingHorizontal: 10, height: 36 }}>
                         <FileText size={15} color={colors.white} /><Text style={{ fontSize: 11, fontWeight: '700', color: colors.white }}>PDF</Text>
                     </Pressable>
-                    <Pressable onPress={() => void printReport()} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 10, height: 42 }}>
+                    <Pressable onPress={() => void printReport()} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 10, height: 36 }}>
                         <Printer size={15} color={colors.white} /><Text style={{ fontSize: 11, fontWeight: '700', color: colors.white }}>Print</Text>
                     </Pressable>
                     <AmountFilterIcon sort={amountSort} onToggle={() => setAmountSort((prev) => prev === 'asc' ? 'desc' : 'asc')} />
                 </View>
 
 
-                <View style={{ marginTop: 2, marginBottom: 10, padding: 11, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.primary + '15', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ marginTop: 2, marginBottom: 8, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.primary, backgroundColor: colors.primary + '15', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View>
                         <Text style={{ fontSize: 14, fontWeight: '600', color: colors.primary }}>Total Records</Text>
                         <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>{totalCount} records • {advances.length} shown</Text>
@@ -419,6 +415,26 @@ export default function SellingAdvanceScreen() {
                             <Pressable onPress={() => setShowDatePicker(false)}><X size={20} color={colors.foreground} /></Pressable>
                         </View>
                         <Calendar onDateSelect={(date) => { const year = date.getFullYear(); const month = String(date.getMonth() + 1).padStart(2, '0'); const day = String(date.getDate()).padStart(2, '0'); setForm((prev) => ({ ...prev, date: `${year}-${month}-${day}` })); setShowDatePicker(false); }} selectedDate={new Date(`${form.date}T00:00:00`)} />
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal visible={!!deletingAdvance} transparent animationType="fade" onRequestClose={() => { if (!busyId) setDeletingAdvance(null); }}>
+                <View style={{ flex: 1, backgroundColor: '#0008', justifyContent: 'center', padding: 24 }}>
+                    <View style={{ backgroundColor: colors.card, borderRadius: 14, padding: 20, borderWidth: 1, borderColor: colors.border }}>
+                        <Text style={{ fontSize: 17, fontWeight: '800', color: colors.foreground }}>Delete advance?</Text>
+                        <Text style={{ fontSize: 13, lineHeight: 19, color: colors.mutedForeground, marginTop: 8 }}>
+                            Delete this selling advance for {deletingAdvance ? memberName(deletingAdvance) : 'this customer'}? This will only remove this isolated selling advance record.
+                        </Text>
+                        {!!deleteError && <Text style={{ fontSize: 12, color: colors.destructive, marginTop: 10 }}>{deleteError}</Text>}
+                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+                            <Pressable onPress={() => setDeletingAdvance(null)} disabled={!!busyId} style={{ minWidth: 88, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.foreground }}>Cancel</Text>
+                            </Pressable>
+                            <Pressable onPress={() => void confirmDelete()} disabled={!!busyId} style={{ minWidth: 88, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: colors.destructive, opacity: busyId ? 0.7 : 1 }}>
+                                {busyId ? <ActivityIndicator size="small" color={colors.white} /> : <Text style={{ fontSize: 13, fontWeight: '800', color: colors.white }}>Delete</Text>}
+                            </Pressable>
+                        </View>
                     </View>
                 </View>
             </Modal>
