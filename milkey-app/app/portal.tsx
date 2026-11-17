@@ -1663,7 +1663,7 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         rowAlt: { backgroundColor: rowAltBg },
         entryDenseHead: { gap: 1, paddingVertical: 4, paddingHorizontal: 4 },
         entryDenseHeadText: { fontSize: 8, letterSpacing: 0 },
-        entryDenseRow: { gap: 1, paddingVertical: 6, paddingHorizontal: 4 },
+        entryDenseRow: { gap: 1, paddingVertical: 7, paddingHorizontal: 4 },
         entryDenseText: { fontSize: 9 },
         settlementCard: { padding: 8, marginBottom: 7, borderWidth: 1, borderColor: colors.primary + '20', borderRadius: 9, backgroundColor: colors.card },
         settlementCardHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 22, gap: 5 },
