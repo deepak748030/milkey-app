@@ -14,8 +14,14 @@ import TopBar from '@/components/TopBar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import {
     CheckCircle2,
+    Home,
+    Droplets,
+    Store,
+    Package,
+    User,
     Search,
     Trash2,
     Users,
@@ -326,33 +332,23 @@ export default function SellingAdvanceScreen() {
                     </View>
                 </View>
 
-                <View style={{
-                    marginTop: 8,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: colors.card,
-                    borderWidth: 1.2,
-                    borderColor: '#9CA3AF',
-                    borderRadius: 6,
-                    paddingHorizontal: 10,
-                    height: 42,
-                }}>
-                    <Search size={15} color={colors.mutedForeground} />
-                    <TextInput
-                        value={search}
-                        onChangeText={setSearch}
-                        placeholder="Search customer or note"
-                        placeholderTextColor={colors.mutedForeground + '99'}
-                        style={{ flex: 1, marginLeft: 8, color: colors.foreground, fontSize: 12 }}
-                    />
-                    <Pressable onPress={() => setSearch('')} hitSlop={8}><X size={14} color={colors.mutedForeground} /></Pressable>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8 }}>
-                    <Pressable onPress={() => void exportPdf()} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 8 }}>
-                        <FileText size={14} color={colors.white} /><Text style={{ fontSize: 10, fontWeight: '800', color: colors.white }}>PDF</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8, marginBottom: 12 }}>
+                    <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderWidth: 1.2, borderColor: '#9CA3AF', borderRadius: 6, paddingHorizontal: 9, height: 42 }}>
+                        <Search size={15} color={colors.mutedForeground} />
+                        <TextInput
+                            value={search}
+                            onChangeText={setSearch}
+                            placeholder="Search customer or note"
+                            placeholderTextColor={colors.mutedForeground + '99'}
+                            style={{ flex: 1, minWidth: 0, marginLeft: 7, color: colors.foreground, fontSize: 12 }}
+                        />
+                        {!!search && <Pressable onPress={() => setSearch('')} hitSlop={8}><X size={14} color={colors.mutedForeground} /></Pressable>}
+                    </View>
+                    <Pressable onPress={() => void exportPdf()} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: '#EAAA00', borderRadius: 6, paddingHorizontal: 10, height: 42 }}>
+                        <FileText size={15} color={colors.white} /><Text style={{ fontSize: 11, fontWeight: '700', color: colors.white }}>PDF</Text>
                     </Pressable>
-                    <Pressable onPress={() => void printReport()} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 9, paddingVertical: 8 }}>
-                        <Printer size={14} color={colors.white} /><Text style={{ fontSize: 10, fontWeight: '800', color: colors.white }}>Print</Text>
+                    <Pressable onPress={() => void printReport()} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 10, height: 42 }}>
+                        <Printer size={15} color={colors.white} /><Text style={{ fontSize: 11, fontWeight: '700', color: colors.white }}>Print</Text>
                     </Pressable>
                     <AmountFilterIcon sort={amountSort} onToggle={() => setAmountSort((prev) => prev === 'asc' ? 'desc' : 'asc')} />
                 </View>
@@ -440,6 +436,23 @@ export default function SellingAdvanceScreen() {
                 </View>
             </Modal>
 
+            <View style={{ flexDirection: 'row', backgroundColor: colors.card, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, paddingBottom: insets.bottom + 6, height: 65 + insets.bottom }}>
+                {[
+                    { label: 'Home', Icon: Home, route: '/(tabs)' },
+                    { label: 'Collection', Icon: Droplets, route: '/(tabs)/purchase' },
+                    { label: 'Selling', Icon: Store, route: '/(tabs)/selling', active: true },
+                    { label: 'Inventory', Icon: Package, route: '/(tabs)/inventory' },
+                    { label: 'Profile', Icon: User, route: '/(tabs)/profile' },
+                ].map(({ label, Icon, route, active }) => (
+                    <Pressable key={label} onPress={() => router.replace(route as any)} accessibilityRole="button" accessibilityLabel={label} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                        <View style={{ backgroundColor: active ? colors.primary : 'transparent', width: active ? 38 : 32, height: active ? 38 : 32, borderRadius: active ? 19 : 16, alignItems: 'center', justifyContent: 'center' }}>
+                            <Icon size={active ? 20 : 22} color={active ? '#fff' : colors.mutedForeground} strokeWidth={active ? 2.6 : 2} />
+                        </View>
+                        <Text numberOfLines={1} style={{ fontSize: 11, fontWeight: active ? '700' : '500', color: active ? colors.primary : colors.mutedForeground, marginTop: 1 }}>{label}</Text>
+                    </Pressable>
+                ))}
+            </View>
+
             <SubscriptionModal
                 visible={showSubscriptionModal}
                 onClose={handleModalClose}
@@ -447,8 +460,6 @@ export default function SellingAdvanceScreen() {
                 filterTab="selling"
                 title="Selling subscription required"
             />
-
-
         </View>
     );
 }
