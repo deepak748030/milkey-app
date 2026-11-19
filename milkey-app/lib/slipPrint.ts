@@ -119,7 +119,7 @@ export function buildJointCollectionPaymentSlipPayload(
     const avgRate = totalQty > 0 ? totalAmt / totalQty : 0;
     // Use same values as payment's total if collections empty? fallback to payment total
     const displayQty = collections.length ? totalQty : (0);
-    const displayAmt = collections.length ? totalAmt : (p.totalMilkAmount || 0);
+    const displayAmt = collections.length ? totalAmt : (p.entriesAmount ?? p.totalMilkAmount ?? 0);
     const displayAvg = collections.length ? avgRate : 0;
     payload += twoCol(`${t.totalQty} :`, displayQty.toFixed(2));
     payload += twoCol(`${t.averageRate} :`, displayAvg.toFixed(2));
@@ -128,17 +128,13 @@ export function buildJointCollectionPaymentSlipPayload(
     // Payment Slip section
     payload += fmtCenter(`${t.paymentSlip} :`, { bold: true });
     payload += twoCol(`${t.lastPayment} :`, (p.previousBalance || 0).toFixed(0));
-    // Milk Amount = the same equation the Payment screen shows:
-    //   <collection amount of the dates> + <amount typed by the user> = <total>
-    // The typed part is not stored separately, so it is derived from the saved total.
-    const purchaseAmountValue = totalAmt;
-    const savedTotalValue = p.totalMilkAmount || 0;
-    const inputAmountValue = Math.max(0, savedTotalValue - purchaseAmountValue);
-    const milkAmountValue = savedTotalValue > 0 ? savedTotalValue : purchaseAmountValue;
-    payload += twoCol(
-        `${t.milkAmount} :`,
-        `${purchaseAmountValue.toFixed(0)} + ${inputAmountValue.toFixed(0)} = ${milkAmountValue.toFixed(0)}`,
-    );
+    // Only show a split when it was actually saved with the payment.
+    const hasSavedSplit = p.entriesAmount != null && p.extraMilkAmount != null;
+    const milkAmountValue = p.totalMilkAmount ?? 0;
+    const milkEquation = hasSavedSplit
+        ? `${p.entriesAmount!.toFixed(2)} + ${p.extraMilkAmount!.toFixed(2)} = ${milkAmountValue.toFixed(2)}`
+        : milkAmountValue.toFixed(2);
+    payload += twoCol(`${t.milkAmount} :`, milkEquation);
     // Advance / Total payable exactly like the Payment screen; if an older payment has
     // no stored advance value, the settled advances of the payment are summed instead.
     const settledAdvances: any[] = Array.isArray((p as any).settledAdvances) ? (p as any).settledAdvances : [];

@@ -116,7 +116,12 @@ export function SettlementPaymentsScreen({ selling = false }: { selling?: boolea
                     <Text numberOfLines={1} style={[styles.profile, { color: colors.mutedForeground }]}>{selling ? (item.customerName || 'Customer') : (item.farmerName || 'Farmer')} · {item.dairyName || 'Dairy'}</Text>
                 )}
                 <View style={[styles.divider, { backgroundColor: border }]} />
+                {!selling && item.entriesAmount != null && item.extraMilkAmount != null && <>
+                    {line('Entries Amount:', item.entriesAmount)}
+                    {line('Extra Amount:', item.extraMilkAmount)}
+                </>}
                 {line('Milk Amount:', item.totalMilkAmount)}
+                {!selling && (item.entriesAmount == null || item.extraMilkAmount == null) && <Text style={[styles.amountLabel, { color: colors.mutedForeground }]}>Breakdown unavailable for this payment</Text>}
                 {line(item.advanceEffect === 'add' ? 'Advance (+):' : 'Advance:', (Number(item.totalAdvanceDeduction) || 0) * (item.advanceEffect === 'add' ? 1 : -1), colors.warning)}
                 {line('Total Payable:', item.netPayable)}
                 {line('Paid Amount:', item.amount, colors.success)}
@@ -143,7 +148,6 @@ export function SettlementPaymentsScreen({ selling = false }: { selling?: boolea
                     <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{result ? `${result.total} records • ${rows.length} shown` : error ? 'Unable to load records' : 'Loading records...'}</Text>
                 </View>
             </View>
-            <Text style={[styles.hint, { color: colors.mutedForeground }]}>Newest payments first · Read-only</Text>
             {!!error && rows.length > 0 && <Text style={[styles.errorText, { color: colors.destructive }]}>{error}</Text>}
         </View>
     );
@@ -170,7 +174,6 @@ export function SettlementPaymentsScreen({ selling = false }: { selling?: boolea
                         {result.nextCursor && <Pressable accessibilityRole="button" disabled={loadingMore} onPress={() => void load('more', result.nextCursor || undefined)} style={[styles.more, { borderColor: colors.primary }]}>
                             {loadingMore ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary, fontWeight: '700' }}>Load More</Text>}
                         </Pressable>}
-                        <Text style={[styles.hint, { color: colors.mutedForeground }]}>Pull down to refresh.</Text>
                     </View>
                 ) : null}
             />
@@ -182,11 +185,10 @@ const styles = StyleSheet.create({
     topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 },
     backButton: { width: 38, height: 38, justifyContent: 'center', alignItems: 'center' },
     pageTitle: { fontSize: 17, fontWeight: '800', flex: 1 },
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderWidth: 1, borderRadius: 12 },
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderWidth: 1, borderRadius: 12, marginBottom: 10 },
     sectionIcon: { width: 30, height: 30, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
     sectionTitle: { fontSize: 14, fontWeight: '800' },
     sectionCount: { fontSize: 10, marginTop: 2 },
-    hint: { fontSize: 11, textAlign: 'center', marginVertical: 10 },
     paymentCard: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 10 },
     paymentTop: { flexDirection: 'row', alignItems: 'center', gap: 7 },
     paymentNumber: { fontSize: 13, fontWeight: '900' },

@@ -36,6 +36,8 @@ const formatDateDDMMYYYY = (dateStr?: string) => {
     return `${day}/${month}/${year}`;
 };
 
+type SlipCollection = Pick<MilkCollection, '_id' | 'date' | 'shift' | 'quantity' | 'fat' | 'snf' | 'rate' | 'amount' | 'bonusAmount'>;
+
 export default function RegisterPaymentSlipScreen() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
@@ -43,7 +45,7 @@ export default function RegisterPaymentSlipScreen() {
     const [loading, setLoading] = useState(true);
     const [payment, setPayment] = useState<Payment | null>(null);
     const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
-    const [collections, setCollections] = useState<MilkCollection[]>([]);
+    const [collections, setCollections] = useState<SlipCollection[]>([]);
     // Server-aggregated totals for the whole query (not page limited) — the same numbers
     // the Payment screen uses for the auto "purchase amount" of the calculation period.
     const [periodTotals, setPeriodTotals] = useState<{ quantity: number; amount: number } | null>(null);
@@ -83,7 +85,18 @@ export default function RegisterPaymentSlipScreen() {
                     const settledRows: MilkCollection[] = Array.isArray(settledRaw)
                         ? settledRaw.filter((r: any) => r && typeof r === 'object' && r._id && r.date !== undefined)
                         : [];
-                    if (settledRows.length > 0) {
+                    if (Array.isArray(p.collectionSnapshots)) {
+                        const rows: SlipCollection[] = p.collectionSnapshots.map(row => ({
+                            _id: row.id, date: row.date || '', shift: row.shift === 'evening' ? 'evening' : 'morning',
+                            quantity: row.quantity ?? 0, fat: row.fat ?? 0, snf: row.snf ?? 0,
+                            rate: row.rate ?? 0, amount: row.amount ?? 0, bonusAmount: row.bonusAmount ?? 0,
+                        }));
+                        setCollections(rows);
+                        setPeriodTotals({
+                            quantity: rows.reduce((sum, row) => sum + (Number(row.quantity) || 0), 0),
+                            amount: rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
+                        });
+                    } else if (settledRows.length > 0) {
                         // Keep the rows that fall inside the Calculation Period; if the
                         // stored period is unusable keep all settled rows.
                         const startKey = localDateKey(start);
@@ -194,14 +207,12 @@ export default function RegisterPaymentSlipScreen() {
     // Bonus already included in the entry amounts — kept visible as a split line
     const slipBonus = collections.reduce((s, c) => s + (Number((c as any).bonusAmount) || 0), 0);
 
-    // Milk Amount is the same equation the Payment screen shows:
-    //    <collection amount of the dates>  +  <amount typed by the user>  =  <total>
-    // The typed part is not stored separately, so it is derived from the saved total:
-    //   input = savedTotal - collectionAmount (never negative).
-    const slipPurchaseAmount = slipAmount || rowsAmount;
-    const slipSavedTotal = payment?.totalMilkAmount || 0;
-    const slipInputAmount = Math.max(0, slipSavedTotal - slipPurchaseAmount);
-    const slipMilkAmount = slipSavedTotal > 0 ? slipSavedTotal : slipPurchaseAmount;
+    // Older payments do not have a reliably recoverable split.
+    const slipSavedTotal = payment?.totalMilkAmount ?? 0;
+    const slipMilkEquation = payment?.entriesAmount != null && payment.extraMilkAmount != null
+        ? `${payment.entriesAmount.toFixed(2)} + ${payment.extraMilkAmount.toFixed(2)} = ${slipSavedTotal.toFixed(2)}`
+        : slipSavedTotal.toFixed(2);
+    const slipMilkAmount = slipSavedTotal;
 
     // Advance / Product and Total Payable come from the saved settlement, exactly like
     // the Payment screen shows them. When an older record has no stored advance value,
@@ -305,7 +316,7 @@ export default function RegisterPaymentSlipScreen() {
         ` : ''}
         <div class="sec-title">Payment Slip :</div>
         <div class="amt-row"><span class="lab">Last Payment :</span><span class="val">${(p.previousBalance || 0).toFixed(0)}</span></div>
-        <div class="amt-row"><span class="lab">Milk Amount :</span><span class="val-red">${slipPurchaseAmount.toFixed(0)} + ${slipInputAmount.toFixed(0)} = ${slipMilkAmount.toFixed(0)}</span></div>
+        <div class="amt-row"><span class="lab">Milk Amount :</span><span class="val-red">${slipMilkEquation}</span></div>
         <div class="amt-row"><span class="lab">Advance / Product :</span><span class="val">${slipAdvance.toFixed(0)}</span></div>
         <div class="amt-row"><span class="lab">Total Payable :</span><span class="val">${slipTotalPayable.toFixed(0)}</span></div>
         <div class="amt-row"><span class="lab">Paid Amount :</span><span class="val">${(p.amount || 0).toFixed(0)}</span></div>
@@ -359,7 +370,7 @@ export default function RegisterPaymentSlipScreen() {
         payload += feed(1);
         payload += fmtLine();
         payload += twoCol(`${t.lastPayment}:`, (p.previousBalance || 0).toFixed(0));
-        payload += twoCol(`${t.milkAmount}:`, `${slipPurchaseAmount.toFixed(0)} + ${slipInputAmount.toFixed(0)} = ${slipMilkAmount.toFixed(0)}`);
+        payload += twoCol(`${t.milkAmount}:`, `${slipMilkEquation}`);
         payload += twoCol(`${t.advanceProduct}:`, slipAdvance.toFixed(0));
         payload += twoCol(`${t.totalPayable}:`, slipTotalPayable.toFixed(0));
         payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
@@ -488,7 +499,7 @@ export default function RegisterPaymentSlipScreen() {
                         </>}
                         <Text style={styles.secTitle}>Payment Slip :</Text>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Last Payment :</Text><Text style={styles.valBlack}>{(p.previousBalance || 0).toFixed(0)}</Text></View>
-                        <View style={styles.slipRow}><Text style={[styles.labBlack, { color: '#d32f2f' }]}>Milk Amount :</Text><Text style={styles.valRed}>{slipPurchaseAmount.toFixed(0)} + {slipInputAmount.toFixed(0)} = {slipMilkAmount.toFixed(0)}</Text></View>
+                        <View style={styles.slipRow}><Text style={[styles.labBlack, { color: '#d32f2f' }]}>Milk Amount :</Text><Text style={styles.valRed}>{slipMilkEquation}</Text></View>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Advance / Product :</Text><Text style={styles.valBlack}>{slipAdvance.toFixed(0)}</Text></View>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Total Payable :</Text><Text style={styles.valBlack}>{slipTotalPayable.toFixed(0)}</Text></View>
                         <View style={styles.slipRow}><Text style={styles.labBlack}>Paid Amount :</Text><Text style={styles.valBlack}>{(p.amount || 0).toFixed(0)}</Text></View>

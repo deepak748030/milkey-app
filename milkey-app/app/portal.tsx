@@ -439,8 +439,10 @@ function CollectionSettlementHistory({
     rows,
     colors,
     s,
+    selling,
 }: {
     rows: PortalPaymentRow[];
+    selling: boolean;
     colors: any;
     s: any;
 }) {
@@ -470,7 +472,12 @@ function CollectionSettlementHistory({
                             <Text numberOfLines={1} style={s.settlementPeriod}>{range}</Text>
                         </View>
                         <View style={s.settlementDivider} />
+                        {!selling && row.entriesAmount != null && row.extraMilkAmount != null && <>
+                            {line('Entries Amount:', row.entriesAmount)}
+                            {line('Extra Amount:', row.extraMilkAmount)}
+                        </>}
                         {line('Milk Amount:', row.totalMilkAmount)}
+                        {!selling && (row.entriesAmount == null || row.extraMilkAmount == null) && <Text style={s.settlementLabel}>Breakdown unavailable for this payment</Text>}
                         {line(row.advanceEffect === 'add' ? 'Advance (+):' : 'Advance:', (Number(row.totalAdvanceDeduction) || 0) * (row.advanceEffect === 'add' ? 1 : -1), colors.warning)}
                         {line('Total Payable:', row.netPayable)}
                         {line('Paid Amount:', row.amount, colors.success)}
@@ -536,12 +543,14 @@ function SectionCard({
 }
 
 function SummaryCard({
-    label, value, sub, icon: Icon, tone, colors, isDark, negative = false, s,
+    label, shortLabel, value, sub, icon: Icon, tone, colors, isDark, negative = false, gridWidth, s,
 }: {
     label: string;
+    shortLabel: string;
     value: string;
-    sub: string;
+    sub?: string;
     icon: any;
+    gridWidth: number;
     tone: 'green' | 'blue' | 'orange' | 'balance';
     negative?: boolean;
     colors: any;
@@ -551,15 +560,21 @@ function SummaryCard({
     const tint = tone === 'blue' ? (isDark ? '#60A5FA' : '#2563EB')
         : tone === 'orange' ? (isDark ? '#FBBF24' : '#B45309')
         : tone === 'balance' ? (isDark ? '#A78BFA' : '#7C3AED') : colors.primary;
+    // Use the measured grid width rather than the window width: the portal can
+    // also be embedded in a narrower container. Long amounts may wrap instead
+    // of becoming unreadably small or losing digits on web.
+    const usableWidth = Math.max(20, gridWidth / 4 - 16);
+    const showIcon = usableWidth >= 68;
+    const fontFor = (text: string, max: number) => Math.max(10, Math.min(max, Math.floor(usableWidth / (Math.max(text.length, 1) * 0.64) * 10) / 10));
     return (
         <View style={s.summaryCell}>
-            <View accessible accessibilityRole="text" accessibilityLabel={`${label}, ${value}, ${sub}`} style={[s.summaryCard, { backgroundColor: tint + (isDark ? '18' : '0B'), borderColor: tint + (isDark ? '38' : '22') }]}>
+            <View accessible accessibilityRole="text" accessibilityLabel={[label, value, sub].filter(Boolean).join(', ')} style={[s.summaryCard, { backgroundColor: tint + (isDark ? '18' : '0B'), borderColor: tint + (isDark ? '38' : '22') }]}>
                 <View style={s.summaryCardHeading}>
-                    <View style={[s.summaryIcon, { backgroundColor: tint + '18' }]}><Icon size={14} color={tint} strokeWidth={2.3} /></View>
-                    <Text style={s.summaryLabel}>{label}</Text>
+                    {showIcon && <View style={[s.summaryIcon, { backgroundColor: tint + '18' }]}><Icon size={12} color={tint} strokeWidth={2.3} /></View>}
+                    <Text numberOfLines={1} adjustsFontSizeToFit style={s.summaryLabel}>{shortLabel}</Text>
                 </View>
-                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[s.summaryValue, negative && { color: colors.destructive }]}>{value}</Text>
-                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={s.summarySub}>{sub}</Text>
+                <Text style={[s.summaryValue, { fontSize: fontFor(value, 14) }, negative && { color: colors.destructive }]}>{value}</Text>
+                {!!sub && <Text style={[s.summarySub, { fontSize: fontFor(sub, 10) }]}>{sub}</Text>}
             </View>
         </View>
     );
@@ -723,6 +738,7 @@ export default function PortalScreen() {
     const compact = width < 400;
     const s = createStyles(colors, isDark, width);
 
+    const [summaryGridWidth, setSummaryGridWidth] = useState(0);
     const [session, setSession] = useState<PortalUser | null>(null);
     const [module, setModule] = useState<PortalModule>('collection');
     const [dashboard, setDashboard] = useState<PortalDashboard | null>(null);
@@ -1197,10 +1213,6 @@ export default function PortalScreen() {
         },
     ];
 
-    const unavailableNote = available.length === 1
-        ? `Only ${available[0] === 'collection' ? 'Collection' : 'Selling'} data is linked to this mobile number. The other tab is unavailable.`
-        : '';
-
     return (
         <View style={s.container}>
             <StatusBar style="light" />
@@ -1235,69 +1247,64 @@ export default function PortalScreen() {
                     <Box style={s.profileCard}>
                         <View pointerEvents="none" style={s.decorCircle} />
                         <View style={s.profileTopRow}>
-                            <Image source={require('@/assets/images/customer-avatar.jpg')} style={s.avatar} />
+                            <Image source={require('@/assets/images/customer-avatar-fair.jpg')} style={s.avatar} />
                             <View style={s.profileInfo}>
-                                <View style={s.profileNameRow}>
-                                    <Text numberOfLines={1} style={s.profileName}>{profile?.name || 'Farmer / Customer'}</Text>
-                                    <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
-                                </View>
-                                <Text numberOfLines={1} style={s.profileMeta}>{isSelling ? 'Customer Code' : 'Farmer Code'}: {profile?.code || '--'}</Text>
-                                {isSelling && (
-                                    <Text style={s.profileMeta}>
-                                        Milk Rate (this customer): {profile?.milkRate != null && Number.isFinite(Number(profile.milkRate)) ? `₹${Number(profile.milkRate).toLocaleString('en-IN', { maximumFractionDigits: 2 })}/L` : '--'}
-                                    </Text>
-                                )}
-                                <View style={s.profileLine}>
-                                    <Phone size={13} color={colors.primary} />
-                                    <Text numberOfLines={1} style={s.profileLineText}>{profile?.phone || '--'}</Text>
-                                </View>
-                                {!!profile?.address && (
-                                    <View style={s.profileLine}>
-                                        <MapPin size={13} color={colors.primary} />
-                                        <Text numberOfLines={1} style={[s.profileLineText, { color: colors.mutedForeground, fontWeight: '500' }]}>{profile.address}</Text>
+                                <View style={s.profileHeadingRow}>
+                                    <View style={s.profileNameRow}>
+                                        <Text numberOfLines={1} style={s.profileName}>{profile?.name || 'Farmer / Customer'}</Text>
+                                        <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
                                     </View>
-                                )}
+                                    <View accessible accessibilityLabel={`Linked by ${profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}`} style={s.profileDairy}>
+                                        <Text style={s.profileDairyLabel}>LINKED BY</Text>
+                                        <Text numberOfLines={1} style={s.profileDairyName}>{profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}</Text>
+                                    </View>
+                                </View>
+                                <View style={s.profileDetails}>
+                                    <Text style={s.profileMeta}>{isSelling ? 'Customer Code' : 'Farmer Code'}: {profile?.code || '--'}</Text>
+                                    <View style={s.profileLine}>
+                                        <Phone size={11} color={colors.primary} />
+                                        <Text style={s.profileLineText}>{profile?.phone || '--'}</Text>
+                                    </View>
+                                    {!!profile?.address && (
+                                        <View style={s.profileLine}>
+                                            <MapPin size={11} color={colors.primary} />
+                                            <Text numberOfLines={1} style={[s.profileLineText, { color: colors.mutedForeground, fontWeight: '500' }]}>{profile.address}</Text>
+                                        </View>
+                                    )}
+                                    {isSelling && (
+                                        <Text style={s.profileMeta}>
+                                            Milk Rate: {profile?.milkRate != null && Number.isFinite(Number(profile.milkRate)) ? `₹${Number(profile.milkRate).toLocaleString('en-IN', { maximumFractionDigits: 2 })}/L` : '--'}
+                                        </Text>
+                                    )}
+                                </View>
                             </View>
                         </View>
-                        <View style={s.profileDairyRow}>
-                            <View style={s.profileDairyDot} />
-                            <Text style={s.profileDairyLabel}>LINKED BY</Text>
-                            <Text numberOfLines={1} style={s.profileDairyName}>{profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}</Text>
-                        </View>
-                        <View style={s.summaryHeader}>
-                            <Text style={s.summaryHeading}>{isSelling ? 'Selling overview' : 'Collection overview'}</Text>
-                            <Text style={s.summaryHeaderHint}>READ ONLY</Text>
-                        </View>
-                        <View style={s.summaryGrid}>
+                        <View style={s.summaryGrid} onLayout={(event) => setSummaryGridWidth(event.nativeEvent.layout.width)}>
                             <SummaryCard
-                                label={isSelling ? 'Today selling' : 'Today collection'}
+                                label={isSelling ? 'Today selling' : 'Today collection'} shortLabel="Today" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summaryQuantity(summary?.todayMilkQuantity)}
                                 sub={summary ? summaryMoney(summary.todayMilkAmount) : '--'}
                                 icon={isSelling ? ShoppingCart : Droplets}
                                 tone="green" colors={colors} isDark={isDark} s={s}
                             />
                             <SummaryCard
-                                label={isSelling ? 'Total selling' : 'Total collection'}
+                                label={isSelling ? 'Total selling' : 'Total collection'} shortLabel="Total" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summaryQuantity(summary?.totalMilkQuantity)}
                                 sub={summary ? summaryMoney(summary.totalMilkAmount) : '--'}
                                 icon={Layers3} tone="blue" colors={colors} isDark={isDark} s={s}
                             />
                             <SummaryCard
-                                label="Advance pending"
+                                label="Advance pending" shortLabel="Advance" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summary ? summaryMoney(summary.advancePending) : '--'}
-                                sub="Outstanding advance"
                                 icon={Clock3} tone="orange" colors={colors} isDark={isDark} s={s}
                             />
                             <SummaryCard
-                                label="Current balance"
+                                label="Current balance" shortLabel="Balance" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summary ? summaryMoney(summary.currentBalance) : '--'}
-                                sub="Includes pending entries"
                                 icon={Wallet} tone="balance" negative={!!summary && summary.currentBalance < 0} colors={colors} isDark={isDark} s={s}
                             />
                         </View>
-                        <Text style={s.summaryFootnote}>All linked records · Overview is not affected by filters</Text>
                     </Box>
-                    {!!unavailableNote && <Text style={s.unavailableNote}>{unavailableNote}</Text>}
                 </View>
 
                 {(loading && !dashboard) ? (
@@ -1326,7 +1333,7 @@ export default function PortalScreen() {
                                         : filters.section === 'all' && rows.length > 5;
                                 const advancePage = config.key === 'advances' ? dashboard?.advancePage : undefined;
                                 const subtitle = advancePage?.nextCursor
-                                    ? `${rows.length} loaded • ${advancePage.total} total (filters apply to loaded records)`
+                                    ? `${rows.length} loaded • ${advancePage.total} total`
                                     : `${rows.length} record${rows.length === 1 ? '' : 's'}${config.key !== 'advances' && rows.length > 100 ? ' • showing 100' : ''}`;
                                 return (
                                     <SectionCard
@@ -1357,7 +1364,7 @@ export default function PortalScreen() {
                                         }}
                                     >
                                         {config.key === 'payments' ? (
-                                            <CollectionSettlementHistory rows={visible as PortalPaymentRow[]} colors={colors} s={s} />
+                                            <CollectionSettlementHistory rows={visible as PortalPaymentRow[]} colors={colors} s={s} selling={isSelling} />
                                         ) : (
                                             <PortalTable
                                                 columns={config.columns}
@@ -1368,16 +1375,6 @@ export default function PortalScreen() {
                                                 minTableWidth={config.key === 'entries' ? 300 : undefined}
                                                 s={s}
                                             />
-                                        )}
-                                        {config.key === 'entries' && (
-                                            <Text style={{ color: colors.mutedForeground, fontSize: 11, paddingHorizontal: 8, paddingTop: 6 }}>
-                                                Green tick means the entry is marked paid in a settlement; a balance may still remain.
-                                            </Text>
-                                        )}
-                                        {config.key === 'advances' && !isSelling && (
-                                            <Text style={{ color: colors.mutedForeground, fontSize: 11, paddingHorizontal: 8, paddingTop: 6 }}>
-                                                Matches the dairy pending list. Settled and partial records are hidden; the pending total includes partial balances.
-                                            </Text>
                                         )}
                                         {advancePage?.nextCursor && (
                                             <View style={{ alignItems: 'center', paddingVertical: 10 }}>
@@ -1391,9 +1388,6 @@ export default function PortalScreen() {
                                 );
                             })}
 
-                        <Text style={s.footerNote}>
-                            This is a read-only view. Please contact your dairy owner to add or correct any entry.
-                        </Text>
                     </>
                 )}
             </ScrollView>
@@ -1543,35 +1537,32 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         headerSub: { fontSize: 10, color: 'rgba(255,255,255,0.72)', marginTop: 1 },
 
         topInfoStack: { gap: 6 },
-        profileCard: { padding: 14, overflow: 'hidden', borderRadius: 16 },
+        profileCard: { padding: 8, overflow: 'hidden', borderRadius: 16 },
         decorCircle: {
-            position: 'absolute', width: 180, height: 180, borderRadius: 90,
-            backgroundColor: colors.primary + (isDark ? '0D' : '08'), right: -85, top: -90,
+            position: 'absolute', width: 120, height: 120, borderRadius: 60,
+            backgroundColor: colors.primary + (isDark ? '0D' : '08'), right: -55, top: -60,
         },
-        profileTopRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-        avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.primary + '15', borderWidth: 2, borderColor: colors.primary + '25' },
+        profileTopRow: { flexDirection: 'row', gap: 7, alignItems: 'flex-start', marginBottom: 5 },
+        avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.primary + '15', borderWidth: 1, borderColor: colors.primary + '25' },
         profileInfo: { flex: 1, minWidth: 0 },
-        profileNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-        profileName: { fontSize: 17, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
-        profileMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 3 },
-        profileLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
-        profileLineText: { flex: 1, fontSize: 11.5, fontWeight: '600', color: colors.foreground },
-        profileDairyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border },
-        profileDairyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
-        profileDairyLabel: { fontSize: 9, fontWeight: '800', color: colors.mutedForeground, letterSpacing: 0.5 },
-        profileDairyName: { flex: 1, fontSize: 11, fontWeight: '700', color: colors.foreground },
-        summaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 3 },
-        summaryHeading: { fontSize: 13, fontWeight: '800', color: colors.foreground },
-        summaryHeaderHint: { fontSize: 9, fontWeight: '800', color: colors.mutedForeground, letterSpacing: 0.4 },
-        summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 },
-        summaryCell: { width: width >= 600 ? '25%' : '50%', padding: 3 },
-        summaryCard: { flex: 1, minHeight: 76, borderWidth: 1, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 6 },
-        summaryCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-        summaryIcon: { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-        summaryLabel: { flex: 1, fontSize: 10, fontWeight: '700', color: colors.mutedForeground },
-        summaryValue: { fontSize: 17, fontWeight: '900', color: colors.foreground, marginTop: 3 },
-        summarySub: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground, marginTop: 1 },
-        summaryFootnote: { color: colors.mutedForeground, fontSize: 10, marginTop: 4 },
+        profileHeadingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+        profileNameRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 },
+        profileName: { fontSize: 14, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
+        profileDetails: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 2, marginTop: 3 },
+        profileMeta: { fontSize: 10, color: colors.mutedForeground },
+        profileLine: { flexDirection: 'row', alignItems: 'center', gap: 3, maxWidth: '100%' },
+        profileLineText: { flexShrink: 1, fontSize: 10, fontWeight: '600', color: colors.foreground },
+        profileDairy: { width: '32%', maxWidth: 140, alignItems: 'flex-end' },
+        profileDairyLabel: { fontSize: 8, fontWeight: '800', color: colors.mutedForeground, letterSpacing: 0.3 },
+        profileDairyName: { width: '100%', textAlign: 'right', fontSize: 10, fontWeight: '700', color: colors.foreground },
+        summaryGrid: { flexDirection: 'row', marginHorizontal: -2 },
+        summaryCell: { flex: 1, minWidth: 0, padding: 2 },
+        summaryCard: { flex: 1, minHeight: 56, borderWidth: 1, borderRadius: 9, paddingHorizontal: 5, paddingVertical: 4 },
+        summaryCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+        summaryIcon: { width: 18, height: 18, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+        summaryLabel: { flex: 1, fontSize: 9, fontWeight: '700', color: colors.mutedForeground },
+        summaryValue: { fontWeight: '900', color: colors.foreground, marginTop: 3 },
+        summarySub: { fontWeight: '600', color: colors.mutedForeground, marginTop: 1 },
 
         portalTabBar: {
             flexDirection: 'row',
@@ -1587,7 +1578,6 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         portalTabLock: { position: 'absolute', right: -3, bottom: -1 },
         portalTabLabel: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground },
         portalTabLabelActive: { color: colors.primary, fontWeight: '800' },
-        unavailableNote: { fontSize: 10.5, color: colors.mutedForeground, textAlign: 'center' },
 
         filterCard: { padding: 10, gap: 8 },
         filterHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
@@ -1794,12 +1784,6 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             backgroundColor: colors.primary,
         },
         retryBtnText: { color: colors.white, fontSize: 12, fontWeight: '800' },
-        footerNote: {
-            fontSize: 9.5,
-            color: colors.mutedForeground,
-            textAlign: 'center',
-            paddingHorizontal: 12,
-        },
 
         modalOverlay: {
             flex: 1,

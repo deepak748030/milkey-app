@@ -216,6 +216,13 @@ export default function RegisterScreen() {
     const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
     const [editPaidAmount, setEditPaidAmount] = useState('');
     const [editMilkAmount, setEditMilkAmount] = useState('');
+    const [editExtraMilkAmount, setEditExtraMilkAmount] = useState('');
+    const [showSettlementEntries, setShowSettlementEntries] = useState(false);
+    const [settlementEntriesLoading, setSettlementEntriesLoading] = useState(false);
+    const [settlementEntriesError, setSettlementEntriesError] = useState('');
+    const [settlementEntries, setSettlementEntries] = useState<any[]>([]);
+    const [settlementEntriesSnapshot, setSettlementEntriesSnapshot] = useState(false);
+    const settlementEntriesRequest = useRef(0);
     const [editPeriodStart, setEditPeriodStart] = useState('');
     const [editPeriodEnd, setEditPeriodEnd] = useState('');
     const [showEditStartDatePicker, setShowEditStartDatePicker] = useState(false);
@@ -586,16 +593,23 @@ export default function RegisterScreen() {
         if (isPrinterConnected) {
             try {
                 let collections: any[] = [];
+                let hasSnapshots = Array.isArray(p.collectionSnapshots);
+                if (hasSnapshots) collections = p.collectionSnapshots!;
                 // 1) The collections this settlement paid — GET /payments/:id populates
                 //    them, so they are the exact purchase entries of the slip.
                 try {
                     const raw = (p as any).settledCollections;
-                    if (Array.isArray(raw) && raw.length && typeof raw[0] === 'object' && (raw[0] as any)._id) {
+                    if (hasSnapshots) {
+                        // Use the immutable settlement snapshot, including an empty one.
+                    } else if (Array.isArray(raw) && raw.length && typeof raw[0] === 'object' && (raw[0] as any)._id) {
                         collections = raw.filter((r: any) => r && typeof r === 'object' && r._id);
                     } else if (p._id) {
                         const detail = await paymentsApi.getById(p._id);
                         const d = (detail as any)?.response;
-                        if (detail.success && Array.isArray(d?.settledCollections)) {
+                        if (detail.success && Array.isArray(d?.collectionSnapshots)) {
+                            hasSnapshots = true;
+                            collections = d.collectionSnapshots;
+                        } else if (detail.success && Array.isArray(d?.settledCollections)) {
                             collections = d.settledCollections.filter((r: any) => r && typeof r === 'object' && r._id);
                         }
                     }
@@ -604,7 +618,7 @@ export default function RegisterScreen() {
                     const farmerCode = (p.farmer as any)?.code;
                     const start = p.periodStart || p.date;
                     const end = p.periodEnd || p.date;
-                    if (collections.length === 0 && farmerCode) {
+                    if (!hasSnapshots && collections.length === 0 && farmerCode) {
                         // Same query the Payment screen's "View Entries" uses (farmer code +
                         // calculation period + tz offset), so the printed slip carries the
                         // purchase entries instead of "- No entries -". Falls back to the
@@ -628,7 +642,7 @@ export default function RegisterScreen() {
                         }
                     }
                 } catch { }
-                const payload = collections.length
+                const payload = collections.length || hasSnapshots
                     ? buildJointCollectionPaymentSlipPayload(p, collections, printSettings)
                     : buildRegisterPaymentSlipPayload(p, printSettings);
                 await printText(payload);
@@ -838,8 +852,8 @@ export default function RegisterScreen() {
             return;
         }
 
-        const amount = parseFloat(paidAmount) || 0;
-        if (isNaN(amount) || amount < 0) {
+        const amount = paidAmount.trim() ? Number(paidAmount) : 0;
+        if (!Number.isFinite(amount) || amount < 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
             showAlert('Error', 'Please enter a valid amount');
             return;
         }
@@ -858,12 +872,22 @@ export default function RegisterScreen() {
 
         setSavingPayment(true);
         try {
-            const milkAmountValue = purchaseAmount + (parseFloat(milkAmount) || 0);
+            const extraValue = milkAmount.trim() ? Number(milkAmount) : 0;
+            if (!Number.isFinite(extraValue) || Math.abs(extraValue * 100 - Math.round(extraValue * 100)) > 1e-6 || purchaseAmount + extraValue < 0) {
+                showAlert('Error', 'Please enter a valid extra amount (up to two decimal places).');
+                return;
+            }
+            const milkAmountValue = Math.round((purchaseAmount + extraValue) * 100) / 100;
             const res = await paymentsApi.create({
                 farmerCode: paymentFarmer.farmer.code,
                 amount,
                 paymentMethod: 'cash',
                 totalMilkAmount: milkAmountValue,
+                entriesAmount: purchaseAmount,
+                extraMilkAmount: extraValue,
+                tzOffsetMinutes: TZ_OFFSET_MINUTES,
+                expectedAdvance: advanceAmount,
+                expectedBalance: previousBalance,
                 periodStart: dateStart,
                 periodEnd: dateEnd,
             });
@@ -908,6 +932,11 @@ export default function RegisterScreen() {
         setEditingPayment(payment);
         setEditPaidAmount((payment.amount || 0).toString());
         setEditMilkAmount((payment.totalMilkAmount || 0).toString());
+        setEditExtraMilkAmount(payment.extraMilkAmount == null ? '' : String(payment.extraMilkAmount));
+        settlementEntriesRequest.current++;
+        setShowSettlementEntries(false);
+        setSettlementEntries([]);
+        setSettlementEntriesError('');
         // Set period dates
         const periodStartStr = payment.periodStart ? new Date(payment.periodStart).toISOString().split('T')[0] : '';
         const periodEndStr = payment.periodEnd ? new Date(payment.periodEnd).toISOString().split('T')[0] : '';
@@ -916,14 +945,39 @@ export default function RegisterScreen() {
         setEditPaymentVisible(true);
     };
 
+    // Fetch the payment's saved links, never all entries in its date range.
+    const loadSettlementEntries = async () => {
+        if (!editingPayment) return;
+        if (showSettlementEntries) { settlementEntriesRequest.current++; setShowSettlementEntries(false); return; }
+        const requestId = ++settlementEntriesRequest.current;
+        setShowSettlementEntries(true);
+        setSettlementEntriesLoading(true);
+        setSettlementEntriesError('');
+        try {
+            const res = await paymentsApi.getById(editingPayment._id);
+            if (!res.success || !res.response) throw new Error(res.message || 'Could not load entries');
+            if (requestId !== settlementEntriesRequest.current) return;
+            const payment = res.response;
+            const hasSnapshots = Array.isArray(payment.collectionSnapshots);
+            setSettlementEntriesSnapshot(hasSnapshots);
+            setSettlementEntries(hasSnapshots ? payment.collectionSnapshots! : (payment.settledCollections || []).filter((row: any) => row && typeof row === 'object' && row._id));
+        } catch (error) {
+            if (requestId === settlementEntriesRequest.current) setSettlementEntriesError(error instanceof Error ? error.message : 'Could not load entries');
+        } finally {
+            if (requestId === settlementEntriesRequest.current) setSettlementEntriesLoading(false);
+        }
+    };
+
     // Save updated payment
     const handleUpdatePayment = async () => {
         if (!editingPayment) return;
 
-        const amount = parseFloat(editPaidAmount) || 0;
-        const milkAmount = parseFloat(editMilkAmount) || 0;
+        const amount = editPaidAmount.trim() ? Number(editPaidAmount) : 0;
+        const hasSplit = editingPayment.entriesAmount != null && editingPayment.extraMilkAmount != null;
+        const extra = editExtraMilkAmount.trim() ? Number(editExtraMilkAmount) : 0;
+        const milkAmount = hasSplit ? Math.round((editingPayment.entriesAmount! + extra) * 100) / 100 : Number(editMilkAmount || 0);
 
-        if (amount < 0 || milkAmount < 0) {
+        if (!Number.isFinite(amount) || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6 || !Number.isFinite(milkAmount) || (hasSplit && (!Number.isFinite(extra) || Math.abs(extra * 100 - Math.round(extra * 100)) > 1e-6)) || amount < 0 || milkAmount < 0) {
             showAlert('Error', 'Please enter valid amounts');
             return;
         }
@@ -933,6 +987,7 @@ export default function RegisterScreen() {
             const updateData: any = {
                 amount,
                 totalMilkAmount: milkAmount,
+                ...(hasSplit ? { extraMilkAmount: extra } : {}),
             };
 
             // Add period dates if set
@@ -966,6 +1021,10 @@ export default function RegisterScreen() {
         setEditingPayment(null);
         setEditPaidAmount('');
         setEditMilkAmount('');
+        setEditExtraMilkAmount('');
+        settlementEntriesRequest.current++;
+        setShowSettlementEntries(false);
+        setSettlementEntries([]);
         setEditPeriodStart('');
         setEditPeriodEnd('');
         setShowEditStartDatePicker(false);
@@ -1492,7 +1551,7 @@ export default function RegisterScreen() {
                         <View style={styles.summaryRow}>
                             <Text style={styles.summaryLabel}>Milk Amount:</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                <Text style={[styles.summaryValue, { fontWeight: '700', color: colors.foreground }]}>{purchaseAmount.toFixed(0)}</Text>
+                                <Text style={[styles.summaryValue, { fontWeight: '700', color: colors.foreground }]}>{purchaseAmount.toFixed(2)}</Text>
                                 {periodBonus > 0 && (
                                     <Text style={{ fontSize: 11, fontWeight: '700', color: colors.primary }}>
                                         (incl. bonus ₹{periodBonus.toFixed(0)})
@@ -1730,10 +1789,15 @@ export default function RegisterScreen() {
                                             </Pressable>
                                         </View>
                                     </View>
+                                    {p.entriesAmount != null && p.extraMilkAmount != null && <>
+                                        <View style={styles.historyRow}><Text style={styles.historyLabel}>Entries Amount:</Text><Text style={styles.historyValue}>₹{p.entriesAmount.toFixed(2)}</Text></View>
+                                        <View style={styles.historyRow}><Text style={styles.historyLabel}>Extra Amount:</Text><Text style={styles.historyValue}>₹{p.extraMilkAmount.toFixed(2)}</Text></View>
+                                    </>}
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Milk Amount:</Text>
                                         <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.totalMilkAmount || 0).toFixed(2)}</Text>
                                     </View>
+                                    {(p.entriesAmount == null || p.extraMilkAmount == null) && <Text style={[styles.historyLabel, { fontSize: 10 }]}>Breakdown unavailable for this payment</Text>}
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Advance:</Text>
                                         <Text style={[styles.historyValue, { color: colors.warning }]}>-₹{(p.totalAdvanceDeduction || 0).toFixed(2)}</Text>
@@ -1798,7 +1862,8 @@ export default function RegisterScreen() {
                                     {formatDateDDMMYYYY(p.date)}
                                 </Text>
                                 <Text style={[styles.historyTableCell, { flex: 0.9, color: colors.primary }]}>
-                                    ₹{(p.totalMilkAmount || 0).toFixed(0)}
+                                    ₹{(p.totalMilkAmount || 0).toFixed(2)}
+                                    {p.entriesAmount != null && p.extraMilkAmount != null ? `\n${p.entriesAmount.toFixed(2)} + ${p.extraMilkAmount.toFixed(2)}` : ''}
                                 </Text>
                                 <Text style={[styles.historyTableCell, { flex: 0.7, color: colors.warning }]}>
                                     ₹{(p.totalAdvanceDeduction || 0).toFixed(0)}
@@ -2438,6 +2503,7 @@ export default function RegisterScreen() {
                                 <View style={styles.dateRow}>
                                     <Pressable
                                         style={styles.dateInputWrapper}
+                                        disabled={!!editingPayment.settledCollections?.length || Array.isArray(editingPayment.collectionSnapshots)}
                                         onPress={() => {
                                             setTempCalendarDate(editPeriodStart ? new Date(editPeriodStart + 'T00:00:00') : new Date());
                                             setShowEditStartDatePicker(true);
@@ -2450,6 +2516,7 @@ export default function RegisterScreen() {
                                     </Pressable>
                                     <Pressable
                                         style={styles.dateInputWrapper}
+                                        disabled={!!editingPayment.settledCollections?.length || Array.isArray(editingPayment.collectionSnapshots)}
                                         onPress={() => {
                                             setTempCalendarDate(editPeriodEnd ? new Date(editPeriodEnd + 'T00:00:00') : new Date());
                                             setShowEditEndDatePicker(true);
@@ -2462,17 +2529,31 @@ export default function RegisterScreen() {
                                     </Pressable>
                                 </View>
 
-                                <View style={styles.editPaymentInputGroup}>
-                                    <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground }]}>Milk Amount (₹)</Text>
-                                    <TextInput
-                                        style={[styles.editPaymentInput, { backgroundColor: colors.secondary, color: colors.foreground }]}
-                                        value={editMilkAmount}
-                                        onChangeText={setEditMilkAmount}
-                                        keyboardType="numeric"
-                                        placeholder="Enter milk amount"
-                                        placeholderTextColor={colors.mutedForeground}
-                                    />
-                                </View>
+                                {(!!editingPayment.settledCollections?.length || Array.isArray(editingPayment.collectionSnapshots)) && <Text style={{ fontSize: 11, color: colors.mutedForeground, marginTop: 4 }}>Period is fixed because entries are linked to this settlement.</Text>}
+                                {editingPayment.entriesAmount != null && editingPayment.extraMilkAmount != null ? <>
+                                    <Text style={[styles.editPaymentLabel, { color: colors.foreground, marginTop: 10 }]}>Entries Amount: ₹{editingPayment.entriesAmount.toFixed(2)}</Text>
+                                    <View style={styles.editPaymentInputGroup}>
+                                        <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground }]}>Extra Amount (₹)</Text>
+                                        <TextInput style={[styles.editPaymentInput, { backgroundColor: colors.secondary, color: colors.foreground }]} value={editExtraMilkAmount} onChangeText={setEditExtraMilkAmount} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.mutedForeground} />
+                                    </View>
+                                    <Text style={[styles.editPaymentLabel, { color: colors.foreground }]}>Milk Amount: ₹{(editingPayment.entriesAmount + (Number(editExtraMilkAmount) || 0)).toFixed(2)}</Text>
+                                </> : <View style={styles.editPaymentInputGroup}>
+                                    <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground }]}>Milk Amount (₹) · Breakdown unavailable</Text>
+                                    <TextInput style={[styles.editPaymentInput, { backgroundColor: colors.secondary, color: colors.foreground }]} value={editMilkAmount} onChangeText={setEditMilkAmount} keyboardType="numeric" placeholder="Enter milk amount" placeholderTextColor={colors.mutedForeground} />
+                                </View>}
+                                <Pressable style={[styles.viewEntriesBtn, { marginTop: 10 }]} onPress={() => void loadSettlementEntries()}>
+                                    <Eye size={16} color={colors.primary} /><Text style={[styles.viewEntriesText, { color: colors.primary }]}>{showSettlementEntries ? 'Hide Entries' : 'View Entries'}</Text>
+                                </Pressable>
+                                {showSettlementEntries && <View style={{ marginVertical: 8, gap: 6 }}>
+                                    {settlementEntriesLoading ? <ActivityIndicator color={colors.primary} /> : settlementEntriesError ? <Text style={{ color: colors.destructive }}>{settlementEntriesError}</Text> : <>
+                                        <Text style={{ fontSize: 11, color: colors.mutedForeground }}>{settlementEntriesSnapshot ? 'Entries saved with this settlement' : 'Linked entries as they exist now; older records may have changed or be missing.'}</Text>
+                                        {settlementEntries.length === 0 && <Text style={{ color: colors.mutedForeground }}>No linked entries available.</Text>}
+                                        {settlementEntries.map((entry, index) => <View key={String(entry.id || entry._id || index)} style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 5 }}>
+                                            <Text style={{ color: colors.foreground, fontSize: 11 }}>{formatDateDDMMYYYY(entry.date || '')} · {entry.shift || '-'} · {Number(entry.quantity || 0).toFixed(2)} L</Text>
+                                            <Text style={{ color: colors.foreground, fontSize: 11 }}>FAT {Number(entry.fat || 0).toFixed(1)} · SNF {Number(entry.snf || 0).toFixed(1)} · Rate ₹{Number(entry.rate || 0).toFixed(2)} · Bonus ₹{Number(entry.bonusAmount || 0).toFixed(2)} · ₹{Number(entry.amount || 0).toFixed(2)}</Text>
+                                        </View>)}
+                                    </>}
+                                </View>}
 
                                 <View style={styles.editPaymentInputGroup}>
                                     <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground }]}>Paid Amount (₹)</Text>

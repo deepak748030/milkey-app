@@ -66,6 +66,8 @@ export interface PortalPaymentRow extends PortalRowBase {
     periodStart?: string;
     periodEnd?: string;
     totalMilkAmount?: number;
+    entriesAmount?: number | null;
+    extraMilkAmount?: number | null;
     totalAdvanceDeduction?: number;
     advanceEffect?: 'add' | 'subtract';
     netPayable?: number;
