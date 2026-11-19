@@ -187,6 +187,18 @@ export interface SettledAdvanceInPayment {
     farmer?: { _id: string; code: string; name: string };
 }
 
+export interface CollectionSettlementSnapshot {
+    id: string;
+    date?: string;
+    shift?: string;
+    quantity?: number;
+    fat?: number;
+    snf?: number;
+    rate?: number;
+    bonusAmount?: number;
+    amount?: number;
+}
+
 export interface Payment {
     _id: string;
     farmer: { _id: string; code: string; name: string };
@@ -195,6 +207,9 @@ export interface Payment {
     paymentMethod: string;
     reference: string;
     totalMilkAmount: number;
+    entriesAmount?: number | null;
+    extraMilkAmount?: number | null;
+    collectionSnapshots?: CollectionSettlementSnapshot[];
     totalAdvanceDeduction: number;
     netPayable: number;
     closingBalance?: number;
@@ -789,6 +804,11 @@ export const paymentsApi = {
         reference?: string;
         notes?: string;
         totalMilkAmount?: number;
+        entriesAmount?: number;
+        extraMilkAmount?: number;
+        tzOffsetMinutes?: number;
+        expectedAdvance?: number;
+        expectedBalance?: number;
         periodStart?: string;
         periodEnd?: string;
     }) => {
@@ -808,6 +828,7 @@ export const paymentsApi = {
         reference?: string;
         notes?: string;
         totalMilkAmount?: number;
+        extraMilkAmount?: number;
         periodStart?: string;
         periodEnd?: string;
     }) => {

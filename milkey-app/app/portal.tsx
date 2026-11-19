@@ -439,8 +439,10 @@ function CollectionSettlementHistory({
     rows,
     colors,
     s,
+    selling,
 }: {
     rows: PortalPaymentRow[];
+    selling: boolean;
     colors: any;
     s: any;
 }) {
@@ -470,7 +472,12 @@ function CollectionSettlementHistory({
                             <Text numberOfLines={1} style={s.settlementPeriod}>{range}</Text>
                         </View>
                         <View style={s.settlementDivider} />
+                        {!selling && row.entriesAmount != null && row.extraMilkAmount != null && <>
+                            {line('Entries Amount:', row.entriesAmount)}
+                            {line('Extra Amount:', row.extraMilkAmount)}
+                        </>}
                         {line('Milk Amount:', row.totalMilkAmount)}
+                        {!selling && (row.entriesAmount == null || row.extraMilkAmount == null) && <Text style={s.settlementLabel}>Breakdown unavailable for this payment</Text>}
                         {line(row.advanceEffect === 'add' ? 'Advance (+):' : 'Advance:', (Number(row.totalAdvanceDeduction) || 0) * (row.advanceEffect === 'add' ? 1 : -1), colors.warning)}
                         {line('Total Payable:', row.netPayable)}
                         {line('Paid Amount:', row.amount, colors.success)}
@@ -1357,7 +1364,7 @@ export default function PortalScreen() {
                                         }}
                                     >
                                         {config.key === 'payments' ? (
-                                            <CollectionSettlementHistory rows={visible as PortalPaymentRow[]} colors={colors} s={s} />
+                                            <CollectionSettlementHistory rows={visible as PortalPaymentRow[]} colors={colors} s={s} selling={isSelling} />
                                         ) : (
                                             <PortalTable
                                                 columns={config.columns}

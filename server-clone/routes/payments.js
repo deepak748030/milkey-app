@@ -8,6 +8,7 @@ const Farmer = require('../models/Farmer');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
 const auth = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
+const { cents, localDayStart, createSplit } = require('../lib/collectionSettlementBreakdown');
 
 // GET /api/payments - Get all payments
 router.get('/', auth, async (req, res) => {
@@ -323,8 +324,87 @@ const rangesOverlap = (start1, end1, start2, end2) => {
     return start1 <= end2 && end1 >= start2;
 };
 
+// New split-aware settlements are transactional: the linked entries, advance
+// deductions and farmer balance must either all be saved or none of them.
+async function createSplitSettlement(req, res) {
+    const { farmerCode, amount, paymentMethod, reference, notes, totalMilkAmount, periodStart, periodEnd,
+        entriesAmount, extraMilkAmount, tzOffsetMinutes, expectedAdvance, expectedBalance } = req.body;
+    const offset = tzOffsetMinutes == null ? NaN : Number(tzOffsetMinutes);
+    const start = localDayStart(periodStart, offset);
+    const end = localDayStart(periodEnd, offset);
+    if (!farmerCode || !start || !end || end < start || cents(amount) === null || cents(amount) < 0 ||
+        cents(entriesAmount) === null || cents(extraMilkAmount) === null || cents(totalMilkAmount) === null ||
+        cents(expectedAdvance) === null || cents(expectedBalance) === null) {
+        return res.status(400).json({ success: false, message: 'Invalid settlement details or milk breakdown.' });
+    }
+    const fail = (status, message) => { const error = new Error(message); error.status = status; throw error; };
+    let session;
+    let populatedPayment;
+    try {
+        session = await mongoose.startSession();
+        await session.withTransaction(async () => {
+            const farmer = await Farmer.findOne({ code: farmerCode, owner: req.userId }).session(session);
+            if (!farmer) fail(404, 'Farmer not found.');
+            const storedStart = new Date(periodStart + 'T12:00:00');
+            const storedEnd = new Date(periodEnd + 'T12:00:00');
+            const existing = await Payment.find({ farmer: farmer._id, owner: req.userId, periodStart: { $ne: null }, periodEnd: { $ne: null } }).session(session).lean();
+            if (existing.some(p => rangesOverlap(storedStart, storedEnd, new Date(p.periodStart), new Date(p.periodEnd)))) {
+                fail(409, 'The selected period overlaps an existing settlement.');
+            }
+            const codePattern = new RegExp(`^${String(farmer.code).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+            const purchaseFarmer = await PurchaseFarmer.findOne({ code: codePattern, owner: req.userId }).session(session);
+            const unpaid = await MilkCollection.find({
+                owner: req.userId, isPaid: false,
+                $or: [ ...(purchaseFarmer ? [{ purchaseFarmer: purchaseFarmer._id }] : []),
+                    { purchaseFarmer: farmer._id }, { farmer: farmer._id }, { farmerCode: codePattern } ],
+                date: { $gte: start, $lt: new Date(end.getTime() + 86400000) },
+            }).sort({ date: 1 }).session(session);
+            const split = createSplit(unpaid, entriesAmount, extraMilkAmount, totalMilkAmount);
+            if (!split) fail(409, 'Milk entries or amounts changed. Refresh the farmer and try again.');
+            const advances = await Advance.find({ farmer: farmer._id, owner: req.userId, status: { $in: ['pending', 'partial'] } }).sort({ date: 1 }).session(session);
+            const advanceAmount = advances.reduce((sum, row) => sum + (row.amount - row.settledAmount), 0);
+            const previousBalance = farmer.currentBalance || 0;
+            if (cents(expectedAdvance) !== cents(advanceAmount) || cents(expectedBalance) !== cents(previousBalance)) {
+                fail(409, 'Advance or balance changed. Refresh the farmer and try again.');
+            }
+            const total = cents(totalMilkAmount) / 100;
+            const netPayable = (cents(total) - cents(advanceAmount) + cents(previousBalance)) / 100;
+            const closingBalance = (cents(netPayable) - cents(amount)) / 100;
+            const snapshots = unpaid.map(c => ({ id: String(c._id), date: c.date, shift: c.shift,
+                quantity: c.quantity, fat: c.fat, snf: c.snf, rate: c.rate, bonusAmount: c.bonusAmount, amount: c.amount }));
+            const [payment] = await Payment.create([{
+                farmer: farmer._id, owner: req.userId, amount: cents(amount) / 100,
+                paymentMethod: paymentMethod || 'cash', reference: reference?.trim() || '', notes: notes?.trim() || '',
+                periodStart: storedStart, periodEnd: storedEnd, settledCollections: unpaid.map(c => c._id),
+                settledAdvances: advances.map(a => a._id), totalMilkAmount: total, ...split, collectionSnapshots: snapshots,
+                totalAdvanceDeduction: advanceAmount, netPayable, previousBalance, closingBalance,
+            }], { session });
+            await MilkCollection.updateMany({ _id: { $in: unpaid.map(c => c._id) }, owner: req.userId, isPaid: false }, { isPaid: true }, { session });
+            for (const advance of advances) {
+                advance.status = 'settled';
+                advance.settledAmount = advance.amount;
+                await advance.save({ session });
+            }
+            farmer.pendingAmount = 0;
+            farmer.currentBalance = closingBalance;
+            // Force a write even when the balance is unchanged, so simultaneous
+            // settlements for the same farmer conflict and retry atomically.
+            farmer.markModified('currentBalance');
+            await farmer.save({ session });
+            populatedPayment = await Payment.findById(payment._id).populate('farmer', 'code name').session(session).lean();
+        });
+        return res.status(201).json({ success: true, message: 'Payment recorded successfully', response: populatedPayment });
+    } catch (error) {
+        console.error('Create collection settlement error:', error);
+        return res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Settlement could not be saved safely. Please try again or contact support.' });
+    } finally {
+        if (session) await session.endSession();
+    }
+}
+
 // POST /api/payments - Create payment (settle farmer dues) (requires register subscription)
 router.post('/', auth, requireSubscription('register'), async (req, res) => {
+    if (req.body.entriesAmount !== undefined || req.body.extraMilkAmount !== undefined) return createSplitSettlement(req, res);
     try {
         const { farmerCode, amount, paymentMethod, reference, notes, totalMilkAmount: providedMilkAmount, periodStart: clientPeriodStart, periodEnd: clientPeriodEnd } = req.body;
 
@@ -424,7 +504,6 @@ router.post('/', auth, requireSubscription('register'), async (req, res) => {
 
         // Get previous balance from farmer (can be + or -)
         const previousBalance = farmer.currentBalance || 0;
-
         // Net payable = milk amount - advances + previous balance
         const netPayable = totalMilkAmount - totalAdvanceAmount + previousBalance;
 
@@ -657,6 +736,42 @@ router.put('/:id', auth, requireSubscription('register'), async (req, res) => {
                     });
                 }
             }
+        }
+
+        // Changing a period does not re-settle its linked entries. Do not
+        // silently associate existing entries with a different date range.
+        const dateKey = (value) => value ? new Date(value).toISOString().slice(0, 10) : '';
+        if ((payment.settledCollections?.length || payment.collectionSnapshots !== undefined) &&
+            ((periodStart && periodStart !== dateKey(payment.periodStart)) || (periodEnd && periodEnd !== dateKey(payment.periodEnd)))) {
+            return res.status(409).json({ success: false, message: 'The period cannot be changed for a settlement with linked entries.' });
+        }
+        if ((amount !== undefined && (cents(amount) === null || cents(amount) < 0)) ||
+            (totalMilkAmount !== undefined && (cents(totalMilkAmount) === null || cents(totalMilkAmount) < 0))) {
+            return res.status(400).json({ success: false, message: 'Please enter valid payment amounts.' });
+        }
+        const amountChanged = (amount !== undefined && cents(amount) !== cents(payment.amount)) ||
+            (totalMilkAmount !== undefined && cents(totalMilkAmount) !== cents(payment.totalMilkAmount));
+        if (amountChanged) {
+            const latest = await Payment.findOne({ farmer: payment.farmer, owner: req.userId })
+                .sort({ periodEnd: -1, date: -1, createdAt: -1 }).select('_id').lean();
+            if (latest && String(latest._id) !== String(payment._id)) {
+                return res.status(409).json({ success: false, message: 'This is an older settlement. Its amounts cannot be changed without recalculating later balances.' });
+            }
+        }
+        const extraProvided = req.body.extraMilkAmount !== undefined;
+        if (extraProvided) {
+            const base = cents(payment.entriesAmount);
+            const extra = cents(req.body.extraMilkAmount);
+            const total = cents(totalMilkAmount);
+            if (payment.entriesAmount == null || base === null || extra === null || total === null || total < 0 || base + extra !== total) {
+                return res.status(400).json({ success: false, message: 'Invalid milk amount breakdown.' });
+            }
+            payment.extraMilkAmount = extra / 100;
+        } else if (payment.entriesAmount != null && totalMilkAmount !== undefined && cents(totalMilkAmount) !== cents(payment.totalMilkAmount)) {
+            // An older client edited only the total. The original split is no
+            // longer known; never present it as if it were still accurate.
+            payment.entriesAmount = undefined;
+            payment.extraMilkAmount = undefined;
         }
 
         // Calculate the difference in payment amount

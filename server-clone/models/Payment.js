@@ -57,6 +57,11 @@ const paymentSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    // Optional on legacy records. New settlements store the actual components
+    // and entry snapshots so later entry edits cannot rewrite payment history.
+    entriesAmount: { type: Number, default: undefined },
+    extraMilkAmount: { type: Number, default: undefined },
+    collectionSnapshots: { type: [mongoose.Schema.Types.Mixed], default: undefined },
     totalAdvanceDeduction: {
         type: Number,
         default: 0

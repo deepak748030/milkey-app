@@ -116,7 +116,12 @@ export function SettlementPaymentsScreen({ selling = false }: { selling?: boolea
                     <Text numberOfLines={1} style={[styles.profile, { color: colors.mutedForeground }]}>{selling ? (item.customerName || 'Customer') : (item.farmerName || 'Farmer')} · {item.dairyName || 'Dairy'}</Text>
                 )}
                 <View style={[styles.divider, { backgroundColor: border }]} />
+                {!selling && item.entriesAmount != null && item.extraMilkAmount != null && <>
+                    {line('Entries Amount:', item.entriesAmount)}
+                    {line('Extra Amount:', item.extraMilkAmount)}
+                </>}
                 {line('Milk Amount:', item.totalMilkAmount)}
+                {!selling && (item.entriesAmount == null || item.extraMilkAmount == null) && <Text style={[styles.amountLabel, { color: colors.mutedForeground }]}>Breakdown unavailable for this payment</Text>}
                 {line(item.advanceEffect === 'add' ? 'Advance (+):' : 'Advance:', (Number(item.totalAdvanceDeduction) || 0) * (item.advanceEffect === 'add' ? 1 : -1), colors.warning)}
                 {line('Total Payable:', item.netPayable)}
                 {line('Paid Amount:', item.amount, colors.success)}

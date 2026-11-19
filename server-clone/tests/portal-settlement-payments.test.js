@@ -139,3 +139,18 @@ test('history beyond dashboard limits is reachable across all pages', async () =
     assert.equal(ids[0], id(127));
     assert.equal(ids.at(-1), id(1));
 });
+
+
+test('collection portal returns the saved split without inventing it for older payments', async () => {
+    const ctx = fixture([payment(1), payment(2, { entriesAmount: 690, extraMilkAmount: 0, totalMilkAmount: 690 })]);
+    const res = await ctx.request();
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.response.payments[0].entriesAmount, 690);
+    assert.equal(res.body.response.payments[0].extraMilkAmount, 0);
+    assert.equal(res.body.response.payments[1].entriesAmount, null);
+    assert.equal(res.body.response.payments[1].extraMilkAmount, null);
+    const projection = ctx.queries[0].find(stage => stage.$project).$project;
+    assert.equal(projection.entriesAmount, 1);
+    assert.equal(projection.extraMilkAmount, 1);
+    assert.equal(projection.collectionSnapshots, undefined);
+});

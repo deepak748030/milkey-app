@@ -321,6 +321,8 @@ router.get('/dashboard', portalAuth, async (req, res) => {
                     periodStart: safeIso(row.periodStart),
                     periodEnd: safeIso(row.periodEnd),
                     totalMilkAmount: round2(row.totalMilkAmount || 0),
+                    entriesAmount: row.entriesAmount == null ? null : round2(row.entriesAmount),
+                    extraMilkAmount: row.extraMilkAmount == null ? null : round2(row.extraMilkAmount),
                     totalAdvanceDeduction: round2(row.totalAdvanceDeduction || 0),
                     netPayable: round2(row.netPayable || 0),
                     closingBalance: round2(row.closingBalance || 0),
@@ -683,7 +685,7 @@ router.get('/collection-payments', portalAuth, async (req, res) => {
         }
         pagePipeline.push({ $sort: { _portalDate: -1, _id: -1 } }, { $limit: 4 }, { $project: {
             owner: 1, farmer: 1, _portalDate: 1, amount: 1, paymentMethod: 1, periodStart: 1, periodEnd: 1,
-            totalMilkAmount: 1, totalAdvanceDeduction: 1, netPayable: 1, closingBalance: 1, createdAt: 1, notes: 1, reference: 1,
+            totalMilkAmount: 1, entriesAmount: 1, extraMilkAmount: 1, totalAdvanceDeduction: 1, netPayable: 1, closingBalance: 1, createdAt: 1, notes: 1, reference: 1,
         } });
         const [total, docs] = await Promise.all([
             Payment.countDocuments(query),
@@ -702,6 +704,8 @@ router.get('/collection-payments', portalAuth, async (req, res) => {
                     amount: round2(row.amount || 0), mode: modeLabel(row.paymentMethod),
                     periodStart: safeIso(row.periodStart), periodEnd: safeIso(row.periodEnd),
                     totalMilkAmount: round2(row.totalMilkAmount || 0),
+                    entriesAmount: row.entriesAmount == null ? null : round2(row.entriesAmount),
+                    extraMilkAmount: row.extraMilkAmount == null ? null : round2(row.extraMilkAmount),
                     totalAdvanceDeduction: round2(row.totalAdvanceDeduction || 0),
                     netPayable: round2(row.netPayable || 0), closingBalance: round2(row.closingBalance || 0),
                     createdAt: safeIso(row.createdAt), remark: row.notes || row.reference || 'Payment received',
