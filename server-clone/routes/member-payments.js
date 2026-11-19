@@ -4,6 +4,8 @@ const router = express.Router();
 const MemberPayment = require('../models/MemberPayment');
 const SellingEntry = require('../models/SellingEntry');
 const Member = require('../models/Member');
+const SellingAdvance = require('../models/SellingAdvance');
+const { planSellingAdvance } = require('../lib/selling-advance-settlement');
 const auth = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
 
@@ -183,9 +185,6 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
 
         const trueCurrentBalance = latestPaymentForBalance ? (latestPaymentForBalance.closingBalance || 0) : (member.sellingPaymentBalance || 0);
 
-        if (latestPaymentForBalance && Math.abs((member.sellingPaymentBalance || 0) - trueCurrentBalance) > 0.01) {
-            Member.findByIdAndUpdate(member._id, { sellingPaymentBalance: trueCurrentBalance }).catch(() => {});
-        }
 
         // Build date filter for entries (SellingEntry dates are stored at UTC start-of-day)
         const dateFilter = {};
@@ -214,6 +213,8 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
         const unpaidSellAmount = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
         const unpaidQuantity = unpaidEntries.reduce((sum, e) => sum + Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0), 0);
 
+        const advances = await SellingAdvance.find({ member: member._id, owner: req.userId, isDeleted: { $ne: true } }).sort({ date: 1, _id: 1 }).lean();
+        const advancePending = planSellingAdvance(advances).amount;
         const currentBalance = Number(trueCurrentBalance || 0);
         const netPayable = currentBalance + unpaidSellAmount;
 
@@ -237,6 +238,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
                         amount: e.amount
                     }))
                 },
+                advancePending,
                 period: {
                     startDate: startDate || null,
                     endDate: endDate || null
@@ -257,134 +259,180 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
 // POST /api/member-payments - Create payment (settle member dues) (requires selling subscription)
 router.post('/', auth, requireSubscription('selling'), async (req, res) => {
     try {
-        const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds, totalQuantity: reqTotalQuantity, milkRate: reqMilkRate } = req.body;
-
-        if (!memberId || !amount) {
+        const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds, totalQuantity: reqTotalQuantity, milkRate: reqMilkRate, expectedAdvance, expectedBalance } = req.body;
+        const applyAdvance = expectedAdvance !== undefined;
+        if (applyAdvance && (!Number.isFinite(Number(expectedAdvance)) || Number(expectedAdvance) < 0 || !Number.isFinite(Number(expectedBalance)) || !Number.isFinite(Number(milkAmount)))) {
+            return res.status(400).json({ success: false, message: 'Invalid payment summary. Please refresh and try again.' });
+        }
+        if (applyAdvance && Number.isFinite(Number(amount)) && Math.abs(Number(amount) * 100 - Math.round(Number(amount) * 100)) > 1e-7) {
+            return res.status(400).json({ success: false, message: 'Paid amount cannot have more than two decimal places.' });
+        }
+        if (applyAdvance && (typeof periodEnd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(periodEnd) || Number.isNaN(new Date(periodEnd).getTime()) || new Date(periodEnd).toISOString().slice(0, 10) !== periodEnd)) {
+            return res.status(400).json({ success: false, message: 'Please select a valid calculation period end date.' });
+        }
+        if (!memberId || amount === undefined || amount === null || amount === '' || !Number.isFinite(Number(amount)) || Number(amount) < (applyAdvance ? 0 : 1)) {
             return res.status(400).json({
                 success: false,
                 message: 'Member ID and amount are required'
             });
         }
 
-        const member = await Member.findOne({
-            _id: memberId,
-            owner: req.userId
-        });
+        const session = applyAdvance ? await mongoose.startSession() : null;
+        let populatedPayment;
+        try {
+            const savePayment = async () => {
+                const member = await Member.findOne({ _id: memberId, owner: req.userId }).session(session);
+                if (!member) {
+                    const error = new Error('Member not found'); error.status = 404; throw error;
+                }
 
-        if (!member) {
-            return res.status(404).json({
-                success: false,
-                message: 'Member not found'
-            });
+                // Build date filter for getting unpaid entries (SellingEntry dates are stored at UTC start-of-day)
+                const dateFilter = {};
+                if (periodStart || periodEnd) {
+                    dateFilter.date = {};
+                    if (periodStart) {
+                        dateFilter.date.$gte = new Date(periodStart + 'T00:00:00.000Z');
+                    }
+                    if (periodEnd) {
+                        dateFilter.date.$lte = new Date(periodEnd + 'T23:59:59.999Z');
+                    }
+                }
+
+                // Get unpaid selling entries for the period
+                const entryQuery = {
+                    member: member._id,
+                    owner: req.userId,
+                    isPaid: false,
+                    ...dateFilter
+                };
+
+                // If specific entry IDs provided, use those
+                if (entryIds && Array.isArray(entryIds) && entryIds.length > 0) {
+                    entryQuery._id = { $in: entryIds };
+                }
+
+                const unpaidEntries = await SellingEntry.find(entryQuery).sort({ date: 1 }).session(session);
+
+                const computedUnpaidTotal = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+                const computedTotalQuantity = unpaidEntries.reduce((sum, e) => sum + Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0), 0);
+
+                // Previous balance carried forward
+                let previousBalance = Number(member.sellingPaymentBalance || 0);
+                let advancePlan = { amount: 0, allocations: [] };
+                let advanceDocs = [];
+                if (applyAdvance) {
+                    const latest = await MemberPayment.findOne({ member: member._id, owner: req.userId })
+                        .sort({ periodEnd: -1, date: -1, createdAt: -1 }).select('closingBalance periodEnd').session(session).lean();
+                    previousBalance = Number(latest?.closingBalance ?? member.sellingPaymentBalance ?? 0);
+                    if (latest?.periodEnd && periodEnd < new Date(latest.periodEnd).toISOString().slice(0, 10)) {
+                        const error = new Error('End date cannot be before the latest settlement.'); error.status = 409; throw error;
+                    }
+                    advanceDocs = await SellingAdvance.find({ member: member._id, owner: req.userId, isDeleted: { $ne: true } })
+                        .sort({ date: 1, _id: 1 }).session(session);
+                    advancePlan = planSellingAdvance(advanceDocs);
+                    if (Number(amount) === 0 && computedUnpaidTotal <= 0 && advancePlan.amount <= 0) {
+                        const error = new Error('There is nothing to settle.'); error.status = 400; throw error;
+                    }
+                    if (Math.round(advancePlan.amount * 100) !== Math.round(Number(expectedAdvance) * 100) ||
+                        Math.round(previousBalance * 100) !== Math.round(Number(expectedBalance) * 100) ||
+                        Math.round(computedUnpaidTotal * 100) !== Math.round(Number(milkAmount) * 100)) {
+                        const error = new Error('Payment summary changed. Please reselect the customer and try again.'); error.status = 409; throw error;
+                    }
+                    // Touch all existing ledger rows so concurrent settle/delete operations
+                    // conflict rather than silently changing the amount being applied.
+                    for (const doc of advanceDocs) {
+                        doc.settlementRevision = Number(doc.settlementRevision || 0) + 1;
+                        const allocation = advancePlan.allocations.find(a => String(a.doc._id) === String(doc._id));
+                        if (allocation) {
+                            doc.settledAmount = Math.round((Number(doc.settledAmount || 0) + allocation.amount) * 100) / 100;
+                            doc.status = doc.settledAmount >= Number(doc.amount) ? 'settled' : 'partial';
+                        }
+                        await doc.save({ session });
+                    }
+                }
+
+                const paymentAmount = Number.parseFloat(amount);
+
+                // Use manual milk amount if provided, otherwise use computed unpaid total
+                let totalSellAmount = computedUnpaidTotal;
+                if (milkAmount !== undefined && milkAmount !== null) {
+                    const manual = Number.parseFloat(milkAmount);
+                    if (!Number.isNaN(manual)) totalSellAmount = manual;
+                }
+
+                // Use provided milkRate and totalQuantity only if they are valid (> 0), otherwise calculate from entries
+                const parsedReqMilkRate = Number(reqMilkRate);
+                const parsedReqTotalQuantity = Number(reqTotalQuantity);
+
+                // Always prioritize computed quantity from actual selling entries
+                const finalTotalQuantity = computedTotalQuantity > 0
+                    ? computedTotalQuantity
+                    : (Number.isFinite(parsedReqTotalQuantity) && parsedReqTotalQuantity > 0 ? parsedReqTotalQuantity : 0);
+
+                // For milk rate: use member's ratePerLiter if provided and valid, otherwise calculate from totalSellAmount / quantity
+                // This ensures the rate at the time of payment is saved (won't change if user updates their rate later)
+                const memberRateAtPayment = Number(member.ratePerLiter) || 0;
+                let finalMilkRate = 0;
+                if (Number.isFinite(parsedReqMilkRate) && parsedReqMilkRate > 0) {
+                    finalMilkRate = parsedReqMilkRate;
+                } else if (memberRateAtPayment > 0) {
+                    finalMilkRate = memberRateAtPayment;
+                } else if (finalTotalQuantity > 0 && totalSellAmount > 0) {
+                    finalMilkRate = totalSellAmount / finalTotalQuantity;
+                }
+
+                // Log for debugging
+                console.log('Payment creation values:', {
+                    reqMilkRate, reqTotalQuantity,
+                    computedTotalQuantity, memberRateAtPayment,
+                    finalTotalQuantity, finalMilkRate, totalSellAmount
+                });
+
+                const netPayable = Math.round((previousBalance + totalSellAmount - advancePlan.amount) * 100) / 100;
+                const closingBalance = Math.round((netPayable - paymentAmount) * 100) / 100;
+
+                // Create payment record with period info
+                const payment = new MemberPayment({
+                    member: member._id,
+                    owner: req.userId,
+                    amount: paymentAmount,
+                    paymentMethod: paymentMethod || 'cash',
+                    reference: reference?.trim() || '',
+                    notes: notes?.trim() || '',
+                    settledEntries: unpaidEntries.map(e => e._id),
+                    totalSellAmount,
+                    totalQuantity: finalTotalQuantity,
+                    milkRate: finalMilkRate,
+                    netPayable,
+                    previousBalance,
+                    closingBalance,
+                    advanceApplied: advancePlan.amount,
+                    settledSellingAdvances: advancePlan.allocations.map(a => ({ advance: a.doc._id, amount: a.amount })),
+                    periodStart: periodStart ? new Date(periodStart) : null,
+                    periodEnd: periodEnd ? new Date(periodEnd) : null
+                });
+                await payment.save({ session });
+
+                // Mark entries as paid
+                if (unpaidEntries.length > 0) {
+                    await SellingEntry.updateMany(
+                        { _id: { $in: unpaidEntries.map(e => e._id) } },
+                        { isPaid: true },
+                        { session }
+                    );
+                }
+
+                // Update member - set sellingPaymentBalance to closingBalance
+                member.sellingPaymentBalance = closingBalance;
+                await member.save({ session });
+                populatedPayment = await MemberPayment.findById(payment._id)
+                    .populate('member', 'name mobile').session(session).lean();
+            };
+            if (session) await session.withTransaction(savePayment);
+            else await savePayment();
+        } finally {
+            if (session) await session.endSession();
         }
-
-        // Build date filter for getting unpaid entries (SellingEntry dates are stored at UTC start-of-day)
-        const dateFilter = {};
-        if (periodStart || periodEnd) {
-            dateFilter.date = {};
-            if (periodStart) {
-                dateFilter.date.$gte = new Date(periodStart + 'T00:00:00.000Z');
-            }
-            if (periodEnd) {
-                dateFilter.date.$lte = new Date(periodEnd + 'T23:59:59.999Z');
-            }
-        }
-
-        // Get unpaid selling entries for the period
-        const entryQuery = {
-            member: member._id,
-            owner: req.userId,
-            isPaid: false,
-            ...dateFilter
-        };
-
-        // If specific entry IDs provided, use those
-        if (entryIds && Array.isArray(entryIds) && entryIds.length > 0) {
-            entryQuery._id = { $in: entryIds };
-        }
-
-        const unpaidEntries = await SellingEntry.find(entryQuery).sort({ date: 1 });
-
-        const computedUnpaidTotal = unpaidEntries.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-        const computedTotalQuantity = unpaidEntries.reduce((sum, e) => sum + Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0), 0);
-
-        // Previous balance carried forward
-        const previousBalance = Number(member.sellingPaymentBalance || 0);
-
-        const paymentAmount = Number.parseFloat(amount);
-
-        // Use manual milk amount if provided, otherwise use computed unpaid total
-        let totalSellAmount = computedUnpaidTotal;
-        if (milkAmount !== undefined && milkAmount !== null) {
-            const manual = Number.parseFloat(milkAmount);
-            if (!Number.isNaN(manual)) totalSellAmount = manual;
-        }
-
-        // Use provided milkRate and totalQuantity only if they are valid (> 0), otherwise calculate from entries
-        const parsedReqMilkRate = Number(reqMilkRate);
-        const parsedReqTotalQuantity = Number(reqTotalQuantity);
-
-        // Always prioritize computed quantity from actual selling entries
-        const finalTotalQuantity = computedTotalQuantity > 0
-            ? computedTotalQuantity
-            : (Number.isFinite(parsedReqTotalQuantity) && parsedReqTotalQuantity > 0 ? parsedReqTotalQuantity : 0);
-
-        // For milk rate: use member's ratePerLiter if provided and valid, otherwise calculate from totalSellAmount / quantity
-        // This ensures the rate at the time of payment is saved (won't change if user updates their rate later)
-        const memberRateAtPayment = Number(member.ratePerLiter) || 0;
-        let finalMilkRate = 0;
-        if (Number.isFinite(parsedReqMilkRate) && parsedReqMilkRate > 0) {
-            finalMilkRate = parsedReqMilkRate;
-        } else if (memberRateAtPayment > 0) {
-            finalMilkRate = memberRateAtPayment;
-        } else if (finalTotalQuantity > 0 && totalSellAmount > 0) {
-            finalMilkRate = totalSellAmount / finalTotalQuantity;
-        }
-
-        // Log for debugging
-        console.log('Payment creation values:', {
-            reqMilkRate, reqTotalQuantity,
-            computedTotalQuantity, memberRateAtPayment,
-            finalTotalQuantity, finalMilkRate, totalSellAmount
-        });
-
-        const netPayable = previousBalance + totalSellAmount;
-        const closingBalance = netPayable - paymentAmount;
-
-        // Create payment record with period info
-        const payment = await MemberPayment.create({
-            member: member._id,
-            owner: req.userId,
-            amount: paymentAmount,
-            paymentMethod: paymentMethod || 'cash',
-            reference: reference?.trim() || '',
-            notes: notes?.trim() || '',
-            settledEntries: unpaidEntries.map(e => e._id),
-            totalSellAmount,
-            totalQuantity: finalTotalQuantity,
-            milkRate: finalMilkRate,
-            netPayable,
-            previousBalance,
-            closingBalance,
-            periodStart: periodStart ? new Date(periodStart) : null,
-            periodEnd: periodEnd ? new Date(periodEnd) : null
-        });
-
-        // Mark entries as paid
-        if (unpaidEntries.length > 0) {
-            await SellingEntry.updateMany(
-                { _id: { $in: unpaidEntries.map(e => e._id) } },
-                { isPaid: true }
-            );
-        }
-
-        // Update member - set sellingPaymentBalance to closingBalance
-        member.sellingPaymentBalance = closingBalance;
-        await member.save();
-
-        const populatedPayment = await MemberPayment.findById(payment._id)
-            .populate('member', 'name mobile')
-            .lean();
 
         res.status(201).json({
             success: true,
@@ -393,9 +441,9 @@ router.post('/', auth, requireSubscription('selling'), async (req, res) => {
         });
     } catch (error) {
         console.error('Create member payment error:', error);
-        res.status(500).json({
+        res.status(error.status || 500).json({
             success: false,
-            message: 'Failed to record payment'
+            message: error.status ? error.message : 'Payment could not be saved safely. Please try again or contact support.'
         });
     }
 });
@@ -464,7 +512,7 @@ router.put('/:id', auth, async (req, res) => {
 
         // Recalculate closing balance if amount or milk amount changes
         const newMilkAmount = totalSellAmount !== undefined ? parseFloat(totalSellAmount) : payment.totalSellAmount;
-        const netPayable = newMilkAmount + payment.previousBalance;
+        const netPayable = newMilkAmount + payment.previousBalance - Number(payment.advanceApplied || 0);
         const newClosingBalance = netPayable - newPaymentAmount;
 
         // Update payment fields

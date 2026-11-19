@@ -178,6 +178,7 @@ export function buildSellingPaymentSlipPayload(
     payload += twoCol(`${t.qty}:`, milkQty + ' L');
     payload += twoCol(`${t.rate}:`, 'Rs ' + milkRate + '/L');
     payload += twoCol(`${t.milkAmount}:`, (p.totalSellAmount || 0).toFixed(0));
+    payload += twoCol(`${t.advanceProduct}:`, (p.advanceApplied || 0).toFixed(0));
     payload += twoCol(`${t.totalPayable}:`, (p.netPayable || 0).toFixed(0));
     payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
     payload += fmtLine();

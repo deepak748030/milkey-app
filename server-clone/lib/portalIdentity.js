@@ -220,6 +220,11 @@ function publicPortalIdentity(identity, module) {
 
     const collectionProfile = identity.collectionLinks[0] || null;
     const sellingProfile = identity.sellingLinks[0] || null;
+    // The displayed selling profile is built from the first linked member. Use
+    // that same member's configured rate, never a historical entry or average.
+    const sellingRate = sellingProfile?.memberDocs?.[0]?.ratePerLiter;
+    const milkRate = sellingRate != null && String(sellingRate).trim() !== '' && Number.isFinite(Number(sellingRate)) && Number(sellingRate) >= 0
+        ? Number(sellingRate) : null;
     const profileFor = (profile) => profile ? ({
         name: profile.name || 'Farmer / Customer',
         phone: profile.mobile || identity.phone,
@@ -231,7 +236,7 @@ function publicPortalIdentity(identity, module) {
     }) : null;
     const moduleProfiles = {
         collection: profileFor(collectionProfile),
-        selling: profileFor(sellingProfile),
+        selling: sellingProfile ? { ...profileFor(sellingProfile), milkRate } : null,
     };
     const selectedProfile = module === 'selling'
         ? (sellingProfile || collectionProfile)
@@ -247,6 +252,7 @@ function publicPortalIdentity(identity, module) {
         dairyName: selectedProfile?.dairyName || identity.dairyNames[0] || 'Dairy',
         dairyNames: identity.dairyNames || [],
         status: 'Active',
+        milkRate: selectedProfile === sellingProfile && sellingProfile ? milkRate : null,
         availableModules,
         moduleProfiles,
         memberSince: null,

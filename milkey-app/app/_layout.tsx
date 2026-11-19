@@ -49,6 +49,10 @@ function RootLayoutContent() {
         <Stack.Screen name="(tabs)" />
         {/* Farmer/Customer portal: intentionally outside the owner tab navigator. */}
         <Stack.Screen name="portal" />
+        <Stack.Screen name="portal-collection-entries" />
+        <Stack.Screen name="portal-settlement-payments" />
+        <Stack.Screen name="portal-selling-entries" />
+        <Stack.Screen name="portal-selling-payments" />
         {/* Isolated dairy-owner selling advance ledger. */}
         <Stack.Screen name="selling-advance" />
         <Stack.Screen name="calculator" />

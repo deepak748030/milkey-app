@@ -1512,6 +1512,7 @@ export const sellingEntriesApi = {
 export interface MemberPaymentSummary {
     member: { id: string; name: string; mobile: string; currentBalance: number };
     selling: { totalLiters: number; totalAmount: number; unpaidAmount?: number };
+    advancePending?: number;
     netPayable: number;
     closingBalance: number;
 }
@@ -1525,6 +1526,7 @@ export interface MemberPayment {
     paymentMethod: string;
     reference: string;
     totalSellAmount: number;
+    advanceApplied?: number;
     totalQuantity?: number;
     milkRate?: number;
     netPayable: number;
@@ -1569,6 +1571,8 @@ export const memberPaymentsApi = {
         periodEnd?: string;
         totalQuantity?: number;
         milkRate?: number;
+        expectedAdvance?: number;
+        expectedBalance?: number;
     }) => {
         return apiRequest<MemberPayment>('/member-payments', {
             method: 'POST',
