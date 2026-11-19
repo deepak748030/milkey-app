@@ -3,6 +3,7 @@ const Member = require('../models/Member');
 const PurchaseFarmer = require('../models/PurchaseFarmer');
 const Farmer = require('../models/Farmer');
 const User = require('../models/User');
+const PrintSettings = require('../models/PrintSettings');
 const { normalizeIndianMobile } = require('./ninzaSms');
 
 /**
@@ -173,19 +174,32 @@ async function findPortalProfiles(rawPhone) {
         ...Array.from(collectionMap.values()).map((link) => link.owner),
     ].filter((id) => mongoose.isValidObjectId(id))));
 
-    const users = ownerIds.length
-        ? await User.find({ _id: { $in: ownerIds } }).select('name').lean()
-        : [];
+    // Fetch only settings belonging to already verified linked owners. Keep the
+    // existing owner-name mapping for record labels and filters; Linked by is
+    // a separate display value sourced from the owner's receipt settings.
+    const [users, settings] = ownerIds.length ? await Promise.all([
+        User.find({ _id: { $in: ownerIds } }).select('name').lean(),
+        PrintSettings.find({ owner: { $in: ownerIds } }).select('owner dairyName').lean(),
+    ]) : [[], []];
     const ownerNames = {};
     for (const user of users) ownerNames[toId(user._id)] = user.name || 'Dairy';
+    const linkedDairyNames = {};
+    for (const ownerId of ownerIds) linkedDairyNames[ownerId] = ownerNames[ownerId] || 'Dairy';
+    for (const setting of settings) {
+        const ownerId = toId(setting.owner);
+        const name = typeof setting.dairyName === 'string' ? setting.dairyName.trim() : '';
+        if (Object.prototype.hasOwnProperty.call(linkedDairyNames, ownerId) && name) linkedDairyNames[ownerId] = name;
+    }
 
     const sellingLinks = Array.from(sellingMap.values()).map((link) => ({
         ...link,
         dairyName: ownerNames[link.owner] || 'Dairy',
+        linkedDairyName: linkedDairyNames[link.owner] || ownerNames[link.owner] || 'Dairy',
     }));
     const collectionLinks = Array.from(collectionMap.values()).map((link) => ({
         ...link,
         dairyName: ownerNames[link.owner] || 'Dairy',
+        linkedDairyName: linkedDairyNames[link.owner] || ownerNames[link.owner] || 'Dairy',
     }));
 
     const firstSelling = sellingLinks[0];
@@ -225,18 +239,20 @@ function publicPortalIdentity(identity, module) {
     const sellingRate = sellingProfile?.memberDocs?.[0]?.ratePerLiter;
     const milkRate = sellingRate != null && String(sellingRate).trim() !== '' && Number.isFinite(Number(sellingRate)) && Number(sellingRate) >= 0
         ? Number(sellingRate) : null;
-    const profileFor = (profile) => profile ? ({
+    const namesFor = (links) => Array.from(new Set(links.map((link) => link.linkedDairyName || link.dairyName || 'Dairy')));
+    const profileFor = (profile, links) => profile ? ({
         name: profile.name || 'Farmer / Customer',
         phone: profile.mobile || identity.phone,
         code: profile.code || '',
         address: profile.address || '',
         dairyName: profile.dairyName || identity.dairyNames[0] || 'Dairy',
         dairyNames: identity.dairyNames || [],
+        linkedDairyNames: namesFor(links),
         status: 'Active',
     }) : null;
     const moduleProfiles = {
-        collection: profileFor(collectionProfile),
-        selling: sellingProfile ? { ...profileFor(sellingProfile), milkRate } : null,
+        collection: profileFor(collectionProfile, identity.collectionLinks),
+        selling: sellingProfile ? { ...profileFor(sellingProfile, identity.sellingLinks), milkRate } : null,
     };
     const selectedProfile = module === 'selling'
         ? (sellingProfile || collectionProfile)
@@ -251,6 +267,7 @@ function publicPortalIdentity(identity, module) {
         address: selectedProfile?.address || '',
         dairyName: selectedProfile?.dairyName || identity.dairyNames[0] || 'Dairy',
         dairyNames: identity.dairyNames || [],
+        linkedDairyNames: namesFor(selectedProfile === sellingProfile && sellingProfile ? identity.sellingLinks : identity.collectionLinks),
         status: 'Active',
         milkRate: selectedProfile === sellingProfile && sellingProfile ? milkRate : null,
         availableModules,

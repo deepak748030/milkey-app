@@ -27,7 +27,6 @@ import {
     Filter,
     History,
     IndianRupee,
-    Layers3,
     Lock,
     LogOut,
     MapPin,
@@ -551,19 +550,18 @@ function SummaryCard({
     sub?: string;
     icon: any;
     gridWidth: number;
-    tone: 'green' | 'blue' | 'orange' | 'balance';
+    tone: 'green' | 'orange' | 'balance';
     negative?: boolean;
     colors: any;
     isDark: boolean;
     s: any;
 }) {
-    const tint = tone === 'blue' ? (isDark ? '#60A5FA' : '#2563EB')
-        : tone === 'orange' ? (isDark ? '#FBBF24' : '#B45309')
+    const tint = tone === 'orange' ? (isDark ? '#FBBF24' : '#B45309')
         : tone === 'balance' ? (isDark ? '#A78BFA' : '#7C3AED') : colors.primary;
     // Use the measured grid width rather than the window width: the portal can
     // also be embedded in a narrower container. Long amounts may wrap instead
     // of becoming unreadably small or losing digits on web.
-    const usableWidth = Math.max(20, gridWidth / 4 - 16);
+    const usableWidth = Math.max(20, gridWidth / 3 - 16);
     const showIcon = usableWidth >= 68;
     const fontFor = (text: string, max: number) => Math.max(10, Math.min(max, Math.floor(usableWidth / (Math.max(text.length, 1) * 0.64) * 10) / 10));
     return (
@@ -1254,9 +1252,9 @@ export default function PortalScreen() {
                                         <Text numberOfLines={1} style={s.profileName}>{profile?.name || 'Farmer / Customer'}</Text>
                                         <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
                                     </View>
-                                    <View accessible accessibilityLabel={`Linked by ${profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}`} style={s.profileDairy}>
+                                    <View accessible accessibilityLabel={`Linked by ${profile?.linkedDairyNames?.join(', ') || profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}`} style={s.profileDairy}>
                                         <Text style={s.profileDairyLabel}>LINKED BY</Text>
-                                        <Text numberOfLines={1} style={s.profileDairyName}>{profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}</Text>
+                                        <Text numberOfLines={2} style={s.profileDairyName}>{profile?.linkedDairyNames?.join(', ') || profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}</Text>
                                     </View>
                                 </View>
                                 <View style={s.profileDetails}>
@@ -1286,12 +1284,6 @@ export default function PortalScreen() {
                                 sub={summary ? summaryMoney(summary.todayMilkAmount) : '--'}
                                 icon={isSelling ? ShoppingCart : Droplets}
                                 tone="green" colors={colors} isDark={isDark} s={s}
-                            />
-                            <SummaryCard
-                                label={isSelling ? 'Total selling' : 'Total collection'} shortLabel="Total" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
-                                value={summaryQuantity(summary?.totalMilkQuantity)}
-                                sub={summary ? summaryMoney(summary.totalMilkAmount) : '--'}
-                                icon={Layers3} tone="blue" colors={colors} isDark={isDark} s={s}
                             />
                             <SummaryCard
                                 label="Advance pending" shortLabel="Advance" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
@@ -1397,7 +1389,7 @@ export default function PortalScreen() {
                 {(['collection', 'selling'] as PortalModule[]).map((item) => {
                     const enabled = available.includes(item);
                     const active = module === item && enabled;
-                    const label = item === 'collection' ? 'Collection' : 'Selling';
+                    const label = item === 'collection' ? 'My milk' : 'My purchase';
                     const Icon = item === 'collection' ? Droplets : ShoppingCart;
                     return (
                         <Pressable
