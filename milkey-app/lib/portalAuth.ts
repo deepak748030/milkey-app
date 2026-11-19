@@ -10,6 +10,7 @@ export interface PortalModuleProfile {
     address: string;
     dairyName: string;
     dairyNames: string[];
+    linkedDairyNames?: string[];
     status: string;
     milkRate?: number | null;
 }
