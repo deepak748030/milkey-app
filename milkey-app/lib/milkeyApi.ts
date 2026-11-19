@@ -1513,6 +1513,7 @@ export interface MemberPaymentSummary {
     member: { id: string; name: string; mobile: string; currentBalance: number };
     selling: { totalLiters: number; totalAmount: number; unpaidAmount?: number };
     advancePending?: number;
+    advanceEffect?: 'add';
     netPayable: number;
     closingBalance: number;
 }
@@ -1527,6 +1528,7 @@ export interface MemberPayment {
     reference: string;
     totalSellAmount: number;
     advanceApplied?: number;
+    advanceEffect?: 'add' | 'subtract';
     totalQuantity?: number;
     milkRate?: number;
     netPayable: number;
@@ -1573,6 +1575,7 @@ export const memberPaymentsApi = {
         milkRate?: number;
         expectedAdvance?: number;
         expectedBalance?: number;
+        advanceEffect?: 'add';
     }) => {
         return apiRequest<MemberPayment>('/member-payments', {
             method: 'POST',

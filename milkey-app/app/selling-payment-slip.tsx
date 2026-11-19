@@ -12,6 +12,7 @@ import * as Sharing from 'expo-sharing';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { brandedFooter, brandedHeader, twoCol, labelValueWrap, line as fmtLine, feed } from '@/lib/printFormat';
 import { getSlipLabels } from '@/lib/printTranslations';
+import { formatSellingAdvance, sellingAdvanceSigned } from '@/lib/sellingPayment';
 
 export default function SellingPaymentSlipScreen() {
     const { colors } = useTheme();
@@ -100,7 +101,7 @@ export default function SellingPaymentSlipScreen() {
                 <div class="amount-row"><span>${t.milkQuantity} :</span><span class="value-black">${milkQty} L</span></div>
                 <div class="amount-row"><span>${t.milkRate} :</span><span class="value-black">₹${milkRate}/L</span></div>
                 <div class="amount-row"><span>${t.milkAmount} :</span><span class="value-black">${(p.totalSellAmount || 0).toFixed(0)}</span></div>
-                <div class="amount-row"><span>${t.advanceProduct} :</span><span class="value-black">${(p.advanceApplied || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>${t.sellingAdvance} :</span><span class="value-black">${formatSellingAdvance(p)}</span></div>
                 <div class="amount-row"><span>${t.totalPayable} :</span><span class="value-black">${(p.netPayable || 0).toFixed(0)}</span></div>
                 <div class="amount-row"><span>${t.paidAmount} :</span><span class="value-black">${(p.amount || 0).toFixed(0)}</span></div>
                 <div class="separator">${'*'.repeat(40)}</div>
@@ -161,7 +162,7 @@ export default function SellingPaymentSlipScreen() {
         payload += twoCol(`${t.qty}:`, milkQty + ' L');
         payload += twoCol(`${t.rate}:`, 'Rs ' + milkRate + '/L');
         payload += twoCol(`${t.milkAmount}:`, (p.totalSellAmount || 0).toFixed(0));
-        payload += twoCol(`${t.advanceProduct}:`, (p.advanceApplied || 0).toFixed(0));
+        payload += twoCol(`${t.sellingAdvance}:`, formatSellingAdvance(p));
         payload += twoCol(`${t.totalPayable}:`, (p.netPayable || 0).toFixed(0));
         payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
         payload += fmtLine();
@@ -213,7 +214,7 @@ export default function SellingPaymentSlipScreen() {
                     <Pressable onPress={handlePrint} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
                         <Printer size={18} color={colors.primary} />
                     </Pressable>
-                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).member?.name?.slice(0,4).toUpperCase()||'',name:(p as any).member?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, (p as any).totalSellAmount||0, (p as any).advanceApplied||0, (p as any).netPayable||0, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).member?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
+                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).member?.name?.slice(0,4).toUpperCase()||'',name:(p as any).member?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, (p as any).totalSellAmount||0, sellingAdvanceSigned(p), (p as any).netPayable||0, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).member?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
                         <MessageCircle size={18} color="#25D366" />
                     </Pressable>
                 </View>
@@ -268,8 +269,8 @@ export default function SellingPaymentSlipScreen() {
                             <Text style={[styles.slipValue, { color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
                         </View>
                         <View style={styles.slipRow}>
-                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.advanceProduct}</Text>
-                            <Text style={[styles.slipValue, { color: colors.foreground }]}>₹{(p.advanceApplied || 0).toFixed(0)}</Text>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.sellingAdvance}</Text>
+                            <Text style={[styles.slipValue, { color: colors.foreground }]}>{formatSellingAdvance(p)} ₹</Text>
                         </View>
                         <View style={styles.slipRow}>
                             <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.totalPayable}</Text>

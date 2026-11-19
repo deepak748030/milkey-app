@@ -620,14 +620,14 @@ export default function SellingScreen() {
             ]);
 
             if (requestId !== paymentSummaryRequest.current) return;
-            if (summaryRes.success && summaryRes.response && typeof summaryRes.response.advancePending === 'number') {
+            if (summaryRes.success && summaryRes.response && typeof summaryRes.response.advancePending === 'number' && summaryRes.response.advanceEffect === 'add') {
                 setMemberSummary(summaryRes.response);
                 // Auto-fill milk amount with unpaid amount
                 const unpaidAmount = summaryRes.response.selling?.unpaidAmount || 0;
                 setMilkAmount(unpaidAmount.toFixed(2));
             } else {
                 setMemberSummary(null);
-                showAlert('Error', summaryRes.message || 'Unable to load selling advance. Please reselect the customer.');
+                showAlert('Error', summaryRes.message || 'Selling payment calculation is unavailable. Please update the app/server and reload the customer.');
             }
 
             // Update recentPayments with member-specific data so payment history shows correctly
@@ -666,13 +666,13 @@ export default function SellingScreen() {
                 { startDate: calcStartDate || undefined, endDate: endDate || undefined }
             );
             if (requestId !== paymentSummaryRequest.current) return;
-            if (res.success && res.response && typeof res.response.advancePending === 'number') {
+            if (res.success && res.response && typeof res.response.advancePending === 'number' && res.response.advanceEffect === 'add') {
                 setMemberSummary(res.response);
                 // Auto-fill milk amount with unpaid amount for the period
                 const unpaidAmount = res.response.selling?.unpaidAmount || 0;
                 setMilkAmount(unpaidAmount.toFixed(2));
             } else {
-                showAlert('Error', res.message || 'Unable to load payment summary. Please reselect the customer.');
+                showAlert('Error', res.message || 'Selling payment calculation is unavailable. Please update the app/server and reload the customer.');
             }
         } catch (error) {
             if (requestId === paymentSummaryRequest.current) showAlert('Error', 'Unable to load payment summary. Please reselect the customer.');
@@ -692,7 +692,7 @@ export default function SellingScreen() {
             showAlert('Error', 'Please select the calculation period end date.');
             return;
         }
-        if (!memberSummary || typeof memberSummary.advancePending !== 'number') {
+        if (!memberSummary || typeof memberSummary.advancePending !== 'number' || memberSummary.advanceEffect !== 'add') {
             showAlert('Error', 'Please reload the payment summary before saving.');
             return;
         }
@@ -721,6 +721,7 @@ export default function SellingScreen() {
                 milkRate: memberRate,
                 expectedAdvance: memberSummary.advancePending,
                 expectedBalance: memberSummary.member.currentBalance,
+                advanceEffect: 'add',
             });
 
             if (res.success) {
@@ -1574,6 +1575,10 @@ export default function SellingScreen() {
             showAlert('Error', 'Please select a customer first');
             return;
         }
+        if (!memberSummary || memberSummary.advanceEffect !== 'add') {
+            showAlert('Error', 'Please reload the payment summary before printing.');
+            return;
+        }
         if (!isPrinterConnected) {
             notifyPrinterDisconnected();
             return;
@@ -1606,7 +1611,7 @@ export default function SellingScreen() {
             payload += twoCol(`${tMS.lastBalance}:`, `Rs ${prevBal.toFixed(0)}`);
             payload += twoCol(`${tMS.milkQuantity}:`, `${totalLiters.toFixed(1)} L`);
             payload += twoCol(`${tMS.milkAmount}:`, `Rs ${milkAmt.toFixed(0)}`);
-            payload += twoCol(`${tMS.advanceProduct}:`, `Rs ${advanceAmount.toFixed(0)}`);
+            payload += twoCol(`${tMS.sellingAdvance}:`, `+Rs ${advanceAmount.toFixed(0)}`);
             payload += twoCol(`${tMS.totalPayable}:`, `Rs ${payable.toFixed(0)}`);
             payload += twoCol(`${tMS.paidAmount}:`, `Rs ${paidAmt.toFixed(0)}`);
             payload += fmtLine();
@@ -2084,7 +2089,7 @@ export default function SellingScreen() {
     const currentMilkAmount = Number.parseFloat(milkAmount) || 0;
     const paidAmount = Number.parseFloat(paymentAmount) || 0;
     const advanceAmount = Number(memberSummary?.advancePending || 0);
-    const netPayable = previousBalance + currentMilkAmount - advanceAmount;
+    const netPayable = Math.round((previousBalance + currentMilkAmount + advanceAmount) * 100) / 100;
     const closingBalance = netPayable - paidAmount;
 
     const renderPaymentTab = () => (
@@ -2305,7 +2310,7 @@ export default function SellingScreen() {
                             </Text>
                         </View>
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
-                            <Text style={styles.summaryLabel}>Advance/Prod:</Text>
+                            <Text style={styles.summaryLabel}>Selling Advance (+):</Text>
                             <Text style={[styles.summaryValueBoxText, { color: colors.warning }]}>₹{advanceAmount.toFixed(2)}</Text>
                         </View>
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
@@ -2317,7 +2322,7 @@ export default function SellingScreen() {
                     </View>
 
                     <Text style={{ color: colors.mutedForeground, fontSize: 11, marginBottom: 8 }}>
-                        Advance/Prod includes all pending selling advances, not products or a date-filtered amount.
+                        Pending selling advance is added to the payable. Products and date filtering are not included.
                     </Text>
 
                     {/* Paid Amount Input - styled like Register/Payment box */}

@@ -216,7 +216,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
         const advances = await SellingAdvance.find({ member: member._id, owner: req.userId, isDeleted: { $ne: true } }).sort({ date: 1, _id: 1 }).lean();
         const advancePending = planSellingAdvance(advances).amount;
         const currentBalance = Number(trueCurrentBalance || 0);
-        const netPayable = currentBalance + unpaidSellAmount;
+        const netPayable = Math.round((currentBalance + unpaidSellAmount + advancePending) * 100) / 100;
 
         res.json({
             success: true,
@@ -239,6 +239,7 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
                     }))
                 },
                 advancePending,
+                advanceEffect: 'add',
                 period: {
                     startDate: startDate || null,
                     endDate: endDate || null
@@ -259,8 +260,13 @@ router.get('/member-summary/:memberId', auth, async (req, res) => {
 // POST /api/member-payments - Create payment (settle member dues) (requires selling subscription)
 router.post('/', auth, requireSubscription('selling'), async (req, res) => {
     try {
-        const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds, totalQuantity: reqTotalQuantity, milkRate: reqMilkRate, expectedAdvance, expectedBalance } = req.body;
+        const { memberId, amount, milkAmount, paymentMethod, reference, notes, periodStart, periodEnd, entryIds, totalQuantity: reqTotalQuantity, milkRate: reqMilkRate, expectedAdvance, expectedBalance, advanceEffect } = req.body;
         const applyAdvance = expectedAdvance !== undefined;
+        // Old clients calculate a deduction. Do not silently save a different
+        // total until both client and server agree on the addition rule.
+        if (!applyAdvance || advanceEffect !== 'add') {
+            return res.status(409).json({ success: false, message: 'Selling payment calculation changed. Please update the app and reload the summary.' });
+        }
         if (applyAdvance && (!Number.isFinite(Number(expectedAdvance)) || Number(expectedAdvance) < 0 || !Number.isFinite(Number(expectedBalance)) || !Number.isFinite(Number(milkAmount)))) {
             return res.status(400).json({ success: false, message: 'Invalid payment summary. Please refresh and try again.' });
         }
@@ -388,7 +394,7 @@ router.post('/', auth, requireSubscription('selling'), async (req, res) => {
                     finalTotalQuantity, finalMilkRate, totalSellAmount
                 });
 
-                const netPayable = Math.round((previousBalance + totalSellAmount - advancePlan.amount) * 100) / 100;
+                const netPayable = Math.round((previousBalance + totalSellAmount + advancePlan.amount) * 100) / 100;
                 const closingBalance = Math.round((netPayable - paymentAmount) * 100) / 100;
 
                 // Create payment record with period info
@@ -407,6 +413,7 @@ router.post('/', auth, requireSubscription('selling'), async (req, res) => {
                     previousBalance,
                     closingBalance,
                     advanceApplied: advancePlan.amount,
+                    advanceEffect: applyAdvance ? 'add' : 'subtract',
                     settledSellingAdvances: advancePlan.allocations.map(a => ({ advance: a.doc._id, amount: a.amount })),
                     periodStart: periodStart ? new Date(periodStart) : null,
                     periodEnd: periodEnd ? new Date(periodEnd) : null
@@ -512,7 +519,10 @@ router.put('/:id', auth, async (req, res) => {
 
         // Recalculate closing balance if amount or milk amount changes
         const newMilkAmount = totalSellAmount !== undefined ? parseFloat(totalSellAmount) : payment.totalSellAmount;
-        const netPayable = newMilkAmount + payment.previousBalance - Number(payment.advanceApplied || 0);
+        // Keep historical settlements on their original rule; do not rewrite
+        // an old deducted advance as an addition when editing a payment.
+        const signedAdvance = Number(payment.advanceApplied || 0) * (payment.advanceEffect === 'add' ? 1 : -1);
+        const netPayable = Math.round((newMilkAmount + payment.previousBalance + signedAdvance) * 100) / 100;
         const newClosingBalance = netPayable - newPaymentAmount;
 
         // Update payment fields

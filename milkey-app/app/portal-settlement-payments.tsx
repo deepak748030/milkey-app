@@ -117,7 +117,7 @@ export function SettlementPaymentsScreen({ selling = false }: { selling?: boolea
                 )}
                 <View style={[styles.divider, { backgroundColor: border }]} />
                 {line('Milk Amount:', item.totalMilkAmount)}
-                {line('Advance:', -(Number(item.totalAdvanceDeduction) || 0), colors.warning)}
+                {line(item.advanceEffect === 'add' ? 'Advance (+):' : 'Advance:', (Number(item.totalAdvanceDeduction) || 0) * (item.advanceEffect === 'add' ? 1 : -1), colors.warning)}
                 {line('Total Payable:', item.netPayable)}
                 {line('Paid Amount:', item.amount, colors.success)}
                 <View style={[styles.closingRow, { borderTopColor: border }]}>

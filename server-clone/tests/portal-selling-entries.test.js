@@ -90,17 +90,18 @@ test('selling entries reject invalid dates and cursors and require linked module
 test('selling dashboard exposes shift quantities, paid flag and stored payment details', async () => {
     const handlers = {};
     const router = { use() {}, get(path, ...args) { handlers[path] = args.at(-1); } };
-    const identity = { availableModules: { collection: false, selling: true }, ownerNames: { [owner]: 'Dairy' }, collectionLinks: [], sellingLinks: [{ owner, memberIds: [farmer], memberDocs: [] }] };
+    const identity = { availableModules: { collection: false, selling: true }, ownerNames: { [owner]: 'Dairy' }, collectionLinks: [], sellingLinks: [{ owner, memberIds: [farmer], memberDocs: [{ _id: farmer, sellingPaymentBalance: -10 }] }] };
     const chain = rows => ({ populate() { return this; }, sort() { return this; }, limit() { return this; }, async lean() { return rows; } });
     const sellingRows = [entry(1, { morningQuantity: 5.125, eveningQuantity: 3.25, isPaid: true }), entry(2, { morningQuantity: 0, eveningQuantity: 1, isPaid: false })];
-    const sellingEntry = { find: () => chain(sellingRows), aggregate: async () => [{ all: [{}], today: [{}] }] };
-    const memberPayment = { find: () => chain([{ _id: id(3), owner, member: farmer, date: new Date('2026-11-22'), totalSellAmount: 400, advanceApplied: 80, netPayable: 320, amount: 150, closingBalance: 170, periodStart: new Date('2026-11-01'), periodEnd: new Date('2026-11-21') }]) };
-    const advances = { find: () => chain([]), countDocuments: async () => 0, aggregate: async () => [] };
+    const sellingEntry = { find: () => chain(sellingRows), aggregate: async () => [{ all: [{ unpaidAmount: 350 }], today: [{}] }] };
+    const memberPayment = { find: () => chain([{ _id: id(3), owner, member: farmer, date: new Date('2026-11-22'), totalSellAmount: 400, advanceApplied: 80, netPayable: 320, amount: 150, closingBalance: -10, periodStart: new Date('2026-11-01'), periodEnd: new Date('2026-11-21') }]) };
+    const advances = { find: () => chain([]), countDocuments: async () => 0, aggregate: async () => [{ given: 600, adjusted: 0 }] };
     const deps = { express: { Router: () => router }, mongoose: { Types: { ObjectId }, isValidObjectId: s => /^[a-f0-9]{24}$/.test(String(s)) }, '../models/MilkCollection': {}, '../models/Payment': {}, '../models/Advance': {}, '../models/SellingEntry': sellingEntry, '../models/MemberPayment': memberPayment, '../models/SellingAdvance': advances, '../middleware/portal-auth': () => {}, '../lib/portalIdentity': { findPortalProfiles: async () => identity, publicPortalIdentity: () => ({ name: 'Customer', availableModules: ['selling'] }), toId: v => v ? String(v) : '', escapeRegExp: v => String(v) } };
     vm.runInNewContext(fs.readFileSync(require.resolve('../routes/portal'), 'utf8'), { require: n => deps[n], module: { exports: {} }, console, Date, Number, String, Math, Set, Map, RegExp });
     const res = { statusCode: 200, status(n) { this.statusCode = n; return this; }, json(body) { this.body = body; return this; } };
     await handlers['/dashboard']({ portalPhone: '7489301982', query: { module: 'selling' } }, res);
     assert.equal(res.statusCode, 200);
+    assert.equal(res.body.response.summary.currentBalance, 940);
     assert.equal(res.body.response.entries[0].morningQuantity, 5.125);
     assert.equal(res.body.response.entries[0].eveningQuantity, 3.25);
     assert.equal(res.body.response.entries[0].status, 'Paid');
@@ -108,5 +109,5 @@ test('selling dashboard exposes shift quantities, paid flag and stored payment d
     assert.equal(res.body.response.payments[0].totalMilkAmount, 400);
     assert.equal(res.body.response.payments[0].totalAdvanceDeduction, 80);
     assert.equal(res.body.response.payments[0].netPayable, 320);
-    assert.equal(res.body.response.payments[0].closingBalance, 170);
+    assert.equal(res.body.response.payments[0].closingBalance, -10);
 });

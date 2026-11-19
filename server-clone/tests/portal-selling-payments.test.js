@@ -91,3 +91,13 @@ test('selling payments reject invalid or unlinked requests and support empty his
     assert.equal((await ctx.request({ date: '2026-11-22', id: 'bad' })).statusCode, 400);
     assert.equal((await fixture([], { allowed: false }).request()).statusCode, 403);
 });
+
+test('payment history retains the old deduction rule and the new addition rule', async () => {
+    const ctx = fixture([payment(1), payment(2, { advanceEffect: 'add', netPayable: 734 })]);
+    const data = (await ctx.request()).body.response;
+    assert.equal(data.payments.find(p => p.id === id(1)).advanceEffect, 'subtract');
+    assert.equal(data.payments.find(p => p.id === id(1)).netPayable, 624);
+    assert.equal(data.payments.find(p => p.id === id(2)).advanceEffect, 'add');
+    assert.equal(data.payments.find(p => p.id === id(2)).netPayable, 734);
+    assert.equal(ctx.queries[0].find(step => step.$project).$project.advanceEffect, 1);
+});
