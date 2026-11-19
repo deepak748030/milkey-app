@@ -17,6 +17,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import {
+    Check,
     CheckCircle2,
     ChevronDown,
     ChevronRight,
@@ -47,6 +48,7 @@ import {
     PortalDashboard,
     PortalEntryRow,
     PortalModule,
+    PortalModuleProfile,
     PortalPaymentRow,
     PortalUser,
 } from '@/lib/portalAuth';
@@ -171,6 +173,13 @@ const portalDate = (value?: string) => {
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
+// SellingEntry dates represent a UTC calendar day, not a local instant.
+const sellingEntryDate = (value?: string) => {
+    if (!value) return '--';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '--' : date.toLocaleDateString('en-GB', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
 const longDate = portalDate;
 const shortDate = portalDate;
 
@@ -205,7 +214,7 @@ const getDateRange = (filters: Filters): { start?: string; end?: string } | null
     return null;
 };
 
-const rowSearchText = (row: any, profile?: PortalUser | null) => [
+const rowSearchText = (row: any, profile?: PortalModuleProfile | null) => [
     row?.customerName,
     row?.farmerName,
     row?.remark,
@@ -338,6 +347,7 @@ function PortalTable<T extends { id: string }>({
     emptyText,
     compact,
     dense = false,
+    minTableWidth,
     s,
 }: {
     columns: PortalColumn<T>[];
@@ -345,6 +355,7 @@ function PortalTable<T extends { id: string }>({
     emptyText: string;
     compact: boolean;
     dense?: boolean;
+    minTableWidth?: number;
     s: any;
 }) {
     const visibleColumns = columns.filter((col) => !(compact && col.hideOnCompact));
@@ -357,8 +368,8 @@ function PortalTable<T extends { id: string }>({
         );
     }
 
-    return (
-        <View style={s.tableWrap}>
+    const table = (
+        <View style={[s.tableWrap, minTableWidth ? { minWidth: minTableWidth, flex: 1 } : undefined]}>
             <View style={[s.tHead, dense && s.entryDenseHead]}>
                 {visibleColumns.map((col) => (
                     <Text
@@ -403,6 +414,11 @@ function PortalTable<T extends { id: string }>({
             ))}
         </View>
     );
+    return minTableWidth ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ flexGrow: 1 }}>
+            {table}
+        </ScrollView>
+    ) : table;
 }
 
 function CollectionSettlementHistory({
@@ -707,6 +723,9 @@ export default function PortalScreen() {
         payments: false,
         advances: false,
     });
+    const [loadingMoreAdvances, setLoadingMoreAdvances] = useState(false);
+    const [advancePageError, setAdvancePageError] = useState('');
+    const dashboardRequest = useRef(0);
     const [logoutModalVisible, setLogoutModalVisible] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
     const scrollRef = useRef<ScrollView | null>(null);
@@ -792,9 +811,13 @@ export default function PortalScreen() {
     }, []);
 
     const loadDashboard = useCallback(async (isRefresh = false) => {
+        const requestId = ++dashboardRequest.current;
+        setLoadingMoreAdvances(false);
+        setAdvancePageError('');
         if (!isRefresh) setLoading(true);
         setError('');
         const result = await portalApi.getDashboard(module);
+        if (requestId !== dashboardRequest.current) return;
         if (result.success && result.response) {
             setDashboard(result.response);
             if (result.response.profile) setSession(result.response.profile);
@@ -840,13 +863,45 @@ export default function PortalScreen() {
 
     const switchTo = useCallback((next: PortalModule) => {
         if (!session?.availableModules.includes(next)) return;
+        ++dashboardRequest.current;
         setDashboard(null);
+        setLoadingMoreAdvances(false);
+        setAdvancePageError('');
         setError('');
         setFilters(DEFAULT_FILTERS);
         setFiltersOpen(false);
         setExpanded({ entries: false, payments: false, advances: false });
         setModule(next);
     }, [session]);
+
+    const loadMoreAdvances = useCallback(async () => {
+        const cursor = dashboard?.advancePage?.nextCursor;
+        if (!cursor || loadingMoreAdvances) return;
+        const requestId = dashboardRequest.current;
+        setExpanded((current) => ({ ...current, advances: true }));
+        setLoadingMoreAdvances(true);
+        setAdvancePageError('');
+        const result = await portalApi.getAdvances(module, cursor);
+        if (requestId !== dashboardRequest.current) return;
+        if (result.success && result.response) {
+            const page = result.response;
+            setDashboard((current) => {
+                if (!current || current.module !== module) return current;
+                const ids = new Set(current.advances.map((row) => row.id));
+                return {
+                    ...current,
+                    advances: [...current.advances, ...page.advances.filter((row) => !ids.has(row.id))],
+                    advancePage: { total: current.advancePage?.total ?? current.advances.length, nextCursor: page.nextCursor },
+                };
+            });
+        } else if (result.status === 401 || result.code === 'INVALID_PORTAL_SESSION' || result.code === 'PORTAL_SESSION_REQUIRED') {
+            await clearPortalSession();
+            router.replace('/auth');
+        } else {
+            setAdvancePageError(result.message || 'Could not load more advances.');
+        }
+        setLoadingMoreAdvances(false);
+    }, [dashboard?.advancePage?.nextCursor, loadingMoreAdvances, module]);
 
     const profile = dashboard?.profile || session?.moduleProfiles?.[module] || session;
     const summary = dashboard?.summary;
@@ -879,12 +934,12 @@ export default function PortalScreen() {
     }, [filters.dairy, searchTerm, profile]);
 
     const filteredEntries = useMemo(() => entries.filter((row) => {
-        if (!matchesDate(row.date) || !matchesCommon(row)) return false;
+        if ((isSelling && row.date && dateRange ? ((dateRange.start && row.date.slice(0, 10) < dateRange.start) || (dateRange.end && row.date.slice(0, 10) > dateRange.end)) : !matchesDate(row.date)) || !matchesCommon(row)) return false;
         const paid = String(row.status || '').toLowerCase() === 'paid';
         if (filters.status === 'paid' && !paid) return false;
         if (filters.status === 'pending' && paid) return false;
         return true;
-    }), [entries, matchesDate, matchesCommon, filters.status]);
+    }), [entries, matchesDate, matchesCommon, filters.status, isSelling, dateRange]);
 
     const filteredPayments = useMemo(() => payments.filter((row) => {
         if (!matchesDate(row.date) || !matchesCommon(row)) return false;
@@ -937,21 +992,26 @@ export default function PortalScreen() {
 
     const displayRows = (rows: any[], key: SectionKey) => {
         if (key === 'advances' && isSelling && !expanded[key]) return rows.slice(0, 3);
-        if (key === 'payments' && !isSelling && !expanded[key]) return rows.slice(0, 1);
+        if (key === 'payments') return rows.slice(0, 1);
+        if (key === 'advances' && expanded[key]) return rows;
         const cap = filters.section === 'all' && !expanded[key] ? 5 : 100;
         return rows.slice(0, cap);
     };
 
     const entryColumns: PortalColumn<PortalEntryRow>[] = isSelling ? [
-        { key: 'date', title: 'Date', flex: 1, render: (row) => <CellText s={s} dense>{shortDate(row.date)}</CellText> },
-        { key: 'quantity', title: 'Qty', flex: 0.9, render: (row) => <CellText s={s} dense>{quantity(row.quantity)}</CellText> },
-        { key: 'rate', title: 'Rate', flex: 0.9, render: (row) => <CellText s={s} dense>{money(row.rate)}</CellText> },
+        { key: 'date', title: 'Date', flex: 1.2, render: (row) => <CellText s={s} dense numberOfLines={1}>{sellingEntryDate(row.date)}</CellText> },
+        { key: 'quantity', title: 'M + E (L)', flex: 1.35, render: (row) => <CellText s={s} dense numberOfLines={1}>{`${Number(row.morningQuantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })} + ${Number(row.eveningQuantity || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })}`}</CellText> },
+        { key: 'rate', title: 'Rate', flex: 0.8, render: (row) => <CellText s={s} dense>{money(row.rate)}</CellText> },
         { key: 'amount', title: 'Amount', flex: 1, render: (row) => <CellText s={s} dense bold>{money(row.amount)}</CellText> },
+        { key: 'paid', title: 'Paid', flex: 0.6, render: (row) => {
+            const paid = String(row.status || '').trim().toLowerCase() === 'paid';
+            return <View accessible accessibilityRole="text" accessibilityLabel={paid ? 'Paid' : 'Not paid'} style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>{paid ? <Check size={14} color={colors.success} strokeWidth={3} /> : null}</View>;
+        } },
     ] : [
         {
             key: 'date',
             title: 'Date',
-            flex: 0.82,
+            flex: 1.2,
             render: (row) => <CellText s={s} dense numberOfLines={1}>{shortDate(row.date)}</CellText>,
         },
         {
@@ -995,8 +1055,21 @@ export default function PortalScreen() {
         {
             key: 'amount',
             title: 'Amt',
-            flex: 0.82,
+            flex: 1,
             render: (row) => <CellText bold s={s} dense>{money(row.amount)}</CellText>,
+        },
+        {
+            key: 'paid',
+            title: 'Paid',
+            flex: 0.55,
+            render: (row) => {
+                const paid = String(row.status || '').trim().toLowerCase() === 'paid';
+                return (
+                    <View accessible accessibilityRole="text" accessibilityLabel={paid ? 'Paid' : 'Not paid'} style={{ width: 16, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+                        {paid ? <Check size={14} color={colors.success} strokeWidth={3} /> : null}
+                    </View>
+                );
+            },
         },
     ];
 
@@ -1051,7 +1124,12 @@ export default function PortalScreen() {
             key: 'name',
             title: 'Name',
             flex: 1.3,
-            render: () => <CellText s={s} dense numberOfLines={1}>{profile?.name || '--'}</CellText>,
+            render: (row) => (
+                <View>
+                    <CellText s={s} dense numberOfLines={1}>{row.farmerName || row.customerName || profile?.name || '--'}</CellText>
+                    {dairyOptions.length > 1 && <CellText s={s} dense numberOfLines={1}>{row.dairyName || 'Dairy'}</CellText>}
+                </View>
+            ),
         },
         {
             key: 'note',
@@ -1096,7 +1174,7 @@ export default function PortalScreen() {
         },
         {
             key: 'advances',
-            title: 'Advance History',
+            title: isSelling ? 'Advance History' : 'Pending Advances',
             icon: History,
             rows: filteredAdvances,
             columns: advanceColumns,
@@ -1159,6 +1237,11 @@ export default function PortalScreen() {
                             <Text numberOfLines={1} style={s.profileMeta}>
                                 {isSelling ? 'Customer Code' : 'Farmer Code'} : {profile?.code || '--'}
                             </Text>
+                            {isSelling && (
+                                <Text style={s.profileMeta}>
+                                    Milk Rate (this customer): {profile?.milkRate != null && Number.isFinite(Number(profile.milkRate)) ? `₹${Number(profile.milkRate).toLocaleString('en-IN', { maximumFractionDigits: 2 })}/L` : '--'}
+                                </Text>
+                            )}
                             <View style={s.profileLine}>
                                 <Phone size={12} color={colors.primary} />
                                 <Text numberOfLines={1} style={s.profileLineText}>{profile?.phone || '--'}</Text>
@@ -1254,12 +1337,15 @@ export default function PortalScreen() {
                             .map((config) => {
                                 const rows = config.rows;
                                 const visible = displayRows(rows, config.key);
-                                const showViewAll = config.key === 'payments' && !isSelling
-                                    ? rows.length > 1
-                                    : config.key === 'advances' && isSelling
-                                        ? rows.length > 3
+                                const showViewAll = config.key === 'entries' || config.key === 'payments'
+                                    ? true
+                                    : config.key === 'advances'
+                                        ? rows.length > (isSelling ? 3 : 5)
                                         : filters.section === 'all' && rows.length > 5;
-                                const subtitle = `${rows.length} record${rows.length === 1 ? '' : 's'}${rows.length > 100 ? ' • showing 100' : ''}`;
+                                const advancePage = config.key === 'advances' ? dashboard?.advancePage : undefined;
+                                const subtitle = advancePage?.nextCursor
+                                    ? `${rows.length} loaded • ${advancePage.total} total (filters apply to loaded records)`
+                                    : `${rows.length} record${rows.length === 1 ? '' : 's'}${config.key !== 'advances' && rows.length > 100 ? ' • showing 100' : ''}`;
                                 return (
                                     <SectionCard
                                         key={config.key}
@@ -1270,10 +1356,25 @@ export default function PortalScreen() {
                                         s={s}
                                         dense={config.key === 'entries' || config.key === 'advances'}
                                         showViewAll={showViewAll}
-                                        expanded={expanded[config.key]}
-                                        onToggle={() => toggleSection(config.key)}
+                                        expanded={config.key === 'entries' || config.key === 'payments' ? false : expanded[config.key]}
+                                        onToggle={() => {
+                                            if (config.key === 'entries') {
+                                                const range = filters.datePreset === 'custom'
+                                                    ? { start: filters.startDate || undefined, end: filters.endDate || undefined }
+                                                    : getDateRange(filters);
+                                                const reversed = !!range?.start && !!range?.end && range.start > range.end;
+                                                const start = reversed ? range?.end : range?.start;
+                                                const end = reversed ? range?.start : range?.end;
+                                                (router as any).push({ pathname: isSelling ? '/portal-selling-entries' : '/portal-collection-entries', params: {
+                                                    ...(start ? { startDate: start } : {}),
+                                                    ...(end ? { endDate: end } : {}),
+                                                } });
+                                            } else if (config.key === 'payments') {
+                                                (router as any).push(isSelling ? '/portal-selling-payments' : '/portal-settlement-payments');
+                                            } else toggleSection(config.key);
+                                        }}
                                     >
-                                        {config.key === 'payments' && !isSelling ? (
+                                        {config.key === 'payments' ? (
                                             <CollectionSettlementHistory rows={visible as PortalPaymentRow[]} colors={colors} s={s} />
                                         ) : (
                                             <PortalTable
@@ -1282,8 +1383,27 @@ export default function PortalScreen() {
                                                 emptyText={emptyText}
                                                 compact={compact}
                                                 dense={config.key === 'entries' || config.key === 'advances'}
+                                                minTableWidth={config.key === 'entries' ? 300 : undefined}
                                                 s={s}
                                             />
+                                        )}
+                                        {config.key === 'entries' && (
+                                            <Text style={{ color: colors.mutedForeground, fontSize: 11, paddingHorizontal: 8, paddingTop: 6 }}>
+                                                Green tick means the entry is marked paid in a settlement; a balance may still remain.
+                                            </Text>
+                                        )}
+                                        {config.key === 'advances' && !isSelling && (
+                                            <Text style={{ color: colors.mutedForeground, fontSize: 11, paddingHorizontal: 8, paddingTop: 6 }}>
+                                                Matches the dairy pending list. Settled and partial records are hidden; the pending total includes partial balances.
+                                            </Text>
+                                        )}
+                                        {advancePage?.nextCursor && (
+                                            <View style={{ alignItems: 'center', paddingVertical: 10 }}>
+                                                {!!advancePageError && <Text style={{ color: colors.destructive, marginBottom: 6 }}>{advancePageError}</Text>}
+                                                <Pressable onPress={() => void loadMoreAdvances()} disabled={loadingMoreAdvances}>
+                                                    {loadingMoreAdvances ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary, fontWeight: '700' }}>Load more advances</Text>}
+                                                </Pressable>
+                                            </View>
                                         )}
                                     </SectionCard>
                                 );

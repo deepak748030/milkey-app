@@ -14,7 +14,7 @@ const memberPaymentSchema = new mongoose.Schema({
     amount: {
         type: Number,
         required: [true, 'Amount is required'],
-        min: [1, 'Amount must be at least 1']
+        min: [0, 'Amount cannot be negative']
     },
     date: {
         type: Date,
@@ -71,6 +71,12 @@ const memberPaymentSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    // Snapshot and audit trail for advances applied by new selling settlements.
+    advanceApplied: { type: Number, default: 0, min: 0 },
+    settledSellingAdvances: [{
+        advance: { type: mongoose.Schema.Types.ObjectId, ref: 'SellingAdvance' },
+        amount: { type: Number, min: 0 }
+    }],
     // Previous balance carried forward
     previousBalance: {
         type: Number,

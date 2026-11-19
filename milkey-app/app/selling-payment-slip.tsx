@@ -36,11 +36,8 @@ export default function SellingPaymentSlipScreen() {
             if (psRes.success && psRes.response) setPrintSettings(psRes.response);
 
             if (paymentId) {
-                const res = await memberPaymentsApi.getAll({ limit: 10 });
-                if (res.success && res.response?.data) {
-                    const found = res.response.data.find((p: MemberPayment) => p._id === paymentId);
-                    if (found) setPayment(found);
-                }
+                const res = await memberPaymentsApi.getById(paymentId);
+                if (res.success && res.response) setPayment(res.response);
             }
         } catch (e) {
             console.error('Error fetching payment slip data:', e);
@@ -103,6 +100,7 @@ export default function SellingPaymentSlipScreen() {
                 <div class="amount-row"><span>${t.milkQuantity} :</span><span class="value-black">${milkQty} L</span></div>
                 <div class="amount-row"><span>${t.milkRate} :</span><span class="value-black">₹${milkRate}/L</span></div>
                 <div class="amount-row"><span>${t.milkAmount} :</span><span class="value-black">${(p.totalSellAmount || 0).toFixed(0)}</span></div>
+                <div class="amount-row"><span>${t.advanceProduct} :</span><span class="value-black">${(p.advanceApplied || 0).toFixed(0)}</span></div>
                 <div class="amount-row"><span>${t.totalPayable} :</span><span class="value-black">${(p.netPayable || 0).toFixed(0)}</span></div>
                 <div class="amount-row"><span>${t.paidAmount} :</span><span class="value-black">${(p.amount || 0).toFixed(0)}</span></div>
                 <div class="separator">${'*'.repeat(40)}</div>
@@ -163,6 +161,7 @@ export default function SellingPaymentSlipScreen() {
         payload += twoCol(`${t.qty}:`, milkQty + ' L');
         payload += twoCol(`${t.rate}:`, 'Rs ' + milkRate + '/L');
         payload += twoCol(`${t.milkAmount}:`, (p.totalSellAmount || 0).toFixed(0));
+        payload += twoCol(`${t.advanceProduct}:`, (p.advanceApplied || 0).toFixed(0));
         payload += twoCol(`${t.totalPayable}:`, (p.netPayable || 0).toFixed(0));
         payload += twoCol(`${t.paidAmount}:`, (p.amount || 0).toFixed(0));
         payload += fmtLine();
@@ -214,7 +213,7 @@ export default function SellingPaymentSlipScreen() {
                     <Pressable onPress={handlePrint} style={[styles.headerActionBtn, { borderColor: colors.border }]}>
                         <Printer size={18} color={colors.primary} />
                     </Pressable>
-                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).member?.name?.slice(0,4).toUpperCase()||'',name:(p as any).member?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, (p as any).totalMilkAmount||0, (p as any).totalAdvanceDeduction||0, (p as any).netPayable||0, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).member?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
+                    <Pressable onPress={async()=>{ if(!p) return; const txt=paymentSlipText({code:(p as any).member?.name?.slice(0,4).toUpperCase()||'',name:(p as any).member?.name||''},{start:formatDateDDMMYYYY((p as any).periodStart),end:formatDateDDMMYYYY((p as any).periodEnd)}, (p as any).totalSellAmount||0, (p as any).advanceApplied||0, (p as any).netPayable||0, (p as any).amount||0, (p as any).closingBalance||0); await shareViaWhatsapp((p as any).member?.mobile||'', txt); }} style={[styles.headerActionBtn, { borderColor: colors.border, backgroundColor: '#25D36615' }]}>
                         <MessageCircle size={18} color="#25D366" />
                     </Pressable>
                 </View>
@@ -267,6 +266,10 @@ export default function SellingPaymentSlipScreen() {
                         <View style={styles.slipRow}>
                             <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.milkAmount}</Text>
                             <Text style={[styles.slipValue, { color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(0)}</Text>
+                        </View>
+                        <View style={styles.slipRow}>
+                            <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.advanceProduct}</Text>
+                            <Text style={[styles.slipValue, { color: colors.foreground }]}>₹{(p.advanceApplied || 0).toFixed(0)}</Text>
                         </View>
                         <View style={styles.slipRow}>
                             <Text style={[styles.slipLabel, { color: colors.mutedForeground }]}>{t.totalPayable}</Text>

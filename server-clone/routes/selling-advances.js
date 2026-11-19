@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const router = express.Router();
 const Member = require('../models/Member');
 const SellingAdvance = require('../models/SellingAdvance');
+const MemberPayment = require('../models/MemberPayment');
 const auth = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
 
@@ -220,6 +221,10 @@ router.delete('/:id', auth, requireSubscription('selling'), async (req, res) => 
         });
         if (!doc) {
             return res.status(404).json({ success: false, message: 'Selling advance not found.' });
+        }
+        // An applied advance is part of a saved payment's audit trail.
+        if (await MemberPayment.exists({ owner: req.userId, 'settledSellingAdvances.advance': doc._id })) {
+            return res.status(409).json({ success: false, message: 'This advance is linked to a payment and cannot be deleted.' });
         }
         doc.isDeleted = true;
         doc.deletedAt = new Date();

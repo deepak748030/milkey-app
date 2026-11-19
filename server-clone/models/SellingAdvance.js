@@ -3,9 +3,8 @@ const mongoose = require('mongoose');
 /**
  * Isolated advance ledger for Selling customers.
  *
- * IMPORTANT: This is a NEW collection. It never writes to Member,
- * SellingEntry, MemberPayment, Farmer, or the existing Advance collection,
- * so all pre-existing selling/collection data remains untouched.
+ * Selling payments may settle these rows transactionally. Collection advances
+ * and existing historical payment records remain separate.
  */
 const sellingAdvanceSchema = new mongoose.Schema({
     member: {
@@ -48,6 +47,8 @@ const sellingAdvanceSchema = new mongoose.Schema({
         default: 0,
         min: 0,
     },
+    // Transactional write guard for concurrent adjustments/deletes.
+    settlementRevision: { type: Number, default: 0 },
     isDeleted: {
         type: Boolean,
         default: false,
@@ -56,7 +57,7 @@ const sellingAdvanceSchema = new mongoose.Schema({
         type: Date,
         default: null,
     },
-}, { timestamps: true });
+}, { timestamps: true, optimisticConcurrency: true });
 
 sellingAdvanceSchema.index({ owner: 1, member: 1, date: -1 });
 sellingAdvanceSchema.index({ owner: 1, type: 1, status: 1 });

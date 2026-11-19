@@ -11,6 +11,7 @@ export interface PortalModuleProfile {
     dairyName: string;
     dairyNames: string[];
     status: string;
+    milkRate?: number | null;
 }
 
 export interface PortalUser extends PortalModuleProfile {
@@ -45,6 +46,8 @@ export interface PortalRowBase {
 
 export interface PortalEntryRow extends PortalRowBase {
     quantity: number;
+    morningQuantity?: number;
+    eveningQuantity?: number;
     fat?: number | null;
     snf?: number | null;
     rate: number;
@@ -53,10 +56,13 @@ export interface PortalEntryRow extends PortalRowBase {
     bonusRate?: number;
     customerName?: string;
     farmerName?: string;
+    shift?: string;
 }
 
 export interface PortalPaymentRow extends PortalRowBase {
     mode: string;
+    customerName?: string;
+    farmerName?: string;
     periodStart?: string;
     periodEnd?: string;
     totalMilkAmount?: number;
@@ -67,6 +73,8 @@ export interface PortalPaymentRow extends PortalRowBase {
 }
 
 export interface PortalAdvanceRow extends PortalRowBase {
+    farmerName?: string;
+    customerName?: string;
     type: 'Given' | 'Adjusted' | 'Settled' | string;
     direction: 'up' | 'down' | string;
     remaining: number;
@@ -88,7 +96,28 @@ export interface PortalDashboard {
     entries: PortalEntryRow[];
     payments: PortalPaymentRow[];
     advances: PortalAdvanceRow[];
+    advancePage?: { total: number; nextCursor: PortalAdvanceCursor | null };
     generatedAt: string;
+}
+
+export interface PortalAdvanceCursor {
+    date: string;
+    id: string;
+}
+
+export interface PortalCollectionEntriesResult {
+    summary: { count: number; quantity: number; avgRate: number; amount: number; bonus: number };
+    entries: PortalEntryRow[];
+    nextCursor: PortalAdvanceCursor | null;
+    dairyNames: string[];
+    multipleProfiles: boolean;
+}
+
+export interface PortalCollectionPaymentsResult {
+    total: number;
+    payments: PortalPaymentRow[];
+    nextCursor: PortalAdvanceCursor | null;
+    multipleProfiles: boolean;
 }
 
 const TOKEN_KEY = 'portal_token';
@@ -204,6 +233,37 @@ export const portalApi = {
             tzOffsetMinutes: String(tzOffsetMinutes),
         });
         return request<PortalDashboard>(`/portal/dashboard?${params.toString()}`);
+    },
+
+    getSellingPayments: async (cursor?: PortalAdvanceCursor) => {
+        const query = cursor ? `?${new URLSearchParams({ date: cursor.date, id: cursor.id }).toString()}` : '';
+        return request<PortalCollectionPaymentsResult>(`/portal/selling-payments${query}`);
+    },
+
+    getSellingEntries: async (params: { startDate?: string; endDate?: string; cursor?: PortalAdvanceCursor }) => {
+        const query = new URLSearchParams();
+        if (params.startDate) query.set('startDate', params.startDate);
+        if (params.endDate) query.set('endDate', params.endDate);
+        if (params.cursor) { query.set('date', params.cursor.date); query.set('id', params.cursor.id); }
+        return request<PortalCollectionEntriesResult>(`/portal/selling-entries?${query.toString()}`);
+    },
+
+    getCollectionPayments: async (cursor?: PortalAdvanceCursor) => {
+        const query = cursor ? `?${new URLSearchParams({ date: cursor.date, id: cursor.id }).toString()}` : '';
+        return request<PortalCollectionPaymentsResult>(`/portal/collection-payments${query}`);
+    },
+
+    getCollectionEntries: async (params: { startDate?: string; endDate?: string; cursor?: PortalAdvanceCursor }) => {
+        const query = new URLSearchParams({ tzOffsetMinutes: String(-new Date().getTimezoneOffset()) });
+        if (params.startDate) query.set('startDate', params.startDate);
+        if (params.endDate) query.set('endDate', params.endDate);
+        if (params.cursor) { query.set('date', params.cursor.date); query.set('id', params.cursor.id); }
+        return request<PortalCollectionEntriesResult>(`/portal/collection-entries?${query.toString()}`);
+    },
+
+    getAdvances: async (module: PortalModule, cursor: PortalAdvanceCursor) => {
+        const params = new URLSearchParams({ module, date: cursor.date, id: cursor.id });
+        return request<{ advances: PortalAdvanceRow[]; nextCursor: PortalAdvanceCursor | null }>(`/portal/advances?${params.toString()}`);
     },
 
     logout: async () => {

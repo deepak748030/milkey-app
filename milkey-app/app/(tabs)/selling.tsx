@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal, KeyboardAvoidingView, Platform, ToastAndroid } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { SheetBackdrop } from '@/components/ui/SheetBackdrop';
@@ -145,6 +145,7 @@ export default function SellingScreen() {
     const [memberPaymentsHasMore, setMemberPaymentsHasMore] = useState(true);
     const [memberPaymentsLoadingMore, setMemberPaymentsLoadingMore] = useState(false);
     const [paymentLoading, setPaymentLoading] = useState(false);
+    const paymentSummaryRequest = useRef(0);
     const [savingPayment, setSavingPayment] = useState(false);
     const [paymentMemberSearch, setPaymentMemberSearch] = useState('');
     const [showPaymentMemberSuggestions, setShowPaymentMemberSuggestions] = useState(false);
@@ -205,6 +206,7 @@ export default function SellingScreen() {
     const [members, setMembers] = useState<Member[]>([]);
     const [memberName, setMemberName] = useState('');
     const [memberMobile, setMemberMobile] = useState('');
+    const [memberFormError, setMemberFormError] = useState('');
     const [memberAddress, setMemberAddress] = useState('');
     const [memberRatePerLiter, setMemberRatePerLiter] = useState('50');
     const [memberDailyAutoEntry, setMemberDailyAutoEntry] = useState(false);
@@ -579,7 +581,9 @@ export default function SellingScreen() {
 
     // Fetch member summary for payment
     const handleSelectPaymentMember = async (member: Member) => {
+        const requestId = ++paymentSummaryRequest.current;
         setSelectedPaymentMember(member);
+        setMemberSummary(null);
         setPaymentMemberSearch(member.name);
         setShowPaymentMemberSuggestions(false);
         setPaymentLoading(true);
@@ -615,13 +619,15 @@ export default function SellingScreen() {
                 memberPaymentsApi.getAll({ memberId: member._id, limit: 10 }),
             ]);
 
-            if (summaryRes.success && summaryRes.response) {
+            if (requestId !== paymentSummaryRequest.current) return;
+            if (summaryRes.success && summaryRes.response && typeof summaryRes.response.advancePending === 'number') {
                 setMemberSummary(summaryRes.response);
                 // Auto-fill milk amount with unpaid amount
                 const unpaidAmount = summaryRes.response.selling?.unpaidAmount || 0;
                 setMilkAmount(unpaidAmount.toFixed(2));
             } else {
-                setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+                setMemberSummary(null);
+                showAlert('Error', summaryRes.message || 'Unable to load selling advance. Please reselect the customer.');
             }
 
             // Update recentPayments with member-specific data so payment history shows correctly
@@ -636,9 +642,12 @@ export default function SellingScreen() {
                 setMemberPaymentsHasMore(data.length >= 10);
             }
         } catch (error) {
-            setMemberSummary({ member: { currentBalance: member.sellingPaymentBalance ?? 0 }, selling: { unpaidAmount: 0 } });
+            if (requestId === paymentSummaryRequest.current) {
+                setMemberSummary(null);
+                showAlert('Error', 'Unable to load payment summary. Please reselect the customer.');
+            }
         } finally {
-            setPaymentLoading(false);
+            if (requestId === paymentSummaryRequest.current) setPaymentLoading(false);
         }
     };
 
@@ -648,22 +657,27 @@ export default function SellingScreen() {
 
         if (!selectedPaymentMember) return;
 
+        const requestId = ++paymentSummaryRequest.current;
         setPaymentLoading(true);
+        setMemberSummary(null);
         try {
             const res = await memberPaymentsApi.getMemberSummary(
                 selectedPaymentMember._id,
                 { startDate: calcStartDate || undefined, endDate: endDate || undefined }
             );
-            if (res.success && res.response) {
+            if (requestId !== paymentSummaryRequest.current) return;
+            if (res.success && res.response && typeof res.response.advancePending === 'number') {
                 setMemberSummary(res.response);
                 // Auto-fill milk amount with unpaid amount for the period
                 const unpaidAmount = res.response.selling?.unpaidAmount || 0;
                 setMilkAmount(unpaidAmount.toFixed(2));
+            } else {
+                showAlert('Error', res.message || 'Unable to load payment summary. Please reselect the customer.');
             }
         } catch (error) {
-            console.error('Failed to fetch summary for date range:', error);
+            if (requestId === paymentSummaryRequest.current) showAlert('Error', 'Unable to load payment summary. Please reselect the customer.');
         } finally {
-            setPaymentLoading(false);
+            if (requestId === paymentSummaryRequest.current) setPaymentLoading(false);
         }
     };
 
@@ -674,8 +688,16 @@ export default function SellingScreen() {
             return;
         }
 
-        const amount = parseFloat(paymentAmount);
-        if (isNaN(amount) || amount <= 0) {
+        if (!calcEndDate) {
+            showAlert('Error', 'Please select the calculation period end date.');
+            return;
+        }
+        if (!memberSummary || typeof memberSummary.advancePending !== 'number') {
+            showAlert('Error', 'Please reload the payment summary before saving.');
+            return;
+        }
+        const amount = Number(paymentAmount || 0);
+        if (!Number.isFinite(amount) || amount < 0) {
             showAlert('Error', 'Please enter a valid amount');
             return;
         }
@@ -697,6 +719,8 @@ export default function SellingScreen() {
                 periodEnd: calcEndDate || undefined,
                 totalQuantity: totalQuantityFromSummary,
                 milkRate: memberRate,
+                expectedAdvance: memberSummary.advancePending,
+                expectedBalance: memberSummary.member.currentBalance,
             });
 
             if (res.success) {
@@ -724,6 +748,8 @@ export default function SellingScreen() {
 
     // Clear payment form
     const clearPaymentForm = () => {
+        ++paymentSummaryRequest.current;
+        setPaymentLoading(false);
         setSelectedPaymentMember(null);
         setPaymentMemberSearch('');
         setPaymentAmount('');
@@ -740,12 +766,13 @@ export default function SellingScreen() {
 
     // Save member
     const handleSaveMember = async () => {
-        if (!memberName || !memberMobile) {
-            showAlert('Error', 'Please fill all required fields');
+        if (!memberName.trim() || !memberMobile.trim()) {
+            setMemberFormError('Please fill all required fields');
             return;
         }
 
         try {
+            setMemberFormError('');
             setIsLoading(true);
 
             if (editingMember) {
@@ -765,7 +792,7 @@ export default function SellingScreen() {
                     setShowMemberModal(false);
                     fetchData();
                 } else {
-                    showAlert('Error', res.message || 'Failed to update member');
+                    setMemberFormError(res.message || 'Failed to update customer');
                 }
             } else {
                 const res = await membersApi.create({
@@ -784,17 +811,18 @@ export default function SellingScreen() {
                     setShowMemberModal(false);
                     fetchData();
                 } else {
-                    showAlert('Error', res.message || 'Failed to add member');
+                    setMemberFormError(res.message || 'Failed to add customer');
                 }
             }
         } catch (error) {
-            showAlert('Error', 'Failed to save member');
+            setMemberFormError('Failed to save customer. Please try again.');
         } finally {
             setIsLoading(false);
         }
     };
 
     const clearMemberForm = () => {
+        setMemberFormError('');
         setMemberName('');
         setMemberMobile('');
         setMemberAddress('');
@@ -807,6 +835,7 @@ export default function SellingScreen() {
     };
 
     const handleEditMember = (member: Member) => {
+        setMemberFormError('');
         setEditingMember(member);
         setMemberName(member.name);
         setMemberMobile(member.mobile);
@@ -1577,6 +1606,7 @@ export default function SellingScreen() {
             payload += twoCol(`${tMS.lastBalance}:`, `Rs ${prevBal.toFixed(0)}`);
             payload += twoCol(`${tMS.milkQuantity}:`, `${totalLiters.toFixed(1)} L`);
             payload += twoCol(`${tMS.milkAmount}:`, `Rs ${milkAmt.toFixed(0)}`);
+            payload += twoCol(`${tMS.advanceProduct}:`, `Rs ${advanceAmount.toFixed(0)}`);
             payload += twoCol(`${tMS.totalPayable}:`, `Rs ${payable.toFixed(0)}`);
             payload += twoCol(`${tMS.paidAmount}:`, `Rs ${paidAmt.toFixed(0)}`);
             payload += fmtLine();
@@ -2053,7 +2083,8 @@ export default function SellingScreen() {
     const previousBalance = (memberSummary?.member?.currentBalance ?? selectedPaymentMember?.sellingPaymentBalance ?? 0);
     const currentMilkAmount = Number.parseFloat(milkAmount) || 0;
     const paidAmount = Number.parseFloat(paymentAmount) || 0;
-    const netPayable = previousBalance + currentMilkAmount;
+    const advanceAmount = Number(memberSummary?.advancePending || 0);
+    const netPayable = previousBalance + currentMilkAmount - advanceAmount;
     const closingBalance = netPayable - paidAmount;
 
     const renderPaymentTab = () => (
@@ -2129,7 +2160,12 @@ export default function SellingScreen() {
             )}
 
             {/* Member Info */}
-            {selectedPaymentMember && !paymentLoading && (
+            {selectedPaymentMember && !paymentLoading && !memberSummary && (
+                <Pressable onPress={() => handleSelectPaymentMember(selectedPaymentMember)} style={styles.clearPaymentBtn}>
+                    <Text style={styles.clearPaymentText}>Payment summary unavailable. Tap to retry.</Text>
+                </Pressable>
+            )}
+            {selectedPaymentMember && !paymentLoading && memberSummary && (
                 <>
                     <View style={styles.memberInfoRow}>
                         <View>
@@ -2269,12 +2305,20 @@ export default function SellingScreen() {
                             </Text>
                         </View>
                         <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
+                            <Text style={styles.summaryLabel}>Advance/Prod:</Text>
+                            <Text style={[styles.summaryValueBoxText, { color: colors.warning }]}>₹{advanceAmount.toFixed(2)}</Text>
+                        </View>
+                        <View style={[styles.summaryRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }]}>
                             <Text style={[styles.summaryLabel, { fontWeight: '700' }]}>Total Payable:</Text>
                             <Text style={[styles.summaryValueBoxText, { fontWeight: '700', color: netPayable >= 0 ? colors.primary : colors.destructive }]}>
                                 ₹{netPayable.toFixed(2)}
                             </Text>
                         </View>
                     </View>
+
+                    <Text style={{ color: colors.mutedForeground, fontSize: 11, marginBottom: 8 }}>
+                        Advance/Prod includes all pending selling advances, not products or a date-filtered amount.
+                    </Text>
 
                     {/* Paid Amount Input - styled like Register/Payment box */}
                     <View style={styles.paymentSummaryCard}>
@@ -2952,10 +2996,15 @@ export default function SellingScreen() {
                                         style={styles.modalInput}
                                         placeholder="10-digit number"
                                         value={memberMobile}
-                                        onChangeText={setMemberMobile}
+                                        onChangeText={(value) => { setMemberMobile(value); setMemberFormError(''); }}
                                         keyboardType="phone-pad"
                                         placeholderTextColor={colors.mutedForeground}
                                     />
+                                    {!!memberFormError && (
+                                        <Text accessibilityRole="alert" style={{ color: colors.destructive, marginTop: 6, fontSize: 13 }}>
+                                            {memberFormError}
+                                        </Text>
+                                    )}
                                 </View>
                                 <View style={styles.modalInputGroup}>
                                     <Text style={styles.label}>Address</Text>

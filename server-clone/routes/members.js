@@ -1,10 +1,60 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Member = require('../models/Member');
+const SellingMobileReservation = require('../models/SellingMobileReservation');
+const { normalizeSellingMobile, sellingMobilePattern } = require('../lib/selling-mobile');
 const SellingEntry = require('../models/SellingEntry');
 const MemberPayment = require('../models/MemberPayment');
 const auth = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
+
+// Reservations and member writes commit together; no legacy customer is rewritten.
+const reservationKey = (owner, mobile) => `${String(owner)}:${mobile}`;
+const phoneConflict = () => Object.assign(new Error('Phone number already registered'), { status: 409 });
+const invalidPhone = () => Object.assign(new Error('Please enter a valid phone number'), { status: 400 });
+
+async function claimMobile(owner, memberId, mobile, session) {
+    try {
+        await SellingMobileReservation.create([{ _id: reservationKey(owner, mobile), owner, member: memberId }], { session });
+    } catch (error) {
+        if (error.code === 11000) throw phoneConflict();
+        throw error;
+    }
+    const duplicate = await Member.findOne({
+        owner,
+        _id: { $ne: memberId },
+        mobile: sellingMobilePattern(mobile),
+    }).session(session).lean();
+    if (duplicate) throw phoneConflict();
+}
+
+// Create the reservation collection outside transactions (including the first
+// request on an empty database). MongoDB always creates its unique _id index.
+let reservationCollectionReady;
+async function ensureReservationCollection() {
+    if (!reservationCollectionReady) {
+        reservationCollectionReady = SellingMobileReservation.createCollection().catch(error => {
+            if (error.code !== 48 && error.codeName !== 'NamespaceExists') {
+                reservationCollectionReady = null;
+                throw error;
+            }
+        });
+    }
+    await reservationCollectionReady;
+}
+
+async function inSellingTransaction(work) {
+    await ensureReservationCollection();
+    const session = await mongoose.startSession();
+    try {
+        let result;
+        await session.withTransaction(async () => { result = await work(session); });
+        return result;
+    } finally {
+        await session.endSession();
+    }
+}
 
 // GET /api/members/balance-report - Get all members with balance calculated from unpaid entries
 router.get('/balance-report', auth, async (req, res) => {
@@ -232,16 +282,24 @@ router.post('/', auth, requireSubscription('selling'), async (req, res) => {
             });
         }
 
-        const member = await Member.create({
-            name: String(name).trim(),
-            mobile: String(mobile).trim(),
-            address: address?.trim() || '',
-            ratePerLiter: parseFloat(ratePerLiter) || 50,
-            dailyAutoEntry: !!dailyAutoEntry,
-            defaultMorningQuantity: Math.max(0, parseFloat(defaultMorningQuantity) || 0),
-            defaultEveningQuantity: Math.max(0, parseFloat(defaultEveningQuantity) || 0),
-            defaultNotes: defaultNotes?.trim() || '',
-            owner: req.userId
+        const normalizedMobile = normalizeSellingMobile(mobile);
+        if (!normalizedMobile) throw invalidPhone();
+        const member = await inSellingTransaction(async session => {
+            const memberId = new mongoose.Types.ObjectId();
+            await claimMobile(req.userId, memberId, normalizedMobile, session);
+            const [created] = await Member.create([{
+                _id: memberId,
+                name: String(name).trim(),
+                mobile: String(mobile).trim(),
+                address: address?.trim() || '',
+                ratePerLiter: parseFloat(ratePerLiter) || 50,
+                dailyAutoEntry: !!dailyAutoEntry,
+                defaultMorningQuantity: Math.max(0, parseFloat(defaultMorningQuantity) || 0),
+                defaultEveningQuantity: Math.max(0, parseFloat(defaultEveningQuantity) || 0),
+                defaultNotes: defaultNotes?.trim() || '',
+                owner: req.userId
+            }], { session });
+            return created;
         });
 
         // Non-blocking WhatsApp welcome to the new member (dedup-safe)
@@ -260,10 +318,11 @@ router.post('/', auth, requireSubscription('selling'), async (req, res) => {
             response: member
         });
     } catch (error) {
-        console.error('Create member error:', error);
-        res.status(500).json({
+        if (error.code === 11000) error = phoneConflict();
+        if (!error.status) console.error('Create member error:', error);
+        res.status(error.status || 500).json({
             success: false,
-            message: 'Failed to add member'
+            message: error.status ? error.message : 'Failed to add member safely. Please try again.'
         });
     }
 });
@@ -283,17 +342,34 @@ router.put('/:id', auth, requireSubscription('selling'), async (req, res) => {
         if (defaultEveningQuantity !== undefined) updateData.defaultEveningQuantity = Math.max(0, parseFloat(defaultEveningQuantity) || 0);
         if (defaultNotes !== undefined) updateData.defaultNotes = String(defaultNotes || '').trim();
 
-        const member = await Member.findOneAndUpdate(
-            { _id: req.params.id, owner: req.userId },
-            updateData,
-            { new: true }
-        );
+        const member = await inSellingTransaction(async session => {
+            const current = await Member.findOne({ _id: req.params.id, owner: req.userId }).session(session).lean();
+            if (!current) return null;
+
+            if (mobile !== undefined) {
+                const oldNumber = normalizeSellingMobile(current.mobile);
+                const newNumber = normalizeSellingMobile(mobile);
+                // Old duplicate/invalid records remain editable when their phone is unchanged.
+                const unchanged = String(mobile).trim() === String(current.mobile).trim() ||
+                    (newNumber && oldNumber && newNumber === oldNumber);
+                if (!unchanged) {
+                    if (!newNumber) throw invalidPhone();
+                    await claimMobile(req.userId, current._id, newNumber, session);
+                    if (oldNumber) {
+                        await SellingMobileReservation.deleteOne({
+                            _id: reservationKey(req.userId, oldNumber), owner: req.userId, member: current._id,
+                        }, { session });
+                    }
+                }
+                if (newNumber || unchanged) updateData.mobile = String(mobile).trim();
+            }
+            return Member.findOneAndUpdate(
+                { _id: current._id, owner: req.userId }, updateData, { new: true, session }
+            );
+        });
 
         if (!member) {
-            return res.status(404).json({
-                success: false,
-                message: 'Member not found'
-            });
+            return res.status(404).json({ success: false, message: 'Member not found' });
         }
 
         res.json({
@@ -302,10 +378,11 @@ router.put('/:id', auth, requireSubscription('selling'), async (req, res) => {
             response: member
         });
     } catch (error) {
-        console.error('Update member error:', error);
-        res.status(500).json({
+        if (error.code === 11000) error = phoneConflict();
+        if (!error.status) console.error('Update member error:', error);
+        res.status(error.status || 500).json({
             success: false,
-            message: 'Failed to update member'
+            message: error.status ? error.message : 'Failed to update member safely. Please try again.'
         });
     }
 });
