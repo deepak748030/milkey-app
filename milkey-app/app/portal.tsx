@@ -27,6 +27,7 @@ import {
     Filter,
     History,
     IndianRupee,
+    Layers3,
     Lock,
     LogOut,
     MapPin,
@@ -149,6 +150,19 @@ const money = (value: number | string | undefined) => {
     const n = Number(value || 0);
     return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 };
+
+// Preserve paise and negative balances in the overview rather than rounding
+// them to whole rupees. Missing data stays a dash while the dashboard loads.
+const summaryMoney = (value: number | null | undefined) => {
+    if (value == null || !Number.isFinite(Number(value))) return '--';
+    const n = Number(value);
+    return `${n < 0 ? '-' : ''}₹${Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+};
+const summaryQuantity = (value: number | null | undefined) => (
+    value == null || !Number.isFinite(Number(value))
+        ? '--'
+        : `${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })} L`
+);
 
 const settlementMoney = (value: number | string | undefined) => {
     const n = Number(value || 0);
@@ -522,33 +536,32 @@ function SectionCard({
 }
 
 function SummaryCard({
-    label,
-    value,
-    sub,
-    icon: Icon,
-    tone,
-    colors,
-    s,
+    label, value, sub, icon: Icon, tone, colors, isDark, negative = false, s,
 }: {
     label: string;
     value: string;
-    sub?: string;
+    sub: string;
     icon: any;
-    tone: 'green' | 'orange' | 'wallet';
+    tone: 'green' | 'blue' | 'orange' | 'balance';
+    negative?: boolean;
     colors: any;
+    isDark: boolean;
     s: any;
 }) {
-    const iconBg = tone === 'orange' ? colors.warning + '18' : colors.primary + '12';
-    const iconColor = tone === 'orange' ? colors.warning : colors.primary;
+    const tint = tone === 'blue' ? (isDark ? '#60A5FA' : '#2563EB')
+        : tone === 'orange' ? (isDark ? '#FBBF24' : '#B45309')
+        : tone === 'balance' ? (isDark ? '#A78BFA' : '#7C3AED') : colors.primary;
     return (
-        <Box style={s.summaryCard}>
-            <View style={[s.summaryIcon, { backgroundColor: iconBg }]}>
-                <Icon size={14} color={iconColor} />
+        <View style={s.summaryCell}>
+            <View accessible accessibilityRole="text" accessibilityLabel={`${label}, ${value}, ${sub}`} style={[s.summaryCard, { backgroundColor: tint + (isDark ? '18' : '0B'), borderColor: tint + (isDark ? '38' : '22') }]}>
+                <View style={s.summaryCardHeading}>
+                    <View style={[s.summaryIcon, { backgroundColor: tint + '18' }]}><Icon size={14} color={tint} strokeWidth={2.3} /></View>
+                    <Text style={s.summaryLabel}>{label}</Text>
+                </View>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[s.summaryValue, negative && { color: colors.destructive }]}>{value}</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={s.summarySub}>{sub}</Text>
             </View>
-            <Text numberOfLines={1} style={s.summaryLabel}>{label}</Text>
-            <Text numberOfLines={1} style={s.summaryValue}>{value}</Text>
-            {!!sub && <Text numberOfLines={1} style={s.summarySub}>{sub}</Text>}
-        </Box>
+        </View>
     );
 }
 
@@ -1219,80 +1232,72 @@ export default function PortalScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
             >
                 <View style={s.topInfoStack}>
-                {/* Profile card — same card/border language, no shadow. */}
-                <Box style={s.profileCard}>
-                    <View style={s.decorCircle} />
-                    <View style={s.profileTopRow}>
-                        <Image source={require('@/assets/images/customer-avatar.jpg')} style={s.avatar} />
-                        <View style={s.profileInfo}>
-                            <View style={s.profileNameRow}>
-                                <Text numberOfLines={1} style={s.profileName}>
-                                    {profile?.name || 'Farmer / Customer'}
-                                </Text>
-                                <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
-                                <View style={s.linkedBy}>
-                                    <Text style={s.linkedByLabel}>Linked by</Text>
-                                    <Text numberOfLines={1} style={s.linkedByText}>
-                                        {profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}
-                                    </Text>
+                    <Box style={s.profileCard}>
+                        <View pointerEvents="none" style={s.decorCircle} />
+                        <View style={s.profileTopRow}>
+                            <Image source={require('@/assets/images/customer-avatar.jpg')} style={s.avatar} />
+                            <View style={s.profileInfo}>
+                                <View style={s.profileNameRow}>
+                                    <Text numberOfLines={1} style={s.profileName}>{profile?.name || 'Farmer / Customer'}</Text>
+                                    <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
                                 </View>
-                            </View>
-                            <Text numberOfLines={1} style={s.profileMeta}>
-                                {isSelling ? 'Customer Code' : 'Farmer Code'} : {profile?.code || '--'}
-                            </Text>
-                            {isSelling && (
-                                <Text style={s.profileMeta}>
-                                    Milk Rate (this customer): {profile?.milkRate != null && Number.isFinite(Number(profile.milkRate)) ? `₹${Number(profile.milkRate).toLocaleString('en-IN', { maximumFractionDigits: 2 })}/L` : '--'}
-                                </Text>
-                            )}
-                            <View style={s.profileLine}>
-                                <Phone size={12} color={colors.primary} />
-                                <Text numberOfLines={1} style={s.profileLineText}>{profile?.phone || '--'}</Text>
-                            </View>
-                            {!!profile?.address && (
+                                <Text numberOfLines={1} style={s.profileMeta}>{isSelling ? 'Customer Code' : 'Farmer Code'}: {profile?.code || '--'}</Text>
+                                {isSelling && (
+                                    <Text style={s.profileMeta}>
+                                        Milk Rate (this customer): {profile?.milkRate != null && Number.isFinite(Number(profile.milkRate)) ? `₹${Number(profile.milkRate).toLocaleString('en-IN', { maximumFractionDigits: 2 })}/L` : '--'}
+                                    </Text>
+                                )}
                                 <View style={s.profileLine}>
-                                    <MapPin size={12} color={colors.primary} />
-                                    <Text numberOfLines={1} style={[s.profileLineText, { color: colors.mutedForeground, fontWeight: '500' }]}>
-                                        {profile.address}
-                                    </Text>
+                                    <Phone size={13} color={colors.primary} />
+                                    <Text numberOfLines={1} style={s.profileLineText}>{profile?.phone || '--'}</Text>
                                 </View>
-                            )}
+                                {!!profile?.address && (
+                                    <View style={s.profileLine}>
+                                        <MapPin size={13} color={colors.primary} />
+                                        <Text numberOfLines={1} style={[s.profileLineText, { color: colors.mutedForeground, fontWeight: '500' }]}>{profile.address}</Text>
+                                    </View>
+                                )}
+                            </View>
                         </View>
-                    </View>
-                </Box>
-
-                {!!unavailableNote && <Text style={s.unavailableNote}>{unavailableNote}</Text>}
-
-                {/* Summary cards — same gaps/radius as owner screens. */}
-                <View style={s.summaryRow}>
-                    <SummaryCard
-                        label="Today Milk"
-                        value={money(summary?.todayMilkAmount)}
-                        sub={`${quantity(summary?.todayMilkQuantity)} L today`}
-                        icon={isSelling ? ShoppingCart : Droplets}
-                        tone="green"
-                        colors={colors}
-                        s={s}
-                    />
-                    <SummaryCard
-                        label="Advance Pending"
-                        value={money(summary?.advancePending)}
-                        sub="Isolated ledger"
-                        icon={Clock3}
-                        tone="orange"
-                        colors={colors}
-                        s={s}
-                    />
-                    <SummaryCard
-                        label="Current Balance"
-                        value={money(summary?.currentBalance)}
-                        sub="Read-only"
-                        icon={Wallet}
-                        tone="wallet"
-                        colors={colors}
-                        s={s}
-                    />
-                </View>
+                        <View style={s.profileDairyRow}>
+                            <View style={s.profileDairyDot} />
+                            <Text style={s.profileDairyLabel}>LINKED BY</Text>
+                            <Text numberOfLines={1} style={s.profileDairyName}>{profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}</Text>
+                        </View>
+                        <View style={s.summaryHeader}>
+                            <Text style={s.summaryHeading}>{isSelling ? 'Selling overview' : 'Collection overview'}</Text>
+                            <Text style={s.summaryHeaderHint}>READ ONLY</Text>
+                        </View>
+                        <View style={s.summaryGrid}>
+                            <SummaryCard
+                                label={isSelling ? 'Today selling' : 'Today collection'}
+                                value={summaryQuantity(summary?.todayMilkQuantity)}
+                                sub={summary ? summaryMoney(summary.todayMilkAmount) : '--'}
+                                icon={isSelling ? ShoppingCart : Droplets}
+                                tone="green" colors={colors} isDark={isDark} s={s}
+                            />
+                            <SummaryCard
+                                label={isSelling ? 'Total selling' : 'Total collection'}
+                                value={summaryQuantity(summary?.totalMilkQuantity)}
+                                sub={summary ? summaryMoney(summary.totalMilkAmount) : '--'}
+                                icon={Layers3} tone="blue" colors={colors} isDark={isDark} s={s}
+                            />
+                            <SummaryCard
+                                label="Advance pending"
+                                value={summary ? summaryMoney(summary.advancePending) : '--'}
+                                sub="Outstanding advance"
+                                icon={Clock3} tone="orange" colors={colors} isDark={isDark} s={s}
+                            />
+                            <SummaryCard
+                                label="Current balance"
+                                value={summary ? summaryMoney(summary.currentBalance) : '--'}
+                                sub="Includes pending entries"
+                                icon={Wallet} tone="balance" negative={!!summary && summary.currentBalance < 0} colors={colors} isDark={isDark} s={s}
+                            />
+                        </View>
+                        <Text style={s.summaryFootnote}>All linked records · Overview is not affected by filters</Text>
+                    </Box>
+                    {!!unavailableNote && <Text style={s.unavailableNote}>{unavailableNote}</Text>}
                 </View>
 
                 {(loading && !dashboard) ? (
@@ -1537,33 +1542,36 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         headerTitleText: { fontSize: 16, fontWeight: '800', color: '#fff', letterSpacing: 0.2 },
         headerSub: { fontSize: 10, color: 'rgba(255,255,255,0.72)', marginTop: 1 },
 
-        topInfoStack: { gap: 0 },
-        profileCard: { padding: 12, overflow: 'hidden' },
+        topInfoStack: { gap: 6 },
+        profileCard: { padding: 14, overflow: 'hidden', borderRadius: 16 },
         decorCircle: {
-            position: 'absolute',
-            width: 120,
-            height: 120,
-            borderRadius: 60,
-            backgroundColor: colors.primary + '08',
-            right: -40,
-            top: -45,
+            position: 'absolute', width: 180, height: 180, borderRadius: 90,
+            backgroundColor: colors.primary + (isDark ? '0D' : '08'), right: -85, top: -90,
         },
-        profileTopRow: { flexDirection: 'row', gap: 10 },
-        avatar: {
-            width: 58,
-            height: 58,
-            borderRadius: 29,
-            backgroundColor: colors.primary + '15',
-        },
+        profileTopRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+        avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.primary + '15', borderWidth: 2, borderColor: colors.primary + '25' },
         profileInfo: { flex: 1, minWidth: 0 },
         profileNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-        linkedBy: { marginLeft: 'auto', alignItems: 'flex-end', maxWidth: 100 },
-        linkedByLabel: { fontSize: 8, color: colors.mutedForeground, fontWeight: '600' },
-        linkedByText: { fontSize: 9, color: colors.primary, fontWeight: '700' },
-        profileName: { fontSize: 16, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
-        profileMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 2 },
-        profileLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+        profileName: { fontSize: 17, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
+        profileMeta: { fontSize: 11, color: colors.mutedForeground, marginTop: 3 },
+        profileLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 5 },
         profileLineText: { flex: 1, fontSize: 11.5, fontWeight: '600', color: colors.foreground },
+        profileDairyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border },
+        profileDairyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary },
+        profileDairyLabel: { fontSize: 9, fontWeight: '800', color: colors.mutedForeground, letterSpacing: 0.5 },
+        profileDairyName: { flex: 1, fontSize: 11, fontWeight: '700', color: colors.foreground },
+        summaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 3 },
+        summaryHeading: { fontSize: 13, fontWeight: '800', color: colors.foreground },
+        summaryHeaderHint: { fontSize: 9, fontWeight: '800', color: colors.mutedForeground, letterSpacing: 0.4 },
+        summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 },
+        summaryCell: { width: width >= 600 ? '25%' : '50%', padding: 3 },
+        summaryCard: { flex: 1, minHeight: 76, borderWidth: 1, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 6 },
+        summaryCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+        summaryIcon: { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+        summaryLabel: { flex: 1, fontSize: 10, fontWeight: '700', color: colors.mutedForeground },
+        summaryValue: { fontSize: 17, fontWeight: '900', color: colors.foreground, marginTop: 3 },
+        summarySub: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground, marginTop: 1 },
+        summaryFootnote: { color: colors.mutedForeground, fontSize: 10, marginTop: 4 },
 
         portalTabBar: {
             flexDirection: 'row',
@@ -1580,20 +1588,6 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         portalTabLabel: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground },
         portalTabLabelActive: { color: colors.primary, fontWeight: '800' },
         unavailableNote: { fontSize: 10.5, color: colors.mutedForeground, textAlign: 'center' },
-
-        summaryRow: { flexDirection: 'row', gap: 8 },
-        summaryCard: { flex: 1, minWidth: 0, padding: 10 },
-        summaryIcon: {
-            width: 26,
-            height: 26,
-            borderRadius: 8,
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 6,
-        },
-        summaryLabel: { fontSize: 9.5, fontWeight: '700', color: colors.mutedForeground },
-        summaryValue: { fontSize: 13.5, fontWeight: '900', color: colors.foreground, marginTop: 2 },
-        summarySub: { fontSize: 8.5, color: colors.mutedForeground, marginTop: 2 },
 
         filterCard: { padding: 10, gap: 8 },
         filterHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
