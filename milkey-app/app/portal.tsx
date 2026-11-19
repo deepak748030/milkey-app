@@ -536,12 +536,14 @@ function SectionCard({
 }
 
 function SummaryCard({
-    label, value, sub, icon: Icon, tone, colors, isDark, negative = false, s,
+    label, shortLabel, value, sub, icon: Icon, tone, colors, isDark, negative = false, gridWidth, s,
 }: {
     label: string;
+    shortLabel: string;
     value: string;
-    sub: string;
+    sub?: string;
     icon: any;
+    gridWidth: number;
     tone: 'green' | 'blue' | 'orange' | 'balance';
     negative?: boolean;
     colors: any;
@@ -551,15 +553,21 @@ function SummaryCard({
     const tint = tone === 'blue' ? (isDark ? '#60A5FA' : '#2563EB')
         : tone === 'orange' ? (isDark ? '#FBBF24' : '#B45309')
         : tone === 'balance' ? (isDark ? '#A78BFA' : '#7C3AED') : colors.primary;
+    // Use the measured grid width rather than the window width: the portal can
+    // also be embedded in a narrower container. Long amounts may wrap instead
+    // of becoming unreadably small or losing digits on web.
+    const usableWidth = Math.max(20, gridWidth / 4 - 16);
+    const showIcon = usableWidth >= 68;
+    const fontFor = (text: string, max: number) => Math.max(10, Math.min(max, Math.floor(usableWidth / (Math.max(text.length, 1) * 0.64) * 10) / 10));
     return (
         <View style={s.summaryCell}>
-            <View accessible accessibilityRole="text" accessibilityLabel={`${label}, ${value}, ${sub}`} style={[s.summaryCard, { backgroundColor: tint + (isDark ? '18' : '0B'), borderColor: tint + (isDark ? '38' : '22') }]}>
+            <View accessible accessibilityRole="text" accessibilityLabel={[label, value, sub].filter(Boolean).join(', ')} style={[s.summaryCard, { backgroundColor: tint + (isDark ? '18' : '0B'), borderColor: tint + (isDark ? '38' : '22') }]}>
                 <View style={s.summaryCardHeading}>
-                    <View style={[s.summaryIcon, { backgroundColor: tint + '18' }]}><Icon size={14} color={tint} strokeWidth={2.3} /></View>
-                    <Text style={s.summaryLabel}>{label}</Text>
+                    {showIcon && <View style={[s.summaryIcon, { backgroundColor: tint + '18' }]}><Icon size={12} color={tint} strokeWidth={2.3} /></View>}
+                    <Text numberOfLines={1} adjustsFontSizeToFit style={s.summaryLabel}>{shortLabel}</Text>
                 </View>
-                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[s.summaryValue, negative && { color: colors.destructive }]}>{value}</Text>
-                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={s.summarySub}>{sub}</Text>
+                <Text style={[s.summaryValue, { fontSize: fontFor(value, 14) }, negative && { color: colors.destructive }]}>{value}</Text>
+                {!!sub && <Text style={[s.summarySub, { fontSize: fontFor(sub, 10) }]}>{sub}</Text>}
             </View>
         </View>
     );
@@ -723,6 +731,7 @@ export default function PortalScreen() {
     const compact = width < 400;
     const s = createStyles(colors, isDark, width);
 
+    const [summaryGridWidth, setSummaryGridWidth] = useState(0);
     const [session, setSession] = useState<PortalUser | null>(null);
     const [module, setModule] = useState<PortalModule>('collection');
     const [dashboard, setDashboard] = useState<PortalDashboard | null>(null);
@@ -1197,10 +1206,6 @@ export default function PortalScreen() {
         },
     ];
 
-    const unavailableNote = available.length === 1
-        ? `Only ${available[0] === 'collection' ? 'Collection' : 'Selling'} data is linked to this mobile number. The other tab is unavailable.`
-        : '';
-
     return (
         <View style={s.container}>
             <StatusBar style="light" />
@@ -1266,38 +1271,33 @@ export default function PortalScreen() {
                         </View>
                         <View style={s.summaryHeader}>
                             <Text style={s.summaryHeading}>{isSelling ? 'Selling overview' : 'Collection overview'}</Text>
-                            <Text style={s.summaryHeaderHint}>READ ONLY</Text>
                         </View>
-                        <View style={s.summaryGrid}>
+                        <View style={s.summaryGrid} onLayout={(event) => setSummaryGridWidth(event.nativeEvent.layout.width)}>
                             <SummaryCard
-                                label={isSelling ? 'Today selling' : 'Today collection'}
+                                label={isSelling ? 'Today selling' : 'Today collection'} shortLabel="Today" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summaryQuantity(summary?.todayMilkQuantity)}
                                 sub={summary ? summaryMoney(summary.todayMilkAmount) : '--'}
                                 icon={isSelling ? ShoppingCart : Droplets}
                                 tone="green" colors={colors} isDark={isDark} s={s}
                             />
                             <SummaryCard
-                                label={isSelling ? 'Total selling' : 'Total collection'}
+                                label={isSelling ? 'Total selling' : 'Total collection'} shortLabel="Total" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summaryQuantity(summary?.totalMilkQuantity)}
                                 sub={summary ? summaryMoney(summary.totalMilkAmount) : '--'}
                                 icon={Layers3} tone="blue" colors={colors} isDark={isDark} s={s}
                             />
                             <SummaryCard
-                                label="Advance pending"
+                                label="Advance pending" shortLabel="Advance" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summary ? summaryMoney(summary.advancePending) : '--'}
-                                sub="Outstanding advance"
                                 icon={Clock3} tone="orange" colors={colors} isDark={isDark} s={s}
                             />
                             <SummaryCard
-                                label="Current balance"
+                                label="Current balance" shortLabel="Balance" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summary ? summaryMoney(summary.currentBalance) : '--'}
-                                sub="Includes pending entries"
                                 icon={Wallet} tone="balance" negative={!!summary && summary.currentBalance < 0} colors={colors} isDark={isDark} s={s}
                             />
                         </View>
-                        <Text style={s.summaryFootnote}>All linked records · Overview is not affected by filters</Text>
                     </Box>
-                    {!!unavailableNote && <Text style={s.unavailableNote}>{unavailableNote}</Text>}
                 </View>
 
                 {(loading && !dashboard) ? (
@@ -1326,7 +1326,7 @@ export default function PortalScreen() {
                                         : filters.section === 'all' && rows.length > 5;
                                 const advancePage = config.key === 'advances' ? dashboard?.advancePage : undefined;
                                 const subtitle = advancePage?.nextCursor
-                                    ? `${rows.length} loaded • ${advancePage.total} total (filters apply to loaded records)`
+                                    ? `${rows.length} loaded • ${advancePage.total} total`
                                     : `${rows.length} record${rows.length === 1 ? '' : 's'}${config.key !== 'advances' && rows.length > 100 ? ' • showing 100' : ''}`;
                                 return (
                                     <SectionCard
@@ -1369,16 +1369,6 @@ export default function PortalScreen() {
                                                 s={s}
                                             />
                                         )}
-                                        {config.key === 'entries' && (
-                                            <Text style={{ color: colors.mutedForeground, fontSize: 11, paddingHorizontal: 8, paddingTop: 6 }}>
-                                                Green tick means the entry is marked paid in a settlement; a balance may still remain.
-                                            </Text>
-                                        )}
-                                        {config.key === 'advances' && !isSelling && (
-                                            <Text style={{ color: colors.mutedForeground, fontSize: 11, paddingHorizontal: 8, paddingTop: 6 }}>
-                                                Matches the dairy pending list. Settled and partial records are hidden; the pending total includes partial balances.
-                                            </Text>
-                                        )}
                                         {advancePage?.nextCursor && (
                                             <View style={{ alignItems: 'center', paddingVertical: 10 }}>
                                                 {!!advancePageError && <Text style={{ color: colors.destructive, marginBottom: 6 }}>{advancePageError}</Text>}
@@ -1391,9 +1381,6 @@ export default function PortalScreen() {
                                 );
                             })}
 
-                        <Text style={s.footerNote}>
-                            This is a read-only view. Please contact your dairy owner to add or correct any entry.
-                        </Text>
                     </>
                 )}
             </ScrollView>
@@ -1562,16 +1549,14 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         profileDairyName: { flex: 1, fontSize: 11, fontWeight: '700', color: colors.foreground },
         summaryHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginBottom: 3 },
         summaryHeading: { fontSize: 13, fontWeight: '800', color: colors.foreground },
-        summaryHeaderHint: { fontSize: 9, fontWeight: '800', color: colors.mutedForeground, letterSpacing: 0.4 },
-        summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -3 },
-        summaryCell: { width: width >= 600 ? '25%' : '50%', padding: 3 },
-        summaryCard: { flex: 1, minHeight: 76, borderWidth: 1, borderRadius: 10, paddingHorizontal: 9, paddingVertical: 6 },
-        summaryCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-        summaryIcon: { width: 24, height: 24, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
-        summaryLabel: { flex: 1, fontSize: 10, fontWeight: '700', color: colors.mutedForeground },
-        summaryValue: { fontSize: 17, fontWeight: '900', color: colors.foreground, marginTop: 3 },
-        summarySub: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground, marginTop: 1 },
-        summaryFootnote: { color: colors.mutedForeground, fontSize: 10, marginTop: 4 },
+        summaryGrid: { flexDirection: 'row', marginHorizontal: -2 },
+        summaryCell: { flex: 1, minWidth: 0, padding: 2 },
+        summaryCard: { flex: 1, minHeight: 62, borderWidth: 1, borderRadius: 9, paddingHorizontal: 5, paddingVertical: 5 },
+        summaryCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+        summaryIcon: { width: 18, height: 18, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
+        summaryLabel: { flex: 1, fontSize: 9, fontWeight: '700', color: colors.mutedForeground },
+        summaryValue: { fontWeight: '900', color: colors.foreground, marginTop: 3 },
+        summarySub: { fontWeight: '600', color: colors.mutedForeground, marginTop: 1 },
 
         portalTabBar: {
             flexDirection: 'row',
@@ -1587,7 +1572,6 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         portalTabLock: { position: 'absolute', right: -3, bottom: -1 },
         portalTabLabel: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground },
         portalTabLabelActive: { color: colors.primary, fontWeight: '800' },
-        unavailableNote: { fontSize: 10.5, color: colors.mutedForeground, textAlign: 'center' },
 
         filterCard: { padding: 10, gap: 8 },
         filterHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
@@ -1794,12 +1778,6 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
             backgroundColor: colors.primary,
         },
         retryBtnText: { color: colors.white, fontSize: 12, fontWeight: '800' },
-        footerNote: {
-            fontSize: 9.5,
-            color: colors.mutedForeground,
-            textAlign: 'center',
-            paddingHorizontal: 12,
-        },
 
         modalOverlay: {
             flex: 1,

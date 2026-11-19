@@ -158,7 +158,6 @@ export function PortalEntriesScreen({ selling = false }: { selling?: boolean }) 
                     </View>
                 ))}
             </View>
-            <Text style={[styles.hint, { color: colors.mutedForeground }]}>{selling ? 'Avg Rate = amount ÷ quantity. M + E = morning + evening.' : 'Amount includes bonus. Avg Rate = amount ÷ quantity.'}</Text>
             <View style={[styles.sectionHeader, { backgroundColor: colors.secondary, borderColor: border }]}>
                 <View style={[styles.sectionIcon, { backgroundColor: colors.primary }]}><Droplets size={17} color={colors.white} /></View>
                 <View style={{ flex: 1 }}>
@@ -166,7 +165,6 @@ export function PortalEntriesScreen({ selling = false }: { selling?: boolean }) 
                     <Text style={[styles.sectionCount, { color: colors.mutedForeground }]}>{stats ? `${stats.count} records • ${rows.length} shown` : error ? 'Unable to load records' : 'Loading records...'}</Text>
                 </View>
             </View>
-            {showProfile && <Text style={[styles.hint, { color: colors.mutedForeground }]}>Entries from all linked profiles. {selling ? 'Customer' : 'Farmer'} and dairy are shown for each entry.</Text>}
             {rows.length > 0 && (
                 <View style={[styles.tableHeader, { backgroundColor: colors.secondary, borderColor: border }]}>
                     {columns.map((column) => <Text key={column.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.tableHeaderText, { flex: column.flex, color: colors.mutedForeground }]}>{column.title}</Text>)}
@@ -227,7 +225,6 @@ export function PortalEntriesScreen({ selling = false }: { selling?: boolean }) 
                         {result.nextCursor && <Pressable accessibilityRole="button" disabled={loadingMore} onPress={() => void load('more', result.nextCursor || undefined)} style={[styles.more, { borderColor: colors.primary }]}>
                             {loadingMore ? <ActivityIndicator color={colors.primary} /> : <Text style={{ color: colors.primary, fontWeight: '700' }}>Load More Entries</Text>}
                         </Pressable>}
-                        <Text style={[styles.hint, { color: colors.mutedForeground }]}>✓ marks entries saved as paid. Pull down to refresh.</Text>
                     </View>
                 ) : null}
             />
@@ -240,11 +237,10 @@ const styles = StyleSheet.create({
     backButton: { width: 38, height: 38, justifyContent: 'center', alignItems: 'center' },
     pageTitle: { fontSize: 17, fontWeight: '800', flex: 1 },
     clearDate: { alignSelf: 'flex-end', paddingVertical: 4, paddingHorizontal: 4 },
-    summary: { marginTop: 12, borderWidth: 1, borderRadius: 12, flexDirection: 'row', paddingVertical: 12 },
+    summary: { marginTop: 12, borderWidth: 1, borderRadius: 12, flexDirection: 'row', paddingVertical: 6, marginBottom: 10 },
     stat: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
     statValue: { fontSize: 15, fontWeight: '800', textAlign: 'center' },
     statLabel: { fontSize: 10, marginTop: 2 },
-    hint: { fontSize: 10, marginVertical: 8, textAlign: 'center' },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 9, borderWidth: 1, borderTopLeftRadius: 12, borderTopRightRadius: 12 },
     sectionIcon: { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
     sectionTitle: { fontSize: 14, fontWeight: '800' },
