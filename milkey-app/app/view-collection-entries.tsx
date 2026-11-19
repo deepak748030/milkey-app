@@ -12,6 +12,7 @@ import { TZ_OFFSET_MINUTES } from '@/lib/purchaseConstants';
 import { getSlipLabels, getThermalSlipLabels } from '@/lib/printTranslations';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { SuccessModal } from '@/components/SuccessModal';
+import SettlementEntriesPage from '@/components/collection/SettlementEntriesPage';
 
 const formatDate = (iso?: string) => {
     if (!iso) return '-';
@@ -32,6 +33,11 @@ const prettyPeriod = (start?: string, end?: string) => {
 };
 
 export default function ViewCollectionEntriesScreen() {
+    const params = useLocalSearchParams<{ paymentId?: string }>();
+    return params.paymentId ? <SettlementEntriesPage paymentId={String(params.paymentId)} /> : <UnpaidCollectionEntriesScreen />;
+}
+
+function UnpaidCollectionEntriesScreen() {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const params = useLocalSearchParams<{

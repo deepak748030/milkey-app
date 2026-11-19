@@ -29,6 +29,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useSubTabStore, RegisterTab } from '@/lib/subTabStore';
 import { useFocusEffect } from 'expo-router';
 import { TZ_OFFSET_MINUTES } from '@/lib/purchaseConstants';
+import { settlementCollectionEntries } from '@/lib/settlementCollectionEntries';
 
 /** Calendar day (YYYY-MM-DD) of an instant in the DEVICE timezone.
  *  Periods are stored as instants (e.g. 2026-10-01T06:30Z); slicing the ISO string
@@ -217,12 +218,16 @@ export default function RegisterScreen() {
     const [editPaidAmount, setEditPaidAmount] = useState('');
     const [editMilkAmount, setEditMilkAmount] = useState('');
     const [editExtraMilkAmount, setEditExtraMilkAmount] = useState('');
-    const [showSettlementEntries, setShowSettlementEntries] = useState(false);
-    const [settlementEntriesLoading, setSettlementEntriesLoading] = useState(false);
-    const [settlementEntriesError, setSettlementEntriesError] = useState('');
-    const [settlementEntries, setSettlementEntries] = useState<any[]>([]);
-    const [settlementEntriesSnapshot, setSettlementEntriesSnapshot] = useState(false);
+    const [settlementEntryQty, setSettlementEntryQty] = useState<number | null>(null);
     const settlementEntriesRequest = useRef(0);
+    const restoreEditAfterEntries = useRef(false);
+    const pendingEntriesPaymentId = useRef<string | null>(null);
+    useFocusEffect(useCallback(() => {
+        if (restoreEditAfterEntries.current) {
+            restoreEditAfterEntries.current = false;
+            setEditPaymentVisible(true);
+        }
+    }, []));
     const [editPeriodStart, setEditPeriodStart] = useState('');
     const [editPeriodEnd, setEditPeriodEnd] = useState('');
     const [showEditStartDatePicker, setShowEditStartDatePicker] = useState(false);
@@ -933,10 +938,22 @@ export default function RegisterScreen() {
         setEditPaidAmount((payment.amount || 0).toString());
         setEditMilkAmount((payment.totalMilkAmount || 0).toString());
         setEditExtraMilkAmount(payment.extraMilkAmount == null ? '' : String(payment.extraMilkAmount));
-        settlementEntriesRequest.current++;
-        setShowSettlementEntries(false);
-        setSettlementEntries([]);
-        setSettlementEntriesError('');
+        const requestId = ++settlementEntriesRequest.current;
+        setSettlementEntryQty(null);
+        const data = settlementCollectionEntries(payment);
+        if (data.snapshot) {
+            setSettlementEntryQty(data.quantity);
+        } else {
+            void paymentsApi.getById(payment._id).then(result => {
+                if (requestId !== settlementEntriesRequest.current || !result.success || !result.response) return;
+                const detail = settlementCollectionEntries(result.response);
+                // A deleted linked entry makes the visible total incomplete.
+                const expected = payment.settledCollections?.length;
+                if (detail.snapshot || (expected != null && expected > 0 && expected === detail.rows.length)) {
+                    setSettlementEntryQty(detail.quantity);
+                }
+            }).catch(() => {});
+        }
         // Set period dates
         const periodStartStr = payment.periodStart ? new Date(payment.periodStart).toISOString().split('T')[0] : '';
         const periodEndStr = payment.periodEnd ? new Date(payment.periodEnd).toISOString().split('T')[0] : '';
@@ -945,27 +962,21 @@ export default function RegisterScreen() {
         setEditPaymentVisible(true);
     };
 
-    // Fetch the payment's saved links, never all entries in its date range.
-    const loadSettlementEntries = async () => {
-        if (!editingPayment) return;
-        if (showSettlementEntries) { settlementEntriesRequest.current++; setShowSettlementEntries(false); return; }
-        const requestId = ++settlementEntriesRequest.current;
-        setShowSettlementEntries(true);
-        setSettlementEntriesLoading(true);
-        setSettlementEntriesError('');
-        try {
-            const res = await paymentsApi.getById(editingPayment._id);
-            if (!res.success || !res.response) throw new Error(res.message || 'Could not load entries');
-            if (requestId !== settlementEntriesRequest.current) return;
-            const payment = res.response;
-            const hasSnapshots = Array.isArray(payment.collectionSnapshots);
-            setSettlementEntriesSnapshot(hasSnapshots);
-            setSettlementEntries(hasSnapshots ? payment.collectionSnapshots! : (payment.settledCollections || []).filter((row: any) => row && typeof row === 'object' && row._id));
-        } catch (error) {
-            if (requestId === settlementEntriesRequest.current) setSettlementEntriesError(error instanceof Error ? error.message : 'Could not load entries');
-        } finally {
-            if (requestId === settlementEntriesRequest.current) setSettlementEntriesLoading(false);
-        }
+    const navigateToSettlementEntries = () => {
+        const paymentId = pendingEntriesPaymentId.current;
+        if (!paymentId) return;
+        pendingEntriesPaymentId.current = null;
+        (router as any).push({ pathname: '/view-collection-entries', params: { paymentId } });
+    };
+
+    const openSettlementEntries = () => {
+        if (!editingPayment || pendingEntriesPaymentId.current) return;
+        pendingEntriesPaymentId.current = editingPayment._id;
+        restoreEditAfterEntries.current = true;
+        setEditPaymentVisible(false);
+        Keyboard.dismiss();
+        // iOS waits for the native modal to finish dismissing before navigation.
+        if (Platform.OS !== 'ios') requestAnimationFrame(navigateToSettlementEntries);
     };
 
     // Save updated payment
@@ -1023,8 +1034,9 @@ export default function RegisterScreen() {
         setEditMilkAmount('');
         setEditExtraMilkAmount('');
         settlementEntriesRequest.current++;
-        setShowSettlementEntries(false);
-        setSettlementEntries([]);
+        restoreEditAfterEntries.current = false;
+        pendingEntriesPaymentId.current = null;
+        setSettlementEntryQty(null);
         setEditPeriodStart('');
         setEditPeriodEnd('');
         setShowEditStartDatePicker(false);
@@ -2463,6 +2475,7 @@ export default function RegisterScreen() {
                 animationType="slide"
                 statusBarTranslucent
                 onRequestClose={closeEditPaymentModal}
+                onDismiss={navigateToSettlementEntries}
             >
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -2541,19 +2554,10 @@ export default function RegisterScreen() {
                                     <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground }]}>Milk Amount (₹) · Breakdown unavailable</Text>
                                     <TextInput style={[styles.editPaymentInput, { backgroundColor: colors.secondary, color: colors.foreground }]} value={editMilkAmount} onChangeText={setEditMilkAmount} keyboardType="numeric" placeholder="Enter milk amount" placeholderTextColor={colors.mutedForeground} />
                                 </View>}
-                                <Pressable style={[styles.viewEntriesBtn, { marginTop: 10 }]} onPress={() => void loadSettlementEntries()}>
-                                    <Eye size={16} color={colors.primary} /><Text style={[styles.viewEntriesText, { color: colors.primary }]}>{showSettlementEntries ? 'Hide Entries' : 'View Entries'}</Text>
+                                <Pressable accessibilityRole="button" style={[styles.viewEntriesBtn, { marginTop: 10 }]} onPress={openSettlementEntries}>
+                                    <Eye size={16} color={colors.primary} />
+                                    <Text style={[styles.viewEntriesText, { color: colors.primary }]}>View Entries{settlementEntryQty == null ? '' : ` (${settlementEntryQty.toLocaleString('en-IN', { maximumFractionDigits: 3 })}L)`}</Text>
                                 </Pressable>
-                                {showSettlementEntries && <View style={{ marginVertical: 8, gap: 6 }}>
-                                    {settlementEntriesLoading ? <ActivityIndicator color={colors.primary} /> : settlementEntriesError ? <Text style={{ color: colors.destructive }}>{settlementEntriesError}</Text> : <>
-                                        <Text style={{ fontSize: 11, color: colors.mutedForeground }}>{settlementEntriesSnapshot ? 'Entries saved with this settlement' : 'Linked entries as they exist now; older records may have changed or be missing.'}</Text>
-                                        {settlementEntries.length === 0 && <Text style={{ color: colors.mutedForeground }}>No linked entries available.</Text>}
-                                        {settlementEntries.map((entry, index) => <View key={String(entry.id || entry._id || index)} style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 4, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 5 }}>
-                                            <Text style={{ color: colors.foreground, fontSize: 11 }}>{formatDateDDMMYYYY(entry.date || '')} · {entry.shift || '-'} · {Number(entry.quantity || 0).toFixed(2)} L</Text>
-                                            <Text style={{ color: colors.foreground, fontSize: 11 }}>FAT {Number(entry.fat || 0).toFixed(1)} · SNF {Number(entry.snf || 0).toFixed(1)} · Rate ₹{Number(entry.rate || 0).toFixed(2)} · Bonus ₹{Number(entry.bonusAmount || 0).toFixed(2)} · ₹{Number(entry.amount || 0).toFixed(2)}</Text>
-                                        </View>)}
-                                    </>}
-                                </View>}
 
                                 <View style={styles.editPaymentInputGroup}>
                                     <Text style={[styles.editPaymentLabel, { color: colors.mutedForeground }]}>Paid Amount (₹)</Text>
