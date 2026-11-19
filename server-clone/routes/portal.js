@@ -86,6 +86,7 @@ const mapSellingPayment = (row) => ({
     periodStart: safeIso(row.periodStart), periodEnd: safeIso(row.periodEnd),
     totalMilkAmount: round2(row.totalSellAmount || 0),
     totalAdvanceDeduction: round2(row.advanceApplied || 0),
+    advanceEffect: row.advanceEffect === 'add' ? 'add' : 'subtract',
     netPayable: round2(row.netPayable || 0), closingBalance: round2(row.closingBalance || 0),
     createdAt: safeIso(row.createdAt), remark: row.notes || row.reference || 'Payment received',
 });
@@ -450,7 +451,7 @@ router.get('/dashboard', portalAuth, async (req, res) => {
                     totalMilkQuantity: round2(allTotals.quantity || 0),
                     totalMilkAmount: round2(allTotals.amount || 0),
                     advancePending,
-                    currentBalance: round2(baseBalance + unpaidSellAmount - advancePending),
+                    currentBalance: round2(baseBalance + unpaidSellAmount + advancePending),
                     status: 'Active',
                 },
                 entries: entries.map((row) => ({
@@ -746,7 +747,7 @@ router.get('/selling-payments', portalAuth, async (req, res) => {
         }
         pagePipeline.push({ $sort: { _portalDate: -1, _id: -1 } }, { $limit: 4 }, { $project: {
             owner: 1, member: 1, _portalDate: 1, amount: 1, paymentMethod: 1, periodStart: 1, periodEnd: 1,
-            totalSellAmount: 1, advanceApplied: 1, netPayable: 1, closingBalance: 1, createdAt: 1, notes: 1, reference: 1,
+            totalSellAmount: 1, advanceApplied: 1, advanceEffect: 1, netPayable: 1, closingBalance: 1, createdAt: 1, notes: 1, reference: 1,
         } });
         const [total, docs] = await Promise.all([
             MemberPayment.countDocuments(query),

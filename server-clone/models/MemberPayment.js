@@ -73,6 +73,8 @@ const memberPaymentSchema = new mongoose.Schema({
     },
     // Snapshot and audit trail for advances applied by new selling settlements.
     advanceApplied: { type: Number, default: 0, min: 0 },
+    // Old payments applied advance as a deduction. New payments record 'add'.
+    advanceEffect: { type: String, enum: ['add', 'subtract'], default: 'subtract' },
     settledSellingAdvances: [{
         advance: { type: mongoose.Schema.Types.ObjectId, ref: 'SellingAdvance' },
         amount: { type: Number, min: 0 }

@@ -55,6 +55,7 @@ export interface SlipLabels {
     milkQuantity: string;
     milkRate: string;
     advanceProduct: string;
+    sellingAdvance: string;
     totalPayable: string;
     paidAmount: string;
     closingBalance: string;
@@ -136,6 +137,7 @@ const en: SlipLabels = {
     milkQuantity: 'Milk Quantity',
     milkRate: 'Milk Rate',
     advanceProduct: 'Advance / Product',
+    sellingAdvance: 'Selling Advance',
     totalPayable: 'Total Payable',
     paidAmount: 'Paid Amount',
     closingBalance: 'Closing Balance',
@@ -214,6 +216,7 @@ const hi: SlipLabels = {
     milkQuantity: 'दूध मात्रा',
     milkRate: 'दूध दर',
     advanceProduct: 'अग्रिम / उत्पाद',
+    sellingAdvance: 'बिक्री अग्रिम',
     totalPayable: 'कुल देय',
     paidAmount: 'भुगतान राशि',
     closingBalance: 'शेष राशि',

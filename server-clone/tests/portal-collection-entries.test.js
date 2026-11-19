@@ -100,3 +100,19 @@ test('one-sided dates, empty results and invalid/unlinked requests fail safely',
     ctx = fixture([], false);
     assert.equal((await ctx.request()).statusCode, 403);
 });
+
+test('collection report returns the saved bonus amount for per-litre and percent entries', async () => {
+    const rows = [
+        collection(1, { quantity: 5, amount: 375, bonusAmount: 25, bonusType: 'perLitre', bonusRate: 5 }),
+        collection(2, { quantity: 1, amount: 77, bonusAmount: 7, bonusType: 'percent', bonusRate: 10 }),
+        collection(3, { quantity: 1, amount: 70, bonusAmount: 0 }),
+    ];
+    const data = (await fixture(rows).request()).body.response;
+    assert.equal(data.entries.find(row => row.id === id(1)).bonusAmount, 25);
+    assert.equal(data.entries.find(row => row.id === id(2)).bonusAmount, 7);
+    assert.equal(data.entries.find(row => row.id === id(3)).bonusAmount, 0);
+    assert.equal(data.summary.bonus, 32);
+    assert.equal(data.summary.amount, 522);
+    assert.equal(rows[0].bonusRate, 5);
+    assert.equal(rows[1].bonusRate, 10);
+});

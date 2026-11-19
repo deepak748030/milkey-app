@@ -23,11 +23,9 @@ const dateText = (value?: string) => {
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? '--' : d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
-const bonusText = (row: PortalEntryRow) => {
-    if (!(Number(row.bonusAmount) > 0)) return '--';
-    if (Number(row.bonusRate) > 0) return `+${numberText(row.bonusRate)}${row.bonusType === 'percent' ? '%' : '/L'}`;
-    return `+${money(row.bonusAmount)}`;
-};
+const bonusText = (row: PortalEntryRow) => (
+    Number(row.bonusAmount) > 0 ? money(row.bonusAmount) : '--'
+);
 
 const COLUMNS = [
     { title: 'Date', flex: 1.25 }, { title: 'Milk', flex: 0.65 },

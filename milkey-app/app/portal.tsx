@@ -457,7 +457,7 @@ function CollectionSettlementHistory({
                         </View>
                         <View style={s.settlementDivider} />
                         {line('Milk Amount:', row.totalMilkAmount)}
-                        {line('Advance:', -(Number(row.totalAdvanceDeduction) || 0), colors.warning)}
+                        {line(row.advanceEffect === 'add' ? 'Advance (+):' : 'Advance:', (Number(row.totalAdvanceDeduction) || 0) * (row.advanceEffect === 'add' ? 1 : -1), colors.warning)}
                         {line('Total Payable:', row.netPayable)}
                         {line('Paid Amount:', row.amount, colors.success)}
                         <View style={s.settlementClosing}>
@@ -862,17 +862,20 @@ export default function PortalScreen() {
     }, [loadDashboard]);
 
     const switchTo = useCallback((next: PortalModule) => {
-        if (!session?.availableModules.includes(next)) return;
+        if (next === module || !session?.availableModules.includes(next)) return;
         ++dashboardRequest.current;
         setDashboard(null);
+        setLoading(true);
+        setRefreshing(false);
         setLoadingMoreAdvances(false);
         setAdvancePageError('');
         setError('');
         setFilters(DEFAULT_FILTERS);
         setFiltersOpen(false);
         setExpanded({ entries: false, payments: false, advances: false });
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
         setModule(next);
-    }, [session]);
+    }, [module, session]);
 
     const loadMoreAdvances = useCallback(async () => {
         const cursor = dashboard?.advancePage?.nextCursor;
@@ -1182,7 +1185,7 @@ export default function PortalScreen() {
     ];
 
     const unavailableNote = available.length === 1
-        ? `Only ${available[0] === 'collection' ? 'Collection' : 'Selling'} data is linked to this mobile number. The other switch is unavailable.`
+        ? `Only ${available[0] === 'collection' ? 'Collection' : 'Selling'} data is linked to this mobile number. The other tab is unavailable.`
         : '';
 
     return (
@@ -1209,7 +1212,7 @@ export default function PortalScreen() {
             <ScrollView
                 ref={scrollRef}
                 style={s.scroll}
-                contentContainerStyle={[s.scrollContent, { paddingBottom: Math.max(insets.bottom + 24, 34) }]}
+                contentContainerStyle={[s.scrollContent, { paddingBottom: 24 }]}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="interactive"
@@ -1258,32 +1261,6 @@ export default function PortalScreen() {
                     </View>
                 </Box>
 
-                {/* Collection / Selling switch, styled like the owner SubTabBar. */}
-                <View style={s.moduleSwitch}>
-                    {(['collection', 'selling'] as PortalModule[]).map((item) => {
-                        const enabled = available.includes(item);
-                        const active = module === item && enabled;
-                        const Icon = item === 'collection' ? Droplets : ShoppingCart;
-                        return (
-                            <Pressable
-                                key={item}
-                                onPress={() => switchTo(item)}
-                                disabled={!enabled}
-                                style={[
-                                    s.switchBtn,
-                                    active && s.switchBtnActive,
-                                    !enabled && { opacity: 0.45 },
-                                ]}
-                            >
-                                <Icon size={15} color={active ? colors.white : enabled ? colors.mutedForeground : colors.mutedForeground} />
-                                <Text style={[s.switchText, active && s.switchTextActive]}>
-                                    {item === 'collection' ? 'Collection' : 'Selling'}
-                                </Text>
-                                {!enabled && <Lock size={12} color={colors.mutedForeground} />}
-                            </Pressable>
-                        );
-                    })}
-                </View>
                 {!!unavailableNote && <Text style={s.unavailableNote}>{unavailableNote}</Text>}
 
                 {/* Summary cards — same gaps/radius as owner screens. */}
@@ -1415,6 +1392,34 @@ export default function PortalScreen() {
                     </>
                 )}
             </ScrollView>
+
+            {/* Portal-only bottom navigation; never enters the dairy-owner tabs. */}
+            <View accessibilityRole="tablist" style={[s.portalTabBar, { paddingBottom: Math.max(insets.bottom, 6) }]}>
+                {(['collection', 'selling'] as PortalModule[]).map((item) => {
+                    const enabled = available.includes(item);
+                    const active = module === item && enabled;
+                    const label = item === 'collection' ? 'Collection' : 'Selling';
+                    const Icon = item === 'collection' ? Droplets : ShoppingCart;
+                    return (
+                        <Pressable
+                            key={item}
+                            accessibilityRole="tab"
+                            accessibilityLabel={label}
+                            accessibilityState={{ selected: active, disabled: !enabled }}
+                            accessibilityHint={enabled ? `Show ${label} records` : `${label} is not linked to this mobile number`}
+                            onPress={() => switchTo(item)}
+                            disabled={!enabled}
+                            style={[s.portalTab, !enabled && s.portalTabDisabled]}
+                        >
+                            <View style={[s.portalTabIcon, active && s.portalTabIconActive]}>
+                                <Icon size={21} color={active ? colors.white : colors.mutedForeground} />
+                                {!enabled && <Lock size={11} color={colors.mutedForeground} style={s.portalTabLock} />}
+                            </View>
+                            <Text style={[s.portalTabLabel, active && s.portalTabLabelActive]}>{label}</Text>
+                        </Pressable>
+                    );
+                })}
+            </View>
 
             {/* In-app logout confirmation. React Native Web's Alert.alert is a no-op,
                 so the header logout icon needs a real modal on every platform. */}
@@ -1560,27 +1565,20 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         profileLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
         profileLineText: { flex: 1, fontSize: 11.5, fontWeight: '600', color: colors.foreground },
 
-        moduleSwitch: {
+        portalTabBar: {
             flexDirection: 'row',
-            gap: 6,
-            padding: 4,
             backgroundColor: colors.card,
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: 10,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            paddingTop: 5,
         },
-        switchBtn: {
-            flex: 1,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            paddingVertical: 6,
-            borderRadius: 7,
-        },
-        switchBtnActive: { backgroundColor: colors.primary },
-        switchText: { fontSize: 12, fontWeight: '700', color: colors.foreground },
-        switchTextActive: { color: colors.white },
+        portalTab: { flex: 1, minHeight: 54, alignItems: 'center', justifyContent: 'center', gap: 2 },
+        portalTabDisabled: { opacity: 0.45 },
+        portalTabIcon: { width: 35, height: 35, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+        portalTabIconActive: { backgroundColor: colors.primary },
+        portalTabLock: { position: 'absolute', right: -3, bottom: -1 },
+        portalTabLabel: { fontSize: 11, fontWeight: '600', color: colors.mutedForeground },
+        portalTabLabelActive: { color: colors.primary, fontWeight: '800' },
         unavailableNote: { fontSize: 10.5, color: colors.mutedForeground, textAlign: 'center' },
 
         summaryRow: { flexDirection: 'row', gap: 8 },
