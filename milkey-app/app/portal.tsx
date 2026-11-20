@@ -14,6 +14,7 @@ import { Pressable } from '@/components/ui/HapticPressable';
 import { SearchInput } from '@/components/common/SearchInput';
 import { DateRangePicker } from '@/components/DateRangePicker';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import {
@@ -542,7 +543,7 @@ function SectionCard({
 }
 
 function SummaryCard({
-    label, shortLabel, value, sub, icon: Icon, tone, colors, isDark, negative = false, gridWidth, s,
+    label, shortLabel, value, sub, icon: Icon, tone, colors, isDark, negative = false, last = false, gridWidth, s,
 }: {
     label: string;
     shortLabel: string;
@@ -552,6 +553,7 @@ function SummaryCard({
     gridWidth: number;
     tone: 'green' | 'orange' | 'balance';
     negative?: boolean;
+    last?: boolean;
     colors: any;
     isDark: boolean;
     s: any;
@@ -565,8 +567,8 @@ function SummaryCard({
     const showIcon = usableWidth >= 68;
     const fontFor = (text: string, max: number) => Math.max(10, Math.min(max, Math.floor(usableWidth / (Math.max(text.length, 1) * 0.64) * 10) / 10));
     return (
-        <View style={s.summaryCell}>
-            <View accessible accessibilityRole="text" accessibilityLabel={[label, value, sub].filter(Boolean).join(', ')} style={[s.summaryCard, { backgroundColor: tint + (isDark ? '18' : '0B'), borderColor: tint + (isDark ? '38' : '22') }]}>
+        <View style={[s.summaryCell, !last && s.summaryDivider]}>
+            <View accessible accessibilityRole="text" accessibilityLabel={[label, value, sub].filter(Boolean).join(', ')} style={s.summaryCard}>
                 <View style={s.summaryCardHeading}>
                     {showIcon && <View style={[s.summaryIcon, { backgroundColor: tint + '18' }]}><Icon size={12} color={tint} strokeWidth={2.3} /></View>}
                     <Text numberOfLines={1} adjustsFontSizeToFit style={s.summaryLabel}>{shortLabel}</Text>
@@ -1242,7 +1244,7 @@ export default function PortalScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
             >
                 <View style={s.topInfoStack}>
-                    <Box style={s.profileCard}>
+                    <LinearGradient colors={isDark ? ['#184C36', '#0E3225', '#12603B'] : ['#B8F3C5', '#E9F8EA', '#22A851']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.profileCard}>
                         <View pointerEvents="none" style={s.decorCircle} />
                         <View style={s.profileTopRow}>
                             <Image source={require('@/assets/images/customer-avatar-fair.jpg')} style={s.avatar} />
@@ -1251,10 +1253,6 @@ export default function PortalScreen() {
                                     <View style={s.profileNameRow}>
                                         <Text numberOfLines={1} style={s.profileName}>{profile?.name || 'Farmer / Customer'}</Text>
                                         <StatusPill status={profile?.status || 'Active'} colors={colors} s={s} />
-                                    </View>
-                                    <View accessible accessibilityLabel={`Linked by ${profile?.linkedDairyNames?.join(', ') || profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}`} style={s.profileDairy}>
-                                        <Text style={s.profileDairyLabel}>LINKED BY</Text>
-                                        <Text numberOfLines={2} style={s.profileDairyName}>{profile?.linkedDairyNames?.join(', ') || profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}</Text>
                                     </View>
                                 </View>
                                 <View style={s.profileDetails}>
@@ -1275,6 +1273,10 @@ export default function PortalScreen() {
                                         </Text>
                                     )}
                                 </View>
+                                <View accessible accessibilityLabel={`Linked by ${profile?.linkedDairyNames?.join(', ') || profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}`} style={s.profileDairy}>
+                                    <Text style={s.profileDairyLabel}>LINKED BY</Text>
+                                    <Text numberOfLines={2} style={s.profileDairyName}>{profile?.linkedDairyNames?.join(', ') || profile?.dairyNames?.join(', ') || profile?.dairyName || 'Dairy'}</Text>
+                                </View>
                             </View>
                         </View>
                         <View style={s.summaryGrid} onLayout={(event) => setSummaryGridWidth(event.nativeEvent.layout.width)}>
@@ -1293,10 +1295,10 @@ export default function PortalScreen() {
                             <SummaryCard
                                 label="Current balance" shortLabel="Balance" gridWidth={summaryGridWidth || Math.max(0, width - 50)}
                                 value={summary ? summaryMoney(summary.currentBalance) : '--'}
-                                icon={Wallet} tone="balance" negative={!!summary && summary.currentBalance < 0} colors={colors} isDark={isDark} s={s}
+                                icon={Wallet} tone="balance" last negative={!!summary && summary.currentBalance < 0} colors={colors} isDark={isDark} s={s}
                             />
                         </View>
-                    </Box>
+                    </LinearGradient>
                 </View>
 
                 {(loading && !dashboard) ? (
@@ -1470,7 +1472,7 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
     return StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.background },
         scroll: { flex: 1 },
-        scrollContent: { paddingHorizontal: 10, paddingTop: 0, gap: 10 },
+        scrollContent: { paddingHorizontal: 10, paddingTop: 1, gap: 10 },
 
         header: {
             backgroundColor: colors.primary,
@@ -1531,29 +1533,34 @@ const createStyles = (colors: any, isDark: boolean, width: number) => {
         topInfoStack: { gap: 6 },
         profileCard: { padding: 8, overflow: 'hidden', borderRadius: 16 },
         decorCircle: {
-            position: 'absolute', width: 120, height: 120, borderRadius: 60,
-            backgroundColor: colors.primary + (isDark ? '0D' : '08'), right: -55, top: -60,
+            position: 'absolute', width: 180, height: 180, borderRadius: 90,
+            backgroundColor: isDark ? 'rgba(120,220,150,0.08)' : 'rgba(255,255,255,0.22)', right: -70, top: -100,
         },
-        profileTopRow: { flexDirection: 'row', gap: 7, alignItems: 'flex-start', marginBottom: 5 },
-        avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.primary + '15', borderWidth: 1, borderColor: colors.primary + '25' },
+        profileTopRow: {
+            flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginBottom: 8,
+            borderRadius: 12, padding: 10,
+            backgroundColor: isDark ? 'rgba(15,35,26,0.85)' : 'rgba(255,255,255,0.86)',
+        },
+        avatar: { width: 54, height: 54, borderRadius: 27, backgroundColor: colors.primary + '15', borderWidth: 2, borderColor: colors.primary },
         profileInfo: { flex: 1, minWidth: 0 },
         profileHeadingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
-        profileNameRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4 },
-        profileName: { fontSize: 14, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
-        profileDetails: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 2, marginTop: 3 },
-        profileMeta: { fontSize: 10, color: colors.mutedForeground },
+        profileNameRow: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+        profileName: { fontSize: 16, fontWeight: '800', color: colors.foreground, flexShrink: 1 },
+        profileDetails: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 4, marginTop: 5 },
+        profileMeta: { fontSize: 11, color: colors.mutedForeground, fontWeight: '600' },
         profileLine: { flexDirection: 'row', alignItems: 'center', gap: 3, maxWidth: '100%' },
-        profileLineText: { flexShrink: 1, fontSize: 10, fontWeight: '600', color: colors.foreground },
-        profileDairy: { width: '32%', maxWidth: 140, alignItems: 'flex-end' },
-        profileDairyLabel: { fontSize: 8, fontWeight: '800', color: colors.mutedForeground, letterSpacing: 0.3 },
-        profileDairyName: { width: '100%', textAlign: 'right', fontSize: 10, fontWeight: '700', color: colors.foreground },
-        summaryGrid: { flexDirection: 'row', marginHorizontal: -2 },
-        summaryCell: { flex: 1, minWidth: 0, padding: 2 },
-        summaryCard: { flex: 1, minHeight: 56, borderWidth: 1, borderRadius: 9, paddingHorizontal: 5, paddingVertical: 4 },
-        summaryCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-        summaryIcon: { width: 18, height: 18, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
-        summaryLabel: { flex: 1, fontSize: 9, fontWeight: '700', color: colors.mutedForeground },
-        summaryValue: { fontWeight: '900', color: colors.foreground, marginTop: 3 },
+        profileLineText: { flexShrink: 1, fontSize: 11, fontWeight: '600', color: colors.foreground },
+        profileDairy: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, marginTop: 6, minWidth: 0 },
+        profileDairyLabel: { fontSize: 9, fontWeight: '800', color: colors.primary, letterSpacing: 0.3 },
+        profileDairyName: { flex: 1, fontSize: 10, fontWeight: '700', color: colors.foreground },
+        summaryGrid: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: 12, paddingVertical: 8, overflow: 'hidden' },
+        summaryCell: { flex: 1, minWidth: 0, paddingHorizontal: 6 },
+        summaryDivider: { borderRightWidth: 1, borderRightColor: colors.primary + '45' },
+        summaryCard: { flex: 1, minHeight: 52 },
+        summaryCardHeading: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+        summaryIcon: { width: 20, height: 20, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+        summaryLabel: { flex: 1, fontSize: 10, fontWeight: '700', color: colors.mutedForeground },
+        summaryValue: { fontWeight: '900', color: colors.foreground, marginTop: 4 },
         summarySub: { fontWeight: '600', color: colors.mutedForeground, marginTop: 1 },
 
         portalTabBar: {
