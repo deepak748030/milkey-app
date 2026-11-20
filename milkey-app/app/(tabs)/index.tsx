@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, Image, ActivityIndicator, RefreshControl, Animated, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Image, ActivityIndicator, RefreshControl, Animated, Linking, Modal } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
 import { useTheme } from '@/hooks/useTheme';
 import { router } from 'expo-router';
@@ -8,7 +8,7 @@ import TopBar from '@/components/TopBar';
 import { useCartStore } from '@/lib/cartStore';
 import { productsApi, reportsApi, milkCollectionsApi, sellingEntriesApi, Product, HomeStats } from '@/lib/milkeyApi';
 import { useAuth } from '@/hooks/useAuth';
-import { Plus, Wallet, ChevronRight, Package, ChevronDown, Milk, ShoppingCart, Users } from 'lucide-react-native';
+import { Plus, Wallet, ChevronRight, Package, ChevronDown, Milk, ShoppingCart, Users, X } from 'lucide-react-native';
 import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { useTranslation } from '@/hooks/useTranslation';
 import { QuickEntryModal } from '@/components/QuickEntryModal';
@@ -54,8 +54,24 @@ export default function HomeScreen() {
   // Quick Entry modal state
   const [showQuickEntryModal, setShowQuickEntryModal] = useState(false);
 
-  // Quick Advance modal state
+  // Choose the ledger before opening its existing advance flow.
+  const [showAdvanceOptions, setShowAdvanceOptions] = useState(false);
   const [showQuickAdvanceModal, setShowQuickAdvanceModal] = useState(false);
+  const advanceTransition = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (advanceTransition.current) clearTimeout(advanceTransition.current);
+  }, []);
+
+  const openAdvance = (kind: 'farmer' | 'customer') => {
+    if (advanceTransition.current) return;
+    setShowAdvanceOptions(false);
+    // Let the options modal dismiss before opening another modal or screen on native.
+    advanceTransition.current = setTimeout(() => {
+      advanceTransition.current = null;
+      if (kind === 'farmer') setShowQuickAdvanceModal(true);
+      else router.push('/selling-advance' as any);
+    }, 300);
+  };
 
   // Bulk (one session) entry modal state
   const [showBulkEntryModal, setShowBulkEntryModal] = useState(false);
@@ -333,7 +349,7 @@ export default function HomeScreen() {
           </Pressable>
           <Pressable
             style={styles.quickActionCard}
-            onPress={() => setShowQuickAdvanceModal(true)}
+            onPress={() => setShowAdvanceOptions(true)}
           >
             <View style={[styles.quickActionIcon, { backgroundColor: colors.secondary }]}>
               <Wallet size={20} color={colors.primary} />
@@ -354,7 +370,28 @@ export default function HomeScreen() {
           onBulkEntryPress={() => setShowBulkEntryModal(true)}
         />
 
-        {/* Quick Advance Modal */}
+        {/* Select the existing farmer or customer advance flow. */}
+        <Modal visible={showAdvanceOptions} transparent animationType="fade" onRequestClose={() => setShowAdvanceOptions(false)}>
+          <View style={styles.advanceOptionsOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="Close advance options" onPress={() => setShowAdvanceOptions(false)} />
+            <View style={styles.advanceOptionsCard}>
+              <View style={styles.advanceOptionsHeader}>
+                <Text style={styles.advanceOptionsTitle}>Select Advance</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Close advance options" hitSlop={10} onPress={() => setShowAdvanceOptions(false)}>
+                  <X size={20} color={colors.foreground} />
+                </Pressable>
+              </View>
+              <Pressable accessibilityRole="button" style={styles.advanceOption} onPress={() => openAdvance('farmer')}>
+                <Text style={styles.advanceOptionText}>Farmer Advance</Text><ChevronRight size={20} color={colors.primary} />
+              </Pressable>
+              <Pressable accessibilityRole="button" style={styles.advanceOption} onPress={() => openAdvance('customer')}>
+                <Text style={styles.advanceOptionText}>Customer Advance</Text><ChevronRight size={20} color={colors.primary} />
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Quick Farmer Advance Modal */}
         <QuickAdvanceModal
           isVisible={showQuickAdvanceModal}
           onClose={() => setShowQuickAdvanceModal(false)}
@@ -385,6 +422,39 @@ export default function HomeScreen() {
 }
 
 const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
+  advanceOptionsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  advanceOptionsCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 18,
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
+  advanceOptionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  advanceOptionsTitle: { fontSize: 18, fontWeight: '700', color: colors.foreground },
+  advanceOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: 15,
+    marginTop: 8,
+    backgroundColor: colors.background,
+  },
+  advanceOptionText: { fontSize: 15, fontWeight: '600', color: colors.foreground },
   container: {
     flex: 1,
     backgroundColor: colors.background,

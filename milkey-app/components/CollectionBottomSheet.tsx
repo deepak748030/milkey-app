@@ -9,7 +9,7 @@ const ITEMS: SheetItem<PurchaseTab>[] = [
   { key: 'Purchase' as PurchaseTab, label: 'Purchase', IconComp: Milk, iconBg: '#D9ECFB', iconColor: '#1565C0', tint: '#E9F8EE' },
   { key: 'Report' as PurchaseTab, label: 'Generate Report', IconComp: FileText, iconBg: '#E2F6E7', iconColor: '#2E7D32', tint: '#EFFAF3' },
   { key: 'Payment' as PurchaseTab, label: 'Payment', IconComp: IndianRupee, iconBg: '#FFEFC9', iconColor: '#EF8A12', tint: '#FFFCF0' },
-  { key: 'Advances' as PurchaseTab, label: 'Advance', IconComp: Calendar, iconBg: '#FBDCE1', iconColor: '#D32F2F', tint: '#FDF1F3' },
+  { key: 'Advances' as PurchaseTab, label: 'Farmer Advance', IconComp: Calendar, iconBg: '#FBDCE1', iconColor: '#D32F2F', tint: '#FDF1F3' },
 ];
 const PREF: PurchaseTab[] = ['RateSetting','Farmer','Purchase','Report','Payment','Advances'];
 function getDisplay(): SheetItem<PurchaseTab>[] {

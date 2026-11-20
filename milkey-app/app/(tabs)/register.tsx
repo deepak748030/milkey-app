@@ -1347,11 +1347,13 @@ export default function RegisterScreen() {
     // Debounce advance search and fetch from server
     const debouncedAdvanceSearch = useDebounce(advanceSearch, 400);
 
-    useEffect(() => {
-        // Reset page and fetch with new search term
-        setAdvancesPage(1);
-        fetchAdvances(1, debouncedAdvanceSearch, false);
-    }, [debouncedAdvanceSearch]);
+    useFocusEffect(useCallback(() => {
+        // Refresh on return as Home's quick advance can update this ledger.
+        if (activeTab === 'Advances') {
+            setAdvancesPage(1);
+            void fetchAdvances(1, debouncedAdvanceSearch, false);
+        }
+    }, [activeTab, debouncedAdvanceSearch, advSortOrder]));
 
     // Data comes pre-sorted from server (pending first, then settled)
     // No need for client-side filtering/sorting
