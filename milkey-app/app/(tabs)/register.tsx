@@ -1875,7 +1875,6 @@ export default function RegisterScreen() {
                                 </Text>
                                 <Text style={[styles.historyTableCell, { flex: 0.9, color: colors.primary }]}>
                                     ₹{(p.totalMilkAmount || 0).toFixed(2)}
-                                    {p.entriesAmount != null && p.extraMilkAmount != null ? `\n${p.entriesAmount.toFixed(2)} + ${p.extraMilkAmount.toFixed(2)}` : ''}
                                 </Text>
                                 <Text style={[styles.historyTableCell, { flex: 0.7, color: colors.warning }]}>
                                     ₹{(p.totalAdvanceDeduction || 0).toFixed(0)}

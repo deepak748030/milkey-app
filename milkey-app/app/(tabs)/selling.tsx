@@ -1938,19 +1938,19 @@ export default function SellingScreen() {
 
                 <View style={styles.recentFiltersRow}>
                     {/* Member Filter */}
-                    <View style={{ flex: 1, position: 'relative' }}>
+                    <View style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                         {showRecentMemberDropdown ? (
                             <View style={styles.recentMemberFilter}>
                                 <Search size={14} color={colors.mutedForeground} />
                                 <TextInput
-                                    style={[styles.memberSearchInput, { flex: 1 }]}
+                                    style={[styles.memberSearchInput, { flex: 1, minWidth: 0 }]}
                                     placeholder="Search customer..."
                                     value={recentMemberSearch}
                                     onChangeText={setRecentMemberSearch}
                                     placeholderTextColor={colors.mutedForeground}
                                     autoFocus
                                 />
-                                <Pressable onPress={() => { setShowRecentMemberDropdown(false); setRecentMemberSearch(''); }}>
+                                <Pressable style={{ flexShrink: 0 }} onPress={() => { setShowRecentMemberDropdown(false); setRecentMemberSearch(''); }}>
                                     <X size={14} color={colors.mutedForeground} />
                                 </Pressable>
                             </View>
