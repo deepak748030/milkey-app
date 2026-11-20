@@ -116,6 +116,56 @@ const collectionDateQuery = (start, end, offset) => {
     return { $or: [{ date: dates }, { date: strings }] };
 };
 
+// The balance is computed independently of the paginated history lists. Each
+// linked account has its own settlement cutoff; no entry or payment is modified.
+const portalBalanceParts = async ({ identity, module, offset }) => {
+    const collection = module === 'collection';
+    const paymentModel = collection ? Payment : MemberPayment;
+    const entryModel = collection ? MilkCollection : SellingEntry;
+    const accounts = collection
+        ? identity.collectionLinks.map(link => ({
+            paymentScope: { owner: link.owner, farmer: { $in: link.farmerIds.length ? link.farmerIds : link.allProfileIds } },
+            entryScope: { owner: link.owner, $or: [
+                { purchaseFarmer: { $in: link.allProfileIds } },
+                { farmerCode: { $regex: `^${escapeRegExp(link.code)}$`, $options: 'i' } },
+            ] },
+            fallbackBalance: (link.farmerDocs || []).reduce((sum, farmer) => sum + Number(farmer.currentBalance || 0), 0),
+        }))
+        : identity.sellingLinks.flatMap(link => (link.memberDocs || []).map(member => ({
+            paymentScope: { owner: link.owner, member: toId(member._id) },
+            entryScope: { owner: link.owner, member: toId(member._id) },
+            fallbackBalance: Number(member.sellingPaymentBalance || 0),
+        })));
+
+    const parts = await Promise.all(accounts.map(async account => {
+        const rows = await paymentModel.find(account.paymentScope)
+            .sort({ periodEnd: -1, date: -1, createdAt: -1, _id: -1 }).limit(1).lean();
+        const latest = rows[0];
+        const end = latest?.periodEnd ? new Date(latest.periodEnd) : null;
+        let dateOrLegacyFilter;
+        if (end && !Number.isNaN(end.getTime())) {
+            const nextDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate() + 1)).toISOString().slice(0, 10);
+            // Collection dates use the owner's local day; selling dates use UTC calendar days.
+            dateOrLegacyFilter = collectionDateQuery(nextDay, null, collection ? offset : 0);
+        } else {
+            // A missing historical period must not be guessed from payment date.
+            // Retain the prior unpaid-status rule until a period is available.
+            dateOrLegacyFilter = { isPaid: { $ne: true } };
+        }
+        return {
+            balance: Number(latest?.closingBalance ?? account.fallbackBalance ?? 0),
+            clause: { $and: [castAggregateMatch(account.entryScope), dateOrLegacyFilter] },
+        };
+    }));
+    // One OR-filtered aggregation avoids counting a legacy entry twice when
+    // its farmer code and linked profile both match.
+    const totals = await entryModel.aggregate([
+        { $match: parts.length ? { $or: parts.map(part => part.clause) } : EMPTY_QUERY },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+    ]);
+    return { baseBalance: parts.reduce((sum, part) => sum + part.balance, 0), entryAmount: Number(totals[0]?.total || 0) };
+};
+
 // The dairy's Collection Advances tab explicitly requests status=pending.
 // Settled, partially settled and deleted records remain in the database but
 // must not appear as extra rows in that pending list.
@@ -188,6 +238,8 @@ router.get('/dashboard', portalAuth, async (req, res) => {
         }
 
         const { start: todayStart, end: tomorrowStart } = localDayRange(req.query.tzOffsetMinutes);
+        const parsedOffset = Number(req.query.tzOffsetMinutes);
+        const offset = Number.isFinite(parsedOffset) ? Math.max(-720, Math.min(840, parsedOffset)) : 330;
         const publicUser = publicPortalIdentity(identity, module);
         const availableModules = publicUser.availableModules;
         const ownerName = (doc) => identity.ownerNames[toId(doc?.owner)] || 'Dairy';
@@ -263,26 +315,7 @@ router.get('/dashboard', portalAuth, async (req, res) => {
             const allTotals = totals?.[0]?.all?.[0] || {};
             const todayTotals = totals?.[0]?.today?.[0] || {};
             const advancePending = round2(advanceTotals[0]?.total || 0);
-            const unpaidMilkAmount = round2(allTotals.unpaidAmount || 0);
-
-            // Read-only balance: latest payment closing balance per linked farmer,
-            // falling back to the existing farmer.currentBalance field. We never
-            // write these values back, so old data remains untouched.
-            const latestPaymentByFarmer = new Map();
-            for (const payment of payments) {
-                const farmerId = toId(payment.farmer?._id || payment.farmer);
-                const key = `${toId(payment.owner)}:${farmerId}`;
-                if (!latestPaymentByFarmer.has(key)) latestPaymentByFarmer.set(key, payment);
-            }
-            const baseBalance = identity.collectionLinks.reduce((sum, link) => {
-                let linkBalance = 0;
-                for (const farmer of link.farmerDocs) {
-                    const key = `${link.owner}:${toId(farmer._id)}`;
-                    const latest = latestPaymentByFarmer.get(key);
-                    linkBalance += Number(latest?.closingBalance ?? farmer.currentBalance ?? 0);
-                }
-                return sum + linkBalance;
-            }, 0);
+            const { baseBalance, entryAmount } = await portalBalanceParts({ identity, module, offset });
 
             response = {
                 module,
@@ -294,7 +327,7 @@ router.get('/dashboard', portalAuth, async (req, res) => {
                     totalMilkQuantity: round2(allTotals.quantity || 0),
                     totalMilkAmount: round2(allTotals.amount || 0),
                     advancePending,
-                    currentBalance: round2(baseBalance + unpaidMilkAmount - advancePending),
+                    currentBalance: round2(baseBalance + entryAmount - advancePending),
                     status: 'Active',
                 },
                 entries: entries.map((row) => ({
@@ -425,23 +458,7 @@ router.get('/dashboard', portalAuth, async (req, res) => {
             const allTotals = totals?.[0]?.all?.[0] || {};
             const todayTotals = totals?.[0]?.today?.[0] || {};
             const advancePending = round2(advanceTotals.reduce((sum, group) => sum + Math.max(0, Number(group.given || 0) - Number(group.adjusted || 0)), 0));
-            const unpaidSellAmount = round2(allTotals.unpaidAmount || 0);
-
-            const latestPaymentByMember = new Map();
-            for (const payment of payments) {
-                const memberId = toId(payment.member?._id || payment.member);
-                const key = `${toId(payment.owner)}:${memberId}`;
-                if (!latestPaymentByMember.has(key)) latestPaymentByMember.set(key, payment);
-            }
-            const baseBalance = identity.sellingLinks.reduce((sum, link) => {
-                let linkBalance = 0;
-                for (const member of link.memberDocs) {
-                    const key = `${link.owner}:${toId(member._id)}`;
-                    const latest = latestPaymentByMember.get(key);
-                    linkBalance += Number(latest?.closingBalance ?? member.sellingPaymentBalance ?? 0);
-                }
-                return sum + linkBalance;
-            }, 0);
+            const { baseBalance, entryAmount } = await portalBalanceParts({ identity, module, offset });
 
             response = {
                 module,
@@ -453,7 +470,7 @@ router.get('/dashboard', portalAuth, async (req, res) => {
                     totalMilkQuantity: round2(allTotals.quantity || 0),
                     totalMilkAmount: round2(allTotals.amount || 0),
                     advancePending,
-                    currentBalance: round2(baseBalance + unpaidSellAmount + advancePending),
+                    currentBalance: round2(baseBalance + entryAmount + advancePending),
                     status: 'Active',
                 },
                 entries: entries.map((row) => ({
