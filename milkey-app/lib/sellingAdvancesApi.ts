@@ -102,7 +102,7 @@ export const sellingAdvancesApi = {
     getAll: async (params?: {
         memberId?: string;
         type?: SellingAdvanceType;
-        status?: 'all' | SellingAdvanceStatus;
+        status?: 'all' | 'open' | SellingAdvanceStatus;
         limit?: number;
         page?: number;
         search?: string;

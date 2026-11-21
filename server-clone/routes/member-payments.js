@@ -34,7 +34,7 @@ router.get('/', auth, async (req, res) => {
 
             const pipeline = [
                 { $match: matchStage },
-                { $sort: { date: -1 } },
+                { $sort: { date: -1, _id: -1 } },
                 {
                     $group: {
                         _id: '$member',
@@ -42,7 +42,7 @@ router.get('/', auth, async (req, res) => {
                     }
                 },
                 { $replaceRoot: { newRoot: '$doc' } },
-                { $sort: { date: -1 } },
+                { $sort: { date: -1, _id: -1 } },
                 { $skip: (parseInt(page) - 1) * parseInt(limit) },
                 { $limit: parseInt(limit) }
             ];
@@ -74,13 +74,13 @@ router.get('/', auth, async (req, res) => {
 
         const payments = await MemberPayment.find(query)
             .populate('member', 'name mobile')
-            .sort({ date: -1 })
+            .sort({ date: -1, _id: -1 })
             .limit(parseInt(limit))
             .skip((parseInt(page) - 1) * parseInt(limit))
             .lean();
 
-        // Backfill derived fields for older payments that may have 0 values
-        // Compute from settledEntries (selling entries) for the selected period.
+        // Derive missing quantity/rate for display only; reading history must not
+        // rewrite historical payment snapshots.
         const paymentsNeedingFix = payments.filter(p => {
             const qty = Number(p.totalQuantity ?? 0);
             const rate = Number(p.milkRate ?? 0);
@@ -101,8 +101,6 @@ router.get('/', auth, async (req, res) => {
 
             const qtyByEntryId = new Map(entries.map(e => [String(e._id), Number(e.morningQuantity || 0) + Number(e.eveningQuantity || 0)]));
 
-            const bulkOps = [];
-
             for (const p of paymentsNeedingFix) {
                 const computedQty = (p.settledEntries || []).reduce((sum, id) => sum + (qtyByEntryId.get(String(id)) || 0), 0);
                 const currentQty = Number(p.totalQuantity ?? 0);
@@ -115,20 +113,6 @@ router.get('/', auth, async (req, res) => {
                 // Update response payload
                 p.totalQuantity = finalQty;
                 p.milkRate = finalRate;
-
-                // Persist only if we computed meaningful values
-                if ((currentQty <= 0 && finalQty > 0) || (currentRate <= 0 && finalRate > 0)) {
-                    bulkOps.push({
-                        updateOne: {
-                            filter: { _id: p._id },
-                            update: { $set: { totalQuantity: finalQty, milkRate: finalRate } }
-                        }
-                    });
-                }
-            }
-
-            if (bulkOps.length > 0) {
-                await MemberPayment.bulkWrite(bulkOps);
             }
         }
 

@@ -1,3 +1,4 @@
+import { subscriptionFeatureLabel, subscriptionFeatureDescription } from '@/lib/subscriptionFeatures';
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, ScrollView, StyleSheet, ActivityIndicator, Dimensions, StatusBar, Alert } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
@@ -13,7 +14,7 @@ interface SubscriptionModalProps {
     visible: boolean;
     onClose: () => void;
     onSubscribe?: (subscription: Subscription) => void;
-    filterTab?: 'purchase' | 'selling' | 'register';
+    filterTab?: 'purchase' | 'selling' | 'register' | 'inventory';
     title?: string;
     fullScreen?: boolean;
 }
@@ -65,7 +66,7 @@ export function SubscriptionModal({
             if (res.success && res.response) {
                 let subs = res.response.subscriptions || [];
                 if (filterTab) {
-                    subs = subs.filter(s => s.applicableTabs?.includes(filterTab) || s.subscriptionType === 'combined');
+                    subs = subs.filter(s => s.applicableTabs?.includes(filterTab));
                 }
                 subs = subs.filter(s => !s.isPurchased);
                 setSubscriptions(subs);
@@ -182,7 +183,7 @@ export function SubscriptionModal({
 
     const getTabNames = (tabs: string[]) => {
         if (!tabs || tabs.length === 0) return '';
-        return tabs.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' • ');
+        return tabs.map(subscriptionFeatureLabel).join(' • ');
     };
 
     const styles = createStyles(colors, isDark, fullScreen);
@@ -207,7 +208,7 @@ export function SubscriptionModal({
                     </View>
                     <Text style={styles.emptyTitle}>Subscription Required</Text>
                     <Text style={styles.emptyText}>
-                        {filterTab ? `Unlock ${filterTab.charAt(0).toUpperCase() + filterTab.slice(1)} features with an active plan.` : 'No plans available right now.'}
+                        {filterTab ? `Unlock ${subscriptionFeatureLabel(filterTab)} features with an active plan.` : 'No plans available right now.'}
                     </Text>
                     <Text style={styles.emptySubtext}>Please contact support or try again later.</Text>
                 </View>
@@ -232,7 +233,7 @@ export function SubscriptionModal({
                         <View style={styles.infoIcon}>
                             <ShieldCheck size={16} color={colors.primary} />
                         </View>
-                        <Text style={styles.infoBannerText}>Unlock <Text style={styles.infoBannerHighlight}>{filterTab.charAt(0).toUpperCase() + filterTab.slice(1)}</Text> — choose a plan below</Text>
+                        <Text style={styles.infoBannerText}>Unlock <Text style={styles.infoBannerHighlight}>{subscriptionFeatureLabel(filterTab)}</Text> — choose a plan below</Text>
                     </View>
                 )}
 
@@ -325,7 +326,7 @@ export function SubscriptionModal({
                                 {sub.applicableTabs?.map((tab) => (
                                     <View key={tab} style={styles.featureItem}>
                                         <View style={styles.checkCircle}><Check size={10} color="#fff" strokeWidth={3} /></View>
-                                        <Text style={styles.featureText}>{tab.charAt(0).toUpperCase() + tab.slice(1)} access unlocked</Text>
+                                        <Text style={styles.featureText}>{subscriptionFeatureDescription(tab)}</Text>
                                     </View>
                                 ))}
                                 <View style={styles.featureItem}>
@@ -363,7 +364,7 @@ export function SubscriptionModal({
         );
     };
 
-    const headerTitle = title || (filterTab ? `Unlock ${filterTab.charAt(0).toUpperCase() + filterTab.slice(1)}` : 'Choose a plan');
+    const headerTitle = title || (filterTab ? `Unlock ${subscriptionFeatureLabel(filterTab)}` : 'Choose a plan');
     const headerSubtitle = filterTab ? `Subscribe to continue using ${filterTab}` : isNewUser ? 'Start free or pick a paid plan' : 'Pick the right plan for your dairy';
 
     return (

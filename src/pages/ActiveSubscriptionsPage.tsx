@@ -374,7 +374,7 @@ export function ActiveSubscriptionsPage() {
                                                         <div className="flex flex-wrap gap-1">
                                                             {sub.applicableTabs?.map(tab => (
                                                                 <span key={tab} className="px-2 py-0.5 text-xs bg-primary/10 text-primary rounded-full capitalize">
-                                                                    {tab}
+                                                                    {({ purchase: 'Collection', selling: 'Selling', register: 'Register (legacy)', inventory: 'Inventory', user_login: 'User Login' } as Record<string, string>)[tab] || tab}
                                                                 </span>
                                                             ))}
                                                         </div>

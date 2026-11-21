@@ -29,6 +29,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { useBluetoothPrinter } from '@/hooks/useBluetoothPrinter';
 import { useSubTabStore, SellingTab } from '@/lib/subTabStore';
 import { buildSellingPaymentSlipPayload, buildMembersListPayload } from '@/lib/slipPrint';
+import { formatSellingAdvance } from '@/lib/sellingPayment';
 import { useFocusEffect } from 'expo-router';
 import { brandedHeaderHtml, brandedFooterHtml, brandedHeader, brandedFooter, twoCol, threeCol, line as fmtLine, left as fmtLeft, center as fmtCenter, feed } from '@/lib/printFormat';
 import { getThermalSlipLabels } from '@/lib/printTranslations';
@@ -141,6 +142,10 @@ export default function SellingScreen() {
     const [paymentsHasMore, setPaymentsHasMore] = useState(true);
     const [paymentsLoadingMore, setPaymentsLoadingMore] = useState(false);
     // Settlement history pagination - member specific
+    const [memberPayments, setMemberPayments] = useState<MemberPayment[]>([]);
+    const [memberPaymentsLoading, setMemberPaymentsLoading] = useState(false);
+    const [memberPaymentsError, setMemberPaymentsError] = useState('');
+    const memberPaymentsRequest = useRef(0);
     const [memberPaymentsPage, setMemberPaymentsPage] = useState(1);
     const [memberPaymentsHasMore, setMemberPaymentsHasMore] = useState(true);
     const [memberPaymentsLoadingMore, setMemberPaymentsLoadingMore] = useState(false);
@@ -444,6 +449,7 @@ export default function SellingScreen() {
 
     const onRefresh = () => {
         setRefreshing(true);
+        if (selectedPaymentMember) void loadMemberPaymentHistory(selectedPaymentMember._id);
         const hasFilters = recentEntriesMemberFilter || recentEntriesStartDate || recentEntriesEndDate;
         if (hasFilters) {
             fetchFilteredEntries().finally(() => setRefreshing(false));
@@ -501,29 +507,43 @@ export default function SellingScreen() {
         }
     };
 
-    // Load more member-specific payment history
-    const loadMoreMemberPayments = async () => {
-        if (memberPaymentsLoadingMore || !memberPaymentsHasMore || !selectedPaymentMember) return;
-        setMemberPaymentsLoadingMore(true);
-        try {
-            const nextPage = memberPaymentsPage + 1;
-            const res = await memberPaymentsApi.getAll({ memberId: selectedPaymentMember._id, limit: 10, page: nextPage });
-            if (res.success && res.response?.data) {
-                const newData = res.response.data;
-                setRecentPayments(prev => {
-                    const seen = new Set(prev.map(p => p._id));
-                    return [...prev, ...newData.filter(p => !seen.has(p._id))];
-                });
-                setMemberPaymentsPage(nextPage);
-                if (newData.length < 10) setMemberPaymentsHasMore(false);
-            } else {
-                setMemberPaymentsHasMore(false);
-            }
-        } catch (error) {
-            console.error('Load more member payments error:', error);
-        } finally {
+    // Keep selected-customer history separate from the global latest-per-member
+    // list. A refresh, edit or late response must not replace the other view.
+    const loadMemberPaymentHistory = async (memberId: string, page = 1, append = false) => {
+        const requestId = ++memberPaymentsRequest.current;
+        if (append) setMemberPaymentsLoadingMore(true);
+        else {
+            setMemberPayments([]);
+            setMemberPaymentsLoading(true);
             setMemberPaymentsLoadingMore(false);
+            setMemberPaymentsHasMore(false);
         }
+        setMemberPaymentsError('');
+        try {
+            const res = await memberPaymentsApi.getAll({ memberId, limit: 10, page });
+            if (requestId !== memberPaymentsRequest.current) return;
+            if (!res.success || !res.response) throw new Error(res.message || 'Could not load payment history.');
+            const data = res.response.data || [];
+            setMemberPayments(prev => {
+                if (!append) return data;
+                const seen = new Set(prev.map(p => p._id));
+                return [...prev, ...data.filter(p => !seen.has(p._id))];
+            });
+            setMemberPaymentsPage(page);
+            setMemberPaymentsHasMore(res.response.pagination ? page < res.response.pagination.pages : data.length >= 10);
+        } catch (error) {
+            if (requestId === memberPaymentsRequest.current) setMemberPaymentsError(error instanceof Error ? error.message : 'Could not load payment history.');
+        } finally {
+            if (requestId === memberPaymentsRequest.current) {
+                setMemberPaymentsLoading(false);
+                setMemberPaymentsLoadingMore(false);
+            }
+        }
+    };
+
+    const loadMoreMemberPayments = () => {
+        if (memberPaymentsLoadingMore || memberPaymentsLoading || !memberPaymentsHasMore || !selectedPaymentMember) return;
+        void loadMemberPaymentHistory(selectedPaymentMember._id, memberPaymentsPage + 1, true);
     };
     const handleSaveEntry = async () => {
         if (savingEntry) return;
@@ -608,16 +628,15 @@ export default function SellingScreen() {
         setCalcStartDate(startDateFromLastPayment);
 
         try {
-            // Fetch summary and member-specific payments in parallel
-            const [summaryRes, memberPaymentsRes] = await Promise.all([
-                memberPaymentsApi.getMemberSummary(
-                    member._id,
-                    startDateFromLastPayment
-                        ? { startDate: startDateFromLastPayment, endDate: undefined }
-                        : undefined
-                ),
-                memberPaymentsApi.getAll({ memberId: member._id, limit: 10 }),
-            ]);
+            // The history has its own request generation and must not be
+            // cancelled when the calculation end date is changed.
+            void loadMemberPaymentHistory(member._id);
+            const summaryRes = await memberPaymentsApi.getMemberSummary(
+                member._id,
+                startDateFromLastPayment
+                    ? { startDate: startDateFromLastPayment, endDate: undefined }
+                    : undefined
+            );
 
             if (requestId !== paymentSummaryRequest.current) return;
             if (summaryRes.success && summaryRes.response && typeof summaryRes.response.advancePending === 'number' && summaryRes.response.advanceEffect === 'add') {
@@ -630,17 +649,6 @@ export default function SellingScreen() {
                 showAlert('Error', summaryRes.message || 'Selling payment calculation is unavailable. Please update the app/server and reload the customer.');
             }
 
-            // Update recentPayments with member-specific data so payment history shows correctly
-            if (memberPaymentsRes.success && memberPaymentsRes.response?.data) {
-                const data = memberPaymentsRes.response.data;
-                setRecentPayments(prev => {
-                    // Remove existing entries for this member and add fresh ones
-                    const otherPayments = prev.filter(p => p.member?._id !== member._id);
-                    return [...data, ...otherPayments];
-                });
-                setMemberPaymentsPage(1);
-                setMemberPaymentsHasMore(data.length >= 10);
-            }
         } catch (error) {
             if (requestId === paymentSummaryRequest.current) {
                 setMemberSummary(null);
@@ -732,6 +740,7 @@ export default function SellingScreen() {
                     } catch (e) { /* print failed silently */ }
                 }
                 showAlert('Success', 'Payment saved successfully');
+                ++memberPaymentsRequest.current;
                 setSelectedPaymentMember(null);
                 setPaymentMemberSearch('');
                 setPaymentAmount('');
@@ -750,6 +759,8 @@ export default function SellingScreen() {
     // Clear payment form
     const clearPaymentForm = () => {
         ++paymentSummaryRequest.current;
+        ++memberPaymentsRequest.current;
+        setMemberPayments([]); setMemberPaymentsLoading(false); setMemberPaymentsLoadingMore(false); setMemberPaymentsError('');
         setPaymentLoading(false);
         setSelectedPaymentMember(null);
         setPaymentMemberSearch('');
@@ -1662,7 +1673,8 @@ export default function SellingScreen() {
             setEditPaymentVisible(false);
             setEditingPayment(null);
 
-            // Refresh payments
+            // Refresh the selected customer's full history as well as the global list.
+            if (selectedPaymentMember) await loadMemberPaymentHistory(selectedPaymentMember._id);
             await fetchData();
         } catch (error) {
             showAlert('Error', 'Failed to update payment');
@@ -2110,6 +2122,10 @@ export default function SellingScreen() {
                             setPaymentMemberSearch(text);
                             setShowPaymentMemberSuggestions(true);
                             if (selectedPaymentMember) {
+                                ++paymentSummaryRequest.current;
+                                ++memberPaymentsRequest.current;
+                                setPaymentLoading(false);
+                                setMemberPayments([]); setMemberPaymentsLoading(false); setMemberPaymentsLoadingMore(false); setMemberPaymentsError('');
                                 setSelectedPaymentMember(null);
                                 setMemberSummary(null);
                             }
@@ -2376,23 +2392,16 @@ export default function SellingScreen() {
                 Payment History {selectedPaymentMember ? `(${selectedPaymentMember.name})` : ''}
             </Text>
             {(() => {
-                // Dedupe payments by _id (member-specific fetch + global fetch may overlap)
                 const seenIds = new Set<string>();
-                const uniquePayments = recentPayments.filter(p => {
+                const filteredPayments = (selectedPaymentMember ? memberPayments : recentPayments).filter(p => {
                     if (!p?._id || seenIds.has(p._id)) return false;
                     seenIds.add(p._id);
                     return true;
                 });
-                // Filter payments by member if one is selected
-                // When a member is selected, hide fully-settled payments (closingBalance <= 0)
-                // so only records with outstanding/pending balance are shown.
-                const filteredPayments = selectedPaymentMember
-                    ? uniquePayments.filter(p =>
-                        p.member?._id === selectedPaymentMember._id &&
-                        Number(p.closingBalance ?? 0) > 0
-                    )
-                    : uniquePayments;
-
+                if (selectedPaymentMember && memberPaymentsLoading) return <ActivityIndicator size="small" color={colors.primary} />;
+                if (selectedPaymentMember && memberPaymentsError && filteredPayments.length === 0) {
+                    return <View><Text style={styles.emptyText}>{memberPaymentsError}</Text><Pressable onPress={() => void loadMemberPaymentHistory(selectedPaymentMember._id)}><Text style={styles.loadMoreText}>Retry</Text></Pressable></View>;
+                }
                 if (filteredPayments.length === 0) {
                     return (
                         <Text style={styles.emptyText}>
@@ -2456,6 +2465,12 @@ export default function SellingScreen() {
                                         <Text style={[styles.historyValue, { color: colors.primary }]}>₹{(p.totalSellAmount || 0).toFixed(2)}</Text>
                                     </View>
 
+                                    {/* Use the saved snapshot only; older rows may not have one. */}
+                                    <View style={styles.historyRow}>
+                                        <Text style={styles.historyLabel}>Selling Advance:</Text>
+                                        <Text style={[styles.historyValue, { color: colors.warning }]}>{p.advanceApplied == null ? 'Not recorded' : `₹${formatSellingAdvance(p, 2)}`}</Text>
+                                    </View>
+
                                     {/* Paid Amount */}
                                     <View style={styles.historyRow}>
                                         <Text style={styles.historyLabel}>Paid Amount:</Text>
@@ -2483,6 +2498,7 @@ export default function SellingScreen() {
                                     )}
                                 </View>
                             ))}
+                            {!!memberPaymentsError && <Text style={styles.emptyText}>{memberPaymentsError}</Text>}
                             {memberPaymentsHasMore && (
                                 <Pressable
                                     style={[styles.loadMoreBtn, memberPaymentsLoadingMore && { opacity: 0.6 }]}

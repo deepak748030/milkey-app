@@ -152,6 +152,16 @@ export default function PurchaseScreen() {
     const [reportLoading, setReportLoading] = useState(false);
     const [reportTotals, setReportTotals] = useState({ quantity: 0, amount: 0 });
     const [reportTotalCount, setReportTotalCount] = useState(0);
+    const [reportError, setReportError] = useState('');
+    const [selectedReportFarmer, setSelectedReportFarmer] = useState<PurchaseFarmer | null>(null);
+    const [showReportFarmerModal, setShowReportFarmerModal] = useState(false);
+    const [reportFarmers, setReportFarmers] = useState<PurchaseFarmer[]>([]);
+    const [reportFarmerSearchLoading, setReportFarmerSearchLoading] = useState(false);
+    const [reportFarmerSearchError, setReportFarmerSearchError] = useState('');
+    const reportFarmerFilter = selectedReportFarmer?._id || '';
+    const reportKey = JSON.stringify([reportStartDate, reportEndDate, selectedReportFarmer?._id || '', selectedReportFarmer?.code || '']);
+    const [reportLoadedKey, setReportLoadedKey] = useState('');
+    const reportFarmerRequestIdRef = useRef(0);
     const [printSettings, setPrintSettings] = useState<PrintSettings | null>(null);
 
     // Farmer tab state — Load More pagination 10
@@ -304,6 +314,10 @@ export default function PurchaseScreen() {
         if (!reportStartDate || !reportEndDate) return;
         const requestId = ++reportRequestIdRef.current;
         setReportLoading(true);
+        setReportError('');
+        setReportCollections([]);
+        setReportTotals({ quantity: 0, amount: 0 });
+        setReportTotalCount(0);
         try {
             // Load the range across pages (the old single request was capped at 500
             // rows, newest first — so older entries of the range never came).
@@ -314,25 +328,32 @@ export default function PurchaseScreen() {
                 const res = await milkCollectionsApi.getAll({
                     startDate: reportStartDate,
                     endDate: reportEndDate,
+                    ...(selectedReportFarmer ? { farmerCode: selectedReportFarmer.code, isPaid: 'all' as const } : {}),
                     limit: REPORT_PAGE_SIZE,
                     page,
                     tzOffsetMinutes: TZ_OFFSET_MINUTES,
                 });
                 if (requestId !== reportRequestIdRef.current) return;
-                if (!res.success) break;
-                const data = res.response?.data || [];
+                if (!res.success || !res.response) throw new Error(res.message || 'Could not load the report.');
+                const data = res.response.data || [];
                 rows = rows.concat(data);
-                totals = res.response?.totals || totals;
-                totalCount = res.response?.count ?? rows.length;
+                totals = res.response.totals || totals;
+                totalCount = res.response.count ?? rows.length;
                 if (data.length < REPORT_PAGE_SIZE) break;
             }
             if (requestId !== reportRequestIdRef.current) return;
             setReportCollections(rows);
             setReportTotals(totals);
             setReportTotalCount(totalCount);
-        } catch { }
+            setReportLoadedKey(reportKey);
+        } catch (error) {
+            if (requestId === reportRequestIdRef.current) {
+                setReportLoadedKey(reportKey);
+                setReportError(error instanceof Error ? error.message : 'Could not load the report.');
+            }
+        }
         if (requestId === reportRequestIdRef.current) setReportLoading(false);
-    }, [reportStartDate, reportEndDate]);
+    }, [reportStartDate, reportEndDate, selectedReportFarmer?._id, selectedReportFarmer?.code, reportKey]);
 
     useEffect(() => {
         if (activeTab === 'Farmer') {
@@ -360,7 +381,14 @@ export default function PurchaseScreen() {
     );
     useEffect(() => { fetchCollections(); }, [fetchCollections]);
     useEffect(() => { if (debouncedSearch !== undefined) fetchCustomers(debouncedSearch); }, [debouncedSearch]);
-    useEffect(() => { if (reportStartDate && reportEndDate) fetchReportData(); }, [reportStartDate, reportEndDate]);
+    useEffect(() => {
+        if (reportStartDate && reportEndDate) void fetchReportData();
+        else {
+            ++reportRequestIdRef.current;
+            setReportCollections([]); setReportTotals({ quantity: 0, amount: 0 }); setReportTotalCount(0); setReportLoading(false); setReportError('');
+        }
+        return () => { ++reportRequestIdRef.current; };
+    }, [reportStartDate, reportEndDate, fetchReportData]);
 
     // Farmer tab search - include inactive farmers — Load More 10
     useEffect(() => { setFarmerPage(1); }, [debouncedFarmerSearch]);
@@ -439,6 +467,40 @@ export default function PurchaseScreen() {
         }, 250);
         return () => clearTimeout(timer);
     }, [inlineSearchCode]);
+
+    // Report farmer search is independent of the first page used by other tabs.
+    useEffect(() => {
+        const requestId = ++reportFarmerRequestIdRef.current;
+        if (!showReportFarmerModal) { setReportFarmerSearchLoading(false); return; }
+        setReportFarmers([]);
+        setReportFarmerSearchError('');
+        setReportFarmerSearchLoading(true);
+        const timer = setTimeout(async () => {
+            const q = reportFarmerCodeSearch.trim();
+            try {
+                const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const [exact, res] = await Promise.all([
+                    q ? purchaseFarmersApi.getAll({ search: `^${escaped}$`, limit: 10, includeInactive: true }) : Promise.resolve(null),
+                    purchaseFarmersApi.getAll({ search: escaped || undefined, limit: 100, includeInactive: true }),
+                ]);
+                if (requestId !== reportFarmerRequestIdRef.current) return;
+                if (!res.success || (exact && !exact.success)) throw new Error('Could not search farmers.');
+                const normalized = q.toUpperCase();
+                const list = [...(exact?.response?.data || []), ...(res.response?.data || [])];
+                const seen = new Set<string>();
+                setReportFarmers(list.filter(farmer => {
+                    if (seen.has(farmer._id) || (normalized && !String(farmer.code).toUpperCase().includes(normalized))) return false;
+                    seen.add(farmer._id);
+                    return true;
+                }));
+            } catch {
+                if (requestId === reportFarmerRequestIdRef.current) { setReportFarmers([]); setReportFarmerSearchError('Could not search farmers. Please try again.'); }
+            } finally {
+                if (requestId === reportFarmerRequestIdRef.current) setReportFarmerSearchLoading(false);
+            }
+        }, reportFarmerCodeSearch.trim() ? 250 : 0);
+        return () => { clearTimeout(timer); ++reportFarmerRequestIdRef.current; };
+    }, [showReportFarmerModal, reportFarmerCodeSearch]);
 
     // Never let a late response land after leaving the screen.
     useEffect(() => () => { inlineSearchReqId.current++; }, []);
@@ -831,33 +893,17 @@ export default function PurchaseScreen() {
     const showBuffalo = selectedCustomer ? selectedCustomer.buffaloEnabled !== false : true;
     const isMorning = entryShift === 'morning';
 
-    // Report state for farmer filter
-    const [reportFarmerFilter, setReportFarmerFilter] = useState<string>('');
-    const [showReportFarmerModal, setShowReportFarmerModal] = useState(false);
-
-    const filteredReportCollections = useMemo(() => {
-        if (!reportFarmerFilter) return reportCollections;
-        return reportCollections.filter(c => c.purchaseFarmer?._id === reportFarmerFilter || c.farmerCode === reportFarmerFilter);
-    }, [reportCollections, reportFarmerFilter]);
-
-    const filteredReportTotals = useMemo(() => {
-        if (!reportFarmerFilter) return reportTotals;
-        const filtered = filteredReportCollections;
-        return {
-            quantity: filtered.reduce((sum, c) => sum + c.quantity, 0),
-            amount: filtered.reduce((sum, c) => sum + c.amount, 0),
-        };
-    }, [filteredReportCollections, reportFarmerFilter, reportTotals]);
-
-    const selectedReportFarmer = useMemo(() => {
-        if (!reportFarmerFilter) return null;
-        return customers.find(c => c._id === reportFarmerFilter || c.code === reportFarmerFilter) || null;
-    }, [reportFarmerFilter, customers]);
+    // The server applies the same code/legacy-ID matching to the entire range
+    // before pagination. Keep the selected farmer separately from search results.
+    const reportIsCurrent = reportLoadedKey === reportKey;
+    const filteredReportCollections = reportIsCurrent ? reportCollections : [];
+    const filteredReportTotals = reportIsCurrent ? reportTotals : { quantity: 0, amount: 0 };
+    const reportPending = !!reportStartDate && !!reportEndDate && (reportLoading || !reportIsCurrent);
 
     // Handle print button press - show type selection popup
     const handlePrintPress = useCallback((source: 'purchase' | 'report') => {
         const data = source === 'report'
-            ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
+            ? filteredReportCollections
             : collections;
         if (data.length === 0) { showAlert('Info', 'No data to print'); return; }
         setPrintSource(source);
@@ -873,11 +919,12 @@ export default function PurchaseScreen() {
         const resolvedSource = source ?? printSource;
         const isReport = resolvedSource === 'report';
         const data = overrides?.data ?? (isReport
-            ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
+            ? filteredReportCollections
             : collections);
         const totals = overrides?.totals ?? (isReport
-            ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
+            ? filteredReportTotals
             : historyTotals);
+        if (!data.length) { if (!overrides?.silent) showAlert('Info', 'No data to print'); return false; }
         const farmerForHeader = overrides?.farmer ?? selectedReportFarmer;
 
         const tFull = getThermalSlipLabels();
@@ -1013,11 +1060,12 @@ export default function PurchaseScreen() {
         const resolvedSource = source ?? printSource;
         const isReport = resolvedSource === 'report';
         const data = overrides?.data ?? (isReport
-            ? (filteredReportCollections.length > 0 ? filteredReportCollections : collections)
+            ? filteredReportCollections
             : collections);
         const totals = overrides?.totals ?? (isReport
-            ? (filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals)
+            ? filteredReportTotals
             : historyTotals);
+        if (!data.length) { if (!overrides?.silent) showAlert('Info', 'No data to print'); return false; }
         const farmerForHeader = overrides?.farmer ?? selectedReportFarmer;
 
         const tShort = getThermalSlipLabels();
@@ -1130,8 +1178,8 @@ export default function PurchaseScreen() {
 
 
     const handleExportReportPdf = useCallback(async () => {
-        const data = filteredReportCollections.length > 0 ? filteredReportCollections : collections;
-        const totals = filteredReportCollections.length > 0 ? filteredReportTotals : historyTotals;
+        const data = filteredReportCollections;
+        const totals = filteredReportTotals;
         if (data.length === 0) { showAlert('Info', 'No data to export'); return; }
         const tPdf = getSlipLabels();
         const dateLabel = reportStartDate && reportEndDate
@@ -1182,7 +1230,7 @@ export default function PurchaseScreen() {
 
 
     // Ponytail ctx — single source for all tabs (no prop drilling duplication)
-    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, milkRateSettings, showCow, showBuffalo, bonusEnabled, bonusType, bonusRate, bonusApplied, setBonusApplied, computeBaseAmount, computeBonusAmount, fatRateLocked, fixRateLocked, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
+    const purchaseCtx: any = { s, colors, t, isDark, entryDate, setShowDateModal, formatDate, entryShift, setEntryShift, isMorning, selectedCustomer, setSelectedCustomer, setEditingCustomer, setShowAddCustomer, showInlineSearch, setShowInlineSearch, inlineSearchCode, setInlineSearchCode, inlineSearchResults, inlineSearchLoading, handleSelectCustomer, handleSaveEntry, milkType, setMilkType, milkQty, setMilkQty, fatValue, setFatValue, snfValue, setSnfValue, rateValue, setRateValue, computeAmount, isZero, setIsZero, noPrint, setNoPrint, saving, isPrinterConnected, historyTotals, todayRate, milkRateSettings, showCow, showBuffalo, bonusEnabled, bonusType, bonusRate, bonusApplied, setBonusApplied, computeBaseAmount, computeBonusAmount, fatRateLocked, fixRateLocked, collections, historyLoading, saleEntrySearch, setSaleEntrySearch, isPrinting, handlePrintPress, setActionMenuEntry, selectedReportFarmer, setSelectedReportFarmer, reportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading: reportPending, reportError: reportIsCurrent ? reportError : '', reportCollections: filteredReportCollections, reportTotalCount: reportIsCurrent ? reportTotalCount : 0, reportFarmerCodeSearch, setReportFarmerCodeSearch, reportFarmers, reportFarmerSearchLoading, reportFarmerSearchError, customers, farmerPage, setFarmerPage, farmerPagination, farmerHasMore, farmerLoadingMore, handleLoadMoreFarmers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, formatDateStr, farmerTabSearch, setFarmerTabSearch, farmerSearchLoading, handleExportFarmersPdf, handleEditCustomer, handleDeleteCustomer, handleRestoreCustomer };
 
     return (
         <View style={s.container}>

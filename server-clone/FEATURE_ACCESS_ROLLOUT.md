@@ -1,0 +1,9 @@
+# Subscription feature rollout
+
+Deploy the transaction-capable `server-clone` backend before the admin and app clients. Do not change the production `server/` directory. Coordinate the backend rollout so all signup traffic goes to the new version before new registrations resume: new owner documents are marked with `subscriptionFeatureVersion: 1` at creation, while pre-existing unmarked accounts retain their existing Inventory and User Login access. Existing subscription records are not rewritten. If old and new backend instances accept signups concurrently, accounts created by the old version would be treated as legacy; prevent mixed-version signup traffic or audit those accounts before opening signup.
+
+Admin plan options use the existing `purchase` key for Collection, retain `register` only for historical plans, and add `inventory` and `user_login`. Existing purchased subscriptions keep their locked feature snapshots when a plan is edited. Admins must create or update plans and assign them to new dairies; enabling User Login on a plan definition alone does not change a subscription already purchased.
+
+Portal eligibility is evaluated per linked dairy on each request using its locked subscription and its active, completed, currently started and unexpired status. A customer linked to multiple dairies sees only eligible dairies. Inventory currently has only a coming-soon screen; the plan option controls access to that screen, not functional stock management.
+
+Before production release, verify on staging with a database replica set and test payment configuration: an old dairy; a new dairy without a plan; a current, expired, queued and revoked User Login plan; one customer linked to eligible and ineligible dairies; admin plan creation and assignment; and Inventory access. Test signup/rollback deployment ordering too. UI/mock tests do not replace these checks.

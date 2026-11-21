@@ -1,0 +1,20 @@
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const ts = require('typescript');
+const source = fs.readFileSync(path.join(__dirname, '../lib/subscriptionFeatures.ts'), 'utf8');
+const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const mod = { exports: {} };
+vm.runInNewContext(output, { module: mod, exports: mod.exports });
+test('feature labels are accurate for current plans and old locked subscriptions', () => {
+    const { subscriptionFeatureLabel: label, subscriptionFeatureDescription: describe } = mod.exports;
+    assert.equal(label('purchase'), 'Collection');
+    assert.equal(label('selling'), 'Selling');
+    assert.equal(label('user_login'), 'User Login');
+    assert.equal(label('inventory'), 'Inventory');
+    assert.equal(label('register'), 'Register (legacy)');
+    assert.equal(describe('inventory'), 'Inventory access (coming soon)');
+    assert.equal(describe('user_login'), 'User Login access unlocked');
+});

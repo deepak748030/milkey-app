@@ -1007,9 +1007,11 @@ router.get('/dashboard', adminAuth, async (req, res) => {
 
         // Subscription distribution for pie chart
         const subscriptionTabData = [
-            { name: 'Purchase', value: subscriptionDistribution.find(s => s._id === 'purchase')?.count || 0, color: '#8b5cf6' },
+            { name: 'Collection', value: subscriptionDistribution.find(s => s._id === 'purchase')?.count || 0, color: '#8b5cf6' },
             { name: 'Selling', value: subscriptionDistribution.find(s => s._id === 'selling')?.count || 0, color: '#3b82f6' },
-            { name: 'Register', value: subscriptionDistribution.find(s => s._id === 'register')?.count || 0, color: '#22c55e' }
+            { name: 'Inventory', value: subscriptionDistribution.find(s => s._id === 'inventory')?.count || 0, color: '#f59e0b' },
+            { name: 'User Login', value: subscriptionDistribution.find(s => s._id === 'user_login')?.count || 0, color: '#10b981' },
+            { name: 'Register (legacy)', value: subscriptionDistribution.find(s => s._id === 'register')?.count || 0, color: '#22c55e' }
         ];
 
         // User status distribution for pie chart
@@ -3539,16 +3541,17 @@ router.post('/users/:id/assign-subscription', adminAuth, async (req, res) => {
             });
         }
 
-        // Check if user already has an active subscription covering same tabs
+        // Only renew the same plan with the same locked features. Extending a
+        // merely overlapping plan would silently discard newly assigned features.
         const now = new Date();
         const overlappingTabs = subscription.applicableTabs || [];
-
         const existingActiveSubscription = await UserSubscription.findOne({
             user: userId,
+            subscription: subscription._id,
             isActive: true,
             paymentStatus: 'completed',
             endDate: { $gte: now },
-            applicableTabs: { $in: overlappingTabs }
+            applicableTabs: { $all: overlappingTabs, $size: overlappingTabs.length }
         }).populate('subscription').lean();
 
         // Calculate the new plan's duration as a date offset

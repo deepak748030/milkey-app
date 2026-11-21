@@ -16,7 +16,7 @@ export interface UseSubscriptionCheckResult {
     handleSubscriptionSuccess: () => void;
 }
 
-export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): UseSubscriptionCheckResult {
+export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register' | 'inventory'): UseSubscriptionCheckResult {
     const [loading, setLoading] = useState(true);
     const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
     const [accessChecked, setAccessChecked] = useState(false);
@@ -56,7 +56,7 @@ export function useSubscriptionCheck(tab: 'purchase' | 'selling' | 'register'): 
                     const tabAccess =
                         tab === 'purchase' ? statusData.hasPurchase :
                             tab === 'selling' ? statusData.hasSelling :
-                                statusData.hasRegister;
+                                tab === 'inventory' ? statusData.hasInventory : statusData.hasRegister;
 
                     if (!tabAccess && !modalDismissed) {
                         setShowSubscriptionModal(true);

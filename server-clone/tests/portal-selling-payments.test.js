@@ -101,3 +101,16 @@ test('payment history retains the old deduction rule and the new addition rule',
     assert.equal(data.payments.find(p => p.id === id(2)).netPayable, 734);
     assert.equal(ctx.queries[0].find(step => step.$project).$project.advanceEffect, 1);
 });
+
+test('newly saved payment for the linked customer appears first on a fresh history request', async () => {
+    const rows = [payment(1), payment(2, { owner: otherOwner })];
+    const ctx = fixture(rows);
+    assert.equal((await ctx.request()).body.response.total, 1);
+    rows.push(payment(3, { date: new Date('2026-11-24T10:00:00Z'), periodEnd: new Date('2026-11-24T00:00:00Z'), advanceApplied: 20, advanceEffect: 'add' }));
+    const updated = (await ctx.request()).body.response;
+    assert.equal(updated.total, 2);
+    assert.equal(updated.payments[0].id, id(3));
+    assert.equal(updated.payments[0].totalAdvanceDeduction, 20);
+    assert.equal(updated.payments[0].advanceEffect, 'add');
+    assert.equal(updated.payments[1].id, id(1));
+});

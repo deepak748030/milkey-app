@@ -70,16 +70,20 @@ export function PurchaseCollectionTab(props:any){
                         <Text style={s.summaryLbl}>{t.common.amount}</Text>
                     </View>
                 </View>
-                <View style={s.summaryDivider} />
-                <View style={s.summaryCell}>
-                    <TableIcon size={14} color={colors.primary} />
-                    <View>
-                        <Text style={[s.summaryVal, { color: colors.primary }]}>
-                            ₹{Number(todayRate || 0).toFixed(2)}
-                        </Text>
-                        <Text style={s.summaryLbl}>Rate Chart</Text>
-                    </View>
-                </View>
+                {selectedCustomer && !showInlineSearch && effectiveBasis === 'fat_snf' && (
+                    <>
+                        <View style={s.summaryDivider} />
+                        <View style={s.summaryCell}>
+                            <TableIcon size={14} color={colors.primary} />
+                            <View>
+                                <Text style={[s.summaryVal, { color: colors.primary }]}>
+                                    ₹{Number(todayRate || 0).toFixed(2)}
+                                </Text>
+                                <Text style={s.summaryLbl}>Rate Chart</Text>
+                            </View>
+                        </View>
+                    </>
+                )}
             </View>
 
             {/* Inline Farmer Search - replaces the old pressable box */}

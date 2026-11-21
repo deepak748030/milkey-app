@@ -49,7 +49,14 @@ router.get('/', auth, async (req, res) => {
         if (includeDeleted !== 'true') query.isDeleted = { $ne: true };
         if (memberId && mongoose.isValidObjectId(memberId)) query.member = memberId;
         if (type === 'given' || type === 'adjusted') query.type = type;
-        if (status && status !== 'all') query.status = status;
+        if (status === 'open') {
+            // Keep settled/adjusted history in storage, but show only advances
+            // with an outstanding amount in the pending list, before paging.
+            query.$and = [
+                { status: { $ne: 'settled' }, type: { $ne: 'adjusted' } },
+                { $expr: { $gt: [{ $ifNull: ['$amount', 0] }, { $ifNull: ['$settledAmount', 0] }] } },
+            ];
+        } else if (status && status !== 'all') query.status = status;
         if (search && String(search).trim()) {
             const escaped = String(search).trim().replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
             if (escaped) {
