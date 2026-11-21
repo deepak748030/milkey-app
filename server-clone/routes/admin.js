@@ -17,6 +17,8 @@ const Member = require('../models/Member');
 const SellingEntry = require('../models/SellingEntry');
 const Subscription = require('../models/Subscription');
 const Farmer = require('../models/Farmer');
+const { inCollectionTransaction, changeMobile } = require('../lib/collection-mobile');
+const { inSellingTransaction, changeSellingMobile } = require('../lib/selling-mobile-guard');
 const Banner = require('../models/Banner');
 const Product = require('../models/Product');
 const RateChartSettings = require('../models/RateChartSettings');
@@ -1916,11 +1918,16 @@ router.put('/selling-members/:id', adminAuth, async (req, res) => {
         if (address !== undefined) updates.address = address?.trim() || '';
         if (ratePerLiter !== undefined) updates.ratePerLiter = parseFloat(ratePerLiter) || 50;
 
-        const member = await Member.findByIdAndUpdate(
-            req.params.id,
-            updates,
-            { new: true }
-        ).populate('owner', 'name email phone');
+        const member = await inSellingTransaction(async session => {
+            const current = await Member.findOne({ _id: req.params.id }).session(session).lean();
+            if (!current) return null;
+            if (updates.mobile !== undefined) {
+                updates.mobile = await changeSellingMobile(current.owner, current, updates.mobile, session);
+            }
+            return Member.findOneAndUpdate(
+                { _id: current._id, owner: current.owner }, updates, { new: true, session }
+            ).populate('owner', 'name email phone');
+        });
 
         if (!member) {
             return res.status(404).json({
@@ -1935,6 +1942,7 @@ router.put('/selling-members/:id', adminAuth, async (req, res) => {
             response: member
         });
     } catch (error) {
+        if (error.status) return res.status(error.status).json({ success: false, message: error.message });
         console.error('Update member error:', error);
         res.status(500).json({
             success: false,
@@ -2640,11 +2648,18 @@ router.put('/register-farmers/:id', adminAuth, async (req, res) => {
         if (mobile) updates.mobile = mobile.trim();
         if (address !== undefined) updates.address = address.trim();
 
-        const farmer = await Farmer.findOneAndUpdate(
-            { _id: req.params.id, type: 'farmer', isActive: true },
-            updates,
-            { new: true }
-        ).populate('owner', 'name email phone');
+        const farmer = await inCollectionTransaction(async session => {
+            const existing = await Farmer.findOne({ _id: req.params.id, type: 'farmer', isActive: true }).session(session);
+            if (!existing) return null;
+            if (updates.mobile !== undefined) {
+                await changeMobile({ owner: existing.owner, farmerId: existing._id, code: existing.code, previous: existing.mobile, next: updates.mobile, session });
+            }
+            return Farmer.findOneAndUpdate(
+                { _id: existing._id, owner: existing.owner, type: 'farmer', isActive: true },
+                updates,
+                { new: true, session }
+            ).populate('owner', 'name email phone');
+        });
 
         if (!farmer) {
             return res.status(404).json({
@@ -2659,6 +2674,7 @@ router.put('/register-farmers/:id', adminAuth, async (req, res) => {
             response: farmer
         });
     } catch (error) {
+        if (error.status) return res.status(error.status).json({ success: false, message: error.message, code: error.code });
         console.error('Update farmer error:', error);
         res.status(500).json({
             success: false,
