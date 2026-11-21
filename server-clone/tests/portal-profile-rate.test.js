@@ -6,7 +6,8 @@ const vm = require('node:vm');
 function identityModule() {
     const module = { exports: {} };
     const dependencies = {
-        mongoose: {}, '../models/Member': {}, '../models/PurchaseFarmer': {}, '../models/Farmer': {}, '../models/User': {}, '../lib/ninzaSms': {}, './ninzaSms': {},
+        mongoose: {}, '../models/Member': {}, '../models/PurchaseFarmer': {}, '../models/Farmer': {}, '../models/User': {}, '../lib/ninzaSms': {}, './portal-feature-access': { portalEligibleOwnerIds: async users => new Set(users.map(user => String(user._id))) },
+        './ninzaSms': {},
     };
     vm.runInNewContext(fs.readFileSync(require.resolve('../lib/portalIdentity'), 'utf8'), { require: n => dependencies[n], module, Number, String, Object, Array, Set, Map, RegExp });
     return module.exports;

@@ -697,7 +697,7 @@ export const milkCollectionsApi = {
         startDate?: string;
         endDate?: string;
         shift?: string;
-        isPaid?: boolean;
+        isPaid?: boolean | 'all';
         limit?: number;
         page?: number;
         /** Device timezone as minutes AHEAD of UTC (IST = 330). Lets the server
@@ -1572,7 +1572,7 @@ export const memberPaymentsApi = {
         if (params?.latestPerMember) queryParams.append('latestPerMember', 'true');
         const query = queryParams.toString();
 
-        return apiRequest<{ data: MemberPayment[] }>(`/member-payments${query ? `?${query}` : ''}`);
+        return apiRequest<{ data: MemberPayment[]; count: number; pagination?: { page: number; limit: number; total: number; pages: number } }>(`/member-payments${query ? `?${query}` : ''}`);
     },
 
     getMemberSummary: async (memberId: string, params?: { startDate?: string; endDate?: string }) => {
@@ -1643,7 +1643,7 @@ export interface Subscription {
     durationDays?: number;
     durationType?: 'days' | 'months' | 'years';
     durationValue?: number;
-    applicableTabs: ('purchase' | 'selling' | 'register')[];
+    applicableTabs: ('purchase' | 'selling' | 'register' | 'inventory' | 'user_login')[];
     subscriptionType: 'single' | 'combined' | 'free';
     isFree: boolean;
     forNewUsers: boolean;
@@ -1684,7 +1684,7 @@ export interface UserSubscription {
     _id: string;
     user: string;
     subscription: Subscription;
-    applicableTabs: ('purchase' | 'selling' | 'register')[];
+    applicableTabs: ('purchase' | 'selling' | 'register' | 'inventory' | 'user_login')[];
     startDate: string;
     endDate: string;
     amount: number;
@@ -1707,6 +1707,8 @@ export interface SubscriptionStatus {
     hasPurchase: boolean;
     hasSelling: boolean;
     hasRegister: boolean;
+    hasInventory: boolean;
+    hasUserLogin: boolean;
     subscriptions: UserSubscription[];
     expiryDate?: string | null;
     daysLeft?: number | null;
@@ -1738,7 +1740,7 @@ export const userSubscriptionsApi = {
         }>('/user-subscriptions/my');
     },
 
-    checkTab: async (tab: 'purchase' | 'selling' | 'register') => {
+    checkTab: async (tab: 'purchase' | 'selling' | 'register' | 'inventory' | 'user_login') => {
         return apiRequest<TabSubscriptionCheck>(`/user-subscriptions/check/${tab}`);
     },
 

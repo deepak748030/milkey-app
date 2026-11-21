@@ -9,7 +9,7 @@ const ownerC = 'cccccccccccccccccccccccc';
 const outsider = 'dddddddddddddddddddddddd';
 const phone = '7489301982';
 
-function fixture({ noProfiles = false } = {}) {
+function fixture({ noProfiles = false, allowedOwners = null } = {}) {
     const queries = [];
     const settings = [
         { owner: ownerA, dairyName: '  Madhusudan  ', digitalSlipName: 'Not the receipt name', mobileNumber: 'private' },
@@ -41,6 +41,7 @@ function fixture({ noProfiles = false } = {}) {
             // Include an out-of-scope row too, to test the defensive owner check.
             return chain(settings.filter(row => query.owner.$in.includes(row.owner) || row.owner === outsider));
         } },
+        './portal-feature-access': { portalEligibleOwnerIds: async users => new Set(users.map(user => String(user._id)).filter(id => !allowedOwners || allowedOwners.includes(id))) },
         './ninzaSms': { normalizeIndianMobile: value => ({ ok: true, tenDigit: value }) },
     };
     const module = { exports: {} };
@@ -84,4 +85,15 @@ test('unlinked portal identity never queries dairy settings', async () => {
     assert.equal(ctx.queries.length, 0);
     assert.equal(identity.availableModules.collection, false);
     assert.equal(identity.availableModules.selling, false);
+});
+
+
+test('a shared phone sees only dairies eligible for User Login', async () => {
+    const ctx = fixture({ allowedOwners: [ownerA] });
+    const identity = await ctx.api.findPortalProfiles(phone);
+    assert.deepEqual(Array.from(identity.collectionLinks, link => link.owner), [ownerA]);
+    assert.deepEqual(Array.from(identity.sellingLinks, link => link.owner), [ownerA]);
+    assert.deepEqual(Array.from(ctx.queries[0].owner.$in), [ownerA]);
+    assert.ok(!JSON.stringify(ctx.api.publicPortalIdentity(identity)).includes('Owner B'));
+    assert.ok(!JSON.stringify(ctx.api.publicPortalIdentity(identity)).includes('Owner C'));
 });

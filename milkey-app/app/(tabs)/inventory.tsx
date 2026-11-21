@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { useTranslation } from '@/hooks/useTranslation';
 import TopBar from '@/components/TopBar';
+import { useSubscriptionCheck } from '@/hooks/useSubscriptionCheck';
+import { SubscriptionModal } from '@/components/SubscriptionModal';
 import { Package, Clock } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,10 +13,12 @@ function InventoryScreen() {
     const { t } = useTranslation();
     const insets = useSafeAreaInsets();
     const styles = createStyles(colors, isDark);
+    const { hasAccess, loading, showSubscriptionModal, handleModalClose, handleSubscriptionSuccess } = useSubscriptionCheck('inventory');
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             <TopBar title={t.tabs.inventory || 'Inventory'} />
-            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+            <SubscriptionModal visible={showSubscriptionModal} onClose={handleModalClose} onSubscribe={handleSubscriptionSuccess} filterTab="inventory" title="Inventory access" fullScreen />
+            {(loading || hasAccess) && <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 <View style={styles.card}>
                     <View style={styles.iconWrap}>
                         <Package size={48} color={colors.primary} strokeWidth={1.5} />
@@ -33,7 +37,7 @@ function InventoryScreen() {
                     <View style={styles.bulletRow}><View style={styles.dot} /><Text style={styles.bulletText}>Low stock notifications</Text></View>
                     <View style={styles.bulletRow}><View style={styles.dot} /><Text style={styles.bulletText}>Inventory reports</Text></View>
                 </View>
-            </ScrollView>
+            </ScrollView>}
         </View>
     );
 }

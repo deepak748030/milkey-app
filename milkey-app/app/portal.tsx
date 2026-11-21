@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    AppState,
     Image,
     Modal,
     RefreshControl,
@@ -16,7 +17,7 @@ import { DateRangePicker } from '@/components/DateRangePicker';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
     Check,
     CheckCircle2,
@@ -866,10 +867,17 @@ export default function PortalScreen() {
     }, [module]);
 
     const sessionKey = session?.availableModules?.join(',') || '';
-    useEffect(() => {
-        if (!session || !session.availableModules.includes(module)) return;
+    useFocusEffect(useCallback(() => {
+        if (!session?.phone || !session.availableModules.includes(module)) return;
         void loadDashboard(false);
-    }, [session?.phone, sessionKey, module, loadDashboard]);
+        const subscription = AppState.addEventListener('change', (state) => {
+            if (state === 'active') void loadDashboard(true);
+        });
+        return () => {
+            subscription.remove();
+            ++dashboardRequest.current;
+        };
+    }, [session?.phone, sessionKey, module, loadDashboard]));
 
     useEffect(() => {
         setExpanded({ entries: false, payments: false, advances: false });

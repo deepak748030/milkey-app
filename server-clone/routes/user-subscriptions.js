@@ -139,7 +139,7 @@ router.get('/my', auth, async (req, res) => {
 router.get('/check/:tab', auth, async (req, res) => {
     try {
         const { tab } = req.params;
-        const validTabs = ['purchase', 'selling', 'register'];
+        const validTabs = ['purchase', 'selling', 'register', 'inventory', 'user_login'];
 
         if (!validTabs.includes(tab)) {
             return res.status(400).json({
@@ -156,12 +156,16 @@ router.get('/check/:tab', auth, async (req, res) => {
             applicableTabs: tab,
             isActive: true,
             paymentStatus: 'completed',
-            endDate: { $gte: now }
+            endDate: { $gt: now },
+            ...(['inventory', 'user_login'].includes(tab) ? { $or: [{ startDate: { $lte: now } }, { startDate: { $exists: false } }] } : {})
         }).populate('subscription').lean();
+
+        // Old accounts already had these features before plans supported them.
+        const grandfathered = ['inventory', 'user_login'].includes(tab) && req.user.subscriptionFeatureVersion == null;
 
         // Get available subscriptions for this tab if no valid subscription
         let availableSubscriptions = [];
-        if (!validSubscription) {
+        if (!validSubscription && !grandfathered) {
             // Get subscriptions that cover this tab (single or combined)
             const rawSubs = await Subscription.find({
                 isActive: true,
@@ -205,7 +209,7 @@ router.get('/check/:tab', auth, async (req, res) => {
         res.json({
             success: true,
             response: {
-                hasValidSubscription: !!validSubscription,
+                hasValidSubscription: !!validSubscription || grandfathered,
                 subscription: validSubscription,
                 availableSubscriptions,
                 expiresAt: validSubscription?.endDate
@@ -926,8 +930,17 @@ router.get('/status', auth, async (req, res) => {
         // Get all tabs covered
         const coveredTabs = new Set();
         activeSubscriptions.forEach(sub => {
-            sub.applicableTabs?.forEach(tab => coveredTabs.add(tab));
+            sub.applicableTabs?.forEach(tab => {
+                // New features must not unlock until a queued plan starts.
+                if (['inventory', 'user_login'].includes(tab) && sub.startDate && new Date(sub.startDate) > now) return;
+                coveredTabs.add(tab);
+            });
         });
+
+        if (req.user.subscriptionFeatureVersion == null) {
+            coveredTabs.add('inventory');
+            coveredTabs.add('user_login');
+        }
 
         // Compute nearest expiry for banner (fixes empty red-mark gap when status.expiryDate missing)
         let expiryDate = null;
@@ -953,6 +966,8 @@ router.get('/status', auth, async (req, res) => {
                 hasPurchase: coveredTabs.has('purchase'),
                 hasSelling: coveredTabs.has('selling'),
                 hasRegister: coveredTabs.has('register'),
+                hasInventory: coveredTabs.has('inventory'),
+                hasUserLogin: coveredTabs.has('user_login'),
                 subscriptions: activeSubscriptions,
                 expiryDate,
                 daysLeft

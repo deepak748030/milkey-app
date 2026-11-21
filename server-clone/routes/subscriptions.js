@@ -192,7 +192,7 @@ router.post('/', adminAuth, async (req, res) => {
             });
         }
 
-        const validTabs = ['purchase', 'selling', 'register'];
+        const validTabs = ['purchase', 'selling', 'register', 'inventory', 'user_login'];
         const invalidTabs = applicableTabs.filter(tab => !validTabs.includes(tab));
         if (invalidTabs.length > 0) {
             return res.status(400).json({
@@ -308,7 +308,7 @@ router.put('/:id', adminAuth, async (req, res) => {
                     message: 'At least one applicable tab is required'
                 });
             }
-            const validTabs = ['purchase', 'selling', 'register'];
+            const validTabs = ['purchase', 'selling', 'register', 'inventory', 'user_login'];
             const invalidTabs = applicableTabs.filter(tab => !validTabs.includes(tab));
             if (invalidTabs.length > 0) {
                 return res.status(400).json({

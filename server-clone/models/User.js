@@ -83,9 +83,18 @@ const userSchema = new mongoose.Schema({
     },
     lastLogin: {
         type: Date
-    }
+    },
+    // Missing on pre-existing accounts: preserve their existing free access.
+    // Set only for newly created accounts, never when an old user is updated.
+    subscriptionFeatureVersion: { type: Number }
 }, {
     timestamps: true
+});
+
+// Existing users remain unversioned even if they later update their profile.
+userSchema.pre('validate', function (next) {
+    if (this.isNew && this.subscriptionFeatureVersion == null) this.subscriptionFeatureVersion = 1;
+    next();
 });
 
 // Generate unique referral code before saving

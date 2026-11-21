@@ -13,7 +13,7 @@ const userSubscriptionSchema = new mongoose.Schema({
     },
     applicableTabs: [{
         type: String,
-        enum: ['purchase', 'selling', 'register']
+        enum: ['purchase', 'selling', 'register', 'inventory', 'user_login']
     }],
     startDate: {
         type: Date,

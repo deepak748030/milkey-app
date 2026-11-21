@@ -5,6 +5,7 @@ const Farmer = require('../models/Farmer');
 const User = require('../models/User');
 const PrintSettings = require('../models/PrintSettings');
 const { normalizeIndianMobile } = require('./ninzaSms');
+const { portalEligibleOwnerIds } = require('./portal-feature-access');
 
 /**
  * Farmer / Customer portal identity resolution.
@@ -26,7 +27,10 @@ const toId = (value) => {
 
 const mobileTail = (value) => String(value || '').replace(/\D/g, '').slice(-10);
 
-const isMobileMatch = (mobile, phone) => mobileTail(mobile) === phone;
+const isMobileMatch = (mobile, phone) => {
+    const normalized = normalizeIndianMobile(mobile);
+    return normalized.ok && normalized.tenDigit === phone;
+};
 
 const escapeRegExp = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -48,8 +52,9 @@ const phoneVariants = (phone) => [
 const mobileQuery = (phone) => ({
     $or: [
         { mobile: { $in: phoneVariants(phone) } },
-        // Handles legacy values saved with spaces/dashes/country prefixes.
-        { mobile: { $regex: `${phone}$` } },
+        // Legacy mobiles can contain separators between digits, not just before
+        // the number. The strict normalization check below validates candidates.
+        { mobile: { $regex: `${phone.split('').join('[^0-9]*')}[^0-9]*$` } },
     ],
 });
 
@@ -75,8 +80,8 @@ async function findPortalProfiles(rawPhone) {
         Farmer.find(query).lean(),
     ]);
 
-    // Regex fallback can return values such as "99876543210". The tail check
-    // makes sure only the exact 10-digit Indian mobile is accepted.
+    // Only accepted Indian mobile formats can match; an arbitrary longer
+    // number ending in the same digits must never link another profile.
     const members = memberCandidates.filter((doc) => isMobileMatch(doc.mobile, phone));
     const purchaseFarmers = purchaseFarmerCandidates.filter((doc) => isMobileMatch(doc.mobile, phone));
     const farmers = farmerCandidates.filter((doc) => isMobileMatch(doc.mobile, phone));
@@ -177,26 +182,28 @@ async function findPortalProfiles(rawPhone) {
     // Fetch only settings belonging to already verified linked owners. Keep the
     // existing owner-name mapping for record labels and filters; Linked by is
     // a separate display value sourced from the owner's receipt settings.
-    const [users, settings] = ownerIds.length ? await Promise.all([
-        User.find({ _id: { $in: ownerIds } }).select('name').lean(),
-        PrintSettings.find({ owner: { $in: ownerIds } }).select('owner dairyName').lean(),
-    ]) : [[], []];
+    const users = ownerIds.length ? await User.find({ _id: { $in: ownerIds } }).select('name subscriptionFeatureVersion').lean() : [];
+    const eligible = await portalEligibleOwnerIds(users);
+    const eligibleOwnerIds = ownerIds.filter(id => eligible.has(id));
+    const settings = eligibleOwnerIds.length
+        ? await PrintSettings.find({ owner: { $in: eligibleOwnerIds } }).select('owner dairyName').lean()
+        : [];
     const ownerNames = {};
-    for (const user of users) ownerNames[toId(user._id)] = user.name || 'Dairy';
+    for (const user of users) if (eligible.has(toId(user._id))) ownerNames[toId(user._id)] = user.name || 'Dairy';
     const linkedDairyNames = {};
-    for (const ownerId of ownerIds) linkedDairyNames[ownerId] = ownerNames[ownerId] || 'Dairy';
+    for (const ownerId of eligibleOwnerIds) linkedDairyNames[ownerId] = ownerNames[ownerId] || 'Dairy';
     for (const setting of settings) {
         const ownerId = toId(setting.owner);
         const name = typeof setting.dairyName === 'string' ? setting.dairyName.trim() : '';
         if (Object.prototype.hasOwnProperty.call(linkedDairyNames, ownerId) && name) linkedDairyNames[ownerId] = name;
     }
 
-    const sellingLinks = Array.from(sellingMap.values()).map((link) => ({
+    const sellingLinks = Array.from(sellingMap.values()).filter(link => eligible.has(link.owner)).map((link) => ({
         ...link,
         dairyName: ownerNames[link.owner] || 'Dairy',
         linkedDairyName: linkedDairyNames[link.owner] || ownerNames[link.owner] || 'Dairy',
     }));
-    const collectionLinks = Array.from(collectionMap.values()).map((link) => ({
+    const collectionLinks = Array.from(collectionMap.values()).filter(link => eligible.has(link.owner)).map((link) => ({
         ...link,
         dairyName: ownerNames[link.owner] || 'Dairy',
         linkedDairyName: linkedDairyNames[link.owner] || ownerNames[link.owner] || 'Dairy',

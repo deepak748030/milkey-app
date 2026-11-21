@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -15,7 +15,7 @@ import { ConfirmationModal } from '@/components/ConfirmationModal';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
     Home,
     Droplets,
@@ -46,7 +46,7 @@ import {
 
 const money = (value: number | string | undefined) => {
     const n = Number(value || 0);
-    return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+    return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 };
 
 const dateLabel = (value?: string) => {
@@ -77,6 +77,7 @@ export default function SellingAdvanceScreen() {
     } = useSubscriptionCheck('selling');
 
     const [members, setMembers] = useState<Member[]>([]);
+    const requestGeneration = useRef(0);
     const [advances, setAdvances] = useState<SellingAdvance[]>([]);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPending, setTotalPending] = useState(0);
@@ -102,14 +103,17 @@ export default function SellingAdvanceScreen() {
     }>({ memberId: '', amount: '', type: 'given', date: todayIso(), note: '' });
 
     const load = useCallback(async (isRefresh = false, page = 1, append = false) => {
+        const requestId = ++requestGeneration.current;
+        if (!append) setLoadingMore(false);
         if (append) setLoadingMore(true);
         else if (!isRefresh) setLoading(true);
         setError('');
         try {
             const [membersRes, advancesRes] = await Promise.all([
                 membersApi.getAll({ limit: 100, includeInactive: false }),
-                sellingAdvancesApi.getAll({ limit: 10, page, status: 'all', search: search.trim() || undefined, sortBy: amountSort ? 'amount' : undefined, order: amountSort || undefined }),
+                sellingAdvancesApi.getAll({ limit: 10, page, status: 'open', search: search.trim() || undefined, sortBy: amountSort ? 'amount' : undefined, order: amountSort || undefined }),
             ]);
+            if (requestId !== requestGeneration.current) return;
             if (membersRes.success && membersRes.response?.data) {
                 setMembers(membersRes.response.data);
             } else {
@@ -129,18 +133,20 @@ export default function SellingAdvanceScreen() {
                 setHasMore(false);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Network error. Please try again.');
+            if (requestId === requestGeneration.current) setError(err instanceof Error ? err.message : 'Network error. Please try again.');
         } finally {
-            setLoading(false);
-            setRefreshing(false);
-            setLoadingMore(false);
+            if (requestId === requestGeneration.current) {
+                setLoading(false);
+                setRefreshing(false);
+                setLoadingMore(false);
+            }
         }
     }, [amountSort, search]);
 
-    useEffect(() => {
+    useFocusEffect(useCallback(() => {
         const timer = setTimeout(() => void load(false), search ? 300 : 0);
-        return () => clearTimeout(timer);
-    }, [load, search, amountSort]);
+        return () => { clearTimeout(timer); ++requestGeneration.current; };
+    }, [load, search]));
 
     const memberName = useCallback((advance: SellingAdvance) => {
         if (advance.member && typeof advance.member === 'object') return advance.member.name || 'Customer';
@@ -232,8 +238,8 @@ export default function SellingAdvanceScreen() {
     }, [deletingAdvance, load, setShowSubscriptionModal]);
 
     const reportHtml = useCallback(() => {
-        const rows = filtered.map((advance) => `<tr><td>${memberName(advance)}</td><td>${advance.note || '-'}</td><td>₹${Number(advance.amount || 0).toLocaleString('en-IN')}</td><td>${dateLabel(advance.date)}</td><td>${remainingSellingAdvance(advance) > 0 ? 'Pending' : 'Settled'}</td></tr>`).join('');
-        return `<html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:Arial,sans-serif;padding:20px}h2{text-align:center;color:#168548}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:center}th{background:#168548;color:white}tr:nth-child(even){background:#f5f5f5}</style></head><body><h2>Selling Advances Report</h2><p>Total records: ${filtered.length}</p><table><thead><tr><th>Customer</th><th>Note</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+        const rows = filtered.map((advance) => `<tr><td>${memberName(advance)}</td><td>${advance.note || '-'}</td><td>₹${Number(advance.amount || 0).toLocaleString('en-IN')}</td><td>₹${remainingSellingAdvance(advance).toLocaleString('en-IN')}</td><td>${dateLabel(advance.date)}</td><td>${Number(advance.settledAmount || 0) > 0 ? 'Partial' : 'Pending'}</td></tr>`).join('');
+        return `<html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font-family:Arial,sans-serif;padding:20px}h2{text-align:center;color:#168548}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:center}th{background:#168548;color:white}tr:nth-child(even){background:#f5f5f5}</style></head><body><h2>Selling Advances Report</h2><p>Total records: ${filtered.length}</p><table><thead><tr><th>Customer</th><th>Note</th><th>Amount</th><th>Remaining</th><th>Date</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
     }, [filtered, memberName]);
 
     const exportPdf = useCallback(async () => {
@@ -389,7 +395,10 @@ export default function SellingAdvanceScreen() {
                             <View key={advance._id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 4, borderTopWidth: 1, borderTopColor: '#E5F3EA' }}>
                                 <Text numberOfLines={1} style={{ flex: 1.25, fontSize: 12, fontWeight: '600', color: colors.foreground, textAlign: 'center' }}>{memberName(advance)}</Text>
                                 <Text numberOfLines={1} style={{ flex: 1, fontSize: 12, color: colors.foreground, textAlign: 'center' }}>{advance.note || '-'}</Text>
-                                <Text numberOfLines={1} style={{ flex: 0.8, fontSize: 12, fontWeight: '700', color: '#D5A700', textAlign: 'center' }}>{money(advance.amount)}</Text>
+                                <View style={{ flex: 0.8, alignItems: 'center' }}>
+                                    <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: '700', color: '#D5A700' }}>{money(advance.amount)}</Text>
+                                    {Number(advance.settledAmount || 0) > 0 && <Text style={{ fontSize: 10, color: colors.mutedForeground }}>Left {money(remainingSellingAdvance(advance))}</Text>}
+                                </View>
                                 <Text numberOfLines={1} style={{ flex: 0.9, fontSize: 12, color: colors.foreground, textAlign: 'center' }}>{shortDateLabel(advance.date)}</Text>
                                 <View style={{ flex: 0.55, alignItems: 'center', justifyContent: 'center' }}>
                                     <Pressable onPress={() => remove(advance)} disabled={busyId === advance._id} style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#FEEAEC', alignItems: 'center', justifyContent: 'center' }}>

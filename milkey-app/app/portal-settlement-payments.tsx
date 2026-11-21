@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { ActivityIndicator, AppState, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, IndianRupee } from 'lucide-react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
@@ -86,7 +86,18 @@ export function SettlementPaymentsScreen({ selling = false }: { selling?: boolea
         loadMoreLock.current = false;
     }, [selling]);
 
-    useEffect(() => { if (ready) void load('initial'); }, [ready, load]);
+    useFocusEffect(useCallback(() => {
+        if (!ready) return;
+        void load('initial');
+        const subscription = AppState.addEventListener('change', (state) => {
+            if (state === 'active') void load('refresh');
+        });
+        return () => {
+            subscription.remove();
+            ++generation.current;
+            loadMoreLock.current = false;
+        };
+    }, [ready, load]));
 
     const goBack = () => {
         if ((router as any).canGoBack?.()) router.back();

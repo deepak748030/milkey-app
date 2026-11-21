@@ -7,7 +7,8 @@ import { DateRangePicker } from '@/components/DateRangePicker';
 
 // Ponytail reusable — single source, no duplication, no UI change
 export function PurchaseReportTab(props:any){
-  const { s, colors, t, isDark, selectedReportFarmer, reportFarmerFilter, setReportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, customers, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, isPrinting, formatDateStr, formatDate } = (props as any).ctx || props;
+  const { s, colors, t, isDark, selectedReportFarmer, setSelectedReportFarmer, reportFarmerFilter, reportStartDate, reportEndDate, setReportStartDate, setReportEndDate, filteredReportTotals, filteredReportCollections, reportLoading, reportError, reportCollections, reportTotalCount, reportFarmerCodeSearch, setReportFarmerCodeSearch, reportFarmers, reportFarmerSearchLoading, reportFarmerSearchError, setShowReportFarmerModal, showReportFarmerModal, handleReportBatchPrint, handleFullSummaryPrint, handleShortSummaryPrint, handleExportReportPdf, setPrintSource, isPrinting, formatDateStr, formatDate } = (props as any).ctx || props;
+  const reportUnavailable = reportLoading || !!reportError || !reportStartDate || !reportEndDate || !filteredReportCollections.length || reportTotalCount > reportCollections.length;
   return (
         <View>
             {/* Farmer Picker */}
@@ -17,7 +18,7 @@ export function PurchaseReportTab(props:any){
                     {selectedReportFarmer ? `${selectedReportFarmer.code} - ${selectedReportFarmer.name}` : 'Enter farmer code'}
                 </Text>
                 {reportFarmerFilter ? (
-                    <Pressable onPress={() => setReportFarmerFilter('')} hitSlop={6}>
+                    <Pressable onPress={() => setSelectedReportFarmer(null)} hitSlop={6}>
                         <X size={14} color={colors.destructive} />
                     </Pressable>
                 ) : (
@@ -58,7 +59,7 @@ export function PurchaseReportTab(props:any){
             {/* Print & Export Buttons */}
             <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Pressable
-                    style={[s.exportReportBtn, { flex: 1, backgroundColor: colors.primary }, isPrinting && { opacity: 0.6 }]}
+                    style={[s.exportReportBtn, { flex: 1, backgroundColor: colors.primary }, (isPrinting || reportUnavailable) && { opacity: 0.6 }]}
                     onPress={() => {
                         setPrintSource('report');
                         if (!reportFarmerFilter) {
@@ -67,13 +68,13 @@ export function PurchaseReportTab(props:any){
                             handleFullSummaryPrint('report');
                         }
                     }}
-                    disabled={isPrinting}
+                    disabled={isPrinting || reportUnavailable}
                 >
                     {isPrinting ? <ActivityIndicator size={16} color="#fff" /> : <FileText size={16} color="#fff" />}
                     <Text style={s.exportReportBtnText}>Full Summary</Text>
                 </Pressable>
                 <Pressable
-                    style={[s.exportReportBtn, { flex: 1, backgroundColor: '#f59e0b' }, isPrinting && { opacity: 0.6 }]}
+                    style={[s.exportReportBtn, { flex: 1, backgroundColor: '#f59e0b' }, (isPrinting || reportUnavailable) && { opacity: 0.6 }]}
                     onPress={() => {
                         setPrintSource('report');
                         if (!reportFarmerFilter) {
@@ -82,13 +83,13 @@ export function PurchaseReportTab(props:any){
                             handleShortSummaryPrint('report');
                         }
                     }}
-                    disabled={isPrinting}
+                    disabled={isPrinting || reportUnavailable}
                 >
                     {isPrinting ? <ActivityIndicator size={16} color="#fff" /> : <Printer size={16} color="#fff" />}
                     <Text style={s.exportReportBtnText}>Short Summary</Text>
                 </Pressable>
             </View>
-            <Pressable style={[s.exportReportBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]} onPress={handleExportReportPdf}>
+            <Pressable disabled={reportUnavailable} style={[s.exportReportBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }, reportUnavailable && { opacity: 0.6 }]} onPress={handleExportReportPdf}>
                 <Download size={16} color={colors.primary} />
                 <Text style={[s.exportReportBtnText, { color: colors.foreground }]}>Download PDF</Text>
             </Pressable>
@@ -97,13 +98,15 @@ export function PurchaseReportTab(props:any){
                 below renders the newest rows (capped) — say so instead of staying silent */}
             {!reportLoading && reportStartDate && reportEndDate && reportTotalCount > reportCollections.length && (
                 <Text style={s.reportCapNote}>
-                    Showing latest {reportCollections.length} of {reportTotalCount} entries — select a smaller date range to see older entries.
+                    Showing latest {reportCollections.length} of {reportTotalCount} entries — select a smaller date range to see and print all entries.
                 </Text>
             )}
 
             {/* Report Table */}
             {reportLoading ? (
                 <View style={s.emptyBox}><ActivityIndicator color={colors.primary} /></View>
+            ) : reportError ? (
+                <View style={s.emptyBox}><Text style={s.emptyText}>{reportError}</Text></View>
             ) : filteredReportCollections.length === 0 && reportStartDate && reportEndDate ? (
                 <View style={s.emptyBox}>
                     <Droplets size={24} color={colors.border} />
@@ -194,9 +197,9 @@ export function PurchaseReportTab(props:any){
                                     onSubmitEditing={() => {
                                         const q = reportFarmerCodeSearch.trim();
                                         if (!q) return;
-                                        const match = customers.find(c => String(c.code).toUpperCase() === q);
+                                        const match = reportFarmers.find(c => String(c.code).toUpperCase() === q);
                                         if (match) {
-                                            setReportFarmerFilter(match._id);
+                                            setSelectedReportFarmer(match);
                                             setReportFarmerCodeSearch('');
                                             setShowReportFarmerModal(false);
                                         }
@@ -210,18 +213,14 @@ export function PurchaseReportTab(props:any){
                             </View>
 
                             <FlatList
-                                data={
-                                    reportFarmerCodeSearch.trim()
-                                        ? customers.filter(c => String(c.code).toUpperCase().includes(reportFarmerCodeSearch.trim()))
-                                        : customers
-                                }
+                                data={reportFarmers}
                                 keyExtractor={item => item._id}
                                 keyboardShouldPersistTaps="handled"
                                 renderItem={({ item }) => (
                                     <Pressable
                                         style={[s.custListItem, { paddingHorizontal: 12 }]}
                                         onPress={() => {
-                                            setReportFarmerFilter(item._id);
+                                            setSelectedReportFarmer(item);
                                             setReportFarmerCodeSearch('');
                                             setShowReportFarmerModal(false);
                                         }}
@@ -239,7 +238,7 @@ export function PurchaseReportTab(props:any){
                                 ListEmptyComponent={
                                     <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                                         <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
-                                            {reportFarmerCodeSearch ? 'No farmer with this code' : 'No farmers'}
+                                            {reportFarmerSearchLoading ? 'Searching…' : reportFarmerSearchError || (reportFarmerCodeSearch ? 'No farmer with this code' : 'No farmers')}
                                         </Text>
                                     </View>
                                 }

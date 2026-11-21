@@ -13,10 +13,13 @@ import { Pagination } from '../components/Pagination'
 import { cn } from '../lib/utils'
 
 const TAB_OPTIONS = [
-    { value: 'purchase', label: 'Purchase' },
+    { value: 'purchase', label: 'Collection' },
     { value: 'selling', label: 'Selling' },
-    { value: 'register', label: 'Register' }
+    { value: 'inventory', label: 'Inventory (coming soon)' },
+    { value: 'user_login', label: 'User Login' }
 ]
+
+const tabLabel = (tab: string) => TAB_OPTIONS.find(opt => opt.value === tab)?.label || (tab === 'register' ? 'Register (legacy)' : tab)
 
 export function SubscriptionsPage() {
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
@@ -288,9 +291,11 @@ export function SubscriptionsPage() {
                             className="w-full px-4 py-2.5 bg-input border border-input rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                             <option value="all">All Tabs</option>
-                            <option value="purchase">Purchase</option>
+                            <option value="purchase">Collection</option>
                             <option value="selling">Selling</option>
-                            <option value="register">Register</option>
+                            <option value="inventory">Inventory</option>
+                            <option value="user_login">User Login</option>
+                            <option value="register">Register (legacy)</option>
                         </select>
                     </div>
                 </div>
@@ -354,7 +359,7 @@ export function SubscriptionsPage() {
                             <div className="flex flex-wrap gap-1 mb-3">
                                 {sub.applicableTabs?.map(tab => (
                                     <span key={tab} className={cn('px-2 py-0.5 rounded text-xs font-medium capitalize', getTabBadge(tab))}>
-                                        {tab}
+                                        {tabLabel(tab)}
                                     </span>
                                 ))}
                             </div>
@@ -435,7 +440,7 @@ export function SubscriptionsPage() {
                                             <div className="flex flex-wrap gap-1">
                                                 {sub.applicableTabs?.map(tab => (
                                                     <span key={tab} className={cn('px-2 py-0.5 rounded text-xs font-medium capitalize', getTabBadge(tab))}>
-                                                        {tab}
+                                                        {tabLabel(tab)}
                                                     </span>
                                                 ))}
                                             </div>
@@ -599,9 +604,9 @@ export function SubscriptionsPage() {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-muted-foreground mb-1.5">Applicable Tabs * <span className="text-xs text-primary">(Select multiple for combined subscription)</span></label>
+                                <label className="block text-sm font-medium text-muted-foreground mb-1.5">Included Features * <span className="text-xs text-primary">(Select multiple for combined subscription)</span></label>
                                 <div className="flex flex-wrap gap-2">
-                                    {TAB_OPTIONS.map(opt => (
+                                    {[...TAB_OPTIONS, ...(editingSubscription?.applicableTabs?.includes('register') ? [{ value: 'register', label: 'Register (legacy)' }] : [])].map(opt => (
                                         <button
                                             key={opt.value}
                                             type="button"

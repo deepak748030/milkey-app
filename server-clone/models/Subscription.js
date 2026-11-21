@@ -32,7 +32,7 @@ const subscriptionSchema = new mongoose.Schema({
     },
     applicableTabs: [{
         type: String,
-        enum: ['purchase', 'selling', 'register'],
+        enum: ['purchase', 'selling', 'register', 'inventory', 'user_login'],
         required: true
     }],
     subscriptionType: {

@@ -31,7 +31,9 @@ router.get('/', auth, async (req, res) => {
                 query.shift = shift;
             }
         }
-        if (isPaid !== undefined) query.isPaid = isPaid === 'true';
+        // Farmer settlement callers default to unpaid; reports explicitly ask
+        // for all entries, including paid and legacy rows with no isPaid field.
+        if (isPaid !== undefined && isPaid !== 'all') query.isPaid = isPaid === 'true';
 
         // Date filters.
         // The app sends calendar dates (YYYY-MM-DD) picked on the device, so the day
@@ -122,7 +124,8 @@ router.get('/', auth, async (req, res) => {
             if (pFarmer) orConditions.push({ purchaseFarmer: pFarmer._id });
             if (farmer) orConditions.push({ purchaseFarmer: farmer._id });
             if (farmer) orConditions.push({ farmer: farmer._id });
-            orConditions.push({ farmerCode: codePattern });
+            // Older imports may have stored spaces around the code.
+            orConditions.push({ farmerCode: new RegExp(`^\\s*${escapeRegExp(normalizedCode)}\\s*$`, 'i') });
             if (orConditions.length > 0) {
                 query.$and = [...(query.$and || []), { $or: orConditions }];
             }

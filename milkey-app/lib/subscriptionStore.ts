@@ -27,13 +27,14 @@ interface SubscriptionStoreState {
         purchase: TabSubscriptionData | null;
         selling: TabSubscriptionData | null;
         register: TabSubscriptionData | null;
+        inventory: TabSubscriptionData | null;
     };
 
     // Actions
     fetchStatus: () => Promise<SubscriptionStatus | null>;
-    fetchTabData: (tab: 'purchase' | 'selling' | 'register') => Promise<TabSubscriptionData | null>;
+    fetchTabData: (tab: 'purchase' | 'selling' | 'register' | 'inventory') => Promise<TabSubscriptionData | null>;
     preloadAllTabs: () => Promise<void>;
-    hasTabAccess: (tab: 'purchase' | 'selling' | 'register') => boolean;
+    hasTabAccess: (tab: 'purchase' | 'selling' | 'register' | 'inventory') => boolean;
     clearCache: () => void;
     initializeFromStorage: () => Promise<void>;
 }
@@ -49,6 +50,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>((set, get) =>
         purchase: null,
         selling: null,
         register: null,
+        inventory: null,
     },
 
     initializeFromStorage: async () => {
@@ -62,7 +64,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>((set, get) =>
                 if (data.lastFetched && now - data.lastFetched < CACHE_EXPIRY_MS) {
                     set({
                         status: data.status || null,
-                        tabData: data.tabData || { purchase: null, selling: null, register: null },
+                        tabData: { purchase: null, selling: null, register: null, inventory: null, ...data.tabData },
                         statusFetched: !!data.status,
                     });
                 }
@@ -130,7 +132,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>((set, get) =>
         return null;
     },
 
-    fetchTabData: async (tab: 'purchase' | 'selling' | 'register') => {
+    fetchTabData: async (tab: 'purchase' | 'selling' | 'register' | 'inventory') => {
         const { tabData } = get();
         const existing = tabData[tab];
         const now = Date.now();
@@ -192,7 +194,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>((set, get) =>
         ]);
     },
 
-    hasTabAccess: (tab: 'purchase' | 'selling' | 'register') => {
+    hasTabAccess: (tab: 'purchase' | 'selling' | 'register' | 'inventory') => {
         const { status, tabData } = get();
 
         // Check tab-specific data first
@@ -210,6 +212,8 @@ export const useSubscriptionStore = create<SubscriptionStoreState>((set, get) =>
                     return status.hasSelling;
                 case 'register':
                     return status.hasRegister;
+                case 'inventory':
+                    return !!status.hasInventory;
             }
         }
 
@@ -225,6 +229,7 @@ export const useSubscriptionStore = create<SubscriptionStoreState>((set, get) =>
                 purchase: null,
                 selling: null,
                 register: null,
+                inventory: null,
             },
         });
         AsyncStorage.removeItem(SUBSCRIPTION_CACHE_KEY);

@@ -1,3 +1,4 @@
+import { subscriptionFeatureLabel, subscriptionFeatureDescription } from '@/lib/subscriptionFeatures';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal, Dimensions } from 'react-native';
 import { Pressable } from '@/components/ui/HapticPressable';
@@ -424,7 +425,7 @@ export default function SubscriptionsScreen() {
 
     const getTabNames = (tabs: string[]) => {
         if (!tabs || tabs.length === 0) return '';
-        return tabs.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' + ');
+        return tabs.map(subscriptionFeatureLabel).join(' + ');
     };
 
     const formatDate = (dateString: string) => {
@@ -498,7 +499,7 @@ export default function SubscriptionsScreen() {
                 </View>
                 <View style={styles.activeFooter}>
                     <CheckCircle size={14} color={colors.success} />
-                    <Text style={styles.activeFooterText}>{isQueued ? 'Will auto-activate after current plan' : 'Premium access unlocked'}</Text>
+                    <Text style={styles.activeFooterText}>{isQueued ? 'Will auto-activate after current plan' : (item.applicableTabs?.length === 1 && item.applicableTabs[0] === 'inventory') ? 'Inventory coming soon' : 'Premium access unlocked'}</Text>
                 </View>
             </View>
         );
@@ -580,7 +581,7 @@ export default function SubscriptionsScreen() {
                     {item.applicableTabs?.map((tab) => (
                         <View key={tab} style={styles.featureRow}>
                             <View style={styles.checkCircle}><Check size={10} color="#fff" strokeWidth={3} /></View>
-                            <Text style={styles.featureText}>{tab.charAt(0).toUpperCase() + tab.slice(1)} access unlocked</Text>
+                            <Text style={styles.featureText}>{subscriptionFeatureDescription(tab)}</Text>
                         </View>
                     ))}
                     <View style={styles.featureRow}>
