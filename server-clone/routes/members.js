@@ -2,59 +2,12 @@ const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
 const Member = require('../models/Member');
-const SellingMobileReservation = require('../models/SellingMobileReservation');
-const { normalizeSellingMobile, sellingMobilePattern } = require('../lib/selling-mobile');
+const { normalizeSellingMobile } = require('../lib/selling-mobile');
+const { claimMobile, changeSellingMobile, inSellingTransaction, phoneConflict, invalidPhone } = require('../lib/selling-mobile-guard');
 const SellingEntry = require('../models/SellingEntry');
 const MemberPayment = require('../models/MemberPayment');
 const auth = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
-
-// Reservations and member writes commit together; no legacy customer is rewritten.
-const reservationKey = (owner, mobile) => `${String(owner)}:${mobile}`;
-const phoneConflict = () => Object.assign(new Error('Phone number already registered'), { status: 409 });
-const invalidPhone = () => Object.assign(new Error('Please enter a valid phone number'), { status: 400 });
-
-async function claimMobile(owner, memberId, mobile, session) {
-    try {
-        await SellingMobileReservation.create([{ _id: reservationKey(owner, mobile), owner, member: memberId }], { session });
-    } catch (error) {
-        if (error.code === 11000) throw phoneConflict();
-        throw error;
-    }
-    const duplicate = await Member.findOne({
-        owner,
-        _id: { $ne: memberId },
-        mobile: sellingMobilePattern(mobile),
-    }).session(session).lean();
-    if (duplicate) throw phoneConflict();
-}
-
-// Create the reservation collection outside transactions (including the first
-// request on an empty database). MongoDB always creates its unique _id index.
-let reservationCollectionReady;
-async function ensureReservationCollection() {
-    if (!reservationCollectionReady) {
-        reservationCollectionReady = SellingMobileReservation.createCollection().catch(error => {
-            if (error.code !== 48 && error.codeName !== 'NamespaceExists') {
-                reservationCollectionReady = null;
-                throw error;
-            }
-        });
-    }
-    await reservationCollectionReady;
-}
-
-async function inSellingTransaction(work) {
-    await ensureReservationCollection();
-    const session = await mongoose.startSession();
-    try {
-        let result;
-        await session.withTransaction(async () => { result = await work(session); });
-        return result;
-    } finally {
-        await session.endSession();
-    }
-}
 
 // GET /api/members/balance-report - Get all members with balance calculated from unpaid entries
 router.get('/balance-report', auth, async (req, res) => {
@@ -347,21 +300,7 @@ router.put('/:id', auth, requireSubscription('selling'), async (req, res) => {
             if (!current) return null;
 
             if (mobile !== undefined) {
-                const oldNumber = normalizeSellingMobile(current.mobile);
-                const newNumber = normalizeSellingMobile(mobile);
-                // Old duplicate/invalid records remain editable when their phone is unchanged.
-                const unchanged = String(mobile).trim() === String(current.mobile).trim() ||
-                    (newNumber && oldNumber && newNumber === oldNumber);
-                if (!unchanged) {
-                    if (!newNumber) throw invalidPhone();
-                    await claimMobile(req.userId, current._id, newNumber, session);
-                    if (oldNumber) {
-                        await SellingMobileReservation.deleteOne({
-                            _id: reservationKey(req.userId, oldNumber), owner: req.userId, member: current._id,
-                        }, { session });
-                    }
-                }
-                if (newNumber || unchanged) updateData.mobile = String(mobile).trim();
+                updateData.mobile = await changeSellingMobile(req.userId, current, mobile, session);
             }
             return Member.findOneAndUpdate(
                 { _id: current._id, owner: req.userId }, updateData, { new: true, session }
